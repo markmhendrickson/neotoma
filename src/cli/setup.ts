@@ -70,15 +70,18 @@ export function buildVerifyLine(doctor: Awaited<ReturnType<typeof runDoctor>>): 
 const MCP_PRESET_DESCRIPTION: Record<McpTransportChoice, string> = {
   a: "preset a: local signing proxy command forwarding to a signed HTTP MCP endpoint",
   b: "preset b: local command that may forward MCP requests to a local Neotoma HTTP endpoint",
-  c: "preset c: local stdio command with no URL; this entry makes no network requests",
+  c: "preset c: local stdio command with no endpoint URL; the Neotoma server it starts checks the npm registry for updates unless NO_UPDATE_NOTIFIER=1",
   d: "preset d: local signing proxy command forwarding to a signed HTTP MCP endpoint, with the dev entry pointed at the prod endpoint",
   e: "preset e: local signing proxy command forwarding to a signed HTTP MCP endpoint, discovered from the local prod port file",
 };
 
 /**
  * Plain-language description of what one preset's generated entries do (no URL, path or command).
- * Only preset `c` (local stdio, no URL) may say it makes no network requests; a test pins
- * that for every other preset, so this never throws during a user's setup run.
+ * It describes only the mechanism: a local command or an HTTP endpoint, signed or not, and
+ * whether it forwards to an endpoint. No preset, entry or setup as a whole may claim the
+ * absence of network activity: even preset `c` starts a stdio server that checks the npm
+ * registry for updates. A test pins this for every preset, so this never throws during a
+ * user's setup run.
  */
 export function describeWrittenMcpTransport(transport: McpTransportChoice): string {
   return MCP_PRESET_DESCRIPTION[transport];

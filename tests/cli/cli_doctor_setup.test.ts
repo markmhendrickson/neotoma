@@ -619,7 +619,7 @@ describe("buildVerifyLine", () => {
       });
       expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
       expect(report.privacy_transport_summary).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
-      expect(report.privacy_transport_summary).not.toContain("no network egress");
+      expect(report.privacy_transport_summary).not.toMatch(/no network|no egress/i);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
@@ -635,20 +635,24 @@ describe("buildVerifyLine", () => {
     return [...summary.matchAll(/--mcp-transport[= ](\S+?)[.,;)]?(\s|$)/g)].map((m) => m[1]);
   }
 
-  it("gives each written preset its own wording; only preset c claims no network requests", () => {
+  // Any wording that claims the absence of network activity.
+  const NO_NETWORK_CLAIM =
+    /no network|no egress|offline|never contacts|makes no (network )?requests|without (any )?network/i;
+
+  it("gives each written preset its own wording and no preset claims no network activity", () => {
     const summaries = PRESETS.map((transport) =>
       buildPrivacyTransportSummary([{ server_key: "neotoma", transport }])
     );
     expect(new Set(summaries).size).toBe(PRESETS.length);
     PRESETS.forEach((transport, i) => {
       const summary = summaries[i];
+      const description = describeWrittenMcpTransport(transport);
       expect(summary).toContain("neotoma (");
       expect(summary).toContain(`preset ${transport}`);
-      expect(summary).not.toContain("no network egress");
-      if (transport === "c") {
-        expect(summary).toContain("this entry makes no network requests");
-      } else {
-        expect(summary).not.toMatch(/no network/i);
+      for (const text of [summary, description]) {
+        expect(text).not.toMatch(/no network/i);
+        expect(text).not.toMatch(/no egress/i);
+        expect(text).not.toMatch(NO_NETWORK_CLAIM);
       }
       if (transport === "a" || transport === "d" || transport === "e") {
         expect(summary).toContain("signed HTTP MCP endpoint");
@@ -656,14 +660,21 @@ describe("buildVerifyLine", () => {
     });
   });
 
+  it("says preset c starts a server that checks the npm registry unless NO_UPDATE_NOTIFIER=1", () => {
+    const description = describeWrittenMcpTransport("c");
+    expect(description).toContain("local stdio command");
+    expect(description).toMatch(/npm registry for updates/);
+    expect(description).toContain("NO_UPDATE_NOTIFIER=1");
+  });
+
   it("says other entries were not checked when a stdio entry is written next to an existing one", () => {
     const summary = buildPrivacyTransportSummary([{ server_key: "neotoma-dev", transport: "c" }]);
     expect(summary).toContain(
       "Any other Neotoma entries in your MCP config, including any setup repaired or re-pointed to a new port, are not described here and were not checked."
     );
-    expect(summary).not.toContain("no network egress");
-    // The no-network claim is scoped to the written entry, not the setup as a whole.
-    expect(summary).toMatch(/neotoma-dev \(preset c: [^)]*this entry makes no network requests\)/);
+    // A written preset c entry is described by its mechanism, never as making no network requests.
+    expect(summary).toMatch(/neotoma-dev \(preset c: local stdio command[^)]*NO_UPDATE_NOTIFIER=1\)/);
+    expect(summary).not.toMatch(NO_NETWORK_CLAIM);
     expect(summary).not.toMatch(/^Transport: local stdio/);
   });
 
@@ -674,14 +685,10 @@ describe("buildVerifyLine", () => {
     expect(NO_MCP_ENTRY_WRITTEN_SUMMARY).toContain("were not checked");
   });
 
-  it("describes every preset without a no-network claim except preset c, and never throws", () => {
+  it("describes every preset without a no-network claim, and never throws", () => {
     for (const transport of PRESETS) {
       const description = describeWrittenMcpTransport(transport);
-      if (transport === "c") {
-        expect(description).toContain("no network requests");
-      } else {
-        expect(description).not.toMatch(/no network/i);
-      }
+      expect(description).not.toMatch(NO_NETWORK_CLAIM);
     }
   });
 
@@ -744,6 +751,9 @@ describe("buildVerifyLine", () => {
       expect(summary).toContain("neotoma-dev (preset c:");
       expect(summary).toContain("neotoma (preset c:");
       expect(summary).toContain("were not checked");
+      // A run that writes preset c entries claims no absence of network activity.
+      expect(summary).not.toMatch(NO_NETWORK_CLAIM);
+      expect(summary).toContain("NO_UPDATE_NOTIFIER=1");
       // Setup may have repaired or re-ported other entries, so the line must not
       // claim they were left alone.
       expect(summary).not.toMatch(/unchanged/i);
