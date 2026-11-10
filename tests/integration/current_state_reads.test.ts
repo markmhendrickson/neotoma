@@ -249,6 +249,17 @@ describe("recorded-cutover visibility from lifecycle authority", () => {
     await longHistory(deletedAfter, false);
     await longHistory(`ent_cut_foreign_${tag}`, false); // used by the next case
     await mods.storage.migrateEntityLifecycleAuthority(database, async () => {});
+    // Migration runs offline and leaves this index to the next open.
+    expect(
+      await database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_entity_lifecycle_attached'"
+        )
+        .get()
+    ).toBeUndefined();
+    await (
+      await import("../../src/repositories/sqlite/sqlite_client.js")
+    ).ensureLifecycleAttachedIndex(database);
     for (const [id, kinds] of [
       [restored, ["delete", "restore"]],
       [deletedAfter, ["delete"]],

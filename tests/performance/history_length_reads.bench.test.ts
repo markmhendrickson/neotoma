@@ -312,6 +312,10 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
     // Snapshots were seeded consistent with the observations, so the cutover
     // needs no re-materialization.
     await m.migrateEntityLifecycleAuthority(database, async () => {});
+    // Migration runs offline; the next open creates the attached-authority index.
+    await (
+      await import("../../src/repositories/sqlite/sqlite_client.js")
+    ).ensureLifecycleAttachedIndex(database);
     report.push(`recorded lifecycle cutover in ${(performance.now() - start).toFixed(0)} ms`);
     const short = await measure(SHORT, true);
     const long = await measure(LONG, true);

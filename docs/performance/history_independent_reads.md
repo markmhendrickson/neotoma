@@ -30,7 +30,11 @@ whenever that acquisition answers. After a cutover they also refuse, as the
 exhaustive acquisition does, when a lifecycle-authority row attached to the
 entity is malformed or names something other than an owned entity of the same
 type; those rows are read through `idx_entity_lifecycle_attached`, so the check
-costs the entity's lifecycle actions, not its history.
+costs the entity's lifecycle actions, not its history. A refusal there is the
+same refusal the exhaustive path gives. The index is created when a store with
+the lifecycle columns is opened, not by the lifecycle migration, whose
+executor admits only an allowlisted schema delta; migration runs offline, so
+the next open of a migrated store creates it.
 
 What lists, totals, count certification and single snapshot reads no longer
 re-verify is the integrity of rows that cannot decide the answer: factual

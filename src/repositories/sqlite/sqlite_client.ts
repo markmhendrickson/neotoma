@@ -445,6 +445,31 @@ const DEPRECATED_TABLES = [
   "interpretation_runs",
 ];
 
+/**
+ * The lifecycle-authority rows attached to an entity, so a current-state read
+ * can check them without walking the entity's history (#2792).
+ *
+ * Created at open, and only on a store that already has the lifecycle columns.
+ * The lifecycle migration deliberately does not create it: the migration
+ * executor refuses any schema object outside its allowlist and its recorded
+ * expected inventories. Migration runs offline, so the next open of a migrated
+ * store creates the index. Without it the attached-authority read is still
+ * correct, only not bounded.
+ */
+export async function ensureLifecycleAttachedIndex(
+  db: Pick<DbConnection, "prepare">
+): Promise<void> {
+  const columns = (await db.prepare("PRAGMA table_info(observations)").all()) as Array<{
+    name: string;
+  }>;
+  if (!columns.some((column) => column.name === "entity_lifecycle_kind")) return;
+  await db
+    .prepare(
+      "CREATE INDEX IF NOT EXISTS idx_entity_lifecycle_attached ON observations(entity_id, user_id) WHERE entity_lifecycle_kind IS NOT NULL"
+    )
+    .run();
+}
+
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
 async function addColumnIfMissing(
   db: DbConnection,
@@ -613,21 +638,7 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_raw_fragments_entity_key_seen ON raw_fragments(entity_id, fragment_key, last_seen)"
       )
       .run();
-    // The lifecycle-authority rows attached to an entity, so a current-state
-    // read can check them without walking the entity's history (#2792). The
-    // columns exist only once the lifecycle storage is installed; the install
-    // creates the same index for stores migrated later.
-    {
-      const observationColumns = (await db
-        .prepare("PRAGMA table_info(observations)")
-        .all()) as Array<{ name: string }>;
-      if (observationColumns.some((column) => column.name === "entity_lifecycle_kind"))
-        await db
-          .prepare(
-            "CREATE INDEX IF NOT EXISTS idx_entity_lifecycle_attached ON observations(entity_id, user_id) WHERE entity_lifecycle_kind IS NOT NULL"
-          )
-          .run();
-    }
+    await ensureLifecycleAttachedIndex(db);
     await addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
     await addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
     await addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");

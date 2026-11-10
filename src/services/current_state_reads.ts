@@ -349,11 +349,6 @@ export async function hasLegacyFragments(entityType: string): Promise<boolean> {
 }
 
 /**
- * Current visibility of one unmerged entity from its deciding rows, or
- * `undefined` when the bounded read cannot decide and the caller must use the
- * exhaustive `isEntityDeleted`.
- */
-/**
  * Recorded-cutover visibility of one entity read by id for its owner, as the
  * current-snapshot endpoint asks it. An owned, unmerged entity is answered from
  * its lifecycle authority rows; a merge tombstone or an id the owner does not
@@ -380,6 +375,11 @@ export async function isOwnedEntityHiddenAfterCutover(
   return isEntityDeleted(entityId, userId);
 }
 
+/**
+ * Current visibility of one unmerged entity from its deciding rows, or
+ * `undefined` when the bounded read cannot decide and the caller must use the
+ * exhaustive `isEntityDeleted`.
+ */
 export async function isEntityHiddenNow(target: LifecycleTarget): Promise<boolean | undefined> {
   const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
   if (await hasRecordedEntityLifecycleCutover(await getDb()))

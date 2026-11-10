@@ -97,9 +97,6 @@ export async function installEntityLifecycleStorage(tx: DbConnection): Promise<v
     CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_lifecycle_sequence
       ON observations(user_id, entity_lifecycle_target_id, entity_lifecycle_sequence)
       WHERE entity_lifecycle_kind IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS idx_entity_lifecycle_attached
-      ON observations(entity_id, user_id)
-      WHERE entity_lifecycle_kind IS NOT NULL;
     CREATE TRIGGER IF NOT EXISTS entity_lifecycle_tuple_insert BEFORE INSERT ON observations
     WHEN COALESCE((
       (NEW.entity_lifecycle_kind IS NULL AND NEW.entity_lifecycle_sequence IS NULL AND NEW.entity_lifecycle_target_id IS NULL) OR
