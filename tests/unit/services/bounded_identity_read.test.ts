@@ -120,9 +120,9 @@ describe("bounded identity read", () => {
               `WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<80000)
             INSERT INTO observations (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
             SELECT 'history-'||x,'prior-'||CAST(((x-1)%400+1) AS INTEGER),?,?,'1.0',
-              json_object('ticket_uid','other-'||CAST(((x-1)%400+1) AS INTEGER)),?,?,1 FROM n`
+              json_object('ticket_uid','other-'||CAST(((x-1)%400+1) AS INTEGER),'comments',?),?,?,1 FROM n`
             )
-            .run(type, owner, now, now);
+            .run(type, owner, "x".repeat(2048), now, now);
           await seed(tx, "fresh");
         });
         const joined = await writer
@@ -179,6 +179,52 @@ describe("bounded identity read", () => {
       }
     }, 30_000);
 
+    it(`keeps binary entity and raw-value distinctions (${backend})`, async () => {
+      const dir = mkdtempSync(join(tmpdir(), "binary-identity-"));
+      const path = join(dir, "fixture.db");
+      const writer =
+        backend === "sqlite"
+          ? new AsyncSqliteDatabase(path)
+          : openLibsqlDatabase(pathToFileURL(path).href);
+      const acquire = (value: string) =>
+        writer instanceof WorkerFileDatabase
+          ? writer.withPinnedReadView((view) =>
+              readBoundedIdentityInView(view, owner, type, "ticket_uid", value)
+            )
+          : readSqlite(path, (view) =>
+              readBoundedIdentityInView(view, owner, type, "ticket_uid", value)
+            );
+      try {
+        await prepare(writer);
+        await writer.transaction(async (tx) => {
+          await seed(tx, "Member");
+          await seed(tx, "member");
+        });
+        expect(await acquire(wanted)).toEqual({ state: "ambiguous" });
+        await writer
+          .prepare("UPDATE entity_snapshots SET snapshot=? WHERE entity_id='member'")
+          .run(JSON.stringify(body("different")));
+        expect(await acquire(wanted)).toEqual({ state: "unproved" });
+        await writer
+          .prepare("UPDATE entities SET merged_to_entity_id='case' WHERE id IN ('Member','member')")
+          .run();
+        await writer.transaction(async (tx) => {
+          await seed(tx, "case", "CASE");
+          await tx
+            .prepare(
+              `INSERT INTO observations
+            (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
+            VALUES ('case-lower','case',?,?,'1.0',?,?,?,2)`
+            )
+            .run(type, owner, JSON.stringify(body("case")), now, now);
+        });
+        expect(await acquire("case")).toEqual({ state: "unproved" });
+      } finally {
+        await writer.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it(`keeps typed raw facts before pure conversion (${backend})`, async () => {
       const dir = mkdtempSync(join(tmpdir(), "typed-identity-"));
       const path = join(dir, "fixture.db");
@@ -202,8 +248,18 @@ describe("bounded identity read", () => {
               ticket_uid: {
                 type: "string",
                 converters: [
-                  { from: "number", function: "number_to_string" },
-                  { from: "boolean", function: "boolean_to_string" },
+                  {
+                    from: "number",
+                    to: "string",
+                    function: "number_to_string",
+                    deterministic: true,
+                  },
+                  {
+                    from: "boolean",
+                    to: "string",
+                    function: "boolean_to_string",
+                    deterministic: true,
+                  },
                 ],
               },
             },
@@ -222,6 +278,21 @@ describe("bounded identity read", () => {
             )
             .run(type, owner, JSON.stringify({ ticket_uid: true, comments: "normal" }), now, now);
         });
+        await writer
+          .prepare(
+            `UPDATE entity_snapshots SET snapshot=?,provenance=?,observation_count=2 WHERE entity_id='typed'`
+          )
+          .run(
+            JSON.stringify(body("true")),
+            JSON.stringify({ ticket_uid: "typed-boolean", comments: "typed-boolean" })
+          );
+        expect(await acquire()).toMatchObject({
+          state: "singleton",
+          entity: { entity_id: "typed", snapshot: body("true") },
+        });
+        await writer
+          .prepare("UPDATE entity_snapshots SET snapshot=? WHERE entity_id='typed'")
+          .run(JSON.stringify(body("1")));
         // A scalar SQL extraction would conflate true with 1 and could miss
         // the converted candidate behind this deliberately stale snapshot.
         expect(await acquire()).toEqual({ state: "unproved" });

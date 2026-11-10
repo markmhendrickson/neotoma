@@ -127,6 +127,8 @@ export async function readBoundedIdentityInView(
     // pinned schema's pure converter. Repeated identical facts add no candidate.
     // Keep raw JSON types and entity IDs distinct; replay candidate histories
     // in full below, under the unchanged history and candidate limits.
+    // The deadline bounds response/evidence validity, not scan cardinality or
+    // immediate native CPU cancellation; existing worker retirement still applies.
     const facts = (await view
       .prepare(
         `SELECT DISTINCT e.id COLLATE BINARY AS entity_id,
