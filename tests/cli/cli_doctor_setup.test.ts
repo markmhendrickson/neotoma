@@ -18,7 +18,15 @@ import {
   writePermissionsForTool,
   toolFromString,
 } from "../../src/cli/permissions.ts";
-import { runSetup, buildVerifyLine, PRIVACY_TRANSPORT_SUMMARY } from "../../src/cli/setup.ts";
+import {
+  runSetup,
+  buildVerifyLine,
+  buildPrivacyTransportSummary,
+  NO_MCP_ENTRY_WRITTEN_SUMMARY,
+  describeWrittenMcpTransport,
+  type SetupStepResult,
+} from "../../src/cli/setup.ts";
+import type { McpTransportChoice } from "../../src/cli/mcp_config_scan.ts";
 import { runPreflight } from "../../src/cli/preflight.ts";
 import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
@@ -596,11 +604,6 @@ describe("buildVerifyLine", () => {
     expect(line).toContain("path_fix_hint");
   });
 
-  it("PRIVACY_TRANSPORT_SUMMARY mentions local stdio and no network egress", () => {
-    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("local stdio MCP");
-    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("no network egress");
-  });
-
   it("runSetup report includes verify_line and privacy_transport_summary", async () => {
     const cwd = await mkTmp("ntm-verify-line");
     try {
@@ -615,11 +618,181 @@ describe("buildVerifyLine", () => {
         },
       });
       expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
-      expect(report.privacy_transport_summary).toContain("local stdio MCP");
-      expect(report.privacy_transport_summary).toContain("no network egress");
+      expect(report.privacy_transport_summary).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
+      expect(report.privacy_transport_summary).not.toMatch(/no network|no egress/i);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
+  });
+
+  const PRESETS: McpTransportChoice[] = ["a", "b", "c", "d", "e"];
+  // Values `normalizeInitMcpTransport` (src/cli/index.ts) accepts for --mcp-transport.
+  const ACCEPTED_OVERRIDES = new Set([
+    "1", "2", "3", "4", "5", "a", "b", "c", "d", "e",
+    "signed", "signed-dev-shim", "dev-shim", "shim",
+  ]);
+  function suggestedOverrides(summary: string): string[] {
+    return [...summary.matchAll(/--mcp-transport[= ](\S+?)[.,;)]?(\s|$)/g)].map((m) => m[1]);
+  }
+
+  // Any wording that claims the absence of network activity.
+  const NO_NETWORK_CLAIM =
+    /no network|no egress|offline|never contacts|makes no (network )?requests|without (any )?network/i;
+
+  it("gives each written preset its own wording and no preset claims no network activity", () => {
+    const summaries = PRESETS.map((transport) =>
+      buildPrivacyTransportSummary([{ server_key: "neotoma", transport }])
+    );
+    expect(new Set(summaries).size).toBe(PRESETS.length);
+    PRESETS.forEach((transport, i) => {
+      const summary = summaries[i];
+      const description = describeWrittenMcpTransport(transport);
+      expect(summary).toContain("neotoma (");
+      expect(summary).toContain(`preset ${transport}`);
+      for (const text of [summary, description]) {
+        expect(text).not.toMatch(/no network/i);
+        expect(text).not.toMatch(/no egress/i);
+        expect(text).not.toMatch(NO_NETWORK_CLAIM);
+      }
+      if (transport === "a" || transport === "d" || transport === "e") {
+        expect(summary).toContain("signed HTTP MCP endpoint");
+      }
+    });
+  });
+
+  it("says preset c starts a server that checks the npm registry unless NO_UPDATE_NOTIFIER=1", () => {
+    const description = describeWrittenMcpTransport("c");
+    expect(description).toContain("local stdio command");
+    expect(description).toMatch(/npm registry for updates/);
+    expect(description).toContain("NO_UPDATE_NOTIFIER=1");
+  });
+
+  it("says other entries were not checked when a stdio entry is written next to an existing one", () => {
+    const summary = buildPrivacyTransportSummary([{ server_key: "neotoma-dev", transport: "c" }]);
+    expect(summary).toContain(
+      "Any other Neotoma entries in your MCP config, including any setup repaired or re-pointed to a new port, are not described here and were not checked."
+    );
+    // A written preset c entry is described by its mechanism, never as making no network requests.
+    expect(summary).toMatch(/neotoma-dev \(preset c: local stdio command[^)]*NO_UPDATE_NOTIFIER=1\)/);
+    expect(summary).not.toMatch(NO_NETWORK_CLAIM);
+    expect(summary).not.toMatch(/^Transport: local stdio/);
+  });
+
+  it("reports nothing written for an empty or absent write list", () => {
+    expect(buildPrivacyTransportSummary(undefined)).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
+    expect(buildPrivacyTransportSummary([])).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
+    expect(NO_MCP_ENTRY_WRITTEN_SUMMARY).toContain("describes no Neotoma MCP entry");
+    expect(NO_MCP_ENTRY_WRITTEN_SUMMARY).toContain("were not checked");
+  });
+
+  it("describes every preset without a no-network claim, and never throws", () => {
+    for (const transport of PRESETS) {
+      const description = describeWrittenMcpTransport(transport);
+      expect(description).not.toMatch(NO_NETWORK_CLAIM);
+    }
+  });
+
+  it("only suggests --mcp-transport values the CLI accepts", () => {
+    const all = [
+      buildPrivacyTransportSummary(undefined),
+      ...PRESETS.map((transport) => buildPrivacyTransportSummary([{ server_key: "neotoma", transport }])),
+    ];
+    for (const summary of all) {
+      expect(summary).not.toContain("--mcp-transport=http");
+      for (const value of suggestedOverrides(summary)) {
+        expect(ACCEPTED_OVERRIDES.has(value)).toBe(true);
+      }
+    }
+  });
+
+  describe("runSetup privacy_transport_summary", () => {
+    const passthrough = {
+      init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "x" }),
+      cliInstructionsConfigure: async () => ({
+        id: "cli-instructions",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "x",
+      }),
+      hooksInstall: async () => ({ id: "hooks", ok: true, changed: false, skipped: true, reason: "x" }),
+    };
+
+    async function summaryFor(mcpStep: SetupStepResult, dryRun = false): Promise<string> {
+      const cwd = await mkTmp("ntm-transport-line");
+      try {
+        const report = await runSetup({
+          tool: "cursor",
+          dryRun,
+          cwd,
+          skipPermissions: true,
+          skipSkills: true,
+          runners: { ...passthrough, mcpConfigure: async () => mcpStep },
+        });
+        return report.privacy_transport_summary;
+      } finally {
+        await fs.rm(cwd, { recursive: true, force: true });
+      }
+    }
+
+    it("describes the entries the MCP step wrote", async () => {
+      const summary = await summaryFor({
+        id: "mcp-configure",
+        ok: true,
+        changed: true,
+        details: {
+          installed: true,
+          written: [
+            { server_key: "neotoma-dev", transport: "c" },
+            { server_key: "neotoma", transport: "c" },
+          ],
+        },
+      });
+      expect(summary).toContain("neotoma-dev (preset c:");
+      expect(summary).toContain("neotoma (preset c:");
+      expect(summary).toContain("were not checked");
+      // A run that writes preset c entries claims no absence of network activity.
+      expect(summary).not.toMatch(NO_NETWORK_CLAIM);
+      expect(summary).toContain("NO_UPDATE_NOTIFIER=1");
+      // Setup may have repaired or re-ported other entries, so the line must not
+      // claim they were left alone.
+      expect(summary).not.toMatch(/unchanged/i);
+      expect(summary).not.toMatch(/\bleft\b/i);
+    });
+
+    it("on the repair path claims nothing was written or unchanged and says existing entries were not checked", async () => {
+      const summary = await summaryFor({
+        id: "mcp-configure",
+        ok: true,
+        changed: true,
+        skipped: false,
+        details: { installed: true, message: "Fixed 1 config file(s)" },
+      });
+      expect(summary).not.toMatch(/wrote no/i);
+      expect(summary).not.toMatch(/unchanged/i);
+      expect(summary).toContain("existing entries");
+      expect(summary).toContain("were not checked");
+    });
+
+    it("gives the nothing-written line on every path that writes nothing", async () => {
+      const nothingWritten = [
+        { id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured", details: { installed: false, message: "Dev and prod Neotoma servers are already configured." } },
+        { id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured", details: { installed: false, message: "MCP configuration skipped." } },
+        { id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured", details: { installed: false, message: "Installation cancelled." } },
+        // Fix path: installed but no `written` reported.
+        { id: "mcp-configure", ok: true, changed: true, skipped: false, details: { installed: true, message: "Fixed 1 config file(s)" } },
+      ];
+      for (const step of nothingWritten) {
+        expect(await summaryFor(step)).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
+      }
+      // Dry run never writes, even if a runner claimed otherwise.
+      expect(
+        await summaryFor(
+          { id: "mcp-configure", ok: true, changed: true, skipped: true, reason: "dry-run" },
+          true
+        )
+      ).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
+    });
   });
 });
 

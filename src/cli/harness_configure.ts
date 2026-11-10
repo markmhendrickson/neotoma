@@ -8,6 +8,7 @@ import {
   scanForMcpConfigs,
   type McpHookHarness,
   type McpTransportChoice,
+  type McpWrittenEntry,
 } from "./mcp_config_scan.js";
 
 export type HarnessInstallScope = "project" | "user" | "both";
@@ -39,6 +40,7 @@ export async function configureMcpServers(options: ConfigureMcpServersOptions): 
   message: string;
   scope?: HarnessInstallScope;
   updatedPaths?: string[];
+  written?: McpWrittenEntry[];
   repoRoot: string | null;
 }> {
   const devPort = envPort("NEOTOMA_SESSION_DEV_PORT");
