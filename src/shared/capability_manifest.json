@@ -23,6 +23,9 @@
     "correct": {
       "addedInVersion": "v0.4.3"
     },
+    "correct_transaction": {
+      "addedInVersion": "v0.26.0"
+    },
     "create_interpretation": {
       "addedInVersion": "v0.11.0"
     },
@@ -128,6 +131,9 @@
     },
     "parse_file": {
       "addedInVersion": "v0.4.3"
+    },
+    "patch_array_item": {
+      "addedInVersion": "v0.26.0"
     },
     "publish_rendered_page": {
       "addedInVersion": "v0.16.0"
