@@ -6,8 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildPrivacyTransportSummary } from "../../src/cli/setup.ts";
 import {
   backupMcpConfigEntry,
+  classifyMcpTransportPreset,
+  type McpTransportChoice,
   detectNeotomaServers,
   findMcpConfigPaths,
   inferHookHarnessesFromMcpConfigs,
@@ -184,6 +187,97 @@ describe("CLI MCP and instruction commands", () => {
         }
         await fs.rm(tmpHome, { recursive: true, force: true });
       }
+    });
+
+    it("reports the entries it wrote, and the transport line omits their URLs", async () => {
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-written-home-"));
+      const cursorConfigPath = path.join(tmpHome, ".cursor", "mcp.json");
+      const originalHome = process.env.HOME;
+      try {
+        process.env.HOME = tmpHome;
+        await fs.mkdir(path.dirname(cursorConfigPath), { recursive: true });
+        await fs.writeFile(cursorConfigPath, JSON.stringify({ mcpServers: {} }, null, 2));
+
+        const result = await offerInstall(
+          [{ path: cursorConfigPath, hasDev: false, hasProd: false }],
+          process.cwd(),
+          {
+            silent: true,
+            rewriteExistingNeotoma: true,
+            autoInstallScope: "user",
+            autoInstallEnv: "both",
+            mcpTransport: "d",
+            skipProjectSync: true,
+          }
+        );
+
+        expect(result.installed).toBe(true);
+        expect(result.written).toEqual([
+          { server_key: "neotoma-dev", transport: "d" },
+          { server_key: "neotoma", transport: "d" },
+        ]);
+        const written = await fs.readFile(cursorConfigPath, "utf-8");
+        // The generated entries do hold a URL ...
+        expect(written).toContain("http://127.0.0.1:3180/mcp");
+        // ... and the summary never prints it, nor any host, port, path or command.
+        const summary = buildPrivacyTransportSummary(result.written);
+        expect(summary).toContain("neotoma (preset d:");
+        expect(summary).not.toContain("http://");
+        expect(summary).not.toContain("127.0.0.1");
+        expect(summary).not.toContain("3180");
+        expect(summary).not.toContain(tmpHome);
+        expect(summary).not.toContain("/");
+        expect(summary).not.toMatch(/no network/i);
+      } finally {
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        await fs.rm(tmpHome, { recursive: true, force: true });
+      }
+    });
+
+    it("leaves written absent when nothing was written", async () => {
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-unwritten-home-"));
+      const cursorConfigPath = path.join(tmpHome, ".cursor", "mcp.json");
+      try {
+        const result = await offerInstall(
+          [{ path: cursorConfigPath, hasDev: true, hasProd: true }],
+          process.cwd(),
+          { silent: true, autoInstallScope: "user", autoInstallEnv: "both", skipProjectSync: true }
+        );
+        expect(result.installed).toBe(false);
+        expect(result.written).toBeUndefined();
+      } finally {
+        await fs.rm(tmpHome, { recursive: true, force: true });
+      }
+    });
+
+    it("classifies as signed exactly the presets that get AAuth keys", async () => {
+      const presets: McpTransportChoice[] = ["a", "b", "c", "d", "e"];
+      const originalHome = process.env.HOME;
+      for (const preset of presets) {
+        const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), `neotoma-aauth-${preset}-`));
+        try {
+          process.env.HOME = tmpHome;
+          await ensureAAuthKeysForSignedTransport(preset, true);
+          const keysGenerated = await fs
+            .access(path.join(tmpHome, ".neotoma", "aauth", "private.jwk"))
+            .then(() => true)
+            .catch(() => false);
+          expect(classifyMcpTransportPreset(preset) === "signed_http").toBe(keysGenerated);
+        } finally {
+          if (originalHome === undefined) {
+            delete process.env.HOME;
+          } else {
+            process.env.HOME = originalHome;
+          }
+          await fs.rm(tmpHome, { recursive: true, force: true });
+        }
+      }
+      expect(classifyMcpTransportPreset("c")).toBe("local_stdio");
+      expect(classifyMcpTransportPreset("b")).toBe("local_http_forwarder");
     });
 
     it("uses Claude Desktop compliant server ids when adding missing servers", async () => {

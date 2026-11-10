@@ -210,7 +210,7 @@ When rendering Neotoma Inspector links from CLI-backed memory operations, first 
 After running `neotoma setup --tool <harness> --yes`, two plain-text lines always appear on stdout (after the JSON report, if `--json` is active):
 
 1. **Install-verification line** — grep for `Neotoma installed at` to confirm install succeeded. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`.
-2. **Privacy/transport summary** — `Transport: local stdio MCP (no network egress). ...` Answers the first question from privacy-conscious users about where data goes.
+2. **Transport summary** — begins `Transport:` and describes only the Neotoma MCP entries this run wrote, one clause per entry with its server key and what its preset does. Only a preset `c` entry is described as making no network requests, and only for that entry. When entries were written, the line adds that other Neotoma entries already in the MCP config were left unchanged and not checked. When nothing was written (skipped, already configured, cancelled, dry run, or a repair), it says `this run wrote no Neotoma MCP entry; the transport of existing entries was not checked.` The line never includes a URL, host, port, path or command. The CLI and the stdio MCP server still check the npm registry for updates; set `NO_UPDATE_NOTIFIER=1` to disable those checks.
 
 If the install-verification line is absent, check `neotoma status --json` (the `doctor` alias still works) for `neotoma.path_fix_hint` and surface it to the user.
 

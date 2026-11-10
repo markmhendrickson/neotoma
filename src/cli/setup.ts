@@ -16,6 +16,11 @@ import { runHooksInstall } from "./hooks.js";
 import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
 import { writePermissionsForTool, toolFromString } from "./permissions.js";
+import {
+  classifyMcpTransportPreset,
+  type McpTransportChoice,
+  type McpWrittenEntry,
+} from "./mcp_config_scan.js";
 
 export interface SetupStepResult {
   id: string;
@@ -36,7 +41,10 @@ export interface SetupReport {
   overall_ok: boolean;
   /** Canonical single-line install confirmation. Agents grep for this to confirm install succeeded. */
   verify_line: string;
-  /** One-line privacy/transport summary for privacy-conscious evaluators. */
+  /**
+   * One-line transport summary describing only the Neotoma MCP entries this run wrote;
+   * other entries are reported as not checked.
+   */
   privacy_transport_summary: string;
 }
 
@@ -63,9 +71,76 @@ export function buildVerifyLine(doctor: Awaited<ReturnType<typeof runDoctor>>): 
   return `Neotoma installed at ${bin} (resolved via ${via}; ${ver}; data_dir=${dataDir}; mcp=${mcpLabel})`;
 }
 
-/** One-line privacy summary appended to setup output so privacy-conscious evaluators see it immediately. */
-export const PRIVACY_TRANSPORT_SUMMARY =
-  "Transport: local stdio MCP (no network egress). Override with --mcp-transport=http for signed HTTP /mcp proxy.";
+const MCP_PRESET_DESCRIPTION: Record<McpTransportChoice, string> = {
+  a: "preset a: local signing proxy command forwarding to a signed HTTP MCP endpoint",
+  b: "preset b: local command that may forward MCP requests to a local Neotoma HTTP endpoint",
+  c: "preset c: local stdio command with no URL; this entry makes no network requests",
+  d: "preset d: local signing proxy command forwarding to a signed HTTP MCP endpoint, with the dev entry pointed at the prod endpoint",
+  e: "preset e: local signing proxy command forwarding to a signed HTTP MCP endpoint, discovered from the local prod port file",
+};
+
+/** Plain-language description of what one preset's generated entries do (no URL, path or command). */
+export function describeWrittenMcpTransport(transport: McpTransportChoice): string {
+  const description = MCP_PRESET_DESCRIPTION[transport];
+  // Only a no-URL local preset may claim no network requests; keep the table and the
+  // shared classification from drifting apart.
+  if (classifyMcpTransportPreset(transport) !== "local_stdio" && /no network/i.test(description)) {
+    throw new Error(`Preset ${transport} must not claim no network requests.`);
+  }
+  return description;
+}
+
+export const NO_MCP_ENTRY_WRITTEN_SUMMARY =
+  "Transport: this run wrote no Neotoma MCP entry; the transport of existing entries was not checked.";
+
+export const OTHER_MCP_ENTRIES_NOT_CHECKED =
+  "Other Neotoma entries already in your MCP config were left unchanged and were not checked.";
+
+/**
+ * One-line transport summary built only from the entries this run generated and wrote.
+ * It never reads existing configs back, and never prints a URL, host, port, path,
+ * command, argument or environment value.
+ */
+export function buildPrivacyTransportSummary(written: McpWrittenEntry[] | undefined): string {
+  const seen = new Set<string>();
+  const clauses: string[] = [];
+  for (const entry of written ?? []) {
+    const key = `${entry.server_key}\u0000${entry.transport}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clauses.push(`${entry.server_key} (${describeWrittenMcpTransport(entry.transport)})`);
+  }
+  if (clauses.length === 0) return NO_MCP_ENTRY_WRITTEN_SUMMARY;
+  // Earlier configs may hold Neotoma entries this run did not write; we cannot tell
+  // without reading them back, so always say they were not checked.
+  return `Transport: this run wrote ${clauses.join("; ")}. ${OTHER_MCP_ENTRIES_NOT_CHECKED}`;
+}
+
+function isMcpTransportChoice(value: unknown): value is McpTransportChoice {
+  return value === "a" || value === "b" || value === "c" || value === "d" || value === "e";
+}
+
+/** Read `written` from the MCP step's details; anything malformed counts as nothing written. */
+export function writtenEntriesFromMcpStep(
+  step: SetupStepResult | undefined
+): McpWrittenEntry[] | undefined {
+  if (!step || !step.ok || step.skipped) return undefined;
+  const details = step.details as { written?: unknown } | undefined;
+  if (!details || !Array.isArray(details.written)) return undefined;
+  const out: McpWrittenEntry[] = [];
+  for (const item of details.written) {
+    const candidate = item as { server_key?: unknown; transport?: unknown } | null;
+    if (
+      !candidate ||
+      typeof candidate.server_key !== "string" ||
+      !isMcpTransportChoice(candidate.transport)
+    ) {
+      return undefined;
+    }
+    out.push({ server_key: candidate.server_key, transport: candidate.transport });
+  }
+  return out;
+}
 
 export interface RunSetupOptions {
   tool?: string | ToolId | null;
@@ -359,6 +434,8 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     doctor_after: doctorAfter,
     overall_ok: overall,
     verify_line: buildVerifyLine(doctorAfter),
-    privacy_transport_summary: PRIVACY_TRANSPORT_SUMMARY,
+    privacy_transport_summary: buildPrivacyTransportSummary(
+      dryRun ? undefined : writtenEntriesFromMcpStep(mcpStep)
+    ),
   };
 }
