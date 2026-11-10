@@ -605,6 +605,14 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_raw_fragments_source_key ON raw_fragments(source_id, fragment_key, entity_id)"
       )
       .run();
+    // (entity_id, fragment_key, last_seen): the current fragment per key of an
+    // entity, found by stepping through its keys rather than reading every
+    // fragment each re-store left behind (#2792).
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_raw_fragments_entity_key_seen ON raw_fragments(entity_id, fragment_key, last_seen)"
+      )
+      .run();
     await addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
     await addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
     await addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");

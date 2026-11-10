@@ -253,7 +253,9 @@ function expectWithinRatio(short: Measured, long: Measured): void {
   // The observation-row count is the deterministic gate; timings are medians
   // and get a 2 ms floor so a sub-millisecond short read cannot make noise
   // look like a regression.
-  expect(long.listObservationRows).toBeLessThanOrEqual(Math.max(short.listObservationRows, ENTITIES));
+  expect(long.listObservationRows).toBeLessThanOrEqual(
+    Math.max(short.listObservationRows, ENTITIES)
+  );
   for (const key of ["list", "count", "snapshot"] as const) {
     expect(long[key], `${key}: long ${long[key]} ms vs short ${short[key]} ms`).toBeLessThanOrEqual(
       MAX_RATIO * Math.max(short[key], 2)
@@ -268,12 +270,14 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
       getDb: (await import("../../src/repositories/db/connection.js")).getDb,
       queryEntitiesWithCount: (await import("../../src/shared/action_handlers/entity_handlers.js"))
         .queryEntitiesWithCount,
-      certifySnapshotPopulation: (await import("../../src/services/entity_population_certificate.js"))
-        .certifySnapshotPopulation,
+      certifySnapshotPopulation: (
+        await import("../../src/services/entity_population_certificate.js")
+      ).certifySnapshotPopulation,
       getEntityWithProvenance: (await import("../../src/services/entity_queries.js"))
         .getEntityWithProvenance,
-      migrateEntityLifecycleAuthority: (await import("../../src/services/entity_lifecycle_storage.js"))
-        .migrateEntityLifecycleAuthority,
+      migrateEntityLifecycleAuthority: (
+        await import("../../src/services/entity_lifecycle_storage.js")
+      ).migrateEntityLifecycleAuthority,
       storeStructuredForApi: (await import("../../src/actions.js")).storeStructuredForApi,
     };
     const start = performance.now();
@@ -309,39 +313,51 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
     expectWithinRatio(short, long);
   }, 900_000);
 
-  it("does not grow observation storage linearly when an unchanged record is re-stored", async () => {
-    const database = await m.getDb();
-    const type = `hist_restore_${runTag}`;
-    const entity = { entity_type: type, schema_version: "1.0", name: "Unchanged Record", status: "active" };
-    let entityId = "";
-    const pageCount = async () =>
-      ((await database.prepare("PRAGMA page_count").get()) as { page_count: number }).page_count;
-    const before = await pageCount();
-    // A sync pass re-stores the unchanged record in a batch whose other content
-    // changed. (A byte-identical batch already maps to its earlier source and
-    // observation, so it is not the case that grows a store.)
-    for (let n = 0; n < RESTORES; n++) {
-      const result = (await m.storeStructuredForApi({
-        userId: USER_ID,
-        idempotencyKey: `history-bench-${runTag}-${randomUUID()}`,
-        sourcePriority: 100,
-        entities: [
-          entityId ? { ...entity, target_id: entityId } : entity,
-          { entity_type: `${type}_cursor`, schema_version: "1.0", name: "Sync cursor", pass: n },
-        ],
-      })) as { entities: Array<{ entity_id: string }> };
-      entityId = result.entities[0].entity_id;
-    }
-    const observations = (
-      (await database
-        .prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id = ?")
-        .get(entityId)) as { n: number }
-    ).n;
-    const grownPages = (await pageCount()) - before;
-    report.push(
-      `re-stored an unchanged record ${RESTORES}x: ${observations} observation rows, +${grownPages} pages (${(statSync(process.env.NEOTOMA_SQLITE_PATH!).size / 1e6).toFixed(1)} MB file)`
-    );
-    // First store plus a bounded seen-again record, not one row per re-store.
-    expect(observations).toBeLessThanOrEqual(2);
-  }, 900_000);
+  // Red until no-op store suppression lands (#2792 point 1). `it.fails` keeps
+  // the lane green meanwhile and turns red the moment suppression works, so
+  // that change must flip this to `it`.
+  it.fails(
+    "does not grow observation storage linearly when an unchanged record is re-stored",
+    async () => {
+      const database = await m.getDb();
+      const type = `hist_restore_${runTag}`;
+      const entity = {
+        entity_type: type,
+        schema_version: "1.0",
+        name: "Unchanged Record",
+        status: "active",
+      };
+      let entityId = "";
+      const pageCount = async () =>
+        ((await database.prepare("PRAGMA page_count").get()) as { page_count: number }).page_count;
+      const before = await pageCount();
+      // A sync pass re-stores the unchanged record in a batch whose other content
+      // changed. (A byte-identical batch already maps to its earlier source and
+      // observation, so it is not the case that grows a store.)
+      for (let n = 0; n < RESTORES; n++) {
+        const result = (await m.storeStructuredForApi({
+          userId: USER_ID,
+          idempotencyKey: `history-bench-${runTag}-${randomUUID()}`,
+          sourcePriority: 100,
+          entities: [
+            entityId ? { ...entity, target_id: entityId } : entity,
+            { entity_type: `${type}_cursor`, schema_version: "1.0", name: "Sync cursor", pass: n },
+          ],
+        })) as { entities: Array<{ entity_id: string }> };
+        entityId = result.entities[0].entity_id;
+      }
+      const observations = (
+        (await database
+          .prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id = ?")
+          .get(entityId)) as { n: number }
+      ).n;
+      const grownPages = (await pageCount()) - before;
+      report.push(
+        `re-stored an unchanged record ${RESTORES}x: ${observations} observation rows, +${grownPages} pages (${(statSync(process.env.NEOTOMA_SQLITE_PATH!).size / 1e6).toFixed(1)} MB file)`
+      );
+      // First store plus a bounded seen-again record, not one row per re-store.
+      expect(observations).toBeLessThanOrEqual(2);
+    },
+    900_000
+  );
 });

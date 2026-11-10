@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **809**
-- Backend and repo Vitest files: **755**
+- Total automated test files: **813**
+- Backend and repo Vitest files: **759**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 227 |
+| Vitest unit tests | 228 |
 | Vitest service tests | 65 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 239 |
-| Vitest CLI tests | 90 |
+| Vitest integration tests | 240 |
+| Vitest CLI tests | 91 |
 | Vitest contract tests | 27 |
 | Vitest security tests | 19 |
 | Vitest subscription tests | 7 |
@@ -84,7 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 27 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
-| Tests Performance | 3 |
+| Tests Performance | 4 |
 | Tests Scripts | 4 |
 
 ## Primary validation commands
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (227):**
+**Files (228):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -226,6 +226,7 @@ flowchart TD
 - `tests/unit/llms_txt_claims.test.ts`
 - `tests/unit/manage_bundles_tool.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
+- `tests/unit/mcp_config_scan_user_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
 - `tests/unit/mcp_header_screen_names.test.ts`
 - `tests/unit/mcp_initialize_skills.test.ts`
@@ -493,7 +494,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (239):**
+**Files (240):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -558,6 +559,7 @@ flowchart TD
 - `tests/integration/entity_mutation_capability_coverage.test.ts`
 - `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
+- `tests/integration/entity_queries_deep_offset.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_query_deleted_count.test.ts`
@@ -739,7 +741,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (90):**
+**Files (91):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -813,6 +815,7 @@ flowchart TD
 - `tests/cli/peers.test.ts`
 - `tests/cli/processes_command.test.ts`
 - `tests/cli/relationship_types_cli.test.ts`
+- `tests/cli/relationships_create_refusal.test.ts`
 - `tests/cli/reporter_setup.test.ts`
 - `tests/cli/request_atomic_transaction.test.ts`
 - `tests/cli/request_conditional_store.test.ts`
@@ -1017,10 +1020,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/performance`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (3):**
+**Files (4):**
 - `tests/performance/entity_list_page.bench.test.ts`
 - `tests/performance/entity_query_count.bench.test.ts`
 - `tests/performance/graph_traversal.bench.test.ts`
+- `tests/performance/history_length_reads.bench.test.ts`
 
 ### Tests Scripts
 **Directory:** `tests/scripts/`
