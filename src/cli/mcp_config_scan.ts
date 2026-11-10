@@ -836,11 +836,14 @@ export type NeotomaMcpEntryClass =
   | "stdio_proxy"
   | "unknown";
 
+/**
+ * Holds no value copied from the config entry: only its class and whether its
+ * endpoint is local or remote. A configured URL can carry credentials or a token,
+ * so the URL itself is never kept, printed or returned.
+ */
 export interface NeotomaMcpEntryClassification {
   class: NeotomaMcpEntryClass;
-  /** The HTTP endpoint the entry talks to, when it makes HTTP requests. */
-  endpoint_url: string | null;
-  /** `local` for loopback hosts and `localhost`; `null` when no HTTP is made or the URL is unparseable. */
+  /** `local` for loopback hosts and `localhost`, `remote` for any other host; `null` when no HTTP is made. */
   endpoint_locality: "local" | "remote" | null;
 }
 
@@ -859,14 +862,15 @@ const LOCAL_STDIO_SCRIPTS = new Set([
 /** Default downstream of the proxy shims and `neotoma mcp proxy` when no URL is set (loopback). */
 const DEFAULT_PROXY_DOWNSTREAM_URL = DEFAULT_DEV_MCP_URL;
 
-export function endpointLocality(url: string): "local" | "remote" | null {
+/** `local` for loopback hosts and `localhost`; `remote` for any other host, or one that cannot be parsed. */
+export function endpointLocality(url: string): "local" | "remote" {
   let host: string;
   try {
     host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
   } catch {
-    return null;
+    return "remote";
   }
-  if (!host) return null;
+  if (!host) return "remote";
   if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return "local";
   if (/^127(\.\d{1,3}){3}$/.test(host)) return "local";
   return "remote";
@@ -876,15 +880,17 @@ function httpClassification(
   cls: "signed_http" | "unsigned_http" | "stdio_proxy",
   url: string
 ): NeotomaMcpEntryClassification {
-  const locality = endpointLocality(url);
-  // An HTTP entry whose URL cannot be parsed has no knowable endpoint.
-  if (!locality) return { class: "unknown", endpoint_url: url || null, endpoint_locality: null };
-  return { class: cls, endpoint_url: url, endpoint_locality: locality };
+  // An HTTP entry whose URL cannot be parsed is not a shape we write.
+  try {
+    new URL(url);
+  } catch {
+    return { class: "unknown", endpoint_locality: null };
+  }
+  return { class: cls, endpoint_locality: endpointLocality(url) };
 }
 
 const LOCAL_STDIO_RESULT: NeotomaMcpEntryClassification = {
   class: "local_stdio",
-  endpoint_url: null,
   endpoint_locality: null,
 };
 
@@ -897,7 +903,6 @@ const LOCAL_STDIO_RESULT: NeotomaMcpEntryClassification = {
 export function classifyNeotomaMcpEntry(entry: unknown): NeotomaMcpEntryClassification {
   const unknownResult: NeotomaMcpEntryClassification = {
     class: "unknown",
-    endpoint_url: null,
     endpoint_locality: null,
   };
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return unknownResult;
@@ -960,34 +965,47 @@ export interface NeotomaMcpEntryReadBack extends NeotomaMcpEntryClassification {
   server_key: string;
 }
 
+/** Fixed reasons a config file could not be read back. Never parser error text or file content. */
+export type McpConfigUnreadableReason = "file could not be read" | "file could not be parsed";
+
 /**
  * Read MCP config files back after they were written or kept, and classify every
  * Neotoma server entry in them (`mcpServers` or VS Code `servers`; any key containing
- * "neotoma"). A file that cannot be read or parsed as JSON lands in `unreadable_paths`.
+ * "neotoma"). A file that cannot be read or parsed as JSON lands in `unreadable_paths`
+ * with a fixed reason in `unreadable`; error text is discarded because a parse error
+ * can echo the line it failed on.
  */
 export async function readBackNeotomaMcpEntries(paths: string[]): Promise<{
   entries: NeotomaMcpEntryReadBack[];
   unreadable_paths: string[];
+  unreadable: Array<{ path: string; reason: McpConfigUnreadableReason }>;
 }> {
   const entries: NeotomaMcpEntryReadBack[] = [];
-  const unreadable: string[] = [];
+  const unreadable: Array<{ path: string; reason: McpConfigUnreadableReason }> = [];
   for (const p of [...new Set(paths)]) {
+    let text: string;
+    try {
+      text = await fs.readFile(p, "utf-8");
+    } catch {
+      unreadable.push({ path: p, reason: "file could not be read" });
+      continue;
+    }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(await fs.readFile(p, "utf-8"));
+      parsed = JSON.parse(text);
     } catch {
-      unreadable.push(p);
+      unreadable.push({ path: p, reason: "file could not be parsed" });
       continue;
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      unreadable.push(p);
+      unreadable.push({ path: p, reason: "file could not be parsed" });
       continue;
     }
     const obj = parsed as { mcpServers?: unknown; servers?: unknown };
     const servers = obj.mcpServers ?? obj.servers;
     if (servers === undefined) continue;
     if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
-      unreadable.push(p);
+      unreadable.push({ path: p, reason: "file could not be parsed" });
       continue;
     }
     for (const key of Object.keys(servers as Record<string, unknown>).sort()) {
@@ -999,7 +1017,7 @@ export async function readBackNeotomaMcpEntries(paths: string[]): Promise<{
       });
     }
   }
-  return { entries, unreadable_paths: unreadable };
+  return { entries, unreadable_paths: unreadable.map((u) => u.path), unreadable };
 }
 
 export function hasAAuthKeys(): boolean {

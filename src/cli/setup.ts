@@ -20,6 +20,7 @@ import type {
   McpTransportChoice,
   NeotomaMcpEntryClass,
   NeotomaMcpEntryReadBack,
+  McpConfigUnreadableReason,
 } from "./mcp_config_scan.js";
 import { SIGNED_MCP_TRANSPORTS, readBackNeotomaMcpEntries } from "./mcp_config_scan.js";
 
@@ -79,7 +80,8 @@ const CLASS_DESCRIPTION: Record<Exclude<NeotomaMcpEntryClass, "unknown">, string
 function describeEntry(e: NeotomaMcpEntryReadBack): string {
   const desc = CLASS_DESCRIPTION[e.class as Exclude<NeotomaMcpEntryClass, "unknown">];
   if (e.class === "local_stdio") return desc;
-  return `${desc} to a ${e.endpoint_locality} endpoint (${e.endpoint_url})`;
+  // Key, class and locality only: no value copied from the entry (a URL can carry credentials).
+  return `${desc} to a ${e.endpoint_locality ?? "remote"} endpoint`;
 }
 
 function requestedPresetNote(transport: McpTransportChoice | null | undefined): string {
@@ -96,7 +98,11 @@ function requestedPresetNote(transport: McpTransportChoice | null | undefined): 
  * the line says the transport could not be determined.
  */
 export function buildPrivacyTransportSummary(
-  readBack: { entries: NeotomaMcpEntryReadBack[]; unreadable_paths: string[] } | null,
+  readBack: {
+    entries: NeotomaMcpEntryReadBack[];
+    unreadable_paths: string[];
+    unreadable?: Array<{ path: string; reason: McpConfigUnreadableReason }>;
+  } | null,
   opts: { dryRun?: boolean; requestedTransport?: McpTransportChoice | null } = {}
 ): string {
   const note = requestedPresetNote(opts.requestedTransport);
@@ -106,16 +112,21 @@ export function buildPrivacyTransportSummary(
       note
     );
   }
-  if (!readBack || readBack.entries.length === 0) {
+  if (readBack && readBack.unreadable_paths.length > 0) {
     return (
-      "Transport: could not be determined; this run wrote or kept no Neotoma MCP config entry to read back. " +
+      `Transport: could not be determined; ${(
+        readBack.unreadable ??
+        readBack.unreadable_paths.map((p) => ({ path: p, reason: "file could not be read" }))
+      )
+        .map((u) => `${u.path}: ${u.reason}`)
+        .join(", ")}. ` +
       "Check your MCP client config." +
       note
     );
   }
-  if (readBack.unreadable_paths.length > 0) {
+  if (!readBack || readBack.entries.length === 0) {
     return (
-      `Transport: could not be determined; could not read back ${readBack.unreadable_paths.join(", ")}. ` +
+      "Transport: could not be determined; this run wrote or kept no Neotoma MCP config entry to read back. " +
       "Check your MCP client config." +
       note
     );

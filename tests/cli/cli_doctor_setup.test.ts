@@ -754,6 +754,89 @@ describe("buildVerifyLine", () => {
     }
   });
 
+  // The transport line and read-back carry only each entry's key, class and
+  // local/remote: never a value copied from the config file.
+  const FAKE_HOST = "secret-host.example.invalid";
+  const FAKE_SECRETS = ["user:pass", "FAKE_TEST_VALUE", FAKE_HOST, "8443", "/private/mcp"];
+  function expectNoConfigValues(text: string) {
+    for (const v of FAKE_SECRETS) expect(text).not.toContain(v);
+  }
+
+  it("url entry with credentials and a token query: prints key, class and remote only", async () => {
+    const cwd = await mkTmp("ntm-transport-redact-url");
+    try {
+      const file = await writeConfig(cwd, {
+        neotoma: { url: `https://user:pass@${FAKE_HOST}:8443/private/mcp?token=FAKE_TEST_VALUE` },
+      });
+      const readBack = await readBackNeotomaMcpEntries([file]);
+      expectNoConfigValues(JSON.stringify(readBack));
+      expect(readBack.entries[0]).toEqual({
+        path: file,
+        server_key: "neotoma",
+        class: "unsigned_http",
+        endpoint_locality: "remote",
+      });
+      const report = await runSetupReadingBack(cwd, "c", [file]);
+      const line = report.privacy_transport_summary;
+      expectNoConfigValues(line);
+      expectNoConfigValues(JSON.stringify(report));
+      expect(line).toContain("neotoma: unsigned HTTP /mcp");
+      expect(line).toContain("remote endpoint");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("MCP_PROXY_DOWNSTREAM_URL with a token query: prints key, class and locality only", async () => {
+    const cwd = await mkTmp("ntm-transport-redact-downstream");
+    try {
+      const file = await writeConfig(cwd, {
+        "neotoma-dev": {
+          command: SIGNED_SHIM,
+          env: {
+            MCP_PROXY_DOWNSTREAM_URL: `http://user:pass@${FAKE_HOST}:8443/private/mcp?token=FAKE_TEST_VALUE`,
+          },
+        },
+        neotoma: {
+          command: STDIO_DEV.replace("run_neotoma_mcp_stdio.sh", "run_neotoma_mcp_stdio_dev_shim.sh"),
+          env: { MCP_PROXY_DOWNSTREAM_URL: "http://user:pass@127.0.0.1:8443/private/mcp?token=FAKE_TEST_VALUE" },
+        },
+      });
+      const readBack = await readBackNeotomaMcpEntries([file]);
+      expectNoConfigValues(JSON.stringify(readBack));
+      const report = await runSetupReadingBack(cwd, "a", [file]);
+      const line = report.privacy_transport_summary;
+      expectNoConfigValues(line);
+      expectNoConfigValues(JSON.stringify(report));
+      expect(line).toContain("neotoma-dev: signed HTTP /mcp; makes HTTP requests to a remote endpoint");
+      expect(line).toContain("neotoma: local stdio proxy that makes HTTP requests to a local endpoint");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("config file that fails to parse: fixed reason, no content from the failing line", async () => {
+    const cwd = await mkTmp("ntm-transport-redact-parse");
+    try {
+      const file = path.join(cwd, "mcp.json");
+      await fs.writeFile(
+        file,
+        `{"mcpServers": {"neotoma": {"url": "https://user:pass@${FAKE_HOST}:8443/private/mcp?token=FAKE_TEST_VALUE" oops}}}\n`
+      );
+      const readBack = await readBackNeotomaMcpEntries([file]);
+      expect(readBack.unreadable).toEqual([{ path: file, reason: "file could not be parsed" }]);
+      expectNoConfigValues(JSON.stringify(readBack));
+      const report = await runSetupReadingBack(cwd, "c", [file]);
+      const line = report.privacy_transport_summary;
+      expect(line).toContain("could not be determined");
+      expect(line).toContain("file could not be parsed");
+      expectNoConfigValues(line);
+      expectNoConfigValues(JSON.stringify(report));
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("every --mcp-transport value the summary mentions is accepted by the CLI", async () => {
     const { normalizeInitMcpTransport } = await import("../../src/cli/index.ts");
     const lines = [
