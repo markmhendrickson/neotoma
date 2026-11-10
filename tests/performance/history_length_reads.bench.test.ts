@@ -323,10 +323,10 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
     expectWithinRatio(short, long);
   }, 900_000);
 
-  // Red until no-op store suppression lands (#2792 point 1). `it.fails` keeps
-  // the lane green meanwhile and turns red the moment suppression works, so
-  // that change must flip this to `it`.
-  it.fails(
+  // No-op store suppression (#2792 point 1): an unchanged record re-stored in a
+  // batch whose other content changed adds no observation row and no fragment
+  // row; the repeats are counted on the observation_sightings marker instead.
+  it(
     "does not grow observation storage linearly when an unchanged record is re-stored",
     async () => {
       const database = await m.getDb();
@@ -365,8 +365,21 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
       report.push(
         `re-stored an unchanged record ${RESTORES}x: ${observations} observation rows, +${grownPages} pages (${(statSync(process.env.NEOTOMA_SQLITE_PATH!).size / 1e6).toFixed(1)} MB file)`
       );
-      // First store plus a bounded seen-again record, not one row per re-store.
-      expect(observations).toBeLessThanOrEqual(2);
+      const fragments = (
+        (await database
+          .prepare("SELECT COUNT(*) AS n FROM raw_fragments WHERE entity_id = ?")
+          .get(entityId)) as { n: number }
+      ).n;
+      const sighting = (await database
+        .prepare("SELECT SUM(seen_count) AS n FROM observation_sightings WHERE entity_id = ?")
+        .get(entityId)) as { n: number | null };
+      report.push(
+        `  ${fragments} fragment rows; ${sighting.n ?? 0} repeats counted in observation_sightings`
+      );
+      // The first store only: the other RESTORES - 1 passes are counted, not appended.
+      expect(observations).toBe(1);
+      expect(fragments).toBe(0);
+      expect(sighting.n).toBe(RESTORES - 1);
     },
     900_000
   );

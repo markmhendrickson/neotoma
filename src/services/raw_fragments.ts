@@ -34,6 +34,13 @@ export interface StoreFragmentParams {
    * what readers pick, keeps carrying the current value.
    */
   reuseAcrossSources?: boolean;
+  /**
+   * Out-parameter: `storeFragment` increments `count` when it adds a NEW fragment row
+   * (not when it bumped an existing one). A store that added a new fragment
+   * cannot be suppressed as a no-op, because the fragment is only current while
+   * its source still has an observation of the entity.
+   */
+  inserted?: { count: number };
 }
 
 /** Canonical JSON (keys sorted at every depth) for comparing fragment values. */
@@ -215,6 +222,17 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     fragment_key: key,
     fragment_value: value,
     fragment_envelope: envelope,
+    // With suppression on, rows carry the columns the readers order by.
+    // `last_seen` is how a reader finds the newest fragment per key and how a
+    // later repeat bumps it; a NULL here would sort below every bumped row, so a
+    // bumped older value would outrank a newer inserted one (#2792).
+    ...(params.reuseAcrossSources
+      ? {
+          frequency_count: 1,
+          first_seen: new Date().toISOString(),
+          last_seen: new Date().toISOString(),
+        }
+      : {}),
   };
 
   const { error: insertError } = await db.from("raw_fragments").insert(insertData).select();
@@ -260,6 +278,7 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     return false;
   }
 
+  if (params.inserted) params.inserted.count += 1;
   await enhance(1);
   return true;
 }
@@ -273,6 +292,7 @@ export async function storeConvertedOriginals(params: {
   originalValues: Record<string, unknown>;
   validFields: Record<string, unknown>;
   reuseAcrossSources?: boolean;
+  inserted?: { count: number };
 }): Promise<number> {
   const { sourceId, userId, entityId, entityType, schemaVersion, originalValues, validFields } =
     params;
@@ -290,6 +310,7 @@ export async function storeConvertedOriginals(params: {
       reason: "converted_value_original",
       convertedTo: validFields[key],
       reuseAcrossSources: params.reuseAcrossSources,
+      inserted: params.inserted,
     });
     if (stored) count++;
   }
@@ -305,6 +326,7 @@ export async function storeUnknownFields(params: {
   schemaVersion: string;
   unknownFields: Record<string, unknown>;
   reuseAcrossSources?: boolean;
+  inserted?: { count: number };
 }): Promise<{ count: number; fields: string[] }> {
   const { sourceId, userId, entityId, entityType, schemaVersion, unknownFields } = params;
 
@@ -330,6 +352,7 @@ export async function storeUnknownFields(params: {
       value,
       reason: "unknown_field",
       reuseAcrossSources: params.reuseAcrossSources,
+      inserted: params.inserted,
     });
     if (stored) storedFields.push(key);
   }

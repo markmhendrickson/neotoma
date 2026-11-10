@@ -303,6 +303,14 @@ export async function physicalDeletion(userId: string, entityId?: string): Promi
     throw new Error(`Failed to delete observations: ${obsError.message}`);
   }
 
+  // The seen-again markers of the deleted observations (#2792).
+  let sightingQuery = db.from("observation_sightings").delete().eq("user_id", userId);
+  if (entityId) sightingQuery = sightingQuery.eq("entity_id", entityId);
+  const { error: sightingError } = await sightingQuery;
+  if (sightingError) {
+    throw new Error(`Failed to delete observation sightings: ${sightingError.message}`);
+  }
+
   // Delete snapshots
   if (entityId) {
     const { error: snapError } = await db

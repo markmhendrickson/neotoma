@@ -3890,8 +3890,11 @@ export class NeotomaServer {
       throw new McpError(ErrorCode.InternalError, `Failed to list observations: ${error.message}`);
     }
 
+    // Seen-again markers (#2792): added only to observations that have one.
+    const { attachSightings } = await import("./services/observation_sightings.js");
+
     return this.buildTextResponse({
-      observations: observations || [],
+      observations: await attachSightings(observations || [], userId),
       total: count || 0,
       limit: parsed.limit,
       offset: parsed.offset,
@@ -7620,6 +7623,11 @@ export class NeotomaServer {
         await import("./services/raw_fragments.js");
       const schemaVer = schema?.schema_version || "1.0";
 
+      // A fragment is current only while its source still has an observation of
+      // the entity. So a store that adds a NEW fragment row must also append its
+      // observation (#2792); only a store whose fragments were all repeats may
+      // be suppressed.
+      const newFragments = { count: 0 };
       await storeConvertedOriginals({
         sourceId: storageResult.sourceId,
         userId,
@@ -7629,6 +7637,7 @@ export class NeotomaServer {
         originalValues,
         validFields,
         reuseAcrossSources: suppressNoop,
+        inserted: newFragments,
       });
 
       const unknownFieldsResult = await storeUnknownFields({
@@ -7639,6 +7648,7 @@ export class NeotomaServer {
         schemaVersion: schemaVer,
         unknownFields,
         reuseAcrossSources: suppressNoop,
+        inserted: newFragments,
       });
       unknownFieldsCount += unknownFieldsResult.count;
       for (const f of unknownFieldsResult.fields) unknownFieldNamesSet.add(f);
@@ -7684,7 +7694,7 @@ export class NeotomaServer {
       // observation, so record a sighting of it instead of appending a row.
       let repeatedObservationId: string | null = null;
       let seenAgain: { seen_count: number } | undefined;
-      if (!existingObservation && suppressNoop) {
+      if (!existingObservation && suppressNoop && newFragments.count === 0) {
         const sightings = await import("./services/observation_sightings.js");
         const repeated = await sightings.findRepeatedObservation({
           userId,

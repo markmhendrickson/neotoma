@@ -5705,9 +5705,11 @@ app.get("/entities/:id/observations", async (req, res) => {
 
     const rows = (data || []) as Record<string, unknown>[];
     const enriched = await attachSourceLabelsToObservations(userId, rows);
+    // Seen-again markers (#2792): added only to observations that have one.
+    const { attachSightings } = await import("./services/observation_sightings.js");
 
     return res.json({
-      observations: enriched,
+      observations: await attachSightings(enriched, userId),
       total: count || 0,
       limit,
       offset,
@@ -7623,9 +7625,11 @@ app.get("/observations", async (req, res) => {
 
     const rows = (data || []) as Record<string, unknown>[];
     const enriched = await attachSourceLabelsToObservations(userId, rows);
+    // Seen-again markers (#2792): added only to observations that have one.
+    const { attachSightings } = await import("./services/observation_sightings.js");
 
     return res.json({
-      observations: enriched,
+      observations: await attachSightings(enriched, userId),
       total: count || 0,
       limit,
       offset,
@@ -10633,7 +10637,9 @@ app.post("/list_observations", async (req, res) => {
     entity_id,
     count: data?.length || 0,
   });
-  return res.json({ observations: data || [] });
+  // Seen-again markers (#2792): added only to observations that have one.
+  const { attachSightings } = await import("./services/observation_sightings.js");
+  return res.json({ observations: await attachSightings(data || [], userId) });
 });
 
 // Get field provenance (trace field to source documents)
