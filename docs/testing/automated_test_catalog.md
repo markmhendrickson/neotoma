@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **733**
-- Backend and repo Vitest files: **697**
+- Total automated test files: **741**
+- Backend and repo Vitest files: **705**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 198 |
-| Vitest service tests | 60 |
+| Vitest unit tests | 199 |
+| Vitest service tests | 61 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 223 |
+| Vitest integration tests | 227 |
 | Vitest CLI tests | 87 |
 | Vitest contract tests | 25 |
-| Vitest security tests | 18 |
+| Vitest security tests | 19 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -84,7 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 10 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
-| Tests Performance | 2 |
+| Tests Performance | 3 |
 | Tests Scripts | 4 |
 
 ## Primary validation commands
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (198):**
+**Files (199):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -282,6 +282,7 @@ flowchart TD
 - `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
+- `tests/unit/services/bounded_identity_read.test.ts`
 - `tests/unit/session_info.test.ts`
 - `tests/unit/shared_environment.test.ts`
 - `tests/unit/sign_in_session_wiring.test.ts`
@@ -315,7 +316,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (60):**
+**Files (61):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -332,6 +333,7 @@ flowchart TD
 - `tests/services/entity_resolution_cross_owner_conflict.test.ts`
 - `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
+- `tests/services/entity_resolution_userid_noop.test.ts`
 - `tests/services/entity_resolution.test.ts`
 - `tests/services/entity_split_cross_owner_conflict.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
@@ -458,7 +460,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (223):**
+**Files (227):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -512,6 +514,10 @@ flowchart TD
 - `tests/integration/entity_lifecycle_ingress.test.ts`
 - `tests/integration/entity_lifecycle_inventory.test.ts`
 - `tests/integration/entity_lifecycle_legacy_native.test.ts`
+- `tests/integration/entity_lifecycle_visibility_plans.test.ts`
+- `tests/integration/entity_list_source_lookups.test.ts`
+- `tests/integration/entity_population_certificate_cost.test.ts`
+- `tests/integration/entity_population_certificate_gate.test.ts`
 - `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
@@ -814,10 +820,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (18):**
+**Files (19):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/exact_identity_transport.test.ts`
 - `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/provenance_read_scoping.test.ts`
@@ -942,7 +949,8 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/performance`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (2):**
+**Files (3):**
+- `tests/performance/entity_list_page.bench.test.ts`
 - `tests/performance/entity_query_count.bench.test.ts`
 - `tests/performance/graph_traversal.bench.test.ts`
 

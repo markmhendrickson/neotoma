@@ -23,6 +23,58 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    ExactIdentityRead:
+      type: object
+      additionalProperties: false
+      required: [version, state, common_view, requested_scope]
+      properties:
+        version:
+          type: string
+          enum: ["1"]
+        state:
+          type: string
+          enum: [singleton, absent, ambiguous, unproved]
+          description: |
+            Singleton identifies one verified visible row. Absent proves no match.
+            Ambiguous proves at least two matches. Unproved reports unavailable or
+            incomplete proof and cannot be treated as absence. No state falls
+            back to an ordinary query.
+        common_view:
+          type: boolean
+          description: True only for a proved state from one authenticated database view.
+        requested_scope:
+          type: object
+          additionalProperties: false
+          required: [owner, entity_type, field, value_sha256]
+          properties:
+            owner:
+              type: string
+              enum: [authenticated]
+            entity_type:
+              type: string
+            field:
+              type: string
+            value_sha256:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+              description: SHA-256 of the JSON string value, without echoing the predicate.
+        entity:
+          type: object
+          additionalProperties: false
+          required: [entity_id, entity_type, snapshot, provenance]
+          description: The owned raw snapshot and its field provenance, present only for singleton.
+          properties:
+            entity_id:
+              type: string
+            entity_type:
+              type: string
+            snapshot:
+              type: object
+              additionalProperties: true
+            provenance:
+              type: object
+              additionalProperties:
+                type: string
     EntityReadContract:
       type: object
       additionalProperties: false
@@ -4301,7 +4353,8 @@ paths:
         behavior instead of a 404. Scoped to the authenticated user. The
         request body of `POST /entities/query` and the query string here accept
         the same field names; complex object fields (`snapshot_filters`) are
-        passed as a JSON-encoded string. Unmatched verbs on `/entities` return
+        passed as a JSON-encoded string. Exact identity proofs require POST
+        so the identity value is not carried in the URL. Unmatched verbs on `/entities` return
         a 404 whose `details.hint` points back at this endpoint and
         `POST /entities/query`.
       operationId: listEntities
@@ -4489,6 +4542,19 @@ paths:
             schema:
               type: object
               properties:
+                read_mode:
+                  type: string
+                  enum: [exact_identity]
+                  description: |
+                    Opt in to a bounded same-view read with one entity_type and
+                    one snapshot_filters string equality on its declared sole
+                    canonical identity field. Type and field names must be lowercase
+                    identifiers (1–64 ASCII characters). The value must be
+                    1–256 Unicode characters without control characters.
+                    Supply no other options or user_id override.
+                    The exact_identity result distinguishes unavailable proof
+                    from absence. Only file libSQL with an available pinned
+                    reader currently supplies proof.
                 entity_type:
                   type: string
                   description: |
@@ -4661,6 +4727,8 @@ paths:
                       $ref: "#/components/schemas/EntitySnapshot"
                   read_contract:
                     $ref: "#/components/schemas/EntityReadContract"
+                  exact_identity:
+                    $ref: "#/components/schemas/ExactIdentityRead"
                   total:
                     type: integer
                   limit:
