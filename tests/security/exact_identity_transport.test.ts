@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { promisify, stripVTControlCharacters } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { HttpTransport } from "../../packages/client/src/http.js";
 import { LocalTransport } from "../../packages/client/src/local.js";
@@ -178,19 +178,34 @@ describe("exact identity transport uses existing tenant scope", () => {
       // Exercise the access-log sink, including the router's normal equivalent
       // spellings and implicit HEAD entrance, using synthetic owned input.
       const accessLog = vi.spyOn(process.stdout, "write");
+      const logged = () =>
+        stripVTControlCharacters(accessLog.mock.calls.map(([chunk]) => String(chunk)).join(""));
+      const expectRedactedAccessLog = (method: string, path: string, status: number) => {
+        const line = logged()
+          .split("\n")
+          .find((entry) => entry.startsWith(`${method} ${path} ${status} `));
+        expect(line).toMatch(/ \d+(?:\.\d+)? ms - (?:\d+|-)$/);
+        expect(logged()).not.toContain("snapshot_filters");
+        expect(logged()).not.toContain(bobUid);
+      };
+      const params = new URLSearchParams({
+        read_mode: "exact_identity",
+        entity_type: "case_fixture",
+        snapshot_filters: JSON.stringify(request(bobUid).snapshot_filters),
+      });
       try {
+        const health = await fetch(app.baseUrl + "/health?" + params, { method: "HEAD" });
+        expect(health.status).toBe(200);
+        expectRedactedAccessLog("HEAD", "/health", 200);
+
         const route = "/entities";
         for (const method of ["GET", "HEAD"]) {
           for (const path of [route, route + "/", route.toUpperCase(), "/Entities/"]) {
             for (const repeated of [false, true]) {
               accessLog.mockClear();
-              const params = new URLSearchParams({
-                read_mode: "exact_identity",
-                entity_type: "case_fixture",
-                snapshot_filters: JSON.stringify(request(bobUid).snapshot_filters),
-              });
-              if (repeated) params.append("read_mode", "exact_identity");
-              const response = await fetch(app.baseUrl + path + "?" + params, {
+              const query = new URLSearchParams(params);
+              if (repeated) query.append("read_mode", "exact_identity");
+              const response = await fetch(app.baseUrl + path + "?" + query, {
                 method,
                 headers: bearer(bob.token),
               });
@@ -198,9 +213,7 @@ describe("exact identity transport uses existing tenant scope", () => {
               expect(response.status).toBe(400);
               if (method === "GET") expect(text).toContain("requires POST");
               expect(text).not.toContain(bobUid);
-              expect(accessLog.mock.calls.map(([chunk]) => String(chunk)).join("\n")).not.toContain(
-                bobUid
-              );
+              expectRedactedAccessLog(method, path, 400);
             }
           }
         }
@@ -209,9 +222,7 @@ describe("exact identity transport uses existing tenant scope", () => {
           headers: bearer(bob.token),
         });
         await ordinary.text();
-        expect(accessLog.mock.calls.map(([chunk]) => String(chunk)).join("\n")).toContain(
-          "/entities?entity_type=case_fixture"
-        );
+        expect(logged()).toContain("/entities?entity_type=case_fixture");
       } finally {
         accessLog.mockRestore();
       }
