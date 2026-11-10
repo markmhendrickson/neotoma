@@ -271,6 +271,11 @@ import {
 import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import {
+  EXACT_IDENTITY_REQUEST_MESSAGE,
+  exactIdentityRequested,
+  readExactIdentity,
+} from "./shared/action_handlers/exact_identity_read.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import {
   prepareEntitySnapshotWithEmbedding,
@@ -458,7 +463,11 @@ app.use(
     },
   })
 );
-app.use(morgan("dev"));
+app.use(
+  morgan<express.Request, express.Response>("dev", {
+    skip: (req) => req.path === "/entities" && exactIdentityRequested(req.query),
+  })
+);
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
 
@@ -2624,13 +2633,19 @@ function redactSensitiveFields(obj: unknown): unknown {
   return redacted;
 }
 
+function redactEntityReadInput(value: unknown): unknown {
+  return exactIdentityRequested(value)
+    ? { read_mode: "exact_identity" }
+    : redactSensitiveFields(value);
+}
+
 function logDebug(event: string, req: express.Request, extra?: Record<string, unknown>): void {
   const safe = {
     method: req.method,
     path: req.path,
-    query: redactSensitiveFields(req.query),
+    query: redactEntityReadInput(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: redactSensitiveFields(req.body),
+    body: redactEntityReadInput(req.body),
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
@@ -2641,9 +2656,9 @@ function logWarn(event: string, req: express.Request, extra?: Record<string, unk
   const safe = {
     method: req.method,
     path: req.path,
-    query: redactSensitiveFields(req.query),
+    query: redactEntityReadInput(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: redactSensitiveFields(req.body),
+    body: redactEntityReadInput(req.body),
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
@@ -2677,9 +2692,9 @@ function logError(
   const payload = {
     method: req.method,
     path: req.path,
-    query: redactSensitiveFields(req.query),
+    query: redactEntityReadInput(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: redactSensitiveFields(req.body),
+    body: redactEntityReadInput(req.body),
     error:
       error instanceof Error
         ? {
@@ -5144,6 +5159,18 @@ async function runEntitiesQuery(
   res: express.Response,
   rawInput: unknown
 ): Promise<express.Response> {
+  if (exactIdentityRequested(rawInput)) {
+    try {
+      const userId = await getAuthenticatedUserId(req);
+      const exact_identity = await readExactIdentity(rawInput, userId);
+      if (!exact_identity)
+        return sendError(res, 400, "VALIDATION_ERROR", EXACT_IDENTITY_REQUEST_MESSAGE);
+      return res.set("Cache-Control", "no-store").json({ exact_identity });
+    } catch (error) {
+      return handleApiError(req, res, error, "Could not verify exact identity");
+    }
+  }
+
   const parsed = EntitiesQueryRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
@@ -5295,6 +5322,8 @@ function coerceEntitiesQueryParams(query: express.Request["query"]): Record<stri
 // `GET /entities?entity_type=...&search=...` no longer hit a 404 and silently
 // degrade. REQUIRES AUTHENTICATION - identical user scoping to the POST path.
 app.get("/entities", async (req, res) => {
+  if (exactIdentityRequested(req.query))
+    return sendError(res, 400, "VALIDATION_ERROR", "Exact identity requires POST /entities/query.");
   return runEntitiesQuery(req, res, coerceEntitiesQueryParams(req.query));
 });
 

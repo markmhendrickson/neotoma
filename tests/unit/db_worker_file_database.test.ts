@@ -483,3 +483,178 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
     30_000
   );
 });
+
+describe("pinned worker read view", () => {
+  it("reserves within the pool, expires the view, and leaves other traffic free", async () => {
+    const db = makeDb();
+    let release!: () => void;
+    let entered!: () => void;
+    let former: { prepare(sql: string): { get(): Promise<unknown> } } | undefined;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      const pin = db.withPinnedReadView(async (view) => {
+        former = view;
+        expect(await view.prepare("SELECT COUNT(*) AS n FROM t").get()).toEqual({ n: 0 });
+        expect(() => view.prepare("ATTACH DATABASE 'unexpected' AS outside")).toThrow(
+          /only SELECT/
+        );
+        await expect(view.exec("DELETE FROM t")).rejects.toThrow(/only SELECT/);
+        entered();
+        await held;
+        return view.prepare("SELECT COUNT(*) AS n FROM t").get();
+      });
+      try {
+        await ready;
+        await expect(db.withPinnedReadView(async () => "unused")).rejects.toThrow(/unavailable/);
+        await db.prepare("INSERT INTO t VALUES (1)").run();
+        expect(await db.prepare("SELECT COUNT(*) AS n FROM t").get()).toEqual({ n: 1 });
+        expect(db.readerPoolStats().size).toBe(2);
+      } finally {
+        release();
+      }
+      expect(await pin).toEqual({ n: 0 });
+      await expect(former!.prepare("SELECT 1").get()).rejects.toThrow(/expired/);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses when both ordinary reader slots are busy", async () => {
+    const db = makeDb();
+    const control = new AbortController();
+    const readers: Promise<unknown>[] = [];
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      const sql =
+        "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<2500000) SELECT sum(x) FROM n";
+      readers.push(
+        ...withDbAbortSignal(control.signal, () => [db.prepare(sql).get(), db.prepare(sql).get()])
+      );
+      await vi.waitFor(() => expect(db.readerPoolStats().busy).toBe(2));
+      await expect(db.withPinnedReadView(async () => "unused")).rejects.toThrow(/unavailable/);
+      expect(await db.prepare("INSERT INTO t VALUES (1)").run()).toMatchObject({ changes: 1 });
+    } finally {
+      control.abort();
+      await Promise.allSettled(readers);
+      await db.close();
+    }
+  });
+
+  it("releases the reservation at the whole-read deadline between statements", async () => {
+    const db = makeDb();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await expect(
+        db.withPinnedReadView(async (view) => {
+          await view.prepare("SELECT 1 AS n").get();
+          return new Promise<never>(() => {});
+        }, 150)
+      ).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses a result that exceeds the budget before the timer callback runs", async () => {
+    const db = makeDb();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await db.prepare("SELECT 1 AS n").get();
+      let entered = false;
+      await expect(
+        db.withPinnedReadView(async () => {
+          entered = true;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+          return "late";
+        }, 100)
+      ).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      expect(entered).toBe(true);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("retires an aborted pinned worker without routing its statement to the writer", async () => {
+    const db = makeDb();
+    const control = new AbortController();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      const pin = withDbAbortSignal(control.signal, () =>
+        db.withPinnedReadView(async (view) => {
+          const query = view
+            .prepare(
+              "SELECT sum(x) FROM (WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<2500000) SELECT x FROM n)"
+            )
+            .get();
+          control.abort();
+          return query;
+        })
+      );
+      await expect(pin).rejects.toBeInstanceOf(WorkerDbAbortError);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("rejects an unfinished statement before releasing the view", async () => {
+    const db = makeDb();
+    let statement: Promise<unknown> | undefined;
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await expect(
+        db.withPinnedReadView(async (view) => {
+          statement = view.prepare("SELECT 1 AS n").get();
+          return "unfinished";
+        })
+      ).rejects.toThrow(/unfinished statement/);
+      await expect(statement).rejects.toBeInstanceOf(WorkerDbAbortError);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("never resumes a read view on a replacement after a worker exits", async () => {
+    const db = makeDb();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await expect(
+        db.withPinnedReadView(async (view) => {
+          await view.prepare("SELECT 1 AS n").get();
+          await expect(db.__crashWorkerForTest("pinned")).rejects.toBeInstanceOf(
+            WorkerDbCrashError
+          );
+          await expect(view.prepare("SELECT 2 AS n").get()).rejects.toBeInstanceOf(
+            WorkerDbCrashError
+          );
+          return "unproved";
+        })
+      ).rejects.toBeInstanceOf(WorkerDbCrashError);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 3 AS n").get())).toEqual({
+        n: 3,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+});

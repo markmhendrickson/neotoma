@@ -22,6 +22,11 @@ import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import {
+  EXACT_IDENTITY_REQUEST_MESSAGE,
+  exactIdentityRequested,
+  readExactIdentity,
+} from "./shared/action_handlers/exact_identity_read.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
@@ -2548,8 +2553,11 @@ export class NeotomaServer {
       try {
         const { name, arguments: args } = request.params;
 
-        const cliEquivalent = buildCliEquivalentInvocation(name, args);
-        logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+        const exactIdentity = name === "retrieve_entities" && exactIdentityRequested(args);
+        if (!exactIdentity) {
+          const cliEquivalent = buildCliEquivalentInvocation(name, args);
+          logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+        }
 
         // Check if this is an encrypted request wrapper
         if (name === "encrypted_request" && (args as any)?.encryptedPayload) {
@@ -2606,7 +2614,9 @@ export class NeotomaServer {
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
         const resultWithNotice = this.withRuntimeUpdateNotice(result, runtimeUpdateNotice);
-        const resultSummary = summarizeToolResultForLog(name, resultWithNotice);
+        const resultSummary = exactIdentity
+          ? "exact identity proof response"
+          : summarizeToolResultForLog(name, resultWithNotice);
         if (resultSummary) {
           logger.info(`[MCP Server] ${name} → ${resultSummary}`);
         }
@@ -4384,6 +4394,13 @@ export class NeotomaServer {
   private async retrieveEntities(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (exactIdentityRequested(args)) {
+      const userId = this.getAuthenticatedUserId();
+      const exact_identity = await readExactIdentity(args, userId);
+      if (!exact_identity)
+        throw new McpError(ErrorCode.InvalidParams, EXACT_IDENTITY_REQUEST_MESSAGE);
+      return this.buildTextResponse({ exact_identity });
+    }
     const parsed = RetrieveEntitiesRequestSchema.parse(args ?? {});
     const rawArgs =
       args && typeof args === "object" && !Array.isArray(args)

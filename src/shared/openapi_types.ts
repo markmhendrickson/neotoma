@@ -464,7 +464,7 @@ export interface paths {
     };
     /**
      * List entities
-     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
+     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Exact identity proofs require POST so the identity value is not carried in the URL. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
      */
     get: operations["listEntities"];
     put?: never;
@@ -2537,6 +2537,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    ExactIdentityRead: {
+      /** @enum {string} */
+      version: "1";
+      /**
+       * @description Singleton identifies one verified visible row. Absent proves no match.
+       *     Ambiguous proves at least two matches. Unproved reports unavailable or
+       *     incomplete proof and cannot be treated as absence. No state falls
+       *     back to an ordinary query.
+       * @enum {string}
+       */
+      state: "singleton" | "absent" | "ambiguous" | "unproved";
+      /** @description True only for a proved state from one authenticated database view. */
+      common_view: boolean;
+      requested_scope: {
+        /** @enum {string} */
+        owner: "authenticated";
+        entity_type: string;
+        field: string;
+        /** @description SHA-256 of the JSON string value, without echoing the predicate. */
+        value_sha256: string;
+      };
+      /** @description The owned raw snapshot and its field provenance, present only for singleton. */
+      entity?: {
+        entity_id: string;
+        entity_type: string;
+        snapshot: {
+          [key: string]: unknown;
+        };
+        provenance: {
+          [key: string]: string;
+        };
+      };
+    };
     /** @description Additive acquisition evidence from the executing entity collection path. Ranked candidate zero, ignored scope, acquisition caps or degradation cannot establish predicate-population absence. Existing legacy fields retain their meaning. The read interval is not a write fence, revision lease or common database view. See query_convergence and issue #2597. */
     EntityReadContract: {
       /** @enum {string} */
@@ -5967,6 +6000,19 @@ export interface operations {
       content: {
         "application/json": {
           /**
+           * @description Opt in to a bounded same-view read with one entity_type and
+           *     one snapshot_filters string equality on its declared sole
+           *     canonical identity field. Type and field names must be lowercase
+           *     identifiers (1–64 ASCII characters). The value must be
+           *     1–256 Unicode characters without control characters.
+           *     Supply no other options or user_id override.
+           *     The exact_identity result distinguishes unavailable proof
+           *     from absence. Only file libSQL with an available pinned
+           *     reader currently supplies proof.
+           * @enum {string}
+           */
+          read_mode?: "exact_identity";
+          /**
            * @description Single entity-type filter. Combined as a union with
            *     `entity_types` when both are supplied.
            */
@@ -6114,6 +6160,7 @@ export interface operations {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
             read_contract?: components["schemas"]["EntityReadContract"];
+            exact_identity?: components["schemas"]["ExactIdentityRead"];
             total?: number;
             limit?: number;
             offset?: number;

@@ -208,6 +208,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     adapter: "both",
     mcpTool: "retrieve_entities",
     cliCommand: "entities list",
+    notes: "For exact_identity mode use the generic request command with operation queryEntities.",
   },
   {
     operationId: "listEntities",

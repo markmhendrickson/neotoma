@@ -261,6 +261,7 @@ export type WorkerRequestOptions = {
 
 class WorkerConnection {
   private worker: Worker | null = null;
+  private workerGeneration = 0;
   private nextId = 1;
   private pending = new Map<number, PendingEntry>();
   private closed = false;
@@ -324,6 +325,10 @@ class WorkerConnection {
   /** Whether this connection has been abandoned and left the pool (#2324). */
   get isRetired(): boolean {
     return this.retired;
+  }
+
+  get generation(): number | null {
+    return this.worker === null ? null : this.workerGeneration;
   }
 
   /**
@@ -409,6 +414,7 @@ class WorkerConnection {
     });
     worker.unref();
     this.worker = worker;
+    this.workerGeneration += 1;
     return worker;
   }
 
@@ -906,6 +912,8 @@ export class WorkerFileDatabase implements DbDatabase {
   private readonly statementTimeoutMs: number;
   private writer: WorkerConnection | null = null;
   private readers: WorkerConnection[] = [];
+  private pinnedReader: WorkerConnection | null = null;
+  private pinnedReadAbort: AbortController | null = null;
   /**
    * Connections that have been abandoned and left service, but whose orphaned
    * worker may still be finishing a native call (#2324). Held only so
@@ -1057,6 +1065,7 @@ export class WorkerFileDatabase implements DbDatabase {
 
     let best: WorkerConnection | null = null;
     for (const reader of this.readers) {
+      if (reader === this.pinnedReader) continue;
       if (reader.inFlight === 0) {
         this.noteSaturation(false);
         return reader;
@@ -1188,7 +1197,7 @@ export class WorkerFileDatabase implements DbDatabase {
     let busy = 0;
     let queued = 0;
     for (const reader of this.readers) {
-      if (reader.inFlight > 0) busy += 1;
+      if (reader.inFlight > 0 || reader === this.pinnedReader) busy += 1;
       queued += reader.inFlight;
     }
     return { size: this.readers.length, capacity: this.readerCount, busy, queued };
@@ -1199,7 +1208,11 @@ export class WorkerFileDatabase implements DbDatabase {
    * exercise the supervised-restart path. Returns the promise that rejects with
    * the crash error. Never called by production code.
    */
-  __crashWorkerForTest(which: "writer" | "reader"): Promise<unknown> {
+  __crashWorkerForTest(which: "writer" | "reader" | "pinned"): Promise<unknown> {
+    if (which === "pinned") {
+      if (!this.pinnedReader) throw new Error("No pinned worker to crash");
+      return this.pinnedReader.request("run", "__crash__", []);
+    }
     const conn = which === "writer" ? this.writerConnection() : this.readerConnection();
     return conn.request("run", "__crash__", []);
   }
@@ -1242,8 +1255,132 @@ export class WorkerFileDatabase implements DbDatabase {
     );
   }
 
+  /**
+   * Internal: hold one idle read-only worker for a complete bounded read view.
+   * This path never queues for a busy slot, changes the pool cap, or runs on the writer.
+   */
+  async withPinnedReadView<T>(
+    operation: (view: DbConnection) => Promise<T>,
+    timeoutMs = 1000
+  ): Promise<T> {
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2000)
+      throw new RangeError("Invalid pinned read budget");
+    const parentSignal = abortContext.getStore();
+    if (parentSignal?.aborted)
+      throw new WorkerDbAbortError("DB pinned read aborted before dispatch");
+    if (this.closed || this.readerCount < 2 || this.pinnedReader || this.txContext.getStore())
+      throw new Error("DB pinned reader unavailable");
+    const reader =
+      this.readers.find((candidate) => candidate.inFlight === 0) ??
+      (this.readers.length < this.readerCount ? this.spawnReader() : null);
+    if (!reader) throw new Error("DB pinned reader unavailable");
+
+    this.pinnedReader = reader;
+    const control = new AbortController();
+    this.pinnedReadAbort = control;
+    const budgetError = new WorkerDbTimeoutError("DB pinned read exceeded its budget", timeoutMs);
+    const deadline = performance.now() + timeoutMs;
+    const verifyBudget = () => {
+      if (performance.now() >= deadline) control.abort(budgetError);
+      control.signal.throwIfAborted();
+    };
+    const timer = setTimeout(() => control.abort(budgetError), timeoutMs);
+    const abort = () => control.abort(new WorkerDbAbortError("DB pinned read aborted by caller"));
+    parentSignal?.addEventListener("abort", abort, { once: true });
+    let generation: number | null = null;
+    let began = false;
+    let active = true;
+    let pending = false;
+
+    const verifyWorker = () => {
+      if (generation === null || reader.generation !== generation)
+        throw new WorkerDbCrashError("DB pinned reader lost its original worker");
+    };
+    const readonly = async (): Promise<never> => {
+      throw new Error("DB pinned reader permits only SELECT statements");
+    };
+    const issue = async (op: "get" | "all", sql: string, params: unknown[]) => {
+      if (!active || pending) throw new Error("DB pinned reader is busy or expired");
+      verifyBudget();
+      verifyWorker();
+      pending = true;
+      try {
+        return await reader.request(op, sql, normalizeParams(params).map(toBindValue), {
+          signal: control.signal,
+        });
+      } finally {
+        pending = false;
+      }
+    };
+    const view: DbConnection = {
+      prepare: (sql) => {
+        if (!/^\s*SELECT\s/i.test(sql) || sql.includes(";"))
+          throw new Error("DB pinned reader permits only SELECT statements");
+        return {
+          get: (...params) => guardAbandonedRead(issue("get", sql, params)),
+          all: (...params) => guardAbandonedRead(issue("all", sql, params) as Promise<unknown[]>),
+          run: readonly,
+        };
+      },
+      exec: readonly,
+    };
+
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      control.signal.addEventListener("abort", () => reject(control.signal.reason), { once: true });
+    });
+    const release = async () => {
+      active = false;
+      clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", abort);
+      if (pending)
+        control.abort(new WorkerDbAbortError("DB pinned read closed before its statement"));
+      try {
+        if (this.closed) throw new WorkerDbAbortError("DB pinned reader is closing");
+        if (!reader.isRetired) {
+          try {
+            if (!began || pending) throw new Error("DB pinned reader custody is uncertain");
+            verifyWorker();
+            await reader.request("exec", "ROLLBACK", [], { timeoutMs: 250 });
+          } catch (error) {
+            if (!reader.isRetired) {
+              this.retireReader(reader);
+              await reader.terminate();
+              this.retiredConnections.delete(reader);
+            }
+            throw error;
+          }
+        }
+      } finally {
+        this.pinnedReader = null;
+        this.pinnedReadAbort = null;
+      }
+    };
+
+    try {
+      return await Promise.race([
+        cancelled,
+        (async () => {
+          const begin = reader.request("exec", "BEGIN", [], { signal: control.signal });
+          generation = reader.generation;
+          await begin;
+          verifyWorker();
+          began = true;
+          verifyBudget();
+          const result = await operation(view);
+          verifyBudget();
+          if (pending) throw new Error("DB pinned reader has an unfinished statement");
+          verifyWorker();
+          return result;
+        })(),
+      ]);
+    } finally {
+      await release();
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true;
+    this.pinnedReadAbort?.abort(new WorkerDbAbortError("DB pinned reader is closing"));
     // Retired readers are included so an orphaned worker cannot outlive the
     // database it was reading (#2324). Their `terminate()` waits for the
     // worker to return to JavaScript, bounded by the same grace window, so
