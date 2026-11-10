@@ -123,9 +123,14 @@ export async function readBoundedIdentityInView(
       .get(owner, type);
     if (orphan) return { state: "unproved" };
 
+    // Candidate membership depends only on (entity, raw JSON value) under the
+    // pinned schema's pure converter. Repeated identical facts add no candidate.
+    // Keep raw JSON types and entity IDs distinct; replay candidate histories
+    // in full below, under the unchanged history and candidate limits.
     const facts = (await view
       .prepare(
-        `SELECT e.id AS entity_id, o.fields -> ? AS value
+        `SELECT DISTINCT e.id COLLATE BINARY AS entity_id,
+           (o.fields -> ?) COLLATE BINARY AS value
          FROM entities e CROSS JOIN observations o ON o.entity_id=e.id AND o.user_id=e.user_id
          WHERE e.user_id=? AND e.entity_type=? AND e.merged_to_entity_id IS NULL
          AND json_type(o.fields, ?) IS NOT NULL LIMIT ?`

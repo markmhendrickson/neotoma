@@ -88,6 +88,149 @@ describe("bounded identity read", () => {
   });
 
   for (const backend of ["sqlite", "libsql"] as const) {
+    it(`bounds distinct identity facts without collapsing history (${backend})`, async () => {
+      const dir = mkdtempSync(join(tmpdir(), "repeated-identity-"));
+      const path = join(dir, "fixture.db");
+      const writer =
+        backend === "sqlite"
+          ? new AsyncSqliteDatabase(path)
+          : openLibsqlDatabase(pathToFileURL(path).href);
+      const acquire = () =>
+        writer instanceof WorkerFileDatabase
+          ? writer.withPinnedReadView((view) =>
+              readBoundedIdentityInView(view, owner, type, "ticket_uid", wanted)
+            )
+          : readSqlite(path, (view) =>
+              readBoundedIdentityInView(view, owner, type, "ticket_uid", wanted)
+            );
+      try {
+        await prepare(writer);
+        await writer.exec(
+          "CREATE INDEX fixture_observation_owner_entity ON observations(user_id,entity_id)"
+        );
+        await writer.transaction(async (tx) => {
+          await tx
+            .prepare(
+              `WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<400)
+            INSERT INTO entities (id,user_id,entity_type) SELECT 'prior-'||x,?,? FROM n`
+            )
+            .run(owner, type);
+          await tx
+            .prepare(
+              `WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<80000)
+            INSERT INTO observations (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
+            SELECT 'history-'||x,'prior-'||CAST(((x-1)%400+1) AS INTEGER),?,?,'1.0',
+              json_object('ticket_uid','other-'||CAST(((x-1)%400+1) AS INTEGER)),?,?,1 FROM n`
+            )
+            .run(type, owner, now, now);
+          await seed(tx, "fresh");
+        });
+        const joined = await writer
+          .prepare(
+            `SELECT COUNT(*) AS n FROM entities e JOIN observations o
+          ON o.entity_id=e.id AND o.user_id=e.user_id WHERE e.user_id=? AND e.entity_type=?`
+          )
+          .get(owner, type);
+        expect(joined).toEqual({ n: 80001 });
+        expect(await acquire()).toMatchObject({
+          state: "singleton",
+          entity: { entity_id: "fresh" },
+        });
+        await writer.transaction((tx) => seed(tx, "collision", wanted, { marker: true }));
+        expect(await acquire()).toEqual({ state: "ambiguous" });
+        await writer
+          .prepare("UPDATE entities SET merged_to_entity_id='fresh' WHERE id='collision'")
+          .run();
+        expect(await acquire()).toMatchObject({
+          state: "singleton",
+          entity: { entity_id: "fresh" },
+        });
+        await writer
+          .prepare(
+            `INSERT INTO observations
+          (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
+          VALUES ('malformed','prior-1',?,?,'1.0','{',?,?,1)`
+          )
+          .run(type, owner, now, now);
+        expect(await acquire()).toEqual({ state: "unproved" });
+        await writer.prepare("DELETE FROM observations WHERE id='malformed'").run();
+        expect(await acquire()).toMatchObject({ state: "singleton" });
+        await writer
+          .prepare(
+            `WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10001)
+          INSERT INTO observations (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
+          SELECT 'distinct-'||x,'prior-1',?,?,'1.0',json_object('ticket_uid','distinct-'||x),?,?,1 FROM n`
+          )
+          .run(type, owner, now, now);
+        expect(await acquire()).toEqual({ state: "unproved" });
+        await writer.prepare("DELETE FROM observations WHERE id LIKE 'distinct-%'").run();
+        expect(await acquire()).toMatchObject({ state: "singleton" });
+        await writer
+          .prepare(
+            `WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<128)
+          INSERT INTO observations (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
+          SELECT 'candidate-history-'||x,'fresh',?,?,'1.0',json_object('ticket_uid',?),?,?,1 FROM n`
+          )
+          .run(type, owner, wanted, now, now);
+        expect(await acquire()).toEqual({ state: "unproved" });
+      } finally {
+        await writer.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }, 30_000);
+
+    it(`keeps typed raw facts before pure conversion (${backend})`, async () => {
+      const dir = mkdtempSync(join(tmpdir(), "typed-identity-"));
+      const path = join(dir, "fixture.db");
+      const writer =
+        backend === "sqlite"
+          ? new AsyncSqliteDatabase(path)
+          : openLibsqlDatabase(pathToFileURL(path).href);
+      const read = (view: DbConnection) =>
+        readBoundedIdentityInView(view, owner, type, "ticket_uid", "true");
+      const acquire = () =>
+        writer instanceof WorkerFileDatabase
+          ? writer.withPinnedReadView(read)
+          : readSqlite(path, read);
+      try {
+        await prepare(writer);
+        await writer.prepare("UPDATE schema_registry SET schema_definition=?").run(
+          JSON.stringify({
+            ...schema,
+            fields: {
+              ...schema.fields,
+              ticket_uid: {
+                type: "string",
+                converters: [
+                  { from: "number", function: "number_to_string" },
+                  { from: "boolean", function: "boolean_to_string" },
+                ],
+              },
+            },
+          })
+        );
+        await writer.transaction(async (tx) => {
+          await seed(tx, "typed", "1");
+          await tx
+            .prepare("UPDATE observations SET fields=? WHERE entity_id='typed'")
+            .run(JSON.stringify({ ticket_uid: 1, comments: "normal" }));
+          await tx
+            .prepare(
+              `INSERT INTO observations
+            (id,entity_id,entity_type,user_id,schema_version,fields,observed_at,created_at,source_priority)
+            VALUES ('typed-boolean','typed',?,?,'1.0',?, ?,?,2)`
+            )
+            .run(type, owner, JSON.stringify({ ticket_uid: true, comments: "normal" }), now, now);
+        });
+        // A scalar SQL extraction would conflate true with 1 and could miss
+        // the converted candidate behind this deliberately stale snapshot.
+        expect(await acquire()).toEqual({ state: "unproved" });
+      } finally {
+        await writer.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it(`proves only the exact visible owner/type population (${backend})`, async () => {
       const dir = mkdtempSync(join(tmpdir(), "native-identity-"));
       const path = join(dir, "fixture.db");
