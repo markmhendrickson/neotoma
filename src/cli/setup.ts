@@ -17,7 +17,6 @@ import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
 import { writePermissionsForTool, toolFromString } from "./permissions.js";
 import {
-  classifyMcpTransportPreset,
   type McpTransportChoice,
   type McpWrittenEntry,
 } from "./mcp_config_scan.js";
@@ -79,22 +78,20 @@ const MCP_PRESET_DESCRIPTION: Record<McpTransportChoice, string> = {
   e: "preset e: local signing proxy command forwarding to a signed HTTP MCP endpoint, discovered from the local prod port file",
 };
 
-/** Plain-language description of what one preset's generated entries do (no URL, path or command). */
+/**
+ * Plain-language description of what one preset's generated entries do (no URL, path or command).
+ * Only preset `c` (local stdio, no URL) may say it makes no network requests; a test pins
+ * that for every other preset, so this never throws during a user's setup run.
+ */
 export function describeWrittenMcpTransport(transport: McpTransportChoice): string {
-  const description = MCP_PRESET_DESCRIPTION[transport];
-  // Only a no-URL local preset may claim no network requests; keep the table and the
-  // shared classification from drifting apart.
-  if (classifyMcpTransportPreset(transport) !== "local_stdio" && /no network/i.test(description)) {
-    throw new Error(`Preset ${transport} must not claim no network requests.`);
-  }
-  return description;
+  return MCP_PRESET_DESCRIPTION[transport];
 }
 
 export const NO_MCP_ENTRY_WRITTEN_SUMMARY =
-  "Transport: this run wrote no Neotoma MCP entry; the transport of existing entries was not checked.";
+  "Transport: This line describes no Neotoma MCP entry, because this run recorded no new one. Any existing entries, including any setup repaired or re-pointed to a new port, were not checked.";
 
 export const OTHER_MCP_ENTRIES_NOT_CHECKED =
-  "Other Neotoma entries already in your MCP config were left unchanged and were not checked.";
+  "Any other Neotoma entries in your MCP config, including any setup repaired or re-pointed to a new port, are not described here and were not checked.";
 
 /**
  * One-line transport summary built only from the entries this run generated and wrote.
@@ -111,8 +108,9 @@ export function buildPrivacyTransportSummary(written: McpWrittenEntry[] | undefi
     clauses.push(`${entry.server_key} (${describeWrittenMcpTransport(entry.transport)})`);
   }
   if (clauses.length === 0) return NO_MCP_ENTRY_WRITTEN_SUMMARY;
-  // Earlier configs may hold Neotoma entries this run did not write; we cannot tell
-  // without reading them back, so always say they were not checked.
+  // Setup may also have repaired or re-ported other entries (offerFix,
+  // applySessionPortsToUrls); those are not recorded here, so the line states only
+  // that they were not checked, never that they were unchanged.
   return `Transport: this run wrote ${clauses.join("; ")}. ${OTHER_MCP_ENTRIES_NOT_CHECKED}`;
 }
 

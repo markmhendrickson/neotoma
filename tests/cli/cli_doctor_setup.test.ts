@@ -23,6 +23,7 @@ import {
   buildVerifyLine,
   buildPrivacyTransportSummary,
   NO_MCP_ENTRY_WRITTEN_SUMMARY,
+  describeWrittenMcpTransport,
   type SetupStepResult,
 } from "../../src/cli/setup.ts";
 import type { McpTransportChoice } from "../../src/cli/mcp_config_scan.ts";
@@ -658,7 +659,7 @@ describe("buildVerifyLine", () => {
   it("says other entries were not checked when a stdio entry is written next to an existing one", () => {
     const summary = buildPrivacyTransportSummary([{ server_key: "neotoma-dev", transport: "c" }]);
     expect(summary).toContain(
-      "Other Neotoma entries already in your MCP config were left unchanged and were not checked."
+      "Any other Neotoma entries in your MCP config, including any setup repaired or re-pointed to a new port, are not described here and were not checked."
     );
     expect(summary).not.toContain("no network egress");
     // The no-network claim is scoped to the written entry, not the setup as a whole.
@@ -669,7 +670,19 @@ describe("buildVerifyLine", () => {
   it("reports nothing written for an empty or absent write list", () => {
     expect(buildPrivacyTransportSummary(undefined)).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
     expect(buildPrivacyTransportSummary([])).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
-    expect(NO_MCP_ENTRY_WRITTEN_SUMMARY).toContain("wrote no Neotoma MCP entry");
+    expect(NO_MCP_ENTRY_WRITTEN_SUMMARY).toContain("describes no Neotoma MCP entry");
+    expect(NO_MCP_ENTRY_WRITTEN_SUMMARY).toContain("were not checked");
+  });
+
+  it("describes every preset without a no-network claim except preset c, and never throws", () => {
+    for (const transport of PRESETS) {
+      const description = describeWrittenMcpTransport(transport);
+      if (transport === "c") {
+        expect(description).toContain("no network requests");
+      } else {
+        expect(description).not.toMatch(/no network/i);
+      }
+    }
   });
 
   it("only suggests --mcp-transport values the CLI accepts", () => {
@@ -730,6 +743,24 @@ describe("buildVerifyLine", () => {
       });
       expect(summary).toContain("neotoma-dev (preset c:");
       expect(summary).toContain("neotoma (preset c:");
+      expect(summary).toContain("were not checked");
+      // Setup may have repaired or re-ported other entries, so the line must not
+      // claim they were left alone.
+      expect(summary).not.toMatch(/unchanged/i);
+      expect(summary).not.toMatch(/\bleft\b/i);
+    });
+
+    it("on the repair path claims nothing was written or unchanged and says existing entries were not checked", async () => {
+      const summary = await summaryFor({
+        id: "mcp-configure",
+        ok: true,
+        changed: true,
+        skipped: false,
+        details: { installed: true, message: "Fixed 1 config file(s)" },
+      });
+      expect(summary).not.toMatch(/wrote no/i);
+      expect(summary).not.toMatch(/unchanged/i);
+      expect(summary).toContain("existing entries");
       expect(summary).toContain("were not checked");
     });
 
