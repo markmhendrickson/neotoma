@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **813**
-- Backend and repo Vitest files: **759**
+- Total automated test files: **814**
+- Backend and repo Vitest files: **760**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 228 |
 | Vitest service tests | 65 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 240 |
+| Vitest integration tests | 241 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 27 |
 | Vitest security tests | 19 |
@@ -494,7 +494,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (240):**
+**Files (241):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -538,6 +538,7 @@ flowchart TD
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/cross_type_merge_snapshot.test.ts`
 - `tests/integration/csp_local_http.test.ts`
+- `tests/integration/current_state_reads.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/db_abort_client_disconnect_survival.test.ts`
