@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { holdOrdinaryWorker } from "../helpers/worker_lifetime_barrier.js";
 import {
   WorkerFileDatabase,
   WorkerDbCrashError,
@@ -420,71 +421,173 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
     }
   }, 120_000);
 
-  it(
-    "close() does not reject when a worker's terminate() rejects (#2483)",
-    async () => {
-      // `abandon()`'s two call sites already guard `worker.terminate()` with
-      // `.catch(() => {})` (#2324's own fix); `WorkerConnection.terminate()` —
-      // reachable only from `close()` — did not, so an unhandled rejection
-      // there could crash a clean shutdown exactly like the abort path can
-      // crash a live request. Forcing the real neon panic that made
-      // `terminate()` reject in production is what
-      // `db_abort_client_disconnect_survival.test.ts` does at a whole
-      // child-process level; this test instead proves the GUARD ITSELF is in
-      // place by making `Worker.prototype.terminate` reject directly, which
-      // is deterministic and does not depend on winning that race.
-      //
-      // A dedicated instance (not `makeDb`) with a near-zero `orphanGraceMs`:
-      // `close()`'s `awaitWorkerIdle` otherwise waits for the drain reply,
-      // which cannot arrive until the genuinely-slow in-flight statement below
-      // finishes, and defaults to a 30s grace window before falling through —
-      // this test is about the terminate() guard, not about #2324's orphan
-      // drain timing, which is covered elsewhere.
-      counter += 1;
-      const db = new WorkerFileDatabase(path.join(workDir, `w-${counter}.db`), {
-        readerWorkers: 1,
-        statementTimeoutMs: 0,
-        orphanGraceMs: 20,
-      });
-      try {
-        await seedSlowTable(db, 1500);
-        // Get a real reader worker spawned and mid-statement, so `close()`
-        // takes the "wasBusy" branch in `terminate()` — the one that awaits
-        // `awaitWorkerIdle` and then calls `worker.terminate()` — rather than
-        // the trivial "nothing to terminate" early return.
-        const inFlight = db.prepare(SLOW_SQL).get();
-        await new Promise((resolve) => setTimeout(resolve, 20));
-
-        const terminateSpy = vi
-          .spyOn(Worker.prototype, "terminate")
-          .mockRejectedValueOnce(new Error("simulated native panic during terminate (#2483)"));
-        try {
-          await expect(db.close()).resolves.toBeUndefined();
-        } finally {
-          terminateSpy.mockRestore();
-        }
-
-        // Deliberately NOT awaited. The mock intercepted `terminate()` without
-        // actually killing the real worker thread, so the genuinely-slow
-        // cross-join underneath `inFlight` keeps running for its full natural
-        // duration (seconds) regardless of anything this test does — the same
-        // shape as the abandoned reads `guardAbandonedRead` exists for.
-        // Awaiting it here would make this test about that unrelated timing
-        // rather than about `close()`, so it gets the identical no-op guard
-        // instead: never left unhandled, never blocked on.
-        void inFlight.catch(() => {});
-      } finally {
-        // db is already closed; a second close() must still be harmless. The
-        // real (unmocked) terminate() runs here, so this is what actually
-        // reclaims the still-running worker from the mocked call above.
-        await db.close();
-      }
-    },
-    30_000
-  );
+  it("close waits for actual exit when termination rejects, without an unhandled rejection", async () => {
+    const db = makeDb();
+    await db.prepare("SELECT 1").get();
+    const actual = Worker.prototype.terminate;
+    let held: Worker | undefined;
+    const spy = vi.spyOn(Worker.prototype, "terminate").mockImplementationOnce(function (
+      this: Worker
+    ) {
+      held = this;
+      return Promise.reject(new Error("synthetic termination failure"));
+    });
+    let closed = false;
+    const closing = db.close().then(() => {
+      closed = true;
+    });
+    try {
+      await vi.waitFor(() => expect(held).toBeDefined());
+      expect(closed).toBe(false);
+    } finally {
+      spy.mockRestore();
+      if (held) await actual.call(held);
+      await expect(closing).resolves.toBeUndefined();
+      await db.close();
+    }
+  });
 });
 
 describe("pinned worker read view", () => {
+  it("aborts before BEGIN without creating an exact reader", async () => {
+    const db = makeDb();
+    const control = new AbortController();
+    control.abort();
+    try {
+      await expect(
+        withDbAbortSignal(control.signal, () => db.withPinnedReadView(async () => 1))
+      ).rejects.toBeInstanceOf(WorkerDbAbortError);
+      expect(db.readerPoolStats().size).toBe(0);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it.each(["BEGIN", "SELECT 1 AS exact_stage", "ROLLBACK"])(
+    "retains an unfinished %s generation through abort or failed cleanup",
+    async (stage) => {
+      counter += 1;
+      const db = new WorkerFileDatabase(path.join(workDir, `stage-${counter}.db`), {
+        readerWorkers: 2,
+        orphanGraceMs: 20,
+      });
+      const flags = new Int32Array(new SharedArrayBuffer(8));
+      const originalPost = Worker.prototype.postMessage;
+      let held: Worker | undefined;
+      const posting = vi.spyOn(Worker.prototype, "postMessage").mockImplementation(function (
+        this: Worker,
+        message,
+        ...rest
+      ) {
+        if (message?.sql === stage) {
+          held = this;
+          return originalPost.call(
+            this,
+            { ...message, sql: "__hold_for_test__", params: [flags.buffer] },
+            ...rest
+          );
+        }
+        return originalPost.call(this, message, ...rest);
+      });
+      const control = new AbortController();
+      const pin = withDbAbortSignal(control.signal, () =>
+        db.withPinnedReadView((view) => view.prepare("SELECT 1 AS exact_stage").get())
+      );
+      const failure = expect(pin).rejects.toBeInstanceOf(
+        stage === "ROLLBACK" ? WorkerDbTimeoutError : WorkerDbAbortError
+      );
+      let terminating: ReturnType<typeof vi.spyOn> | undefined;
+      try {
+        await vi.waitFor(() => expect(Atomics.load(flags, 0)).toBe(1));
+        terminating = vi.spyOn(held!, "terminate");
+        if (stage !== "ROLLBACK") control.abort();
+        await failure;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(terminating).not.toHaveBeenCalled();
+        await expect(db.withPinnedReadView(async () => 1)).rejects.toThrow(/unavailable/);
+      } finally {
+        posting.mockRestore();
+        Atomics.store(flags, 1, 1);
+        Atomics.notify(flags, 1);
+        await db.close();
+        terminating?.mockRestore();
+      }
+      const next = makeDb();
+      try {
+        expect(
+          await next.withPinnedReadView((view) => view.prepare("SELECT 1 AS n").get())
+        ).toEqual({ n: 1 });
+      } finally {
+        await next.close();
+      }
+    }
+  );
+
+  it("withholds exact work through ordinary retirement and apparent termination until true exit", async () => {
+    counter += 1;
+    const db = new WorkerFileDatabase(path.join(workDir, `resource-${counter}.db`), {
+      readerWorkers: 2,
+      statementTimeoutMs: 0,
+      orphanGraceMs: 20,
+    });
+    await db.exec("CREATE TABLE resource_control (n INTEGER)");
+    await db.prepare("SELECT 1").get();
+    const control = new AbortController();
+    const held = holdOrdinaryWorker(db, control.signal);
+    const terminate = held.worker.terminate.bind(held.worker);
+    const requested = vi.spyOn(held.worker, "terminate").mockResolvedValue(0);
+    let exited = false;
+    held.worker.once("exit", () => {
+      exited = true;
+    });
+    try {
+      await vi.waitFor(() => expect(Atomics.load(held.flags, 0)).toBe(1));
+      const rejected = expect(held.pending).rejects.toBeInstanceOf(WorkerDbAbortError);
+      control.abort();
+      control.abort();
+      await rejected;
+      await vi.waitFor(() => expect(requested).toHaveBeenCalled());
+      expect(exited).toBe(false);
+      const scans = vi.fn();
+      for (let attempt = 0; attempt < 4; attempt++)
+        await expect(
+          db.withPinnedReadView(async () => {
+            scans();
+            return 1;
+          })
+        ).rejects.toThrow(/unavailable/);
+      expect(scans).not.toHaveBeenCalled();
+      await db.prepare("INSERT INTO resource_control VALUES (9)").run();
+      expect(await db.prepare("SELECT n FROM resource_control").get()).toEqual({ n: 9 });
+      let closed = false;
+      const closing = db.close();
+      closing.then(() => {
+        closed = true;
+      });
+      expect(db.close()).toBe(closing);
+      expect(closed).toBe(false);
+      held.release();
+      requested.mockRestore();
+      await terminate();
+      await closing;
+      expect(exited).toBe(true);
+      expect(closed).toBe(true);
+    } finally {
+      held.release();
+      requested.mockRestore();
+      await terminate();
+      await db.close();
+    }
+    const fresh = makeDb();
+    try {
+      expect(await fresh.withPinnedReadView((view) => view.prepare("SELECT 3 AS n").get())).toEqual(
+        { n: 3 }
+      );
+    } finally {
+      await fresh.close();
+    }
+  });
+
   it("reserves within the pool, expires the view, and leaves other traffic free", async () => {
     const db = makeDb();
     let release!: () => void;
@@ -606,9 +709,11 @@ describe("pinned worker read view", () => {
         })
       );
       await expect(pin).rejects.toBeInstanceOf(WorkerDbAbortError);
-      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
-        n: 2,
-      });
+      await vi.waitFor(async () =>
+        expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+          n: 2,
+        })
+      );
     } finally {
       await db.close();
     }
@@ -626,9 +731,11 @@ describe("pinned worker read view", () => {
         })
       ).rejects.toThrow(/unfinished statement/);
       await expect(statement).rejects.toBeInstanceOf(WorkerDbAbortError);
-      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
-        n: 2,
-      });
+      await vi.waitFor(async () =>
+        expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+          n: 2,
+        })
+      );
     } finally {
       await db.close();
     }

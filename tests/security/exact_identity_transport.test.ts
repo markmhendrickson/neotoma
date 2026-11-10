@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { HttpTransport } from "../../packages/client/src/http.js";
 import { LocalTransport } from "../../packages/client/src/local.js";
+import { holdPinnedWorker } from "../helpers/worker_lifetime_barrier.js";
 
 import {
   bootMcpApp,
@@ -57,11 +58,13 @@ describe("exact identity transport uses existing tenant scope", () => {
     const env = prepareMcpTestEnv("exact-identity-transport-");
     vi.stubEnv("NEOTOMA_DB_BACKEND", "libsql");
     vi.stubEnv("NEOTOMA_DB_READER_WORKERS", "2");
+    vi.stubEnv("NEOTOMA_DB_ORPHAN_GRACE_MS", "20");
     const app = await bootMcpApp();
     const { getDb } = await import("../../src/repositories/db/connection.js");
     const { WorkerFileDatabase } =
       await import("../../src/repositories/worker/worker_file_database.js");
     const db = await getDb();
+    let replacement: InstanceType<typeof WorkerFileDatabase> | undefined;
     const request = (uid: string) => ({
       read_mode: "exact_identity",
       entity_type: "case_fixture",
@@ -389,9 +392,102 @@ describe("exact identity transport uses existing tenant scope", () => {
       expect(await (await post("/entities/query", request(bobUid), bob.token)).json()).toEqual(
         singleton
       );
+
+      // Retired physical custody must survive the existing cached-handle reset.
+      // A fulfilled termination request is deliberately not an exit in this test.
+      let held: ReturnType<typeof holdPinnedWorker> | undefined;
+      const pin = db.withPinnedReadView(async (view) => {
+        await view.prepare("SELECT 1").get();
+        held = holdPinnedWorker(db);
+        return held.pending;
+      });
+      await vi.waitFor(() => expect(held && Atomics.load(held.flags, 0)).toBe(1));
+      const originalTerminate = held!.worker.terminate.bind(held!.worker);
+      const termination = vi.spyOn(held!.worker, "terminate").mockResolvedValue(0);
+      let exited = false;
+      held!.worker.once("exit", () => {
+        exited = true;
+      });
+      let staleClosed = false;
+      const closeSpy = vi.spyOn(db, "close");
+      try {
+        await expect(pin).rejects.toThrow(/budget/);
+        const { clearDbCache } = await import("../../src/repositories/db/connection.js");
+        clearDbCache();
+        const staleClose = closeSpy.mock.results[0].value as Promise<void>;
+        staleClose.then(() => {
+          staleClosed = true;
+        });
+        expect(db.close()).toBe(staleClose);
+        const fresh = await getDb();
+        if (!(fresh instanceof WorkerFileDatabase)) throw new Error("Expected replacement libSQL");
+        replacement = fresh;
+        expect(fresh).not.toBe(db);
+        await fresh.prepare("SELECT 2 AS n").get();
+        await fresh.prepare("CREATE TABLE resource_writer_control (n INTEGER)").run();
+        await fresh.prepare("INSERT INTO resource_writer_control VALUES (7)").run();
+        expect(await fresh.prepare("SELECT n FROM resource_writer_control").get()).toEqual({
+          n: 7,
+        });
+        const scans = vi.fn();
+        const originalPin = fresh.withPinnedReadView.bind(fresh);
+        const dispatch = vi.spyOn(fresh, "withPinnedReadView").mockImplementation((operation) =>
+          originalPin((view) => {
+            scans();
+            return operation(view);
+          })
+        );
+        const unavailable = {
+          exact_identity: {
+            version: "1",
+            state: "unproved",
+            common_view: false,
+            requested_scope: scoped,
+          },
+        };
+        try {
+          const results = await Promise.all([
+            post("/entities/query", request(bobUid), bob.token).then((r) => r.json()),
+            mcp(request(bobUid), bob.token).then((r) => toolResultJson(r.body)),
+            ...clients.map((client) => client.owner.retrieveEntities(request(bobUid))),
+            cli(bob.token, request(bobUid), "body"),
+            cli(bob.token, request(bobUid), "params"),
+          ]);
+          for (const result of results) expect(result).toEqual(unavailable);
+          expect(scans).not.toHaveBeenCalled();
+          expect(exited).toBe(false);
+          expect(staleClosed).toBe(false);
+          expect(termination).not.toHaveBeenCalled();
+          held!.release();
+          await vi.waitFor(() => expect(termination).toHaveBeenCalled());
+          expect(exited).toBe(false);
+          expect(staleClosed).toBe(false);
+          expect(await (await post("/entities/query", request(bobUid), bob.token)).json()).toEqual(
+            unavailable
+          );
+          expect(scans).not.toHaveBeenCalled();
+          termination.mockRestore();
+          await originalTerminate();
+          await staleClose;
+          expect(exited).toBe(true);
+          expect(staleClosed).toBe(true);
+          expect(await (await post("/entities/query", request(bobUid), bob.token)).json()).toEqual(
+            singleton
+          );
+          expect(scans).toHaveBeenCalledTimes(1);
+        } finally {
+          dispatch.mockRestore();
+        }
+      } finally {
+        held!.release();
+        termination.mockRestore();
+        await originalTerminate();
+        closeSpy.mockRestore();
+      }
     } finally {
       await app.close();
       await db.close();
+      await replacement?.close();
       vi.unstubAllEnvs();
       env.restore();
     }
