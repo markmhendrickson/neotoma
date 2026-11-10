@@ -190,6 +190,9 @@ describe("CLI MCP and instruction commands", () => {
     });
 
     it("reports the entries it wrote, and the transport line omits their URLs", async () => {
+      vi.doMock("../../src/cli/aauth_signer.ts", () => ({
+        generateAndStoreKeypair: async () => ({ thumbprint: "test" }),
+      }));
       const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-written-home-"));
       const cursorConfigPath = path.join(tmpHome, ".cursor", "mcp.json");
       const originalHome = process.env.HOME;
@@ -229,6 +232,7 @@ describe("CLI MCP and instruction commands", () => {
         expect(summary).not.toContain("/");
         expect(summary).not.toMatch(/no network/i);
       } finally {
+        vi.doUnmock("../../src/cli/aauth_signer.ts");
         if (originalHome === undefined) {
           delete process.env.HOME;
         } else {
@@ -255,26 +259,33 @@ describe("CLI MCP and instruction commands", () => {
     });
 
     it("classifies as signed exactly the presets that get AAuth keys", async () => {
+      // Record keypair generation instead of writing keys (the signer resolves its key
+      // path from the real home directory at import time).
+      const generated: string[] = [];
+      vi.doMock("../../src/cli/aauth_signer.ts", () => ({
+        generateAndStoreKeypair: async () => {
+          generated.push("call");
+          return { thumbprint: "test" };
+        },
+      }));
       const presets: McpTransportChoice[] = ["a", "b", "c", "d", "e"];
       const originalHome = process.env.HOME;
-      for (const preset of presets) {
-        const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), `neotoma-aauth-${preset}-`));
-        try {
-          process.env.HOME = tmpHome;
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-aauth-classify-"));
+      try {
+        process.env.HOME = tmpHome; // no keys here, so signed presets must generate
+        for (const preset of presets) {
+          generated.length = 0;
           await ensureAAuthKeysForSignedTransport(preset, true);
-          const keysGenerated = await fs
-            .access(path.join(tmpHome, ".neotoma", "aauth", "private.jwk"))
-            .then(() => true)
-            .catch(() => false);
-          expect(classifyMcpTransportPreset(preset) === "signed_http").toBe(keysGenerated);
-        } finally {
-          if (originalHome === undefined) {
-            delete process.env.HOME;
-          } else {
-            process.env.HOME = originalHome;
-          }
-          await fs.rm(tmpHome, { recursive: true, force: true });
+          expect(classifyMcpTransportPreset(preset) === "signed_http").toBe(generated.length > 0);
         }
+      } finally {
+        vi.doUnmock("../../src/cli/aauth_signer.ts");
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        await fs.rm(tmpHome, { recursive: true, force: true });
       }
       expect(classifyMcpTransportPreset("c")).toBe("local_stdio");
       expect(classifyMcpTransportPreset("b")).toBe("local_http_forwarder");
