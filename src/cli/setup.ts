@@ -16,10 +16,7 @@ import { runHooksInstall } from "./hooks.js";
 import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
 import { writePermissionsForTool, toolFromString } from "./permissions.js";
-import {
-  type McpTransportChoice,
-  type McpWrittenEntry,
-} from "./mcp_config_scan.js";
+import { type McpTransportChoice, type McpWrittenEntry } from "./mcp_config_scan.js";
 
 export interface SetupStepResult {
   id: string;

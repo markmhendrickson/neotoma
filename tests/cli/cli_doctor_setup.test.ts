@@ -28,7 +28,10 @@ import {
 } from "../../src/cli/setup.ts";
 import type { McpTransportChoice } from "../../src/cli/mcp_config_scan.ts";
 import { runPreflight } from "../../src/cli/preflight.ts";
-import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
+import {
+  applyCliInstructions,
+  scanAgentInstructions,
+} from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
 import { detectCurrentToolHint, detectDataDirRisks, runDoctor } from "../../src/cli/doctor.ts";
 import { detectHooks } from "../../src/cli/hooks_detect.ts";
@@ -221,7 +224,13 @@ describe("runSetup", () => {
       dryRun: true,
       cwd,
       runners: {
-        init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+        init: async () => ({
+          id: "init",
+          ok: true,
+          changed: false,
+          skipped: true,
+          reason: "dry-run",
+        }),
         mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: true }),
         cliInstructionsConfigure: async () => ({
           id: "cli-instructions",
@@ -233,7 +242,14 @@ describe("runSetup", () => {
       },
     });
     const stepIds = report.steps.map((s) => s.id);
-    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "skills", "permissions"]);
+    expect(stepIds).toEqual([
+      "init",
+      "mcp-configure",
+      "cli-instructions",
+      "hooks",
+      "skills",
+      "permissions",
+    ]);
     expect(report.dry_run).toBe(true);
     expect(report.tool).toBe("cursor");
     expect(report.overall_ok).toBe(true);
@@ -508,14 +524,21 @@ describe("buildVerifyLine", () => {
     has_neotoma_mcp?: boolean;
   }): Parameters<typeof buildVerifyLine>[0] {
     // Use explicit key presence check so null values are preserved (not coalesced to defaults).
-    const whichNeotoma = "which_neotoma" in overrides ? overrides.which_neotoma : "/usr/local/bin/neotoma";
+    const whichNeotoma =
+      "which_neotoma" in overrides ? overrides.which_neotoma : "/usr/local/bin/neotoma";
     const globalBin = "global_bin" in overrides ? overrides.global_bin : "/usr/local/bin/neotoma";
     return {
       neotoma: {
         installed: true,
         which_neotoma: whichNeotoma,
         global_bin: globalBin,
-        resolved_via: (overrides.resolved_via ?? "npm") as "npm" | "mise" | "nvm" | "fnm" | "path" | "unknown",
+        resolved_via: (overrides.resolved_via ?? "npm") as
+          | "npm"
+          | "mise"
+          | "nvm"
+          | "fnm"
+          | "path"
+          | "unknown",
         version: overrides.version ?? "0.11.0",
         node_on_path: true,
         npm_global_root: null,
@@ -533,7 +556,13 @@ describe("buildVerifyLine", () => {
       },
       api: { running: false, env: null, port: null, pid: null, base_url: null },
       mcp_servers_detected: overrides.has_neotoma_mcp
-        ? { cursor: { path: "/home/user/.cursor/mcp.json", has_neotoma: true, has_neotoma_dev: false } }
+        ? {
+            cursor: {
+              path: "/home/user/.cursor/mcp.json",
+              has_neotoma: true,
+              has_neotoma_dev: false,
+            },
+          }
         : {},
       cli_instructions: {
         project: { cursor: false, claude: false, codex: false },
@@ -612,12 +641,32 @@ describe("buildVerifyLine", () => {
         dryRun: true,
         cwd,
         runners: {
-          init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "dry-run" }),
-          mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "dry-run" }),
-          cliInstructionsConfigure: async () => ({ id: "cli-instructions", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+          init: async () => ({
+            id: "init",
+            ok: true,
+            changed: false,
+            skipped: true,
+            reason: "dry-run",
+          }),
+          mcpConfigure: async () => ({
+            id: "mcp-configure",
+            ok: true,
+            changed: false,
+            skipped: true,
+            reason: "dry-run",
+          }),
+          cliInstructionsConfigure: async () => ({
+            id: "cli-instructions",
+            ok: true,
+            changed: false,
+            skipped: true,
+            reason: "dry-run",
+          }),
         },
       });
-      expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
+      expect(report.verify_line).toMatch(
+        /^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/
+      );
       expect(report.privacy_transport_summary).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
       expect(report.privacy_transport_summary).not.toContain("no network egress");
     } finally {
@@ -628,8 +677,20 @@ describe("buildVerifyLine", () => {
   const PRESETS: McpTransportChoice[] = ["a", "b", "c", "d", "e"];
   // Values `normalizeInitMcpTransport` (src/cli/index.ts) accepts for --mcp-transport.
   const ACCEPTED_OVERRIDES = new Set([
-    "1", "2", "3", "4", "5", "a", "b", "c", "d", "e",
-    "signed", "signed-dev-shim", "dev-shim", "shim",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "signed",
+    "signed-dev-shim",
+    "dev-shim",
+    "shim",
   ]);
   function suggestedOverrides(summary: string): string[] {
     return [...summary.matchAll(/--mcp-transport[= ](\S+?)[.,;)]?(\s|$)/g)].map((m) => m[1]);
@@ -688,7 +749,9 @@ describe("buildVerifyLine", () => {
   it("only suggests --mcp-transport values the CLI accepts", () => {
     const all = [
       buildPrivacyTransportSummary(undefined),
-      ...PRESETS.map((transport) => buildPrivacyTransportSummary([{ server_key: "neotoma", transport }])),
+      ...PRESETS.map((transport) =>
+        buildPrivacyTransportSummary([{ server_key: "neotoma", transport }])
+      ),
     ];
     for (const summary of all) {
       expect(summary).not.toContain("--mcp-transport=http");
@@ -708,7 +771,13 @@ describe("buildVerifyLine", () => {
         skipped: true,
         reason: "x",
       }),
-      hooksInstall: async () => ({ id: "hooks", ok: true, changed: false, skipped: true, reason: "x" }),
+      hooksInstall: async () => ({
+        id: "hooks",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "x",
+      }),
     };
 
     async function summaryFor(mcpStep: SetupStepResult, dryRun = false): Promise<string> {
@@ -766,11 +835,41 @@ describe("buildVerifyLine", () => {
 
     it("gives the nothing-written line on every path that writes nothing", async () => {
       const nothingWritten = [
-        { id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured", details: { installed: false, message: "Dev and prod Neotoma servers are already configured." } },
-        { id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured", details: { installed: false, message: "MCP configuration skipped." } },
-        { id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured", details: { installed: false, message: "Installation cancelled." } },
+        {
+          id: "mcp-configure",
+          ok: true,
+          changed: false,
+          skipped: true,
+          reason: "already-configured",
+          details: {
+            installed: false,
+            message: "Dev and prod Neotoma servers are already configured.",
+          },
+        },
+        {
+          id: "mcp-configure",
+          ok: true,
+          changed: false,
+          skipped: true,
+          reason: "already-configured",
+          details: { installed: false, message: "MCP configuration skipped." },
+        },
+        {
+          id: "mcp-configure",
+          ok: true,
+          changed: false,
+          skipped: true,
+          reason: "already-configured",
+          details: { installed: false, message: "Installation cancelled." },
+        },
         // Fix path: installed but no `written` reported.
-        { id: "mcp-configure", ok: true, changed: true, skipped: false, details: { installed: true, message: "Fixed 1 config file(s)" } },
+        {
+          id: "mcp-configure",
+          ok: true,
+          changed: true,
+          skipped: false,
+          details: { installed: true, message: "Fixed 1 config file(s)" },
+        },
       ];
       for (const step of nothingWritten) {
         expect(await summaryFor(step)).toBe(NO_MCP_ENTRY_WRITTEN_SUMMARY);
@@ -838,7 +937,12 @@ describe("runPreflight", () => {
   it("applies permissions for claude-code when --apply is set", async () => {
     const cwd = await mkTmp("ntm-preflight-claude");
     try {
-      const report = await runPreflight({ tool: "claude-code", apply: true, scope: "project", cwd });
+      const report = await runPreflight({
+        tool: "claude-code",
+        apply: true,
+        scope: "project",
+        cwd,
+      });
       expect(report.overall_ok).toBe(true);
       expect(report.apply).toBe(true);
       expect(report.copy_paste_block).toBeNull();
@@ -887,7 +991,10 @@ describe("runPreflight", () => {
     try {
       const report = await runPreflight({ tool: "cursor", apply: true, dryRun: true, cwd });
       expect(report.dry_run).toBe(true);
-      const exists = await fs.access(path.join(cwd, ".cursor", "allowlist.json")).then(() => true).catch(() => false);
+      const exists = await fs
+        .access(path.join(cwd, ".cursor", "allowlist.json"))
+        .then(() => true)
+        .catch(() => false);
       expect(exists).toBe(false);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
