@@ -227,6 +227,15 @@ jobs:
           RUN_BENCH=1 npx vitest run --no-file-parallelism tests/performance/history_length_reads.bench.test.ts
           npx vitest run --no-file-parallelism tests/integration/current_state_reads.test.ts
 
+      # No-op store suppression with a seen-again marker (#2792 point 1). Every
+      # rule that must still store, the instance-policy switch, the fragment
+      # reuse and the cutover interplay are asserted against observation rows.
+      # tests/integration is not part of this lane's allowlist, so the file runs
+      # here by name. The unchanged re-store growth case lives in the benchmark
+      # step above.
+      - name: Run no-op store suppression tests (#2792)
+        run: npx vitest run --no-file-parallelism tests/integration/noop_store_suppression.test.ts
+
       # #2316/#2324 DB-worker abandonment survival. The same gap as the two steps
       # above, and the one that cost the most: this suite already existed and
       # already asserted the right property, but `test:unit` excludes

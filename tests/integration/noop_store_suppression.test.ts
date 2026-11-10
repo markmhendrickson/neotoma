@@ -12,7 +12,7 @@
  * Uses its own temporary database: recording a lifecycle cutover is permanent
  * by design and the instance policy is instance-wide.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +30,7 @@ type Mods = {
   storeStructuredForApi: typeof import("../../src/actions.js").storeStructuredForApi;
   NeotomaServer: typeof import("../../src/server.js").NeotomaServer;
   findRepeatedObservation: typeof import("../../src/services/observation_sightings.js").findRepeatedObservation;
+  isNoopSuppressionEnabled: typeof import("../../src/services/observation_sightings.js").isNoopSuppressionEnabled;
   attachSightings: typeof import("../../src/services/observation_sightings.js").attachSightings;
   getSnapshot: typeof import("../../src/services/snapshot_computation.js").getSnapshot;
   recomputeSnapshot: typeof import("../../src/services/snapshot_computation.js").recomputeSnapshot;
@@ -126,6 +127,8 @@ beforeAll(async () => {
     NeotomaServer: (await import("../../src/server.js")).NeotomaServer,
     findRepeatedObservation: (await import("../../src/services/observation_sightings.js"))
       .findRepeatedObservation,
+    isNoopSuppressionEnabled: (await import("../../src/services/observation_sightings.js"))
+      .isNoopSuppressionEnabled,
     attachSightings: (await import("../../src/services/observation_sightings.js")).attachSightings,
     getSnapshot: (await import("../../src/services/snapshot_computation.js")).getSnapshot,
     recomputeSnapshot: (await import("../../src/services/snapshot_computation.js")).recomputeSnapshot,
@@ -571,6 +574,33 @@ describe("MCP store: response marker and fragments", () => {
 });
 
 describe("instance policy switch", () => {
+  it("treats an unreadable policy as off, not on", async () => {
+    expect(await m.isNoopSuppressionEnabled()).toBe(true);
+    const original = m.db.from.bind(m.db);
+    const failing = {
+      select() {
+        return failing;
+      },
+      eq() {
+        return failing;
+      },
+      then(resolve: (value: unknown) => void) {
+        resolve({ data: null, error: { message: "synthetic lookup failure" } });
+      },
+    };
+    const spy = vi
+      .spyOn(m.db, "from")
+      .mockImplementation(((table: string) =>
+        table === "entity_snapshots" ? failing : original(table)) as typeof m.db.from);
+    try {
+      // Red if a failed lookup fell through to the default (on).
+      expect(await m.isNoopSuppressionEnabled()).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await m.isNoopSuppressionEnabled()).toBe(true);
+  });
+
   it("turns suppression off for both transports and fragments, and back on", async () => {
     const type = `noop_switch_${tag}`;
     const policyId = `policy_${tag}`;
