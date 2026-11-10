@@ -7268,8 +7268,17 @@ export class NeotomaServer {
       identityRule: string;
       action: string;
       deduplicated: boolean;
+      /** Set when a no-op store was recorded as a sighting of `observationId` (#2792). */
+      seenAgain?: { seen_count: number };
       duplicateCandidates?: import("./services/entity_resolution.js").ResolverDuplicateCandidate[];
     }> = [];
+    // No-op store suppression (#2792): one policy read per store call. A
+    // resumed partial store (#2144) never suppresses, so a retry cannot count
+    // the same repeat twice.
+    const suppressNoop =
+      resumeSourceId === undefined
+        ? await (await import("./services/observation_sightings.js")).isNoopSuppressionEnabled()
+        : false;
     // Track the resolved fields per observation index for schema-driven store_warnings.
     const resolvedFieldsByIndex = new Map<number, Record<string, unknown>>();
     // Track constraint violations in "warn" mode per observation index (#1756).
@@ -7619,6 +7628,7 @@ export class NeotomaServer {
         schemaVersion: schemaVer,
         originalValues,
         validFields,
+        reuseAcrossSources: suppressNoop,
       });
 
       const unknownFieldsResult = await storeUnknownFields({
@@ -7628,6 +7638,7 @@ export class NeotomaServer {
         entityType,
         schemaVersion: schemaVer,
         unknownFields,
+        reuseAcrossSources: suppressNoop,
       });
       unknownFieldsCount += unknownFieldsResult.count;
       for (const f of unknownFieldsResult.fields) unknownFieldNamesSet.add(f);
@@ -7669,7 +7680,36 @@ export class NeotomaServer {
         );
       }
 
-      if (!existingObservation) {
+      // No-op store (#2792): the incoming fields repeat the entity's current top
+      // observation, so record a sighting of it instead of appending a row.
+      let repeatedObservationId: string | null = null;
+      let seenAgain: { seen_count: number } | undefined;
+      if (!existingObservation && suppressNoop) {
+        const sightings = await import("./services/observation_sightings.js");
+        const repeated = await sightings.findRepeatedObservation({
+          userId,
+          entityId,
+          entityType,
+          schemaVersion: schema?.schema_version || "1.0",
+          fields: fieldsForObservation,
+          sourcePriority,
+          specificityScore: 1.0,
+          observationSource: String(observationSource ?? DEFAULT_OBSERVATION_SOURCE),
+          sourcePeerId: sourcePeerId || null,
+        });
+        if (repeated) {
+          const sighting = await sightings.recordSighting({
+            observationId: repeated.id,
+            userId,
+            entityId,
+            sourceId: storageResult.sourceId,
+          });
+          repeatedObservationId = repeated.id;
+          seenAgain = { seen_count: sighting.seen_count };
+        }
+      }
+
+      if (!existingObservation && !repeatedObservationId) {
         // Stamp agent attribution (Phase 1) so the Inspector can show the
         // writing agent for structured-store observations too.
         const { getCurrentAttribution: _structuredAttrib } =
@@ -7715,7 +7755,7 @@ export class NeotomaServer {
       createdEntities.push({
         entityId,
         entityType,
-        observationId,
+        observationId: repeatedObservationId ?? observationId,
         canonicalName: resolverTrace.canonicalName,
         resolverPath: resolverTrace.path,
         identityBasis: resolverTrace.identityBasis,
@@ -7725,6 +7765,7 @@ export class NeotomaServer {
         // (no new observation was inserted). Surface it so callers can tell a
         // replay from a fresh write on the normal (non-idempotency-replay) path.
         deduplicated: Boolean(existingObservation),
+        ...(seenAgain ? { seenAgain } : {}),
         ...(resolverTrace.duplicateCandidates && resolverTrace.duplicateCandidates.length > 0
           ? { duplicateCandidates: resolverTrace.duplicateCandidates }
           : {}),
@@ -8426,6 +8467,7 @@ export class NeotomaServer {
         identity_rule: e.identityRule,
         entity_snapshot_after: snapshotByEntityId.get(e.entityId) ?? null,
         deduplicated: e.deduplicated,
+        ...(e.seenAgain ? { seen_again: true, seen_count: e.seenAgain.seen_count } : {}),
         ...(e.duplicateCandidates && e.duplicateCandidates.length > 0
           ? {
               prefix_duplicate_candidates: e.duplicateCandidates.map((c) => ({

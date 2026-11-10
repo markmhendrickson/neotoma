@@ -3127,6 +3127,21 @@ export interface components {
        */
       enforcement?: "advisory" | "enforced";
       /**
+       * @description No-op store suppression switch (#2792). On unless set to `false`.
+       *     When on, a structured store whose incoming fields equal the
+       *     entity's current top observation (same owner, entity type, schema
+       *     version, `source_priority`, specificity and `observation_source`,
+       *     no lifecycle, deletion, encryption or correction marker) does not
+       *     append a new observation: the existing observation is recorded as
+       *     seen again in `observation_sightings`, and the store response
+       *     names it with `seen_again: true`. Unknown-field fragments that
+       *     repeat an existing (entity, key, value) bump that fragment's
+       *     `frequency_count` and `last_seen` instead of adding a row. Set to
+       *     `false` to store every write as before. This switch never rejects
+       *     a write.
+       */
+      suppress_noop_observations?: boolean;
+      /**
        * @description Opaque short identifier (e.g. `pol_9f2a`) echoed in denial envelopes
        *     so an operator can correlate a rejection with the policy revision
        *     that caused it. Deliberately opaque: it describes no policy content.
@@ -3829,6 +3844,18 @@ export interface components {
     Observation: {
       id?: string;
       entity_id?: string;
+      /**
+       * @description Present on observations that later no-op stores repeated (#2792);
+       *     absent otherwise. The repeats did not append rows: this is the
+       *     seen-again marker kept in `observation_sightings`.
+       */
+      seen_again?: {
+        seen_count?: number;
+        /** Format: date-time */
+        first_seen_again_at?: string;
+        /** Format: date-time */
+        last_seen_at?: string;
+      };
       entity_type?: string;
       schema_version?: string;
       source_id?: string | null;
@@ -4629,6 +4656,22 @@ export interface components {
          */
         identity_rule?: string;
         action?: string;
+        /**
+         * @description Present and `true` when this store was a no-op repeat (#2792):
+         *     the incoming fields equal the entity's current top
+         *     observation, so no observation was appended. `observation_id`
+         *     then names the EXISTING observation that was repeated, and
+         *     the repeat is recorded in `observation_sightings`. Absent when
+         *     the store appended a new observation. Suppression can be
+         *     turned off with the instance policy's
+         *     `suppress_noop_observations: false`.
+         */
+        seen_again?: boolean;
+        /**
+         * @description Present with `seen_again`: how many times the repeated
+         *     observation has been seen again, including this store.
+         */
+        seen_count?: number;
         /**
          * @description R3 non-fatal resolver warnings for this observation. Present
          *     when the entity's active schema declares

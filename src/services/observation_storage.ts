@@ -74,6 +74,15 @@ export interface CreateObservationParams {
    * write no origin key at all.
    */
   data_origin?: DataOrigin | null;
+  /**
+   * No-op store suppression (#2792). When true and the write would repeat the
+   * entity's current top observation (see observation_sightings.ts), nothing is
+   * appended: the sighting is recorded and the repeated observation is returned
+   * with `seen_again`. Evaluated after every write guard below, so a suppressed
+   * write needed the same permissions as an appended one. Callers opt in; the
+   * default stores as before.
+   */
+  noop_suppression?: boolean;
 }
 
 export interface ObservationRecord {
@@ -90,6 +99,8 @@ export interface ObservationRecord {
   fields: Record<string, unknown>;
   user_id: string;
   created_at: string;
+  /** Set only on a suppressed no-op store (#2792): this existing row was seen again. */
+  seen_again?: { seen_count: number };
 }
 
 export async function createObservation(
@@ -214,6 +225,33 @@ export async function createObservation(
   }
   if (existing) {
     return existing as ObservationRecord;
+  }
+
+  if (params.noop_suppression && !params.operation_receipt) {
+    const sightings = await import("./observation_sightings.js");
+    const repeated = await sightings.findRepeatedObservation({
+      userId: params.user_id,
+      entityId: params.entity_id,
+      entityType: params.entity_type,
+      schemaVersion: params.schema_version,
+      fields: params.fields,
+      sourcePriority: params.source_priority,
+      specificityScore: params.specificity_score,
+      observationSource: String(params.observation_source ?? DEFAULT_OBSERVATION_SOURCE),
+      sourcePeerId: params.source_peer_id ?? null,
+    });
+    if (repeated) {
+      const sighting = await sightings.recordSighting({
+        observationId: repeated.id,
+        userId: params.user_id,
+        entityId: params.entity_id,
+        sourceId: params.source_id,
+      });
+      return {
+        ...(repeated.row as unknown as ObservationRecord),
+        seen_again: { seen_count: sighting.seen_count },
+      };
+    }
   }
 
   const { data, error } = await insertObservationRow(row).select().single();

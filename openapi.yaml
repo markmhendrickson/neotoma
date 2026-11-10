@@ -1005,6 +1005,21 @@ components:
             `ERR_STORE_POLICY_DENIED`. Defaults to `advisory` so that adding a
             policy record is not itself a breaking change for existing callers;
             an operator opts into rejection explicitly.
+        suppress_noop_observations:
+          type: boolean
+          description: |
+            No-op store suppression switch (#2792). On unless set to `false`.
+            When on, a structured store whose incoming fields equal the
+            entity's current top observation (same owner, entity type, schema
+            version, `source_priority`, specificity and `observation_source`,
+            no lifecycle, deletion, encryption or correction marker) does not
+            append a new observation: the existing observation is recorded as
+            seen again in `observation_sightings`, and the store response
+            names it with `seen_again: true`. Unknown-field fragments that
+            repeat an existing (entity, key, value) bump that fragment's
+            `frequency_count` and `last_seen` instead of adding a row. Set to
+            `false` to store every write as before. This switch never rejects
+            a write.
         policy_id:
           type: string
           description: |
@@ -1992,6 +2007,22 @@ components:
           type: string
         entity_id:
           type: string
+        seen_again:
+          type: object
+          description: |
+            Present on observations that later no-op stores repeated (#2792);
+            absent otherwise. The repeats did not append rows: this is the
+            seen-again marker kept in `observation_sightings`.
+          properties:
+            seen_count:
+              type: integer
+              minimum: 1
+            first_seen_again_at:
+              type: string
+              format: date-time
+            last_seen_at:
+              type: string
+              format: date-time
         entity_type:
           type: string
         schema_version:
@@ -3082,6 +3113,23 @@ components:
                   `composite:full_name+employer`, `first_string_field:name`).
               action:
                 type: string
+              seen_again:
+                type: boolean
+                description: |
+                  Present and `true` when this store was a no-op repeat (#2792):
+                  the incoming fields equal the entity's current top
+                  observation, so no observation was appended. `observation_id`
+                  then names the EXISTING observation that was repeated, and
+                  the repeat is recorded in `observation_sightings`. Absent when
+                  the store appended a new observation. Suppression can be
+                  turned off with the instance policy's
+                  `suppress_noop_observations: false`.
+              seen_count:
+                type: integer
+                minimum: 1
+                description: |
+                  Present with `seen_again`: how many times the repeated
+                  observation has been seen again, including this store.
               warnings:
                 type: array
                 description: |

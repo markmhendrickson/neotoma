@@ -99,6 +99,14 @@ export interface InstancePolicy {
   require_provenance?: boolean;
   max_sensitivity_class?: SensitivityClass | null;
   enforcement?: PolicyEnforcementMode;
+  /**
+   * Switch for no-op store suppression (#2792). Absent or true: a structured
+   * store that would not change anything a reader can see is recorded as a
+   * sighting of the existing observation instead of appending a new one.
+   * False turns suppression off, so every store appends as it always did.
+   * Not a data-policy gate: it never rejects a write.
+   */
+  suppress_noop_observations?: boolean;
   policy_id?: string;
   updated_at?: string;
   updated_by?: string;
@@ -488,6 +496,10 @@ function normalizeInstancePolicy(snapshot: Record<string, unknown>): InstancePol
     // Default advisory: adding a policy record must not itself start rejecting
     // writes that previously succeeded. Rejection is an explicit opt-in.
     enforcement: snapshot.enforcement === "enforced" ? "enforced" : "advisory",
+    suppress_noop_observations:
+      typeof snapshot.suppress_noop_observations === "boolean"
+        ? snapshot.suppress_noop_observations
+        : undefined,
     policy_id: typeof snapshot.policy_id === "string" ? snapshot.policy_id : undefined,
     updated_at: typeof snapshot.updated_at === "string" ? snapshot.updated_at : undefined,
     updated_by: typeof snapshot.updated_by === "string" ? snapshot.updated_by : undefined,

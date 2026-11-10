@@ -8606,6 +8606,9 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
     warnings?: ResolvedEntity["trace"]["warnings"];
     prefix_duplicate_candidates?: ResolvedEntity["trace"]["duplicate_candidates"];
     entity_snapshot_after: Record<string, unknown> | null;
+    /** Set when a no-op store was recorded as a sighting of `observation_id` (#2792). */
+    seen_again?: true;
+    seen_count?: number;
   }> = [];
 
   // Issue #1839: capture each entity's prior and post-reduction snapshot so the
@@ -8636,9 +8639,16 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
     }
   >();
 
+  // No-op store suppression (#2792): one policy read per store call. The
+  // decision itself runs inside createObservation, after its write guards.
+  const suppressNoop = commit
+    ? await (await import("./services/observation_sightings.js")).isNoopSuppressionEnabled()
+    : false;
+
   for (const r of resolved) {
     let observation_id: string | null = null;
     let snapshotAfter: Record<string, unknown> | null = null;
+    let seenAgain: { seen_count: number } | undefined;
 
     if (commit) {
       // Invariant: storageResult is only ever null when `commit` is false
@@ -8679,18 +8689,27 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         identity_basis: r.trace.identity_basis,
         identity_rule: r.trace.identity_rule,
         data_origin: dataOrigins?.[r.observation_index],
+        noop_suppression: suppressNoop,
       });
       observation_id = obsData.id;
+      seenAgain = obsData.seen_again;
 
-      try {
-        const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
-        const snap = await recomputeSnapshot(r.entity_id, userId);
-        snapshotAfter =
-          (snap as { snapshot?: Record<string, unknown> } | null | undefined)?.snapshot ?? null;
-        if (snapshotAfter) newSnapshotByEntityId.set(r.entity_id, snapshotAfter);
-      } catch (snapshotErr) {
-        logger.warn(`Snapshot recompute failed for ${r.entity_id}: ${snapshotErr}`);
+      if (seenAgain) {
+        // Nothing was appended, so the snapshot is unchanged: return it as it
+        // stands (recompute only if the entity has none yet).
+        snapshotAfter = Object.keys(priorSnapshot).length > 0 ? priorSnapshot : null;
       }
+      if (!snapshotAfter) {
+        try {
+          const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
+          const snap = await recomputeSnapshot(r.entity_id, userId);
+          snapshotAfter =
+            (snap as { snapshot?: Record<string, unknown> } | null | undefined)?.snapshot ?? null;
+        } catch (snapshotErr) {
+          logger.warn(`Snapshot recompute failed for ${r.entity_id}: ${snapshotErr}`);
+        }
+      }
+      if (snapshotAfter) newSnapshotByEntityId.set(r.entity_id, snapshotAfter);
 
       const obsRow = obsData as { observed_at?: string; id: string };
       const emitTs = obsRow.observed_at ?? new Date().toISOString();
@@ -8698,18 +8717,20 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         observationSource === undefined || observationSource === null
           ? DEFAULT_OBSERVATION_SOURCE
           : String(observationSource);
-      emitObservationCreated({
-        user_id: userId,
-        entity_id: r.entity_id,
-        entity_type: r.entity_type,
-        observation_id: obsRow.id,
-        timestamp: emitTs,
-        source_id: observationSourceId,
-        idempotency_key: idempotencyKey,
-        observation_source: obsSourceLabel,
-        source_peer_id: sourcePeerId ?? undefined,
-      });
-      if (snapshotAfter) {
+      if (!seenAgain) {
+        emitObservationCreated({
+          user_id: userId,
+          entity_id: r.entity_id,
+          entity_type: r.entity_type,
+          observation_id: obsRow.id,
+          timestamp: emitTs,
+          source_id: observationSourceId,
+          idempotency_key: idempotencyKey,
+          observation_source: obsSourceLabel,
+          source_peer_id: sourcePeerId ?? undefined,
+        });
+      }
+      if (snapshotAfter && !seenAgain) {
         const isNewEntity = r.trace.action === "created";
         emitEntitySnapshotChange({
           user_id: userId,
@@ -8812,6 +8833,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         ? { prefix_duplicate_candidates: r.trace.duplicate_candidates }
         : {}),
       entity_snapshot_after: snapshotAfter,
+      ...(seenAgain ? { seen_again: true, seen_count: seenAgain.seen_count } : {}),
     });
   }
 

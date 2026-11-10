@@ -24,6 +24,33 @@ export interface StoreFragmentParams {
   interpretationId?: string | null;
   /** Conditional caller owns the DB transaction and postcommit callbacks. */
   transactionEffects?: Array<() => Promise<void>>;
+  /**
+   * No-op suppression (#2792). When the entity's newest fragment for this key
+   * already carries the same value and envelope, from any source, count the
+   * sighting on that fragment (`frequency_count`, `last_seen`) instead of
+   * inserting a row per source. Needs `entityId`. Only the newest fragment is
+   * considered, so a value that changed and changed back (A, B, A) still
+   * stores a row for each change, and the newest fragment per key, which is
+   * what readers pick, keeps carrying the current value.
+   */
+  reuseAcrossSources?: boolean;
+}
+
+/** Canonical JSON (keys sorted at every depth) for comparing fragment values. */
+function canonical(value: unknown): string {
+  const sort = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sort);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        const item = (v as Record<string, unknown>)[k];
+        if (item !== undefined) out[k] = sort(item);
+      }
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(sort(value));
 }
 
 async function queueAutoEnhancement(
@@ -96,6 +123,60 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     }
     return callback();
   };
+
+  // Same value already on the entity's newest fragment for this key, stored by
+  // an earlier source: count the sighting there rather than add a row (#2792).
+  let repeated: { id: string; frequency_count: number | null } | null = null;
+  if (!existing && params.reuseAcrossSources && entityId && !params.transactionEffects) {
+    try {
+      const { data: newest } = await db
+        .from("raw_fragments")
+        .select("id, frequency_count, fragment_value, fragment_envelope")
+        .eq("entity_id", entityId)
+        .eq("user_id", userId)
+        .eq("entity_type", entityType)
+        .eq("fragment_key", key)
+        .order("last_seen", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1);
+      const row = newest?.[0] as
+        | {
+            id: string;
+            frequency_count: number | null;
+            fragment_value: unknown;
+            fragment_envelope: unknown;
+          }
+        | undefined;
+      if (
+        row &&
+        canonical(row.fragment_value) === canonical(value) &&
+        canonical(row.fragment_envelope) === canonical(envelope)
+      ) {
+        repeated = { id: row.id, frequency_count: row.frequency_count };
+      }
+    } catch (repeatError) {
+      logger.warn(
+        `[raw_fragments] repeat check failed for ${entityType}.${key}, inserting instead: ${
+          repeatError instanceof Error ? repeatError.message : String(repeatError)
+        }`
+      );
+    }
+  }
+
+  if (repeated) {
+    const newCount = (repeated.frequency_count || 1) + 1;
+    const { error: repeatUpdateError } = await db
+      .from("raw_fragments")
+      .update({ frequency_count: newCount, last_seen: new Date().toISOString() })
+      .eq("id", repeated.id);
+    if (!repeatUpdateError) {
+      await enhance(newCount);
+      return true;
+    }
+    logger.warn(
+      `[raw_fragments] could not count a repeat on ${repeated.id}, inserting instead: ${repeatUpdateError.message}`
+    );
+  }
 
   if (existing) {
     const newCount = (existing.frequency_count || 1) + 1;
@@ -191,6 +272,7 @@ export async function storeConvertedOriginals(params: {
   schemaVersion: string;
   originalValues: Record<string, unknown>;
   validFields: Record<string, unknown>;
+  reuseAcrossSources?: boolean;
 }): Promise<number> {
   const { sourceId, userId, entityId, entityType, schemaVersion, originalValues, validFields } =
     params;
@@ -207,6 +289,7 @@ export async function storeConvertedOriginals(params: {
       value,
       reason: "converted_value_original",
       convertedTo: validFields[key],
+      reuseAcrossSources: params.reuseAcrossSources,
     });
     if (stored) count++;
   }
@@ -221,6 +304,7 @@ export async function storeUnknownFields(params: {
   entityType: string;
   schemaVersion: string;
   unknownFields: Record<string, unknown>;
+  reuseAcrossSources?: boolean;
 }): Promise<{ count: number; fields: string[] }> {
   const { sourceId, userId, entityId, entityType, schemaVersion, unknownFields } = params;
 
@@ -245,6 +329,7 @@ export async function storeUnknownFields(params: {
       key,
       value,
       reason: "unknown_field",
+      reuseAcrossSources: params.reuseAcrossSources,
     });
     if (stored) storedFields.push(key);
   }

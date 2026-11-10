@@ -188,6 +188,25 @@ const SCHEMA_STATEMENTS = [
     user_id TEXT,
     created_at TEXT
   )`,
+  // Seen-again marker for stores that would not change anything a reader can
+  // see (#2792). Observations stay append-only and immutable; a suppressed
+  // no-op store upserts one row here against the observation it repeated.
+  // Created at open, never by the lifecycle migration: the migration executor
+  // refuses schema objects outside its allowlist, and an open before the
+  // migration puts this table in the "before" inventory it compares against.
+  // No foreign key and no trigger: the table is plain rows keyed by the
+  // observation id and owner.
+  `CREATE TABLE IF NOT EXISTS observation_sightings (
+    observation_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    seen_count INTEGER NOT NULL,
+    first_seen_again_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    last_source_id TEXT,
+    PRIMARY KEY (observation_id, user_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_observation_sightings_entity ON observation_sightings(entity_id, user_id)`,
   `CREATE TABLE IF NOT EXISTS entity_merges (
     id TEXT PRIMARY KEY,
     user_id TEXT,
