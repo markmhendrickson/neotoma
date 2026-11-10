@@ -152,6 +152,7 @@ parentPort.on("message", (msg) => {
       process.exit(1);
     } else if (msg.sql === "__hold_for_test__") {
       // Deterministic test-only lifetime barrier; no production path issues it.
+      if (process.env.NODE_ENV !== "test") throw new Error("Worker test barrier unavailable");
       const flags = new Int32Array(msg.params[0]);
       Atomics.store(flags, 0, 1);
       Atomics.notify(flags, 0);

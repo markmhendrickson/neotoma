@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { holdOrdinaryWorker } from "../helpers/worker_lifetime_barrier.js";
+import { holdOrdinaryWorker, holdWriterWorker } from "../helpers/worker_lifetime_barrier.js";
 import {
   WorkerFileDatabase,
   WorkerDbCrashError,
@@ -449,6 +449,46 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
 });
 
 describe("pinned worker read view", () => {
+  it.each(
+    ["test", "development", "production"].flatMap((mode) =>
+      ["reader", "writer"].map((role) => ({ mode, role }))
+    )
+  )("confines the valid lifetime barrier to test mode ($mode/$role)", async ({ mode, role }) => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = mode;
+    const db = makeDb();
+    let held: ReturnType<typeof holdOrdinaryWorker> | undefined;
+    try {
+      await db.exec("CREATE TABLE environment_control(n INTEGER)");
+      await db.prepare("SELECT 1").get();
+      held = (role === "reader" ? holdOrdinaryWorker : holdWriterWorker)(
+        db,
+        new AbortController().signal
+      );
+      const result = held.pending.then(
+        (value) => ({ kind: "returned", value }),
+        (error) => ({ kind: "rejected", message: error.message })
+      );
+      if (mode === "test") {
+        await vi.waitFor(() => expect(Atomics.load(held!.flags, 0)).toBe(1));
+        held.release();
+        expect(await result).toEqual({ kind: "returned", value: { held: true } });
+      } else {
+        const outcome = await Promise.race([
+          result,
+          new Promise((resolve) => setTimeout(() => resolve({ kind: "still-held" }), 150)),
+        ]);
+        expect(outcome).toEqual({ kind: "rejected", message: "Worker test barrier unavailable" });
+        expect(Atomics.load(held.flags, 0)).toBe(0);
+      }
+    } finally {
+      held?.release();
+      await db.close();
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
   it("aborts before BEGIN without creating an exact reader", async () => {
     const db = makeDb();
     const control = new AbortController();

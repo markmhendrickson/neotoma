@@ -39,3 +39,8 @@ export function holdOrdinaryWorker(database: WorkerFileDatabase, signal: AbortSi
   const owned = database as unknown as { readers: HeldConnection[] };
   return hold(owned.readers[0], signal);
 }
+
+export function holdWriterWorker(database: WorkerFileDatabase, signal: AbortSignal) {
+  const owned = database as unknown as { writer: HeldConnection };
+  return hold(owned.writer, signal);
+}

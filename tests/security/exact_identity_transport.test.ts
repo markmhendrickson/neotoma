@@ -412,6 +412,8 @@ describe("exact identity transport uses existing tenant scope", () => {
       const closeSpy = vi.spyOn(db, "close");
       try {
         await expect(pin).rejects.toThrow(/budget/);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(termination).not.toHaveBeenCalled();
         const { clearDbCache } = await import("../../src/repositories/db/connection.js");
         clearDbCache();
         const staleClose = closeSpy.mock.results[0].value as Promise<void>;
