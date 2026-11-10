@@ -92,7 +92,13 @@ in the side table `observation_sightings` against the observation it repeated
 and succeeds:
 
 ```json
-{ "entity_id": "...", "observation_id": "<the EXISTING observation>", "seen_again": true, "seen_count": 3, "deduplicated": false }
+{
+  "entity_id": "...",
+  "observation_id": "<the EXISTING observation>",
+  "seen_again": true,
+  "seen_count": 3,
+  "deduplicated": false
+}
 ```
 
 `seen_again` and `seen_count` appear only on a suppressed entry; every existing

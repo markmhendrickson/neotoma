@@ -326,61 +326,57 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
   // No-op store suppression (#2792 point 1): an unchanged record re-stored in a
   // batch whose other content changed adds no observation row and no fragment
   // row; the repeats are counted on the observation_sightings marker instead.
-  it(
-    "does not grow observation storage linearly when an unchanged record is re-stored",
-    async () => {
-      const database = await m.getDb();
-      const type = `hist_restore_${runTag}`;
-      const entity = {
-        entity_type: type,
-        schema_version: "1.0",
-        name: "Unchanged Record",
-        status: "active",
-      };
-      let entityId = "";
-      const pageCount = async () =>
-        ((await database.prepare("PRAGMA page_count").get()) as { page_count: number }).page_count;
-      const before = await pageCount();
-      // A sync pass re-stores the unchanged record in a batch whose other content
-      // changed. (A byte-identical batch already maps to its earlier source and
-      // observation, so it is not the case that grows a store.)
-      for (let n = 0; n < RESTORES; n++) {
-        const result = (await m.storeStructuredForApi({
-          userId: USER_ID,
-          idempotencyKey: `history-bench-${runTag}-${randomUUID()}`,
-          sourcePriority: 100,
-          entities: [
-            entityId ? { ...entity, target_id: entityId } : entity,
-            { entity_type: `${type}_cursor`, schema_version: "1.0", name: "Sync cursor", pass: n },
-          ],
-        })) as { entities: Array<{ entity_id: string }> };
-        entityId = result.entities[0].entity_id;
-      }
-      const observations = (
-        (await database
-          .prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id = ?")
-          .get(entityId)) as { n: number }
-      ).n;
-      const grownPages = (await pageCount()) - before;
-      report.push(
-        `re-stored an unchanged record ${RESTORES}x: ${observations} observation rows, +${grownPages} pages (${(statSync(process.env.NEOTOMA_SQLITE_PATH!).size / 1e6).toFixed(1)} MB file)`
-      );
-      const fragments = (
-        (await database
-          .prepare("SELECT COUNT(*) AS n FROM raw_fragments WHERE entity_id = ?")
-          .get(entityId)) as { n: number }
-      ).n;
-      const sighting = (await database
-        .prepare("SELECT SUM(seen_count) AS n FROM observation_sightings WHERE entity_id = ?")
-        .get(entityId)) as { n: number | null };
-      report.push(
-        `  ${fragments} fragment rows; ${sighting.n ?? 0} repeats counted in observation_sightings`
-      );
-      // The first store only: the other RESTORES - 1 passes are counted, not appended.
-      expect(observations).toBe(1);
-      expect(fragments).toBe(0);
-      expect(sighting.n).toBe(RESTORES - 1);
-    },
-    900_000
-  );
+  it("does not grow observation storage linearly when an unchanged record is re-stored", async () => {
+    const database = await m.getDb();
+    const type = `hist_restore_${runTag}`;
+    const entity = {
+      entity_type: type,
+      schema_version: "1.0",
+      name: "Unchanged Record",
+      status: "active",
+    };
+    let entityId = "";
+    const pageCount = async () =>
+      ((await database.prepare("PRAGMA page_count").get()) as { page_count: number }).page_count;
+    const before = await pageCount();
+    // A sync pass re-stores the unchanged record in a batch whose other content
+    // changed. (A byte-identical batch already maps to its earlier source and
+    // observation, so it is not the case that grows a store.)
+    for (let n = 0; n < RESTORES; n++) {
+      const result = (await m.storeStructuredForApi({
+        userId: USER_ID,
+        idempotencyKey: `history-bench-${runTag}-${randomUUID()}`,
+        sourcePriority: 100,
+        entities: [
+          entityId ? { ...entity, target_id: entityId } : entity,
+          { entity_type: `${type}_cursor`, schema_version: "1.0", name: "Sync cursor", pass: n },
+        ],
+      })) as { entities: Array<{ entity_id: string }> };
+      entityId = result.entities[0].entity_id;
+    }
+    const observations = (
+      (await database
+        .prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id = ?")
+        .get(entityId)) as { n: number }
+    ).n;
+    const grownPages = (await pageCount()) - before;
+    report.push(
+      `re-stored an unchanged record ${RESTORES}x: ${observations} observation rows, +${grownPages} pages (${(statSync(process.env.NEOTOMA_SQLITE_PATH!).size / 1e6).toFixed(1)} MB file)`
+    );
+    const fragments = (
+      (await database
+        .prepare("SELECT COUNT(*) AS n FROM raw_fragments WHERE entity_id = ?")
+        .get(entityId)) as { n: number }
+    ).n;
+    const sighting = (await database
+      .prepare("SELECT SUM(seen_count) AS n FROM observation_sightings WHERE entity_id = ?")
+      .get(entityId)) as { n: number | null };
+    report.push(
+      `  ${fragments} fragment rows; ${sighting.n ?? 0} repeats counted in observation_sightings`
+    );
+    // The first store only: the other RESTORES - 1 passes are counted, not appended.
+    expect(observations).toBe(1);
+    expect(fragments).toBe(0);
+    expect(sighting.n).toBe(RESTORES - 1);
+  }, 900_000);
 });

@@ -76,7 +76,13 @@ async function restPass(
     sourcePriority: options.priority ?? 100,
     ...(options.source ? { observationSource: options.source } : { observationSource: "sensor" }),
     entities: [
-      { entity_type: type, schema_version: "1.0", name: "Record", ...fields, ...(entityId ? { target_id: entityId } : {}) },
+      {
+        entity_type: type,
+        schema_version: "1.0",
+        name: "Record",
+        ...fields,
+        ...(entityId ? { target_id: entityId } : {}),
+      },
       { entity_type: `${type}_cursor`, schema_version: "1.0", name: "Cursor", pass },
     ],
   })) as { entities: EntityEntry[] };
@@ -84,12 +90,14 @@ async function restPass(
 }
 
 async function observationRows(entityId: string) {
-  return (await m.db
-    .from("observations")
-    .select("id, source_priority, fields")
-    .eq("entity_id", entityId)
-    .eq("user_id", USER)
-    .order("observed_at", { ascending: true })).data as Array<{
+  return (
+    await m.db
+      .from("observations")
+      .select("id, source_priority, fields")
+      .eq("entity_id", entityId)
+      .eq("user_id", USER)
+      .order("observed_at", { ascending: true })
+  ).data as Array<{
     id: string;
     source_priority: number;
     fields: Record<string, unknown>;
@@ -101,17 +109,25 @@ async function sightingRow(observationId: string) {
   return (await database
     .prepare("SELECT * FROM observation_sightings WHERE observation_id = ? AND user_id = ?")
     .get(observationId, USER)) as
-    | { seen_count: number; first_seen_again_at: string; last_seen_at: string; last_source_id: string; entity_id: string }
+    | {
+        seen_count: number;
+        first_seen_again_at: string;
+        last_seen_at: string;
+        last_source_id: string;
+        entity_id: string;
+      }
     | undefined;
 }
 
 async function fragmentRows(entityId: string, key: string) {
-  return (await m.db
-    .from("raw_fragments")
-    .select("id, fragment_value, frequency_count, last_seen")
-    .eq("entity_id", entityId)
-    .eq("fragment_key", key)
-    .order("last_seen", { ascending: true })).data as Array<{
+  return (
+    await m.db
+      .from("raw_fragments")
+      .select("id, fragment_value, frequency_count, last_seen")
+      .eq("entity_id", entityId)
+      .eq("fragment_key", key)
+      .order("last_seen", { ascending: true })
+  ).data as Array<{
     id: string;
     fragment_value: unknown;
     frequency_count: number;
@@ -131,15 +147,17 @@ beforeAll(async () => {
       .isNoopSuppressionEnabled,
     attachSightings: (await import("../../src/services/observation_sightings.js")).attachSightings,
     getSnapshot: (await import("../../src/services/snapshot_computation.js")).getSnapshot,
-    recomputeSnapshot: (await import("../../src/services/snapshot_computation.js")).recomputeSnapshot,
+    recomputeSnapshot: (await import("../../src/services/snapshot_computation.js"))
+      .recomputeSnapshot,
     softDeleteEntity: (await import("../../src/services/deletion.js")).softDeleteEntity,
     restoreEntity: (await import("../../src/services/deletion.js")).restoreEntity,
     isEntityDeleted: (await import("../../src/services/deletion.js")).isEntityDeleted,
     createCorrection: (await import("../../src/services/correction.js")).createCorrection,
     readCurrentEntityFragments: (await import("../../src/services/current_state_reads.js"))
       .readCurrentEntityFragments,
-    migrateEntityLifecycleAuthority: (await import("../../src/services/entity_lifecycle_storage.js"))
-      .migrateEntityLifecycleAuthority,
+    migrateEntityLifecycleAuthority: (
+      await import("../../src/services/entity_lifecycle_storage.js")
+    ).migrateEntityLifecycleAuthority,
     verifyEntityLifecycleStorage: (await import("../../src/services/entity_lifecycle_storage.js"))
       .verifyEntityLifecycleStorage,
     ensureLifecycleAttachedIndex: (await import("../../src/repositories/sqlite/sqlite_client.js"))
@@ -154,7 +172,9 @@ afterAll(() => {
 describe("observation_sightings table", () => {
   it("is created at open, keyed by (observation_id, user_id)", async () => {
     const database = await m.getDb();
-    const columns = (await database.prepare("PRAGMA table_info(observation_sightings)").all()) as Array<{
+    const columns = (await database
+      .prepare("PRAGMA table_info(observation_sightings)")
+      .all()) as Array<{
       name: string;
       pk: number;
     }>;
@@ -167,7 +187,10 @@ describe("observation_sightings table", () => {
       "last_seen_at",
       "last_source_id",
     ]);
-    expect(columns.filter((c) => c.pk > 0).map((c) => c.name)).toEqual(["observation_id", "user_id"]);
+    expect(columns.filter((c) => c.pk > 0).map((c) => c.name)).toEqual([
+      "observation_id",
+      "user_id",
+    ]);
   });
 });
 
@@ -180,7 +203,8 @@ describe("REST store: an unchanged re-store is a sighting, not an observation", 
     const before = await m.getSnapshot(entityId, USER);
 
     const repeats: EntityEntry[] = [];
-    for (let i = 0; i < 4; i++) repeats.push(await restPass(type, { status: "active", body: "x" }, entityId));
+    for (let i = 0; i < 4; i++)
+      repeats.push(await restPass(type, { status: "active", body: "x" }, entityId));
 
     // Red without suppression: 5 observation rows and no seen_again.
     expect(await observationRows(entityId)).toHaveLength(1);
@@ -358,7 +382,11 @@ describe("findRepeatedObservation: each rule that must still store", () => {
     await seed(
       e,
       base(e),
-      base(e, { source_priority: 50, observed_at: "2026-02-01T00:00:00.000Z", fields: { name: "n", status: "B" } })
+      base(e, {
+        source_priority: 50,
+        observed_at: "2026-02-01T00:00:00.000Z",
+        fields: { name: "n", status: "B" },
+      })
     );
     // Top priority row equals the candidate, but a newer lower-priority row
     // decides last_write fields: a repeat on top would flip status back to A.
@@ -369,30 +397,47 @@ describe("findRepeatedObservation: each rule that must still store", () => {
     for (const marker of [{ _deleted: true }, { _deleted: false }]) {
       const e = `ent_rule_deleted_${tag}_${String(marker._deleted)}`;
       await seed(e, base(e, { fields: { name: "n", status: "A", ...marker } }));
-      expect(await m.findRepeatedObservation(candidate(e, { fields: { name: "n", status: "A", ...marker } }))).toBeNull();
+      expect(
+        await m.findRepeatedObservation(
+          candidate(e, { fields: { name: "n", status: "A", ...marker } })
+        )
+      ).toBeNull();
     }
   });
 
   it("stores when the incoming fields carry a deletion marker", async () => {
     const e = `ent_rule_in_deleted_${tag}`;
     await seed(e, base(e));
-    expect(await m.findRepeatedObservation(candidate(e, { fields: { name: "n", status: "A", _deleted: true } }))).toBeNull();
+    expect(
+      await m.findRepeatedObservation(
+        candidate(e, { fields: { name: "n", status: "A", _deleted: true } })
+      )
+    ).toBeNull();
   });
 
   it("stores when the top row is encrypted (cryptographic erasure)", async () => {
     const e = `ent_rule_encrypted_${tag}`;
     await seed(e, base(e, { fields: { _encrypted: "abc", _iv: "def" } }));
-    expect(await m.findRepeatedObservation(candidate(e, { fields: { _encrypted: "abc", _iv: "def" } }))).toBeNull();
+    expect(
+      await m.findRepeatedObservation(candidate(e, { fields: { _encrypted: "abc", _iv: "def" } }))
+    ).toBeNull();
   });
 
   it("stores when the top row has the shape of a correction", async () => {
     const e = `ent_rule_correction_${tag}`;
     await seed(
       e,
-      base(e, { source_id: null, observation_source: null, source_priority: 1000, specificity_score: 1 })
+      base(e, {
+        source_id: null,
+        observation_source: null,
+        source_priority: 1000,
+        specificity_score: 1,
+      })
     );
     expect(
-      await m.findRepeatedObservation(candidate(e, { sourcePriority: 1000, observationSource: "sensor" }))
+      await m.findRepeatedObservation(
+        candidate(e, { sourcePriority: 1000, observationSource: "sensor" })
+      )
     ).toBeNull();
   });
 
@@ -405,7 +450,9 @@ describe("findRepeatedObservation: each rule that must still store", () => {
     expect(await m.findRepeatedObservation(candidate(peer))).toBeNull();
     const plain = `ent_rule_peer_in_${tag}`;
     await seed(plain, base(plain));
-    expect(await m.findRepeatedObservation(candidate(plain, { sourcePeerId: "peer-1" }))).toBeNull();
+    expect(
+      await m.findRepeatedObservation(candidate(plain, { sourcePeerId: "peer-1" }))
+    ).toBeNull();
   });
 
   it("stores when the top row has no source of its own", async () => {
@@ -474,7 +521,10 @@ describe("MCP store: response marker and fragments", () => {
         { entity_type: `${type}_cursor`, name: "Cursor", pass: mcpPass },
       ],
     });
-    const body = JSON.parse(result.content[0].text) as { entities: Array<Record<string, any>>; error?: unknown };
+    const body = JSON.parse(result.content[0].text) as {
+      entities: Array<Record<string, any>>;
+      error?: unknown;
+    };
     expect(body.error).toBeUndefined();
     return body.entities[0];
   }
@@ -556,17 +606,24 @@ describe("MCP store: response marker and fragments", () => {
     await mcpStore({ status: "L", extra: "x" }, "listed");
     await mcpStore({ status: "L", extra: "x" }, "listed");
     await mcpStore({ status: "L2", extra: "x" }, "listed");
-    const result = await (server as unknown as {
-      listObservations: (a: unknown) => Promise<{ content: Array<{ text: string }> }>;
-    }).listObservations({ entity_id: first.entity_id, limit: 50, offset: 0 });
+    const result = await (
+      server as unknown as {
+        listObservations: (a: unknown) => Promise<{ content: Array<{ text: string }> }>;
+      }
+    ).listObservations({ entity_id: first.entity_id, limit: 50, offset: 0 });
     const body = JSON.parse(result.content[0].text) as {
-      observations: Array<{ id: string; seen_again?: { seen_count: number; last_seen_at: string } }>;
+      observations: Array<{
+        id: string;
+        seen_again?: { seen_count: number; last_seen_at: string };
+      }>;
     };
     expect(body.observations).toHaveLength(2);
     const repeated = body.observations.find((o) => o.id === first.observation_id);
     expect(repeated?.seen_again?.seen_count).toBe(2);
     expect(repeated?.seen_again?.last_seen_at).toBeTruthy();
-    expect(body.observations.find((o) => o.id !== first.observation_id)?.seen_again).toBeUndefined();
+    expect(
+      body.observations.find((o) => o.id !== first.observation_id)?.seen_again
+    ).toBeUndefined();
     // attachSightings leaves rows with no sighting untouched (no extra keys).
     const plain = await m.attachSightings([{ id: "obs_without_sighting" }], USER);
     expect(plain).toEqual([{ id: "obs_without_sighting" }]);
@@ -638,7 +695,10 @@ describe("instance policy switch", () => {
     await m.db.from("schema_registry").insert({
       entity_type: mcpType,
       schema_version: "1.0",
-      schema_definition: { fields: { title: { type: "string" } }, canonical_name_fields: ["title"] },
+      schema_definition: {
+        fields: { title: { type: "string" } },
+        canonical_name_fields: ["title"],
+      },
       reducer_config: { merge_policies: { title: { strategy: "last_write" } } },
       active: true,
       scope: "global",
@@ -647,9 +707,11 @@ describe("instance policy switch", () => {
     const server = new m.NeotomaServer();
     (server as unknown as Record<string, unknown>).authenticatedUserId = USER;
     const storeMcp = async (n: number) => {
-      const result = await (server as unknown as {
-        store: (p: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
-      }).store({
+      const result = await (
+        server as unknown as {
+          store: (p: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+        }
+      ).store({
         user_id: USER,
         idempotency_key: `noop-switch-mcp-${tag}-${randomUUID()}`,
         source_priority: 100,

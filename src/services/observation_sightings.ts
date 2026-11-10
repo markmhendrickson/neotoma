@@ -281,7 +281,9 @@ export async function getSightings(
 export async function attachSightings<T extends { id?: unknown }>(
   observations: T[],
   userId: string
-): Promise<Array<T & { seen_again?: Pick<Sighting, "seen_count" | "first_seen_again_at" | "last_seen_at"> }>> {
+): Promise<
+  Array<T & { seen_again?: Pick<Sighting, "seen_count" | "first_seen_again_at" | "last_seen_at"> }>
+> {
   const ids = observations.map((o) => o.id).filter((id): id is string => typeof id === "string");
   let sightings: Map<string, Sighting>;
   try {
