@@ -4,11 +4,16 @@
  * a missing snapshot. No observations or lifecycle state are changed here.
  */
 import { getDb } from "../repositories/db/connection.js";
-import { resolveAttachedObservations } from "./attachment_resolution.js";
-import { acquireEntityLifecycleContext } from "./entity_lifecycle_storage.js";
+import { resolveAttachedObservations, resolveAttachmentTarget } from "./attachment_resolution.js";
+import {
+  acquireEntityLifecycleContext,
+  hasRecordedEntityLifecycleCutover,
+} from "./entity_lifecycle_storage.js";
+import { readDecidingObservations, selectHiddenAfterCutover } from "./current_state_reads.js";
 import {
   selectEntityLifecycleVisibility,
   selectLegacyEntityVisibility,
+  type LifecycleObservation,
   type LifecycleTarget,
   type EntityLifecycleContext,
 } from "./entity_lifecycle_authority.js";
@@ -37,22 +42,29 @@ export async function certifySnapshotPopulation(
         `SELECT e.id,e.user_id,e.entity_type FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL${types("e")} AND s.entity_id IS NULL`
       )
       .all(userId, ...entityTypes)) as LifecycleTarget[];
+    const pending = missing.filter((target) => !candidates || candidates.has(target.id));
+    if (pending.length === 0) return true;
+    // Hidden-entity proof from the rows that decide visibility, not the whole
+    // history (#2792). A missing snapshot is excused only when that proof holds.
+    for (const target of pending) {
+      const attachment = await resolveAttachmentTarget(target.id, userId);
+      if (attachment.truncated || attachment.resolvedEntityId !== target.id) return false;
+    }
+    if (await hasRecordedEntityLifecycleCutover(connection)) {
+      const hidden = await selectHiddenAfterCutover(pending);
+      return pending.every((target) => hidden.has(target.id));
+    }
     let legacyContext: EntityLifecycleContext | undefined;
-    for (const target of missing) {
-      if (candidates && !candidates.has(target.id)) continue;
-      const attached = await resolveAttachedObservations(target.id, userId);
-      if (
-        attached.truncated ||
-        attached.resolvedEntityId !== target.id ||
-        !attached.observations.length
-      )
-        return false;
-      const rows = attached.observations;
+    for (const target of pending) {
+      const deciding = await readDecidingObservations(target.id, userId);
+      const rows =
+        deciding ?? ((await resolveAttachedObservations(target.id, userId)).observations as never);
+      if (!rows.length) return false;
       // Certification needs exact type membership even where pre-migration
       // replay deliberately permits mixed-type merge history.
       if (
         rows.some(
-          (row) =>
+          (row: LifecycleObservation) =>
             row.user_id !== target.user_id ||
             row.entity_type !== target.entity_type ||
             !row.fields ||
@@ -64,12 +76,11 @@ export async function certifySnapshotPopulation(
       const context = legacyContext
         ? { ...legacyContext, target }
         : await acquireEntityLifecycleContext(connection, target, rows);
-      if (context.mode === "pre_migration") {
-        // Certification is stricter than permissive legacy replay: malformed
-        // comparator inputs cannot establish an exact population.
-        selectLegacyEntityVisibility(rows);
-        legacyContext = context;
-      }
+      if (context.mode !== "pre_migration") return false;
+      // Certification is stricter than permissive legacy replay: malformed
+      // comparator inputs cannot establish an exact population.
+      selectLegacyEntityVisibility(rows);
+      legacyContext = context;
       if (!selectEntityLifecycleVisibility(rows, context).hidden) return false;
     }
     return true;

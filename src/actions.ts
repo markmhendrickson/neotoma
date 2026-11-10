@@ -10486,14 +10486,16 @@ app.post("/get_entity_snapshot", async (req, res) => {
 
   // Materialization is derived state. Validate owned current authority before
   // serving its row, including restrictive corruption acquisition failures.
+  // The check reads the entity's lifecycle authority rows, not its whole
+  // observation history (#2792).
   try {
-    const { isEntityDeleted } = await import("./services/deletion.js");
+    const { isOwnedEntityHiddenAfterCutover } = await import("./services/current_state_reads.js");
     const { hasRecordedEntityLifecycleCutover } =
       await import("./services/entity_lifecycle_storage.js");
     const { getDb } = await import("./repositories/db/connection.js");
     if (
       (await hasRecordedEntityLifecycleCutover(await getDb())) &&
-      (await isEntityDeleted(entity_id, userId))
+      (await isOwnedEntityHiddenAfterCutover(entity_id, userId))
     )
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
   } catch (err) {
