@@ -14,8 +14,46 @@ import {
 
 const run = promisify(execFile);
 
+async function requestCli(
+  baseUrl: string,
+  home: string,
+  token: string,
+  input: Record<string, unknown>,
+  flag: "body" | "params"
+) {
+  const result = await run(
+    process.execPath,
+    [
+      "dist/cli/index.js",
+      "--no-log-file",
+      "--json",
+      "--base-url",
+      baseUrl,
+      "request",
+      "--operation",
+      "queryEntities",
+      `--${flag}`,
+      JSON.stringify(flag === "params" ? { body: input } : input),
+    ],
+    {
+      timeout: 20_000,
+      env: {
+        ...process.env,
+        HOME: home,
+        USERPROFILE: home,
+        NEOTOMA_BEARER_TOKEN: token,
+        NEOTOMA_FORCE_LOCAL_TRANSPORT: "false",
+      },
+    }
+  );
+  const output = JSON.parse(result.stdout);
+  expect(output._neotoma).toEqual({ base_url: baseUrl, data_dir: null, transport: "api" });
+  const { _neotoma, ...proof } = output;
+  return proof;
+}
+
 describe("exact identity transport uses existing tenant scope", () => {
-  it("binds REST and MCP to the resolved owner and declines when a worker cannot pin", async () => {
+  it("binds REST, MCP, CLI and SDK proof effects to the owner and available read view", async () => {
     const env = prepareMcpTestEnv("exact-identity-transport-");
     vi.stubEnv("NEOTOMA_DB_BACKEND", "libsql");
     vi.stubEnv("NEOTOMA_DB_READER_WORKERS", "2");
@@ -188,39 +226,7 @@ describe("exact identity transport uses existing tenant scope", () => {
         input: Record<string, unknown>,
         flag: "body" | "params"
       ) => {
-        const result = await run(
-          process.execPath,
-          [
-            "dist/cli/index.js",
-            "--no-log-file",
-            "--json",
-            "--base-url",
-            app.baseUrl,
-            "request",
-            "--operation",
-            "queryEntities",
-            `--${flag}`,
-            JSON.stringify(flag === "params" ? { body: input } : input),
-          ],
-          {
-            timeout: 20_000,
-            env: {
-              ...process.env,
-              HOME: env.tmpRoot,
-              USERPROFILE: env.tmpRoot,
-              NEOTOMA_BEARER_TOKEN: token,
-              NEOTOMA_FORCE_LOCAL_TRANSPORT: "false",
-            },
-          }
-        );
-        const output = JSON.parse(result.stdout);
-        expect(output._neotoma).toEqual({
-          base_url: app.baseUrl,
-          data_dir: null,
-          transport: "api",
-        });
-        const { _neotoma, ...proof } = output;
-        return proof;
+        return requestCli(app.baseUrl, env.tmpRoot, token, input, flag);
       };
       for (const client of clients) {
         expect(await client.owner.retrieveEntities(request(bobUid)), client.name).toEqual(
@@ -312,8 +318,12 @@ describe("exact identity transport uses existing tenant scope", () => {
       for (const value of ["", "x".repeat(257), "key\nvalue", "key\u007fvalue", "key\u0085value"]) {
         const rest = await post("/entities/query", request(value), bob.token);
         expect(rest.status).toBe(400);
+        const error = await rest.text();
+        expect(error).toContain("1–64");
+        expect(error).toContain("1–256");
         const rpc = await mcp(request(value), bob.token);
         expect(rpc.text).toContain("Exact identity requires");
+        expect(rpc.text).toContain("1–256");
       }
 
       const forged = { ...request(bobUid), user_id: bob.user };
@@ -379,6 +389,77 @@ describe("exact identity transport uses existing tenant scope", () => {
       expect(await (await post("/entities/query", request(bobUid), bob.token)).json()).toEqual(
         singleton
       );
+    } finally {
+      await app.close();
+      await db.close();
+      vi.unstubAllEnvs();
+      env.restore();
+    }
+  }, 30_000);
+
+  it("returns unproved on direct SQLite through every exposing surface", async () => {
+    const env = prepareMcpTestEnv("exact-identity-sqlite-");
+    vi.stubEnv("NEOTOMA_DB_BACKEND", "sqlite");
+    const app = await bootMcpApp();
+    const { getDb } = await import("../../src/repositories/db/connection.js");
+    const { AsyncSqliteDatabase } = await import("../../src/repositories/sqlite/sqlite_driver.js");
+    const db = await getDb();
+    const user = randomUUID(),
+      token = randomUUID();
+    const input = {
+      read_mode: "exact_identity",
+      entity_type: "case_fixture",
+      snapshot_filters: { ticket_uid: { op: "eq", value: "sqlite-owned-fixture" } },
+    };
+    const expected = {
+      exact_identity: {
+        version: "1",
+        state: "unproved",
+        common_view: false,
+        requested_scope: {
+          owner: "authenticated",
+          entity_type: "case_fixture",
+          field: "ticket_uid",
+          value_sha256: createHash("sha256")
+            .update(JSON.stringify(input.snapshot_filters.ticket_uid.value))
+            .digest("hex"),
+        },
+      },
+    };
+    try {
+      expect(db).toBeInstanceOf(AsyncSqliteDatabase);
+      await db
+        .prepare(
+          `INSERT INTO mcp_oauth_connections
+        (id,user_id,connection_id,refresh_token,access_token,access_token_expires_at)
+        VALUES (?,?,?,?,?,?)`
+        )
+        .run(randomUUID(), user, "sqlite-fixture", randomUUID(), token, "2099-01-01T00:00:00Z");
+      const http = new HttpTransport({ baseUrl: app.baseUrl, token });
+      const { createOperations } = await import("../../src/core/operations.js");
+      const local = new LocalTransport({
+        userId: user,
+        operations: createOperations({ userId: user }),
+      });
+      const rest = await fetch(app.baseUrl + "/entities/query", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(input),
+      });
+      expect(rest.status).toBe(200);
+      expect(await rest.json()).toEqual(expected);
+      const rpc = await modernPost(
+        app.baseUrl,
+        { id: 1, method: "tools/call", params: { name: "retrieve_entities", arguments: input } },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      expect(rpc.status).toBe(200);
+      expect(toolResultJson(rpc.body)).toEqual(expected);
+      expect(await http.retrieveEntities(input)).toEqual(expected);
+      expect(await local.retrieveEntities(input)).toEqual(expected);
+      for (const flag of ["body", "params"] as const) {
+        expect(await requestCli(app.baseUrl, env.tmpRoot, token, input, flag)).toEqual(expected);
+      }
     } finally {
       await app.close();
       await db.close();
