@@ -28,12 +28,14 @@
  *
  * What these readers do NOT do, compared with the exhaustive acquisition in
  * `isEntityDeleted` / `acquireEntityLifecycleContext`: they do not re-verify,
- * on every list, the integrity of observations that cannot decide the answer
- * (factual rows below the deciding priority, legacy-membership digests,
- * cross-target attachment). They return the same answer the exhaustive path
- * returns whenever that path answers; corruption it would refuse is still
- * refused by single-entity provenance reads, the cutover replay and
- * `verifyEntityLifecycleStorage`, which keep the exhaustive acquisition.
+ * on every list, total or single snapshot read, the integrity of observations
+ * that cannot decide the answer (factual rows below the deciding priority,
+ * legacy-membership digests, authority rows written under another owner).
+ * Authority rows attached to the entity are still checked, through
+ * idx_entity_lifecycle_attached. They return the same answer the exhaustive
+ * path returns whenever that path answers; corruption it would refuse is still
+ * refused by field provenance, timeline and as-of reads, the cutover replay
+ * and `verifyEntityLifecycleStorage`, which keep the exhaustive acquisition.
  */
 import { getDb } from "../repositories/db/connection.js";
 import { fromDbRow } from "../repositories/sqlite/local_db_adapter.js";
@@ -114,6 +116,7 @@ export async function selectHiddenAfterCutover(
         if (!current || row.entity_lifecycle_sequence! > current.entity_lifecycle_sequence!)
           latest.set(target.id, row);
       }
+      await verifyAttachedAuthority(connection, owner, part);
       for (const [id, row] of latest) {
         if (row.entity_lifecycle_kind === "delete" || row.entity_lifecycle_kind === "legacy_hidden")
           hidden.add(id);
@@ -121,6 +124,55 @@ export async function selectHiddenAfterCutover(
     }
   }
   return hidden;
+}
+
+/**
+ * The authority rows ATTACHED to these entities must be well formed and name
+ * an owned entity of the same type, as the exhaustive acquisition requires
+ * before it answers. They are read through idx_entity_lifecycle_attached, so
+ * the cost is the entities' lifecycle actions, not their histories.
+ */
+async function verifyAttachedAuthority(
+  connection: Awaited<ReturnType<typeof getDb>>,
+  owner: string,
+  targets: readonly LifecycleTarget[]
+): Promise<void> {
+  const byId = new Map(targets.map((t) => [t.id, t]));
+  const rows = (await connection
+    .prepare(
+      `SELECT * FROM observations WHERE entity_id IN (${targets
+        .map(() => "?")
+        .join(",")}) AND user_id = ? AND entity_lifecycle_kind IS NOT NULL`
+    )
+    .all(...targets.map((t) => t.id), owner)) as Record<string, unknown>[];
+  const named = new Map<string, string>(); // named target id -> required entity type
+  for (const raw of rows) {
+    const row = lifecycleRow(raw);
+    if (!hasEntityLifecycleAuthority(row)) refuse();
+    const attachedTo = byId.get(row.entity_id as string);
+    if (!attachedTo || row.entity_type !== attachedTo.entity_type) refuse();
+    const targetId = row.entity_lifecycle_target_id!;
+    const known = byId.get(targetId);
+    if (known) {
+      if (known.entity_type !== attachedTo.entity_type) refuse();
+    } else {
+      const required = named.get(targetId);
+      if (required !== undefined && required !== attachedTo.entity_type) refuse();
+      named.set(targetId, attachedTo.entity_type);
+    }
+  }
+  const namedIds = [...named.keys()];
+  for (const part of chunks(namedIds)) {
+    const found = (await connection
+      .prepare(
+        `SELECT id, entity_type FROM entities WHERE user_id = ? AND id IN (${part
+          .map(() => "?")
+          .join(",")})`
+      )
+      .all(owner, ...part)) as Array<{ id: string; entity_type: unknown }>;
+    const types = new Map(found.map((row) => [row.id, row.entity_type]));
+    for (const id of part) if (types.get(id) !== named.get(id)) refuse();
+  }
 }
 
 /** Rows read at the deciding priority before falling back to the full history. */
@@ -301,6 +353,33 @@ export async function hasLegacyFragments(entityType: string): Promise<boolean> {
  * `undefined` when the bounded read cannot decide and the caller must use the
  * exhaustive `isEntityDeleted`.
  */
+/**
+ * Recorded-cutover visibility of one entity read by id for its owner, as the
+ * current-snapshot endpoint asks it. An owned, unmerged entity is answered from
+ * its lifecycle authority rows; a merge tombstone or an id the owner does not
+ * hold keeps the exhaustive acquisition, exactly as before.
+ */
+export async function isOwnedEntityHiddenAfterCutover(
+  entityId: string,
+  userId: string
+): Promise<boolean> {
+  const row = (await (await getDb())
+    .prepare(
+      "SELECT id, user_id, entity_type, merged_to_entity_id FROM entities WHERE id = ? AND user_id = ?"
+    )
+    .get(entityId, userId)) as
+    | { id: string; user_id: string; entity_type: unknown; merged_to_entity_id: unknown }
+    | undefined;
+  if (row && !row.merged_to_entity_id && typeof row.entity_type === "string")
+    return (
+      await selectHiddenAfterCutover([
+        { id: row.id, user_id: row.user_id, entity_type: row.entity_type },
+      ])
+    ).has(entityId);
+  const { isEntityDeleted } = await import("./deletion.js");
+  return isEntityDeleted(entityId, userId);
+}
+
 export async function isEntityHiddenNow(target: LifecycleTarget): Promise<boolean | undefined> {
   const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
   if (await hasRecordedEntityLifecycleCutover(await getDb()))

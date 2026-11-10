@@ -66,6 +66,7 @@ type Mods = {
   queryEntitiesWithCount: typeof import("../../src/shared/action_handlers/entity_handlers.js").queryEntitiesWithCount;
   certifySnapshotPopulation: typeof import("../../src/services/entity_population_certificate.js").certifySnapshotPopulation;
   getEntityWithProvenance: typeof import("../../src/services/entity_queries.js").getEntityWithProvenance;
+  isOwnedEntityHiddenAfterCutover: typeof import("../../src/services/current_state_reads.js").isOwnedEntityHiddenAfterCutover;
   migrateEntityLifecycleAuthority: typeof import("../../src/services/entity_lifecycle_storage.js").migrateEntityLifecycleAuthority;
   storeStructuredForApi: typeof import("../../src/actions.js").storeStructuredForApi;
 };
@@ -215,7 +216,7 @@ interface Measured {
   listObservationRows: number;
 }
 
-async function measure(type: string): Promise<Measured> {
+async function measure(type: string, cutover = false): Promise<Measured> {
   const list = () =>
     m.queryEntitiesWithCount({ userId: USER_ID, entityType: type, limit: ENTITIES, offset: 0 });
   const result = await list();
@@ -228,6 +229,9 @@ async function measure(type: string): Promise<Measured> {
     for (const id of sample) {
       const entity = await m.getEntityWithProvenance(id, false, USER_ID);
       if (!entity) throw new Error(`snapshot read lost ${id}`);
+      // After a cutover the current-snapshot endpoint also checks visibility.
+      if (cutover && (await m.isOwnedEntityHiddenAfterCutover(id, USER_ID)))
+        throw new Error(`snapshot endpoint hid ${id}`);
     }
   };
   return {
@@ -275,6 +279,8 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
       ).certifySnapshotPopulation,
       getEntityWithProvenance: (await import("../../src/services/entity_queries.js"))
         .getEntityWithProvenance,
+      isOwnedEntityHiddenAfterCutover: (await import("../../src/services/current_state_reads.js"))
+        .isOwnedEntityHiddenAfterCutover,
       migrateEntityLifecycleAuthority: (
         await import("../../src/services/entity_lifecycle_storage.js")
       ).migrateEntityLifecycleAuthority,
@@ -307,8 +313,8 @@ describe(`current-state reads vs history length (${ENTITIES} entities, ${HISTORY
     // needs no re-materialization.
     await m.migrateEntityLifecycleAuthority(database, async () => {});
     report.push(`recorded lifecycle cutover in ${(performance.now() - start).toFixed(0)} ms`);
-    const short = await measure(SHORT);
-    const long = await measure(LONG);
+    const short = await measure(SHORT, true);
+    const long = await measure(LONG, true);
     record("cutover", short, long);
     expectWithinRatio(short, long);
   }, 900_000);

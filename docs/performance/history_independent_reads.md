@@ -16,6 +16,7 @@ and before this change every one of those reads walked it.
 | Count certification, hidden entities (`certifySnapshotPopulation`)                                                                   | the full history (`SELECT *`) of every snapshot-less entity                                                 | after a cutover, the authority rows; before, the rows at the entity's highest `source_priority` (the only rows the legacy selector can select)            |
 | Single snapshot read (`getEntityWithProvenance`): visibility                                                                         | `isEntityDeleted`: full history                                                                             | as above; before a cutover, the deciding rows, or for a long run of ordinary stores the newest row by an index-ordered read                               |
 | Single snapshot read: fragments                                                                                                      | an unordered 100-observation source sample, then every observation of the type from those sources           | same reader as the list                                                                                                                                   |
+| Current-snapshot endpoint (`/get_entity_snapshot`), after a cutover                                                                  | `isEntityDeleted`: full history                                                                             | the entity's lifecycle-authority rows (`isOwnedEntityHiddenAfterCutover`)                                                                                 |
 
 `tests/performance/history_length_reads.bench.test.ts` holds a 1-observation
 type and a 500-observation type with equal entity counts to within 2x on all
@@ -25,13 +26,35 @@ observation rows for the long type. It runs in the `CI test lanes` workflow.
 ## Equivalence and what is no longer checked per read
 
 The bounded readers return the answer the exhaustive acquisition returns
-whenever that acquisition answers. What a list no longer does is re-verify the
-integrity of rows that cannot decide the answer: factual observations below
-the deciding priority, legacy-membership digests, and authority rows attached
-to other targets. Single-entity provenance and as-of reads, the cutover replay
-and `verifyEntityLifecycleStorage` keep the exhaustive acquisition and still
-refuse that corruption. `tests/integration/current_state_reads.test.ts`
-compares the bounded and exhaustive answers.
+whenever that acquisition answers. After a cutover they also refuse, as the
+exhaustive acquisition does, when a lifecycle-authority row attached to the
+entity is malformed or names something other than an owned entity of the same
+type; those rows are read through `idx_entity_lifecycle_attached`, so the check
+costs the entity's lifecycle actions, not its history.
+
+What lists, totals, count certification and single snapshot reads no longer
+re-verify is the integrity of rows that cannot decide the answer: factual
+observations below the deciding priority, legacy-membership digests, and
+authority rows written under another owner. Field provenance, timeline and
+as-of reads, the cutover replay and `verifyEntityLifecycleStorage` keep the
+exhaustive acquisition and still refuse that corruption.
+`tests/integration/current_state_reads.test.ts` compares the bounded and
+exhaustive answers.
+
+Two visible details of the fragment reader:
+
+- A fragment whose source no longer holds an observation of its entity (for
+  example after the entity was physically erased) is omitted from
+  `raw_fragments`. Before, eligibility was the union of sources across the
+  whole page.
+- Ties on `last_seen` for one key resolve to the fragment with the greater
+  `id`. Before, they resolved in scan order.
+
+A failure reading entity-named fragments on a list page is reported with the
+existing trace reason `raw_fragments_unavailable`. The source-lookup reasons
+(`raw_fragment_sources_unavailable`, `raw_fragment_source_cap`,
+`raw_fragment_links_unavailable`) now fire only on the legacy-fragment path,
+which is the only path that still looks sources up.
 
 ## Paths that still read history
 

@@ -84,7 +84,7 @@ async function fragment(
   key: string,
   value: unknown,
   lastSeen: string,
-  owner = USER
+  owner: string | null = USER
 ) {
   await database
     .prepare(
@@ -152,17 +152,22 @@ describe("current unknown-field fragments", () => {
     // Shadowed by the snapshot's own field.
     await fragment(`${id}_f5`, id, `s_new_${tag}`, "name", "shadowed", iso(40));
     await fragment(`${id}_f6`, id, `s_old_${tag}`, "extra", 7, iso(5));
+    // The default owner also reads fragments written without an owner.
+    await fragment(`${id}_f7`, id, `s_old_${tag}`, "unowned", "n", iso(6), null);
 
     const listed = await mods.queryEntitiesWithCount({
       userId: USER,
       entityType: TYPE,
-      entityIds: [id],
-      limit: 10,
+      limit: 100,
       offset: 0,
     });
-    expect(listed.entities[0].raw_fragments).toEqual({ cursor: "new", extra: 7 });
+    expect(listed.entities.find((e) => e.entity_id === id)?.raw_fragments).toEqual({
+      cursor: "new",
+      extra: 7,
+      unowned: "n",
+    });
     const single = await mods.getEntityWithProvenance(id, false, USER);
-    expect(single?.raw_fragments).toEqual({ cursor: "new", extra: 7 });
+    expect(single?.raw_fragments).toEqual({ cursor: "new", extra: 7, unowned: "n" });
   });
 
   it("still attributes legacy fragments through a single-entity source", async () => {
@@ -242,6 +247,7 @@ describe("recorded-cutover visibility from lifecycle authority", () => {
     const deletedAfter = `ent_cut_deleted_${tag}`;
     await longHistory(restored, false);
     await longHistory(deletedAfter, false);
+    await longHistory(`ent_cut_foreign_${tag}`, false); // used by the next case
     await mods.storage.migrateEntityLifecycleAuthority(database, async () => {});
     for (const [id, kinds] of [
       [restored, ["delete", "restore"]],
@@ -266,11 +272,58 @@ describe("recorded-cutover visibility from lifecycle authority", () => {
         .all(TYPE)) as Array<{ id: string; user_id: string; entity_type: string }>
     ).filter((t) => t.user_id === USER);
     const hidden = await mods.readers.selectHiddenAfterCutover(targets);
-    for (const target of targets)
-      expect(hidden.has(target.id), target.id).toBe(await mods.isEntityDeleted(target.id, USER));
+    for (const target of targets) {
+      const exhaustive = await mods.isEntityDeleted(target.id, USER);
+      expect(hidden.has(target.id), target.id).toBe(exhaustive);
+      // The current-snapshot endpoint's check agrees as well.
+      expect(await mods.readers.isOwnedEntityHiddenAfterCutover(target.id, USER), target.id).toBe(
+        exhaustive
+      );
+    }
     expect(hidden.has(deletedAfter)).toBe(true);
     expect(hidden.has(restored)).toBe(false);
     expect(hidden.has(`ent_pre_del_${tag}`)).toBe(true); // legacy_hidden baseline
     expect(await mods.certifySnapshotPopulation(USER, [TYPE])).toBe(true);
+  });
+
+  it("ignores lifecycle authority written under another owner", async () => {
+    // A delete authority row for this entity id, but under another owner, in
+    // that owner's own sequence space. It cannot hide this owner's entity.
+    const id = `ent_cut_foreign_${tag}`;
+    await database
+      .prepare(
+        "INSERT INTO observations (id, entity_id, entity_type, schema_version, source_id, observed_at, created_at, source_priority, fields, user_id, entity_lifecycle_kind, entity_lifecycle_sequence, entity_lifecycle_target_id) VALUES (?,?,?,'1.0',NULL,?,?,0,?,?,?,?,?)"
+      )
+      .run(
+        `${id}_foreign_delete`,
+        id,
+        TYPE,
+        iso(HISTORY + 20),
+        iso(HISTORY + 20),
+        JSON.stringify({ _deleted: true }),
+        OTHER,
+        "delete",
+        1,
+        id
+      );
+    const target = { id, user_id: USER, entity_type: TYPE };
+    expect((await mods.readers.selectHiddenAfterCutover([target])).has(id)).toBe(false);
+    expect(await mods.readers.isOwnedEntityHiddenAfterCutover(id, USER)).toBe(false);
+    const listed = await mods.queryEntitiesWithCount({
+      userId: USER,
+      entityType: TYPE,
+      limit: 100,
+      offset: 0,
+    });
+    expect(listed.entities.map((e) => e.entity_id)).toContain(id);
+  });
+
+  it("reads attached authority through its partial index, not the history index", async () => {
+    const plan = (await database
+      .prepare(
+        "EXPLAIN QUERY PLAN SELECT * FROM observations WHERE entity_id IN (?,?) AND user_id = ? AND entity_lifecycle_kind IS NOT NULL"
+      )
+      .all("a", "b", USER)) as Array<{ detail: string }>;
+    expect(plan.map((row) => row.detail).join("\n")).toContain("idx_entity_lifecycle_attached");
   });
 });
