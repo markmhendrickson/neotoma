@@ -21,7 +21,7 @@ export function exactIdentityRequested(input: unknown): input is Record<string, 
 }
 
 export const EXACT_IDENTITY_REQUEST_MESSAGE =
-  "Exact identity requires one entity type and one bounded string equality, with no other options.";
+  "Exact identity requires one entity type and one string equality, with no other options. Identifiers must be 1–64 lowercase ASCII letters/digits/underscore, starting with a letter; values must be 1–256 Unicode characters without C0/C1 controls.";
 
 /** The owner is resolved by the existing transport auth before calling this executor. */
 export async function readExactIdentity(

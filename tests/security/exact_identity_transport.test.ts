@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
+import { HttpTransport } from "../../packages/client/src/http.js";
+import { LocalTransport } from "../../packages/client/src/local.js";
 
 import {
   bootMcpApp,
@@ -7,6 +11,8 @@ import {
   prepareMcpTestEnv,
   toolResultJson,
 } from "../helpers/mcp_http_modern.js";
+
+const run = promisify(execFile);
 
 describe("exact identity transport uses existing tenant scope", () => {
   it("binds REST and MCP to the resolved owner and declines when a worker cannot pin", async () => {
@@ -128,6 +134,115 @@ describe("exact identity transport uses existing tenant scope", () => {
         },
       };
 
+      // Exercise the access-log sink, including the router's normal equivalent
+      // spellings and implicit HEAD entrance, using synthetic owned input.
+      const accessLog = vi.spyOn(process.stdout, "write");
+      try {
+        const route = "/entities";
+        for (const method of ["GET", "HEAD"]) {
+          for (const path of [route, route + "/", route.toUpperCase(), "/Entities/"]) {
+            for (const repeated of [false, true]) {
+              accessLog.mockClear();
+              const params = new URLSearchParams({
+                read_mode: "exact_identity",
+                entity_type: "case_fixture",
+                snapshot_filters: JSON.stringify(request(bobUid).snapshot_filters),
+              });
+              if (repeated) params.append("read_mode", "exact_identity");
+              const response = await fetch(app.baseUrl + path + "?" + params, {
+                method,
+                headers: bearer(bob.token),
+              });
+              const text = await response.text();
+              expect(response.status).toBe(400);
+              if (method === "GET") expect(text).toContain("requires POST");
+              expect(text).not.toContain(bobUid);
+              expect(accessLog.mock.calls.map(([chunk]) => String(chunk)).join("\n")).not.toContain(
+                bobUid
+              );
+            }
+          }
+        }
+        accessLog.mockClear();
+        const ordinary = await fetch(app.baseUrl + "/entities?entity_type=case_fixture", {
+          headers: bearer(bob.token),
+        });
+        await ordinary.text();
+        expect(accessLog.mock.calls.map(([chunk]) => String(chunk)).join("\n")).toContain(
+          "/entities?entity_type=case_fixture"
+        );
+      } finally {
+        accessLog.mockRestore();
+      }
+
+      const { createOperations } = await import("../../src/core/operations.js");
+      const local = (userId: string) =>
+        new LocalTransport({ userId, operations: createOperations({ userId }) });
+      const http = (token: string) => new HttpTransport({ baseUrl: app.baseUrl, token });
+      const clients = [
+        { name: "SDK HTTP", owner: http(bob.token), foreign: http(alice.token) },
+        { name: "SDK local", owner: local(bob.user), foreign: local(alice.user) },
+      ];
+      const cli = async (
+        token: string,
+        input: Record<string, unknown>,
+        flag: "body" | "params"
+      ) => {
+        const result = await run(
+          process.execPath,
+          [
+            "dist/cli/index.js",
+            "--no-log-file",
+            "--json",
+            "--base-url",
+            app.baseUrl,
+            "request",
+            "--operation",
+            "queryEntities",
+            `--${flag}`,
+            JSON.stringify(flag === "params" ? { body: input } : input),
+          ],
+          {
+            timeout: 20_000,
+            env: {
+              ...process.env,
+              HOME: env.tmpRoot,
+              USERPROFILE: env.tmpRoot,
+              NEOTOMA_BEARER_TOKEN: token,
+              NEOTOMA_FORCE_LOCAL_TRANSPORT: "false",
+            },
+          }
+        );
+        const output = JSON.parse(result.stdout);
+        expect(output._neotoma).toEqual({
+          base_url: app.baseUrl,
+          data_dir: null,
+          transport: "api",
+        });
+        const { _neotoma, ...proof } = output;
+        return proof;
+      };
+      for (const client of clients) {
+        expect(await client.owner.retrieveEntities(request(bobUid)), client.name).toEqual(
+          singleton
+        );
+        expect(await client.foreign.retrieveEntities(request(bobUid)), client.name).toEqual(absent);
+        await expect(
+          client.foreign.retrieveEntities({ ...request(bobUid), user_id: bob.user })
+        ).rejects.toThrow();
+      }
+      await expect(
+        http("unregistered-fixture-token").retrieveEntities(request(bobUid))
+      ).rejects.toThrow();
+      for (const flag of ["body", "params"] as const) {
+        expect(await cli(bob.token, request(bobUid), flag)).toEqual(singleton);
+        expect(await cli(alice.token, request(bobUid), flag)).toEqual(absent);
+        await expect(
+          cli(alice.token, { ...request(bobUid), user_id: bob.user }, flag)
+        ).rejects.toThrow();
+        await expect(cli("unregistered-fixture-token", request(bobUid), flag)).rejects.toThrow();
+      }
+
       const restAlice = await post("/entities/query", request(bobUid), alice.token);
       const restBob = await post("/entities/query", request(bobUid), bob.token);
       expect(restAlice.status).toBe(200);
@@ -245,6 +360,22 @@ describe("exact identity transport uses existing tenant scope", () => {
           requested_scope: scoped,
         },
       });
+      await db.withPinnedReadView(async () => {
+        const unavailable = {
+          exact_identity: {
+            version: "1",
+            state: "unproved",
+            common_view: false,
+            requested_scope: scoped,
+          },
+        };
+        const results = await Promise.all([
+          ...clients.map((client) => client.owner.retrieveEntities(request(bobUid))),
+          cli(bob.token, request(bobUid), "body"),
+          cli(bob.token, request(bobUid), "params"),
+        ]);
+        for (const result of results) expect(result).toEqual(unavailable);
+      }, 2000);
       expect(await (await post("/entities/query", request(bobUid), bob.token)).json()).toEqual(
         singleton
       );

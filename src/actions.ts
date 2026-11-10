@@ -465,7 +465,8 @@ app.use(
 );
 app.use(
   morgan<express.Request, express.Response>("dev", {
-    skip: (req) => req.path === "/entities" && exactIdentityRequested(req.query),
+    // Suppress identity-bearing URLs independently of route spelling or method.
+    skip: (req) => exactIdentityRequested(req.query),
   })
 );
 app.use(cookieParser());
