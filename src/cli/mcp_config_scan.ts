@@ -806,6 +806,202 @@ export function neotomaServerEntriesForTransport(
  * (`~/.neotoma/aauth/private.jwk`). When present, the proxy path
  * should be offered as the recommended MCP entry.
  */
+/**
+ * Which `--mcp-transport` presets write AAuth-signed entries. The single copy of
+ * this mapping: `ensureAAuthKeysForSignedTransport` and `neotoma setup` both read
+ * it, and tests assert it agrees with `classifyNeotomaMcpEntry` applied to the
+ * entries `neotomaServerEntriesForTransport` writes. Keyed by the preset type so
+ * adding a preset without classifying it is a type error.
+ */
+export const SIGNED_MCP_TRANSPORTS: Readonly<Record<McpTransportChoice, boolean>> = {
+  a: true,
+  b: false,
+  c: false,
+  d: true,
+  e: true,
+};
+
+/**
+ * Transport class of a Neotoma MCP server entry as written in a config file.
+ * - `signed_http`: forwards to an HTTP /mcp endpoint with AAuth signing.
+ * - `unsigned_http`: an HTTP /mcp endpoint without AAuth signing (a `url` entry).
+ * - `local_stdio`: a local command that runs the server in-process; no downstream URL.
+ * - `stdio_proxy`: a local command that forwards over HTTP to a downstream /mcp URL.
+ * - `unknown`: anything this classifier does not recognise. Never guessed.
+ */
+export type NeotomaMcpEntryClass =
+  | "signed_http"
+  | "unsigned_http"
+  | "local_stdio"
+  | "stdio_proxy"
+  | "unknown";
+
+export interface NeotomaMcpEntryClassification {
+  class: NeotomaMcpEntryClass;
+  /** The HTTP endpoint the entry talks to, when it makes HTTP requests. */
+  endpoint_url: string | null;
+  /** `local` for loopback hosts and `localhost`; `null` when no HTTP is made or the URL is unparseable. */
+  endpoint_locality: "local" | "remote" | null;
+}
+
+const SIGNED_SHIM_SCRIPTS = new Set(["run_neotoma_mcp_signed_stdio_dev_shim.sh"]);
+const UNSIGNED_PROXY_SCRIPTS = new Set([
+  "run_neotoma_mcp_stdio_dev_shim.sh",
+  UNSIGNED_STDIO_DEV_SHIM,
+  "run_neotoma_mcp_unsigned_stdio_proxy.sh",
+]);
+const LOCAL_STDIO_SCRIPTS = new Set([
+  "run_neotoma_mcp_stdio.sh",
+  "run_neotoma_mcp_stdio_prod.sh",
+  "run_neotoma_mcp_stdio_dev_watch.sh",
+  "run_neotoma_mcp_stdio_prod_watch.sh",
+]);
+/** Default downstream of the proxy shims and `neotoma mcp proxy` when no URL is set (loopback). */
+const DEFAULT_PROXY_DOWNSTREAM_URL = DEFAULT_DEV_MCP_URL;
+
+export function endpointLocality(url: string): "local" | "remote" | null {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  } catch {
+    return null;
+  }
+  if (!host) return null;
+  if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return "local";
+  if (/^127(\.\d{1,3}){3}$/.test(host)) return "local";
+  return "remote";
+}
+
+function httpClassification(
+  cls: "signed_http" | "unsigned_http" | "stdio_proxy",
+  url: string
+): NeotomaMcpEntryClassification {
+  const locality = endpointLocality(url);
+  // An HTTP entry whose URL cannot be parsed has no knowable endpoint.
+  if (!locality) return { class: "unknown", endpoint_url: url || null, endpoint_locality: null };
+  return { class: cls, endpoint_url: url, endpoint_locality: locality };
+}
+
+const LOCAL_STDIO_RESULT: NeotomaMcpEntryClassification = {
+  class: "local_stdio",
+  endpoint_url: null,
+  endpoint_locality: null,
+};
+
+/**
+ * Classify one Neotoma MCP server entry (as it sits in an MCP config file) from the
+ * fields the writers in this module produce (`neotomaServerEntriesForTransport`,
+ * `neotomaServerEntries`, `neotomaProxyServerEntries`). Returns `unknown` for any
+ * shape it does not recognise rather than guessing.
+ */
+export function classifyNeotomaMcpEntry(entry: unknown): NeotomaMcpEntryClassification {
+  const unknownResult: NeotomaMcpEntryClassification = {
+    class: "unknown",
+    endpoint_url: null,
+    endpoint_locality: null,
+  };
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return unknownResult;
+  const e = entry as {
+    command?: unknown;
+    args?: unknown;
+    env?: unknown;
+    url?: unknown;
+    serverUrl?: unknown;
+  };
+  const command = typeof e.command === "string" ? e.command : "";
+  const url =
+    typeof e.url === "string" ? e.url : typeof e.serverUrl === "string" ? e.serverUrl : "";
+  if (!command) {
+    return url ? httpClassification("unsigned_http", url) : unknownResult;
+  }
+  if (url) return unknownResult; // both a command and a URL: not a shape we write
+  if (e.args !== undefined && !Array.isArray(e.args)) return unknownResult;
+  const args = Array.isArray(e.args) ? e.args.map((a) => String(a)) : [];
+  const env =
+    e.env && typeof e.env === "object" && !Array.isArray(e.env)
+      ? (e.env as Record<string, unknown>)
+      : {};
+  const rawDownstream = env.MCP_PROXY_DOWNSTREAM_URL;
+  if (rawDownstream !== undefined && typeof rawDownstream !== "string") return unknownResult;
+  const downstream = rawDownstream ?? "";
+  const base = path.basename(command.replace(/\\/g, "/"));
+
+  if (SIGNED_SHIM_SCRIPTS.has(base)) {
+    return httpClassification("signed_http", downstream || DEFAULT_PROXY_DOWNSTREAM_URL);
+  }
+  if (UNSIGNED_PROXY_SCRIPTS.has(base)) {
+    return httpClassification("stdio_proxy", downstream || DEFAULT_PROXY_DOWNSTREAM_URL);
+  }
+  if (LOCAL_STDIO_SCRIPTS.has(base)) {
+    return downstream ? unknownResult : LOCAL_STDIO_RESULT;
+  }
+
+  const normalizedArgs = args.map((a) => a.replace(/\\/g, "/"));
+  const proxyAt = args.findIndex((a, i) => a === "mcp" && args[i + 1] === "proxy");
+  if (
+    proxyAt > 0 &&
+    normalizedArgs.slice(0, proxyAt).some((a) => a.endsWith("/dist/cli/index.js"))
+  ) {
+    const cls = args.includes("--aauth") ? "signed_http" : "stdio_proxy";
+    return httpClassification(cls, downstream || DEFAULT_PROXY_DOWNSTREAM_URL);
+  }
+  if (
+    args.length === 1 &&
+    isDistMcpEntrypointArg(args[0]) &&
+    normalizedArgs[0].endsWith("/dist/index.js")
+  ) {
+    return downstream ? unknownResult : LOCAL_STDIO_RESULT;
+  }
+  return unknownResult;
+}
+
+export interface NeotomaMcpEntryReadBack extends NeotomaMcpEntryClassification {
+  path: string;
+  server_key: string;
+}
+
+/**
+ * Read MCP config files back after they were written or kept, and classify every
+ * Neotoma server entry in them (`mcpServers` or VS Code `servers`; any key containing
+ * "neotoma"). A file that cannot be read or parsed as JSON lands in `unreadable_paths`.
+ */
+export async function readBackNeotomaMcpEntries(paths: string[]): Promise<{
+  entries: NeotomaMcpEntryReadBack[];
+  unreadable_paths: string[];
+}> {
+  const entries: NeotomaMcpEntryReadBack[] = [];
+  const unreadable: string[] = [];
+  for (const p of [...new Set(paths)]) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await fs.readFile(p, "utf-8"));
+    } catch {
+      unreadable.push(p);
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      unreadable.push(p);
+      continue;
+    }
+    const obj = parsed as { mcpServers?: unknown; servers?: unknown };
+    const servers = obj.mcpServers ?? obj.servers;
+    if (servers === undefined) continue;
+    if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
+      unreadable.push(p);
+      continue;
+    }
+    for (const key of Object.keys(servers as Record<string, unknown>).sort()) {
+      if (!key.toLowerCase().includes("neotoma")) continue;
+      entries.push({
+        path: p,
+        server_key: key,
+        ...classifyNeotomaMcpEntry((servers as Record<string, unknown>)[key]),
+      });
+    }
+  }
+  return { entries, unreadable_paths: unreadable };
+}
+
 export function hasAAuthKeys(): boolean {
   const aAuthKeyPath = path.join(os.homedir(), ".neotoma", "aauth", "private.jwk");
   return existsSync(aAuthKeyPath);
@@ -815,7 +1011,7 @@ export async function ensureAAuthKeysForSignedTransport(
   transport: McpTransportChoice,
   silent: boolean
 ): Promise<void> {
-  if (transport !== "a" && transport !== "d" && transport !== "e") return;
+  if (!SIGNED_MCP_TRANSPORTS[transport]) return;
   if (hasAAuthKeys()) return;
 
   const { generateAndStoreKeypair } = await import("./aauth_signer.js");

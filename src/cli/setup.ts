@@ -16,7 +16,12 @@ import { runHooksInstall } from "./hooks.js";
 import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
 import { writePermissionsForTool, toolFromString } from "./permissions.js";
-import type { McpTransportChoice } from "./mcp_config_scan.js";
+import type {
+  McpTransportChoice,
+  NeotomaMcpEntryClass,
+  NeotomaMcpEntryReadBack,
+} from "./mcp_config_scan.js";
+import { SIGNED_MCP_TRANSPORTS, readBackNeotomaMcpEntries } from "./mcp_config_scan.js";
 
 export interface SetupStepResult {
   id: string;
@@ -64,64 +69,78 @@ export function buildVerifyLine(doctor: Awaited<ReturnType<typeof runDoctor>>): 
   return `Neotoma installed at ${bin} (resolved via ${via}; ${ver}; data_dir=${dataDir}; mcp=${mcpLabel})`;
 }
 
-/**
- * Privacy class of each `--mcp-transport` preset (see `neotomaServerEntriesForTransport`
- * and `ensureAAuthKeysForSignedTransport` in mcp_config_scan.ts). Keyed by the preset
- * type so adding a preset without classifying it is a type error.
- */
-const MCP_TRANSPORT_PRIVACY: Record<
-  McpTransportChoice,
-  { kind: "stdio"; label: string } | { kind: "network"; label: string; endpoint: string }
-> = {
-  a: { kind: "network", label: "signed stdio shim + AAuth", endpoint: "signed HTTP /mcp" },
-  b: { kind: "stdio", label: "unsigned/local stdio" },
-  c: { kind: "stdio", label: "direct stdio" },
-  d: {
-    kind: "network",
-    label: "signed shim, prod API on both slots",
-    endpoint: "signed HTTP /mcp (prod)",
-  },
-  e: {
-    kind: "network",
-    label: "signed HTTP proxy, prod profile",
-    endpoint: "signed HTTP /mcp (prod profile)",
-  },
+const CLASS_DESCRIPTION: Record<Exclude<NeotomaMcpEntryClass, "unknown">, string> = {
+  local_stdio: "local stdio",
+  stdio_proxy: "local stdio proxy that makes HTTP requests",
+  signed_http: "signed HTTP /mcp; makes HTTP requests",
+  unsigned_http: "unsigned HTTP /mcp; makes HTTP requests",
 };
 
-/**
- * `--mcp-transport` values suggested in the summary. Each must be accepted by
- * `normalizeInitMcpTransport` in index.ts (tests assert this).
- */
-export const SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE = "stdio";
-export const SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE = "signed";
+function describeEntry(e: NeotomaMcpEntryReadBack): string {
+  const desc = CLASS_DESCRIPTION[e.class as Exclude<NeotomaMcpEntryClass, "unknown">];
+  if (e.class === "local_stdio") return desc;
+  return `${desc} to a ${e.endpoint_locality} endpoint (${e.endpoint_url})`;
+}
+
+function requestedPresetNote(transport: McpTransportChoice | null | undefined): string {
+  if (!transport) return "";
+  const kind = SIGNED_MCP_TRANSPORTS[transport] ? "signed" : "unsigned";
+  return ` Requested --mcp-transport preset: ${transport} (${kind}); this line reports what the config holds, not the request.`;
+}
 
 /**
- * One-line privacy/transport summary appended to setup output so privacy-conscious
- * evaluators see it immediately. Describes the transport actually configured in this
- * run; `null` means it could not be determined (no preset given, or nothing written).
+ * One-line privacy/transport summary appended to setup output. Built only from a
+ * read-back of the MCP config files the MCP step wrote or kept, classified entry by
+ * entry with `classifyNeotomaMcpEntry`. The requested preset is never evidence:
+ * when nothing was read back, a file is unreadable, or any entry is unrecognised,
+ * the line says the transport could not be determined.
  */
 export function buildPrivacyTransportSummary(
-  transport: McpTransportChoice | null | undefined,
-  opts: { dryRun?: boolean } = {}
+  readBack: { entries: NeotomaMcpEntryReadBack[]; unreadable_paths: string[] } | null,
+  opts: { dryRun?: boolean; requestedTransport?: McpTransportChoice | null } = {}
 ): string {
-  const preset = transport ? MCP_TRANSPORT_PRIVACY[transport] : undefined;
-  if (!transport || !preset) {
+  const note = requestedPresetNote(opts.requestedTransport);
+  if (opts.dryRun) {
     return (
-      "Transport: could not be determined from this run; check your MCP client config. " +
-      `Pass --mcp-transport=${SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE} for local stdio (no network egress) ` +
-      `or --mcp-transport=${SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE} for the signed HTTP /mcp proxy.`
+      "Transport (dry run, nothing written): could not be determined; no MCP config was written to read back." +
+      note
     );
   }
-  const prefix = opts.dryRun ? "Transport (dry run, nothing written)" : "Transport";
-  if (preset.kind === "stdio") {
+  if (!readBack || readBack.entries.length === 0) {
     return (
-      `${prefix}: local stdio MCP, preset ${transport} (${preset.label}; no network egress). ` +
-      `Use --mcp-transport=${SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE} for the signed HTTP /mcp proxy.`
+      "Transport: could not be determined; this run wrote or kept no Neotoma MCP config entry to read back. " +
+      "Check your MCP client config." +
+      note
+    );
+  }
+  if (readBack.unreadable_paths.length > 0) {
+    return (
+      `Transport: could not be determined; could not read back ${readBack.unreadable_paths.join(", ")}. ` +
+      "Check your MCP client config." +
+      note
+    );
+  }
+  const multiFile = new Set(readBack.entries.map((e) => e.path)).size > 1;
+  const label = (e: NeotomaMcpEntryReadBack) =>
+    multiFile ? `${e.server_key} (${e.path})` : e.server_key;
+  const unknown = readBack.entries.filter((e) => e.class === "unknown");
+  if (unknown.length > 0) {
+    return (
+      `Transport: could not be determined; unrecognised Neotoma MCP entry ${unknown
+        .map(label)
+        .join(", ")}. Check your MCP client config.` + note
+    );
+  }
+  if (readBack.entries.every((e) => e.class === "local_stdio")) {
+    return (
+      `Transport: local stdio MCP for every Neotoma entry (${readBack.entries
+        .map(label)
+        .join(", ")}); no network egress from the MCP transport.` + note
     );
   }
   return (
-    `${prefix}: ${preset.endpoint} proxy, preset ${transport} (${preset.label}); ` +
-    "the MCP client makes signed HTTP network requests to the Neotoma /mcp endpoint."
+    `Transport: ${readBack.entries.map((e) => `${label(e)}: ${describeEntry(e)}`).join("; ")}.` +
+    note
   );
 }
 
@@ -142,7 +161,8 @@ export interface RunSetupOptions {
   skillsScope?: "project" | "user";
   /**
    * MCP transport preset passed to the mcp-configure runner (`--mcp-transport`).
-   * Used only to describe the transport in `privacy_transport_summary`.
+   * Named in `privacy_transport_summary` as the request only; the transport itself is
+   * read back from the config files the mcp step reports in `details.updatedPaths`.
    */
   mcpTransport?: McpTransportChoice | null;
   /** Injected runners to keep setup pure + testable. */
@@ -177,6 +197,13 @@ function installSkills(tool: ToolId, cwd: string, scope: "project" | "user"): Se
       linked: result.linked,
     },
   };
+}
+
+/** Config paths the mcp step reports it wrote or kept (`offerInstall`'s `updatedPaths`). */
+function mcpStepConfigPaths(step: SetupStepResult | undefined): string[] {
+  const details = step?.details as { updatedPaths?: unknown } | undefined;
+  if (!step?.ok || !details || !Array.isArray(details.updatedPaths)) return [];
+  return details.updatedPaths.filter((p): p is string => typeof p === "string" && p.length > 0);
 }
 
 export async function runSetup(options: RunSetupOptions = {}): Promise<SetupReport> {
@@ -411,10 +438,9 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   }
 
   const doctorAfter = dryRun ? doctorBefore : await runDoctor({ cwd });
-  // Only describe a preset this run actually wrote (or would write, in a dry run).
-  // A skipped mcp step (e.g. already configured) leaves the existing transport unknown.
-  const mcpWritten = Boolean(mcpStep?.ok && (dryRun ? mcpStep.changed : !mcpStep.skipped));
-  const configuredTransport = mcpWritten ? (options.mcpTransport ?? null) : null;
+  // Read back what the MCP step actually wrote or kept; never infer it from the request.
+  const writtenPaths = dryRun ? [] : mcpStepConfigPaths(mcpStep);
+  const readBack = writtenPaths.length > 0 ? await readBackNeotomaMcpEntries(writtenPaths) : null;
   const overall = steps.every((s) => s.ok);
 
   return {
@@ -426,6 +452,9 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     doctor_after: doctorAfter,
     overall_ok: overall,
     verify_line: buildVerifyLine(doctorAfter),
-    privacy_transport_summary: buildPrivacyTransportSummary(configuredTransport, { dryRun }),
+    privacy_transport_summary: buildPrivacyTransportSummary(readBack, {
+      dryRun,
+      requestedTransport: options.mcpTransport ?? null,
+    }),
   };
 }

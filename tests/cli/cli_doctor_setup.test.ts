@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   patchClaudeCodeProject,
@@ -22,9 +23,13 @@ import {
   runSetup,
   buildVerifyLine,
   buildPrivacyTransportSummary,
-  SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE,
-  SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE,
 } from "../../src/cli/setup.ts";
+import {
+  classifyNeotomaMcpEntry,
+  neotomaServerEntriesForTransport,
+  readBackNeotomaMcpEntries,
+  SIGNED_MCP_TRANSPORTS,
+} from "../../src/cli/mcp_config_scan.ts";
 import { runPreflight } from "../../src/cli/preflight.ts";
 import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
@@ -602,62 +607,21 @@ describe("buildVerifyLine", () => {
     expect(line).toContain("path_fix_hint");
   });
 
-  it.each(["b", "c"] as const)(
-    "privacy_transport_summary for stdio preset %s says local stdio with no network egress",
-    (preset) => {
-      const line = buildPrivacyTransportSummary(preset);
-      expect(line).toContain("local stdio MCP");
-      expect(line).toContain("no network egress");
-      expect(line).toContain(`preset ${preset}`);
-    }
-  );
+  const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const SIGNED_SHIM = path.join(REPO_ROOT, "scripts", "run_neotoma_mcp_signed_stdio_dev_shim.sh");
+  const STDIO_PROD = path.join(REPO_ROOT, "scripts", "run_neotoma_mcp_stdio_prod.sh");
+  const STDIO_DEV = path.join(REPO_ROOT, "scripts", "run_neotoma_mcp_stdio.sh");
 
-  it.each(["a", "d", "e"] as const)(
-    "privacy_transport_summary for network preset %s names signed HTTP /mcp and never claims no egress",
-    (preset) => {
-      const line = buildPrivacyTransportSummary(preset);
-      expect(line).toContain("signed HTTP /mcp");
-      expect(line).toContain("network requests");
-      expect(line).not.toContain("no network egress");
-      expect(line).not.toContain("local stdio");
-      expect(line).toContain(`preset ${preset}`);
-    }
-  );
+  async function writeConfig(dir: string, mcpServers: Record<string, unknown>): Promise<string> {
+    const file = path.join(dir, "mcp.json");
+    await fs.writeFile(file, JSON.stringify({ mcpServers }, null, 2) + "\n");
+    return file;
+  }
 
-  it("privacy_transport_summary says plainly when the transport is undetermined", () => {
-    for (const t of [null, undefined]) {
-      const line = buildPrivacyTransportSummary(t);
-      expect(line).toContain("could not be determined");
-      expect(line).not.toMatch(/^Transport: local stdio MCP/);
-    }
-  });
-
-  it("every --mcp-transport value suggested in the summary is accepted by the CLI", async () => {
-    const { normalizeInitMcpTransport } = await import("../../src/cli/index.ts");
-    const lines = [
-      ...(["a", "b", "c", "d", "e"] as const).map((p) => buildPrivacyTransportSummary(p)),
-      buildPrivacyTransportSummary(null),
-    ];
-    const suggested = new Set<string>();
-    for (const line of lines) {
-      for (const m of line.matchAll(/--mcp-transport=([a-z0-9-]+)/g)) {
-        suggested.add(m[1]);
-      }
-    }
-    expect(suggested).toEqual(
-      new Set([SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE, SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE])
-    );
-    for (const value of suggested) {
-      expect(normalizeInitMcpTransport(value)).not.toBeNull();
-    }
-    expect(normalizeInitMcpTransport(SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE)).toBe("c");
-    expect(normalizeInitMcpTransport(SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE)).toBe("a");
-  });
-
-  async function runSetupWithTransport(
+  async function runSetupReadingBack(
     cwd: string,
     mcpTransport: "a" | "b" | "c" | "d" | "e" | null,
-    mcpStep: { changed: boolean; skipped: boolean; reason?: string }
+    updatedPaths: string[] | undefined
   ) {
     return runSetup({
       tool: "cursor",
@@ -669,45 +633,139 @@ describe("buildVerifyLine", () => {
       skipPermissions: true,
       runners: {
         init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "already-initialized" }),
-        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, ...mcpStep }),
+        mcpConfigure: async () => ({
+          id: "mcp-configure",
+          ok: true,
+          changed: Boolean(updatedPaths?.length),
+          skipped: !updatedPaths?.length,
+          details: { installed: Boolean(updatedPaths?.length), message: "", updatedPaths },
+        }),
         cliInstructionsConfigure: async () => ({ id: "cli-instructions", ok: true, changed: false, skipped: true }),
       },
     });
   }
 
-  it("runSetup report describes the signed preset it configured, not stdio", async () => {
-    const cwd = await mkTmp("ntm-transport-signed");
+  it("kept signed dev entry + stdio prod write: names the signed entry, never claims no egress", async () => {
+    // Security finding on af62762: offerInstall keeps an existing signed dev entry,
+    // writes the requested stdio preset only for prod, and returns installed: true.
+    const cwd = await mkTmp("ntm-transport-mixed");
     try {
-      const report = await runSetupWithTransport(cwd, "a", { changed: true, skipped: false });
-      expect(report.privacy_transport_summary).toContain("signed HTTP /mcp");
-      expect(report.privacy_transport_summary).not.toContain("no network egress");
+      const file = await writeConfig(cwd, {
+        "neotoma-dev": {
+          command: SIGNED_SHIM,
+          env: { NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev", MCP_PROXY_DOWNSTREAM_URL: "https://neotoma.example.com/mcp" },
+        },
+        neotoma: { command: STDIO_PROD },
+      });
+      const report = await runSetupReadingBack(cwd, "c", [file]);
+      const line = report.privacy_transport_summary;
+      expect(line).toContain("neotoma-dev: signed HTTP /mcp");
+      expect(line).toContain("remote endpoint");
+      expect(line).toContain("neotoma: local stdio");
+      expect(line).not.toContain("no network egress");
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it("runSetup report describes the stdio preset it configured", async () => {
+  it("says no network egress only when every Neotoma entry read back is local stdio", async () => {
     const cwd = await mkTmp("ntm-transport-stdio");
     try {
-      const report = await runSetupWithTransport(cwd, "c", { changed: true, skipped: false });
-      expect(report.privacy_transport_summary).toContain("local stdio MCP");
+      const file = await writeConfig(cwd, {
+        "neotoma-dev": { command: STDIO_DEV },
+        neotoma: { command: STDIO_PROD },
+        other: { url: "https://example.com/mcp" },
+      });
+      const report = await runSetupReadingBack(cwd, "a", [file]);
+      expect(report.privacy_transport_summary).toContain("local stdio MCP for every Neotoma entry");
       expect(report.privacy_transport_summary).toContain("no network egress");
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it("runSetup report says undetermined when the mcp step wrote nothing", async () => {
-    const cwd = await mkTmp("ntm-transport-skipped");
+  it("preset b scripts-mode entry with a downstream URL makes HTTP requests to a local endpoint", async () => {
+    const cwd = await mkTmp("ntm-transport-proxy");
     try {
-      const report = await runSetupWithTransport(cwd, "a", {
-        changed: false,
-        skipped: true,
-        reason: "already-configured",
-      });
-      expect(report.privacy_transport_summary).toContain("could not be determined");
+      const entries = neotomaServerEntriesForTransport(REPO_ROOT, { prodPort: 3999 }, "b");
+      expect((entries.neotoma as { env?: Record<string, string> }).env?.MCP_PROXY_DOWNSTREAM_URL).toBe(
+        "http://127.0.0.1:3999/mcp"
+      );
+      const file = await writeConfig(cwd, { neotoma: entries.neotoma });
+      const report = await runSetupReadingBack(cwd, "b", [file]);
+      const line = report.privacy_transport_summary;
+      expect(line).toContain("makes HTTP requests to a local endpoint");
+      expect(line).not.toContain("no network egress");
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("says could not be determined for an unreadable file, an unrecognised entry, or nothing written", async () => {
+    const cwd = await mkTmp("ntm-transport-unknown");
+    try {
+      const unreadable = path.join(cwd, "broken.json");
+      await fs.writeFile(unreadable, "{ not json");
+      const r1 = await runSetupReadingBack(cwd, "c", [unreadable]);
+      expect(r1.privacy_transport_summary).toContain("could not be determined");
+      expect(r1.privacy_transport_summary).not.toContain("no network egress");
+
+      const file = await writeConfig(cwd, {
+        "neotoma-dev": { command: STDIO_DEV },
+        neotoma: { command: "/opt/custom/launcher" },
+      });
+      const r2 = await runSetupReadingBack(cwd, "c", [file]);
+      expect(r2.privacy_transport_summary).toContain("could not be determined");
+      expect(r2.privacy_transport_summary).not.toContain("no network egress");
+
+      const r3 = await runSetupReadingBack(cwd, "c", undefined);
+      expect(r3.privacy_transport_summary).toContain("could not be determined");
+      expect(r3.privacy_transport_summary).not.toContain("no network egress");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["a", "b", "c", "d", "e"] as const)(
+    "classifier agrees with the entries the writers produce for preset %s",
+    (preset) => {
+      const entries = neotomaServerEntriesForTransport(REPO_ROOT, undefined, preset);
+      const expected = SIGNED_MCP_TRANSPORTS[preset]
+        ? "signed_http"
+        : preset === "b"
+          ? "stdio_proxy" // scripts mode: the dev shim forwards HTTP to a downstream /mcp
+          : "local_stdio";
+      for (const entry of Object.values(entries)) {
+        expect(classifyNeotomaMcpEntry(entry).class).toBe(expected);
+      }
+    }
+  );
+
+  it("readBackNeotomaMcpEntries reports unparseable files instead of guessing", async () => {
+    const cwd = await mkTmp("ntm-readback");
+    try {
+      const missing = path.join(cwd, "missing.json");
+      const result = await readBackNeotomaMcpEntries([missing]);
+      expect(result.entries).toEqual([]);
+      expect(result.unreadable_paths).toEqual([missing]);
+      expect(buildPrivacyTransportSummary(result)).toContain("could not be determined");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("every --mcp-transport value the summary mentions is accepted by the CLI", async () => {
+    const { normalizeInitMcpTransport } = await import("../../src/cli/index.ts");
+    const lines = [
+      ...(["a", "b", "c", "d", "e"] as const).map((p) =>
+        buildPrivacyTransportSummary(null, { requestedTransport: p })
+      ),
+      buildPrivacyTransportSummary(null),
+    ];
+    for (const line of lines) {
+      for (const m of line.matchAll(/--mcp-transport=([a-z0-9-]+)/g)) {
+        expect(normalizeInitMcpTransport(m[1])).not.toBeNull();
+      }
     }
   });
 
