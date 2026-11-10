@@ -10,6 +10,7 @@ import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import * as attachmentResolution from "../../src/services/attachment_resolution.js";
+import * as currentStateReads from "../../src/services/current_state_reads.js";
 import { certifySnapshotPopulation } from "../../src/services/entity_population_certificate.js";
 import { LOCAL_DEV_USER_ID as userId } from "../../src/services/local_auth.js";
 import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
@@ -247,43 +248,44 @@ it("GET preserves an unknown raw option name and refuses to certify the requeste
   expect(JSON.stringify(result.read_contract)).not.toContain("private-canary-value");
 });
 
-it("native population proof acquires missing histories without reading materialized visible histories", async () => {
+it("native population proof reads only missing members' deciding rows, never materialized visible histories", async () => {
   const id = "ent_synthetic_missing_history_" + randomUUID();
   try {
     expect(
       (
-        await db
-          .from("entities")
-          .insert({
-            id,
-            user_id: userId,
-            entity_type: entityType,
-            canonical_name: "Synthetic deleted",
-          })
+        await db.from("entities").insert({
+          id,
+          user_id: userId,
+          entity_type: entityType,
+          canonical_name: "Synthetic deleted",
+        })
       ).error
     ).toBeNull();
     expect(
       (
-        await db
-          .from("observations")
-          .insert({
-            id: randomUUID(),
-            entity_id: id,
-            user_id: userId,
-            entity_type: entityType,
-            schema_version: "1.0",
-            fields: { _deleted: true },
-            source_priority: 1000,
-            observed_at: "2026-01-01T00:00:00Z",
-          })
+        await db.from("observations").insert({
+          id: randomUUID(),
+          entity_id: id,
+          user_id: userId,
+          entity_type: entityType,
+          schema_version: "1.0",
+          fields: { _deleted: true },
+          source_priority: 1000,
+          observed_at: "2026-01-01T00:00:00Z",
+        })
       ).error
     ).toBeNull();
     await db.from("entity_snapshots").delete().eq("entity_id", id);
+    // The hidden-entity proof reads the rows that decide visibility, bounded
+    // by the top-priority run, not the whole history (#2792).
+    const deciding = vi.spyOn(currentStateReads, "readDecidingObservations");
     const history = vi.spyOn(attachmentResolution, "resolveAttachedObservations");
     try {
       expect(await certifySnapshotPopulation(userId, [entityType])).toBe(true);
-      expect(history.mock.calls.map(([entityId]) => entityId)).toEqual([id]);
+      expect(deciding.mock.calls.map(([entityId]) => entityId)).toEqual([id]);
+      expect(history).not.toHaveBeenCalled();
     } finally {
+      deciding.mockRestore();
       history.mockRestore();
     }
     const result = await queryEntitiesWithCount({ userId, entityType, limit: 100 });
@@ -378,7 +380,10 @@ it("acquires raw-fragment sources beyond a full observation batch through the te
         await db.from("raw_fragments").insert({
           id: fragmentId,
           source_id: lateSource,
-          entity_id: ids[0],
+          // Legacy (no entity_id): attributed only through its source, so the
+          // source walk must page past the first full observation batch.
+          // Fragments that name their entity are read directly (#2792).
+          entity_id: null,
           entity_type: entityType,
           user_id: userId,
           fragment_key: "beyond_first_source_page",
@@ -437,61 +442,85 @@ it("acquires raw-fragment sources beyond a full observation batch through the te
   }
 });
 it("source-observation read errors and nonadvancing pages retain incomplete acquisition evidence", async () => {
+  // The source walk runs only for a type with legacy (entity_id NULL)
+  // fragments; fragments that name their entity are read directly (#2792).
+  const legacySource = "src_" + randomUUID();
+  const legacyFragment = randomUUID();
+  expect((await db.from("sources").insert({ id: legacySource, user_id: userId })).error).toBeNull();
+  expect(
+    (
+      await db.from("raw_fragments").insert({
+        id: legacyFragment,
+        source_id: legacySource,
+        entity_id: null,
+        entity_type: entityType,
+        user_id: userId,
+        fragment_key: "legacy_probe",
+        fragment_value: "legacy",
+        fragment_envelope: { reason: "unknown_field" },
+      })
+    ).error
+  ).toBeNull();
   const from = db.from.bind(db);
-  for (const fault of ["error", "nonadvancing"] as const) {
-    let acquisitions = 0;
-    const spy = vi.spyOn(db, "from").mockImplementation(((table: string) => {
-      const query = from(table);
-      let sourceAcquisition = false;
-      const proxy: typeof query = new Proxy(query, {
-        get(target, key) {
-          if (key === "select") {
-            return (...args: any[]) => {
-              sourceAcquisition =
-                table === "observations" && args[0] === "id, entity_id, source_id, user_id";
-              (target.select as any)(...args);
-              return proxy;
-            };
-          }
-          if (key === "then" && sourceAcquisition) {
-            return (resolve: any, reject: any) => {
-              acquisitions++;
-              const data = Array.from({ length: 1000 }, (_, index) => ({
-                id: "synthetic_stalled_" + String(index).padStart(4, "0"),
-                entity_id: ids[0],
-                source_id: "synthetic_stalled_source",
-                user_id: userId,
-              }));
-              return Promise.resolve(
-                fault === "error"
-                  ? { data: null, error: { message: "synthetic acquisition failure" } }
-                  : { data, error: null }
-              ).then(resolve, reject);
-            };
-          }
-          const value = Reflect.get(target, key);
-          return typeof value === "function"
-            ? (...args: any[]) => {
-                const result = value.apply(target, args);
-                return result === target ? proxy : result;
-              }
-            : value;
-        },
-      });
-      return proxy;
-    }) as typeof db.from);
-    try {
-      const result = await queryEntitiesWithCount({ userId, entityType, limit: 100 });
-      expect(acquisitions).toBe(fault === "error" ? 1 : 2);
-      expect(result.entities.map((row) => row.entity_id).sort()).toEqual([...ids].sort());
-      expect(result.read_contract.coverage.reasons).toContain(
-        fault === "error" ? "raw_fragment_sources_unavailable" : "raw_fragment_source_cap"
-      );
-      expect(result.read_contract.coverage.state).not.toBe("complete");
-      expect(result.read_contract.coverage.scope_exhausted).not.toBe(true);
-    } finally {
-      spy.mockRestore();
+  try {
+    for (const fault of ["error", "nonadvancing"] as const) {
+      let acquisitions = 0;
+      const spy = vi.spyOn(db, "from").mockImplementation(((table: string) => {
+        const query = from(table);
+        let sourceAcquisition = false;
+        const proxy: typeof query = new Proxy(query, {
+          get(target, key) {
+            if (key === "select") {
+              return (...args: any[]) => {
+                sourceAcquisition =
+                  table === "observations" && args[0] === "id, entity_id, source_id, user_id";
+                (target.select as any)(...args);
+                return proxy;
+              };
+            }
+            if (key === "then" && sourceAcquisition) {
+              return (resolve: any, reject: any) => {
+                acquisitions++;
+                const data = Array.from({ length: 1000 }, (_, index) => ({
+                  id: "synthetic_stalled_" + String(index).padStart(4, "0"),
+                  entity_id: ids[0],
+                  source_id: "synthetic_stalled_source",
+                  user_id: userId,
+                }));
+                return Promise.resolve(
+                  fault === "error"
+                    ? { data: null, error: { message: "synthetic acquisition failure" } }
+                    : { data, error: null }
+                ).then(resolve, reject);
+              };
+            }
+            const value = Reflect.get(target, key);
+            return typeof value === "function"
+              ? (...args: any[]) => {
+                  const result = value.apply(target, args);
+                  return result === target ? proxy : result;
+                }
+              : value;
+          },
+        });
+        return proxy;
+      }) as typeof db.from);
+      try {
+        const result = await queryEntitiesWithCount({ userId, entityType, limit: 100 });
+        expect(acquisitions).toBe(fault === "error" ? 1 : 2);
+        expect(result.entities.map((row) => row.entity_id).sort()).toEqual([...ids].sort());
+        expect(result.read_contract.coverage.reasons).toContain(
+          fault === "error" ? "raw_fragment_sources_unavailable" : "raw_fragment_source_cap"
+        );
+        expect(result.read_contract.coverage.state).not.toBe("complete");
+        expect(result.read_contract.coverage.scope_exhausted).not.toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
     }
+  } finally {
+    await db.from("raw_fragments").delete().eq("id", legacyFragment);
+    await db.from("sources").delete().eq("id", legacySource);
   }
 });
 

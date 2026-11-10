@@ -216,6 +216,17 @@ jobs:
       - name: Run entity-query read-latency regressions (#2266)
         run: npx vitest run --no-file-parallelism tests/integration/entity_query_deleted_count.test.ts
 
+      # #2792 current-state reads vs observation-history length. The benchmark
+      # seeds equal entity counts with 1 vs 500 observations per entity and
+      # fails if list, count certification or snapshot reads of the long type
+      # exceed 2x the short type, or if the list reads more observation rows
+      # for it. It lives under tests/performance (RUN_BENCH=1), which no other
+      # lane runs. The correctness tests for the bounded readers run beside it.
+      - name: Run history-length read regressions (#2792)
+        run: |
+          RUN_BENCH=1 npx vitest run --no-file-parallelism tests/performance/history_length_reads.bench.test.ts
+          npx vitest run --no-file-parallelism tests/integration/current_state_reads.test.ts
+
       # #2316/#2324 DB-worker abandonment survival. The same gap as the two steps
       # above, and the one that cost the most: this suite already existed and
       # already asserted the right property, but `test:unit` excludes

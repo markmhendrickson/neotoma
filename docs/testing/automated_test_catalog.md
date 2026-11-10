@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **814**
-- Backend and repo Vitest files: **760**
+- Total automated test files: **816**
+- Backend and repo Vitest files: **762**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 229 |
 | Vitest service tests | 65 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 240 |
+| Vitest integration tests | 241 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 27 |
 | Vitest security tests | 20 |
@@ -84,7 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 27 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
-| Tests Performance | 3 |
+| Tests Performance | 4 |
 | Tests Scripts | 4 |
 
 ## Primary validation commands
@@ -495,7 +495,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (240):**
+**Files (241):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -539,6 +539,7 @@ flowchart TD
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/cross_type_merge_snapshot.test.ts`
 - `tests/integration/csp_local_http.test.ts`
+- `tests/integration/current_state_reads.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/db_abort_client_disconnect_survival.test.ts`
@@ -1022,10 +1023,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/performance`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (3):**
+**Files (4):**
 - `tests/performance/entity_list_page.bench.test.ts`
 - `tests/performance/entity_query_count.bench.test.ts`
 - `tests/performance/graph_traversal.bench.test.ts`
+- `tests/performance/history_length_reads.bench.test.ts`
 
 ### Tests Scripts
 **Directory:** `tests/scripts/`
