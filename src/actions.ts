@@ -442,12 +442,12 @@ app.use(
     },
   })
 );
-app.use(
-  morgan<express.Request, express.Response>("dev", {
-    // Suppress identity-bearing URLs independently of route spelling or method.
-    skip: (req) => exactIdentityRequested(req.query),
-  })
-);
+morgan.token<express.Request, express.Response>("access-url", (req) => {
+  const url = req.originalUrl || req.url;
+  // Exact identity query values may contain customer data on any route or method.
+  return exactIdentityRequested(req.query) ? url.split("?", 1)[0] : url;
+});
+app.use(morgan(":method :access-url :status :response-time ms - :res[content-length]"));
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
 
