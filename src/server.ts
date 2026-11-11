@@ -5045,11 +5045,12 @@ export class NeotomaServer {
     const schemaRegistry = new SchemaRegistryService();
 
     try {
-      const entityTypes = await schemaRegistry.listEntityTypes(
+      const catalog = await schemaRegistry.listEntityTypesResult(
         parsed.keyword,
         this.getAuthenticatedUserId()
       );
 
+      const entityTypes = catalog.entity_types;
       // When no keyword, always return summary to avoid huge payload (all types × full schema).
       // When keyword is provided, respect summary param (default full detail for the few matches).
       const useSummary =
@@ -5061,7 +5062,10 @@ export class NeotomaServer {
               entity_type: et.entity_type,
               schema_version: et.schema_version,
               field_count: et.field_names?.length || 0,
+              ...(et.planning ? { planning: et.planning } : {}),
+              ...(et.planning_error ? { planning_error: et.planning_error } : {}),
             })),
+            registry_coverage: catalog.registry_coverage,
             total: entityTypes.length,
             keyword: parsed.keyword || null,
             search_method: parsed.keyword
@@ -5072,6 +5076,7 @@ export class NeotomaServer {
           }
         : {
             entity_types: entityTypes,
+            registry_coverage: catalog.registry_coverage,
             total: entityTypes.length,
             keyword: parsed.keyword || null,
             search_method: parsed.keyword
@@ -5414,6 +5419,7 @@ export class NeotomaServer {
         fields_to_add: parsed.fields_to_add,
         fields_to_remove: parsed.fields_to_remove,
         canonical_name_fields: parsed.canonical_name_fields,
+        planning: parsed.planning,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
         user_id: userId,

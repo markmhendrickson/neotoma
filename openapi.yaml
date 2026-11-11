@@ -2237,6 +2237,39 @@ components:
           additionalProperties: true
           allOf:
             - $ref: "#/components/schemas/AgentAttribution"
+    PlanningDeclaration:
+      type: object
+      additionalProperties: false
+      required: [level]
+      description: Optional registry declaration of a planning stratum. Relative numeric ordering is instance-defined; read_only never grants write authority.
+      properties:
+        level:
+          type: number
+          description: Finite numeric rank. Higher planning ranks are above lower ranks.
+        read_only:
+          type: boolean
+          description: Read-only reference stratum; omission or false does not authorize edits.
+    SchemaRegistryCoverage:
+      type: object
+      required: [version, state, source, reasons, total, returned_count, exhausted, scope]
+      description: Per-call acquisition evidence for the complete principal-scoped registered type census. A filtered, paginated, fallback, invalid or unreadable catalog is unknown.
+      properties:
+        version: { type: string, enum: ["1"] }
+        state: { type: string, enum: [complete, unknown] }
+        source: { type: string, enum: [registry, code_fallback] }
+        reasons:
+          type: array
+          items: { type: string }
+        total: { type: integer, minimum: 0, nullable: true }
+        returned_count: { type: integer, minimum: 0 }
+        exhausted: { type: boolean }
+        scope:
+          type: object
+          required: [owner, keyword, entity_type]
+          properties:
+            owner: { type: string, enum: [authenticated, global] }
+            keyword: { type: string, nullable: true }
+            entity_type: { type: string, nullable: true }
     EntitySchema:
       type: object
       additionalProperties: true
@@ -2245,6 +2278,14 @@ components:
           type: string
         schema_version:
           type: string
+        planning:
+          $ref: "#/components/schemas/PlanningDeclaration"
+        planning_error:
+          type: string
+          enum: [invalid_declaration]
+          description: A legacy planning declaration is malformed; census coverage is unknown.
+        field_count:
+          type: integer
         field_names:
           type: array
           items:
@@ -2262,6 +2303,8 @@ components:
             agents can read field names, types, and required flags before
             storing.
           properties:
+            planning:
+              $ref: "#/components/schemas/PlanningDeclaration"
             fields:
               type: object
               additionalProperties:
@@ -6158,7 +6201,10 @@ paths:
         returns matching types via hybrid keyword/semantic search; pass
         `summary: true` to keep the response shape compact even when keyword is
         supplied. Use before storing structured data to determine the correct
-        entity_type and its declared field names.
+        entity_type and its declared field names. Compact rows also project
+        schema_definition.planning when declared. For a full planning-level census,
+        request summary=true without keyword or entity_type and with enough limit
+        to return the whole catalog; require registry_coverage.state=complete.
       operationId: listSchemas
       parameters:
         - in: query
@@ -6180,6 +6226,14 @@ paths:
             schema_version, field_count) even when `keyword` is supplied.
             Defaults to false when `keyword` is present, true when it is not.
           schema: { type: boolean }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 0, default: 100 }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
       responses:
         "200":
           description: Schemas
@@ -6188,6 +6242,11 @@ paths:
               schema:
                 type: object
                 properties:
+                  registry_coverage:
+                    $ref: "#/components/schemas/SchemaRegistryCoverage"
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
                   schemas:
                     type: array
                     items:
@@ -8376,6 +8435,9 @@ paths:
                             type: array
                             items:
                               type: string
+                planning:
+                  $ref: "#/components/schemas/PlanningDeclaration"
+                  description: Replace the optional planning-stratum declaration without rebuilding fields or row metadata. Omit to preserve the current declaration; may be supplied alone.
                 schema_version:
                   type: string
                 user_specific:

@@ -972,6 +972,14 @@ export function buildToolDefinitions(
               ],
             },
           },
+          planning: {
+            type: "object",
+            additionalProperties: false,
+            required: ["level"],
+            description:
+              "Replace the registry planning-stratum declaration; omit to preserve. No edit or execution grant.",
+            properties: { level: { type: "number" }, read_only: { type: "boolean" } },
+          },
           schema_version: {
             type: "string",
             description: "New schema version (auto-increments if not provided)",

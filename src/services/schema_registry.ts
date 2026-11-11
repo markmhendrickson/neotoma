@@ -5,6 +5,11 @@
  */
 
 import { db } from "../db.js";
+import {
+  PlanningDeclarationSchema,
+  type PlanningDeclaration,
+  type SchemaRegistryCoverage,
+} from "../shared/schema_planning.js";
 import { getDb } from "../repositories/db/connection.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { DbConnection } from "../repositories/db/driver.js";
@@ -185,7 +190,20 @@ export type CanonicalNameRule = string | { composite: string[] };
  * Declarative rules that drive per-type behavior from the schema instead of
  * hardcoded branches. See `docs/foundation/schema_agnostic_design_rules.md`.
  */
+export interface SchemaTypeSummary {
+  entity_type: string;
+  schema_version: string;
+  field_names: string[];
+  field_summary: Record<string, { type: string; required: boolean }>;
+  planning?: PlanningDeclaration;
+  planning_error?: "invalid_declaration";
+  similarity_score?: number;
+  match_type?: "keyword" | "vector";
+}
+
 export interface SchemaDefinition {
+  /** Instance-defined planning stratum; never an execution or edit grant. */
+  planning?: PlanningDeclaration;
   fields: Record<string, FieldDefinition>;
 
   /**
@@ -1619,6 +1637,7 @@ export class SchemaRegistryService {
      * reconstruct it.
      */
     canonical_name_fields?: CanonicalNameRule[];
+    planning?: PlanningDeclaration;
     converters_to_add?: Array<{
       field_name: string;
       converter: {
@@ -1924,6 +1943,9 @@ export class SchemaRegistryService {
       } else {
         preserved.canonical_name_fields = options.canonical_name_fields;
       }
+    }
+    if (options.planning !== undefined) {
+      preserved.planning = PlanningDeclarationSchema.parse(options.planning);
     }
     if (preserved.temporal_fields) {
       preserved.temporal_fields = preserved.temporal_fields.filter((t) => !removalSet.has(t.field));
@@ -2603,19 +2625,18 @@ export class SchemaRegistryService {
   /**
    * List all active entity types, optionally filtered by keyword with vector search fallback
    */
-  async listEntityTypes(
+  async listEntityTypes(keyword?: string, userId?: string): Promise<SchemaTypeSummary[]> {
+    return (await this.listEntityTypesResult(keyword, userId)).entity_types;
+  }
+
+  /** A per-call census receipt; legacy array callers keep their fallback behavior. */
+  async listEntityTypesResult(
     keyword?: string,
     userId?: string
-  ): Promise<
-    Array<{
-      entity_type: string;
-      schema_version: string;
-      field_names: string[];
-      field_summary: Record<string, { type: string; required: boolean }>;
-      similarity_score?: number;
-      match_type?: "keyword" | "vector";
-    }>
-  > {
+  ): Promise<{
+    entity_types: SchemaTypeSummary[];
+    registry_coverage: SchemaRegistryCoverage;
+  }> {
     // Get all active schemas from database. When a userId is supplied, return
     // only global schemas (user_id IS NULL) plus that user's own schemas, so a
     // user's private entity-type names/shapes are not disclosed cross-user.
@@ -2629,7 +2650,7 @@ export class SchemaRegistryService {
     // happened to arrive last.
     let query = db
       .from("schema_registry")
-      .select("entity_type, schema_version, schema_definition, user_id, scope")
+      .select("entity_type, schema_version, schema_definition, user_id, scope", { count: "exact" })
       .eq("active", true);
     if (userId) {
       query = query.or(`user_id.is.null,user_id.eq.${userId}`);
@@ -2642,21 +2663,60 @@ export class SchemaRegistryService {
       query = query.eq("scope", "global");
     }
 
-    const { data: dbSchemas } = await query;
+    const { data: dbSchemas, error: dbError, count: rawCount } = await query;
+    const reasons = new Set<string>();
+    if (dbError) reasons.add("registry_read_failed");
+    const registeredRows = !dbError && Array.isArray(dbSchemas) ? dbSchemas : [];
+    if (
+      !dbError &&
+      (!Array.isArray(dbSchemas) ||
+        !Number.isSafeInteger(rawCount) ||
+        rawCount !== registeredRows.length)
+    ) {
+      reasons.add("registry_coverage_unqualified");
+    }
+    const source =
+      !dbError && registeredRows.length > 0 ? ("registry" as const) : ("code_fallback" as const);
+    if (source === "code_fallback") reasons.add("code_fallback");
+    if (keyword) reasons.add("filtered");
 
     // Fallback to code-defined schemas if database is empty or error
     const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
     const allSchemas = new Map<string, SchemaRegistryEntry>();
 
-    if (dbSchemas && dbSchemas.length > 0) {
-      for (const schema of dbSchemas) {
+    if (source === "registry") {
+      for (const schema of registeredRows) {
         // #2356: apply the SAME precedence `loadActiveSchema` uses — a
         // user-scoped row for this principal overrides the global row for the
         // same entity_type; otherwise the global row stands. Resolving by
         // precedence rather than by arrival order is what makes list reads
         // agree with per-type reads and with the write path.
         const row = schema as SchemaRegistryEntry;
+        if (
+          !row ||
+          typeof row.entity_type !== "string" ||
+          !row.entity_type ||
+          typeof row.schema_version !== "string" ||
+          !row.schema_definition ||
+          !row.schema_definition.fields ||
+          typeof row.schema_definition.fields !== "object"
+        ) {
+          reasons.add("malformed_registry_row");
+          continue;
+        }
+        if (row.scope !== "global" && row.scope !== "user")
+          reasons.add("unqualified_registry_scope");
+        if (
+          (row.scope === "user" && row.user_id !== userId) ||
+          (row.scope === "global" && row.user_id != null)
+        ) {
+          reasons.add("unqualified_registry_scope");
+          continue;
+        }
         const existing = allSchemas.get(row.entity_type);
+        if (existing && row.scope === existing.scope && row.user_id === existing.user_id) {
+          reasons.add("duplicate_registry_row");
+        }
         if (existing && !isHigherPrecedenceSchemaRow(row, existing, userId)) continue;
         allSchemas.set(row.entity_type, row);
       }
@@ -2676,26 +2736,62 @@ export class SchemaRegistryService {
     }
 
     const allSchemasArray = Array.from(allSchemas.values());
+    const planningFor = (
+      schema: SchemaRegistryEntry
+    ): Pick<SchemaTypeSummary, "planning" | "planning_error"> => {
+      if (!Object.prototype.hasOwnProperty.call(schema.schema_definition, "planning")) return {};
+      const declaration = PlanningDeclarationSchema.safeParse(schema.schema_definition.planning);
+      return declaration.success
+        ? { planning: declaration.data }
+        : { planning_error: "invalid_declaration" };
+    };
+    if (allSchemasArray.some((schema) => planningFor(schema).planning_error))
+      reasons.add("invalid_planning_declaration");
+    const finish = (entity_types: SchemaTypeSummary[]) => {
+      const complete = reasons.size === 0;
+      return {
+        entity_types,
+        registry_coverage: {
+          version: "1" as const,
+          state: complete ? ("complete" as const) : ("unknown" as const),
+          source,
+          reasons: [...reasons].sort(),
+          total: dbError ? null : allSchemasArray.length,
+          returned_count: entity_types.length,
+          exhausted: complete,
+          scope: {
+            owner: userId ? ("authenticated" as const) : ("global" as const),
+            keyword: keyword || null,
+            entity_type: null,
+          },
+        },
+      };
+    };
 
     // If no keyword, return all
     if (!keyword) {
-      return allSchemasArray.map((schema) => {
-        const fieldNames = Object.keys(schema.schema_definition.fields || {});
-        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
-          fieldSummary[fieldName] = {
-            type: fieldDef.type,
-            required: fieldDef.required || false,
-          };
-        }
+      return finish(
+        allSchemasArray.map((schema) => {
+          const fieldNames = Object.keys(schema.schema_definition.fields || {});
+          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+          for (const [fieldName, fieldDef] of Object.entries(
+            schema.schema_definition.fields || {}
+          )) {
+            fieldSummary[fieldName] = {
+              type: fieldDef.type,
+              required: fieldDef.required || false,
+            };
+          }
 
-        return {
-          entity_type: schema.entity_type,
-          schema_version: schema.schema_version,
-          field_names: fieldNames,
-          field_summary: fieldSummary,
-        };
-      });
+          return {
+            ...planningFor(schema),
+            entity_type: schema.entity_type,
+            schema_version: schema.schema_version,
+            field_names: fieldNames,
+            field_summary: fieldSummary,
+          };
+        })
+      );
     }
 
     const keywordLower = keyword.toLowerCase();
@@ -2736,29 +2832,32 @@ export class SchemaRegistryService {
     // If we have good keyword matches (score >= 3), return those
     const goodKeywordMatches = keywordMatches.filter((m) => m.score >= 3);
     if (goodKeywordMatches.length > 0) {
-      return goodKeywordMatches
-        .sort((a, b) => b.score - a.score)
-        .map(({ schema, score }) => {
-          const fieldNames = Object.keys(schema.schema_definition.fields || {});
-          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-          for (const [fieldName, fieldDef] of Object.entries(
-            schema.schema_definition.fields || {}
-          )) {
-            fieldSummary[fieldName] = {
-              type: fieldDef.type,
-              required: fieldDef.required || false,
-            };
-          }
+      return finish(
+        goodKeywordMatches
+          .sort((a, b) => b.score - a.score)
+          .map(({ schema, score }) => {
+            const fieldNames = Object.keys(schema.schema_definition.fields || {});
+            const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+            for (const [fieldName, fieldDef] of Object.entries(
+              schema.schema_definition.fields || {}
+            )) {
+              fieldSummary[fieldName] = {
+                type: fieldDef.type,
+                required: fieldDef.required || false,
+              };
+            }
 
-          return {
-            entity_type: schema.entity_type,
-            schema_version: schema.schema_version,
-            field_names: fieldNames,
-            field_summary: fieldSummary,
-            similarity_score: score / 10, // Normalize to 0-1 range
-            match_type: "keyword" as const,
-          };
-        });
+            return {
+              ...planningFor(schema),
+              entity_type: schema.entity_type,
+              schema_version: schema.schema_version,
+              field_names: fieldNames,
+              field_summary: fieldSummary,
+              similarity_score: score / 10, // Normalize to 0-1 range
+              match_type: "keyword" as const,
+            };
+          })
+      );
     }
 
     // Step 2: Fallback to vector search (semantic matching, bounded eventual consistency)
@@ -2767,29 +2866,32 @@ export class SchemaRegistryService {
 
     if (!queryEmbedding) {
       // If embeddings not available, return keyword matches even if low score
-      return keywordMatches
-        .sort((a, b) => b.score - a.score)
-        .map(({ schema, score }) => {
-          const fieldNames = Object.keys(schema.schema_definition.fields || {});
-          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-          for (const [fieldName, fieldDef] of Object.entries(
-            schema.schema_definition.fields || {}
-          )) {
-            fieldSummary[fieldName] = {
-              type: fieldDef.type,
-              required: fieldDef.required || false,
-            };
-          }
+      return finish(
+        keywordMatches
+          .sort((a, b) => b.score - a.score)
+          .map(({ schema, score }) => {
+            const fieldNames = Object.keys(schema.schema_definition.fields || {});
+            const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+            for (const [fieldName, fieldDef] of Object.entries(
+              schema.schema_definition.fields || {}
+            )) {
+              fieldSummary[fieldName] = {
+                type: fieldDef.type,
+                required: fieldDef.required || false,
+              };
+            }
 
-          return {
-            entity_type: schema.entity_type,
-            schema_version: schema.schema_version,
-            field_names: fieldNames,
-            field_summary: fieldSummary,
-            similarity_score: score / 10,
-            match_type: "keyword" as const,
-          };
-        });
+            return {
+              ...planningFor(schema),
+              entity_type: schema.entity_type,
+              schema_version: schema.schema_version,
+              field_names: fieldNames,
+              field_summary: fieldSummary,
+              similarity_score: score / 10,
+              match_type: "keyword" as const,
+            };
+          })
+      );
     }
 
     // Generate embeddings for all schemas and calculate similarity
@@ -2825,6 +2927,7 @@ export class SchemaRegistryService {
         }
 
         return {
+          ...planningFor(schema),
           entity_type: schema.entity_type,
           schema_version: schema.schema_version,
           field_names: fieldNames,
@@ -2836,37 +2939,45 @@ export class SchemaRegistryService {
 
     // If vector search found results, return them
     if (vectorMatches.length > 0) {
-      return vectorMatches;
+      return finish(vectorMatches);
     }
 
     // Final fallback: return keyword matches even if low score
-    return keywordMatches
-      .sort((a, b) => b.score - a.score)
-      .map(({ schema, score }) => {
-        const fieldNames = Object.keys(schema.schema_definition.fields || {});
-        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
-          fieldSummary[fieldName] = {
-            type: fieldDef.type,
-            required: fieldDef.required || false,
-          };
-        }
+    return finish(
+      keywordMatches
+        .sort((a, b) => b.score - a.score)
+        .map(({ schema, score }) => {
+          const fieldNames = Object.keys(schema.schema_definition.fields || {});
+          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+          for (const [fieldName, fieldDef] of Object.entries(
+            schema.schema_definition.fields || {}
+          )) {
+            fieldSummary[fieldName] = {
+              type: fieldDef.type,
+              required: fieldDef.required || false,
+            };
+          }
 
-        return {
-          entity_type: schema.entity_type,
-          schema_version: schema.schema_version,
-          field_names: fieldNames,
-          field_summary: fieldSummary,
-          similarity_score: score / 10,
-          match_type: "keyword" as const,
-        };
-      });
+          return {
+            ...planningFor(schema),
+            entity_type: schema.entity_type,
+            schema_version: schema.schema_version,
+            field_names: fieldNames,
+            field_summary: fieldSummary,
+            similarity_score: score / 10,
+            match_type: "keyword" as const,
+          };
+        })
+    );
   }
 
   /**
    * Validate schema definition
    */
   private validateSchemaDefinition(definition: SchemaDefinition): void {
+    if (Object.prototype.hasOwnProperty.call(definition, "planning")) {
+      PlanningDeclarationSchema.parse(definition.planning);
+    }
     if (!definition.fields || typeof definition.fields !== "object") {
       throw new Error("Schema definition must have fields object");
     }
