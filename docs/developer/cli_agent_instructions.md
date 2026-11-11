@@ -283,3 +283,27 @@ Immutability and corrections: a correction outranks every other write to its fie
 
 Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`, including compare-only `changes: []` participants with a declared expected field and at least one writing participant. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.
 The committed `atomic_keyed_array_disjoint_writers` replay scenario uses the actual isolated HTTP tool. It binds deterministic portable item-version tokens by asserting the server's returned versions, then verifies a stale same-key conflict with current item/version, reviewed reapplication, exact replay and changed-payload refusal. Snapshot observation counts prove refusals/replay add no writes and the disjoint row survives. The cassette contains requests only. Removing the item-version comparison makes the same scenario fail; simultaneous arrival and post-commit event behavior are separately covered by `tests/unit/array_item_patch_atomic.test.ts`, including queued identical entity-CAS retries. This replay does not claim live-model reasoning or simultaneous HTTP arrival.
+
+## Planning declarations
+
+Planning strata are declared once in `schema_definition.planning` as
+`{ "level": <finite number>, "read_only"?: <boolean> }`. Names and ranks belong
+to the instance; do not infer them from entity-type names. The declaration is
+inert state and never grants execution or edit authority.
+
+Use `update_schema_incremental` with `planning` alone (CLI:
+`neotoma schemas update <type> --planning '<json>'`) to change the declaration
+through the existing versioned, scoped schema operation. Omission preserves the
+current declaration and other fields, identity declarations, reducers and row
+metadata. Existing schema-write grants and effect gates still apply.
+
+For a complete declared-level census, use unfiltered `list_entity_types`, or
+`GET /schemas?summary=true&limit=<budget>&offset=0` (CLI:
+`neotoma schemas list --summary --limit <budget>`). Compact rows project the
+same `planning` declaration. Require every field of `registry_coverage` and a
+complete registry source, exhausted response, empty reasons, authenticated
+unfiltered scope, and equal known total/returned count. Missing, malformed,
+filtered, paginated or code-fallback evidence is unknown, never an empty or
+complete hierarchy. Invalid legacy declarations remain visible as
+`planning_error`; do not silently ignore them or infer a highest rank from only
+the types encountered in task ancestry.

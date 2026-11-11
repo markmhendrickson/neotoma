@@ -2699,7 +2699,8 @@ export class SchemaRegistryService {
           typeof row.schema_version !== "string" ||
           !row.schema_definition ||
           !row.schema_definition.fields ||
-          typeof row.schema_definition.fields !== "object"
+          typeof row.schema_definition.fields !== "object" ||
+          Array.isArray(row.schema_definition.fields)
         ) {
           reasons.add("malformed_registry_row");
           continue;
@@ -2707,7 +2708,8 @@ export class SchemaRegistryService {
         if (row.scope !== "global" && row.scope !== "user")
           reasons.add("unqualified_registry_scope");
         if (
-          (row.scope === "user" && row.user_id !== userId) ||
+          (row.user_id != null && row.user_id !== userId) ||
+          (row.scope === "user" && (!userId || row.user_id !== userId)) ||
           (row.scope === "global" && row.user_id != null)
         ) {
           reasons.add("unqualified_registry_scope");
@@ -2756,7 +2758,19 @@ export class SchemaRegistryService {
           state: complete ? ("complete" as const) : ("unknown" as const),
           source,
           reasons: [...reasons].sort(),
-          total: dbError ? null : allSchemasArray.length,
+          total: [...reasons].some((reason) =>
+            [
+              "registry_read_failed",
+              "registry_coverage_unqualified",
+              "malformed_registry_row",
+              "unqualified_registry_scope",
+              "duplicate_registry_row",
+            ].includes(reason)
+          )
+            ? null
+            : source === "code_fallback"
+              ? 0
+              : allSchemasArray.length,
           returned_count: entity_types.length,
           exhausted: complete,
           scope: {

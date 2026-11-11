@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UpdateSchemaIncrementalRequestSchema } from "../../src/shared/action_schemas.js";
 import { SchemaRegistryService } from "../../src/services/schema_registry.js";
 
-const catalog = vi.hoisted(() => ({ rows: [] as any[], error: null as unknown }));
+const catalog = vi.hoisted(() => ({
+  rows: [] as any[],
+  error: null as unknown,
+  omitCount: false,
+  countOverride: null as number | null,
+}));
 vi.mock("../../src/db.js", () => ({
   db: {
     from: vi.fn(() => {
@@ -14,7 +19,7 @@ vi.mock("../../src/db.js", () => ({
           Promise.resolve({
             data: catalog.rows,
             error: catalog.error,
-            count: catalog.rows.length,
+            ...(catalog.omitCount ? {} : { count: catalog.countOverride ?? catalog.rows.length }),
           }).then(resolve),
       };
       return query;
@@ -39,6 +44,8 @@ describe("validated planning declarations", () => {
     vi.restoreAllMocks();
     catalog.rows = [];
     catalog.error = null;
+    catalog.omitCount = false;
+    catalog.countOverride = null;
   });
 
   it("admits a standalone planning change without manufacturing scope intent", () => {
@@ -124,6 +131,53 @@ describe("validated planning declarations", () => {
     const filtered = await (registry as any).listEntityTypesResult("arbitrary", "synthetic-owner");
     expect(filtered.registry_coverage.state).toBe("unknown");
     expect(filtered.registry_coverage.reasons).toContain("filtered");
+  });
+
+  it("refuses completeness for missing, truncated or contradictory acquisitions", async () => {
+    const registry = new SchemaRegistryService();
+    catalog.rows = [row()];
+    catalog.omitCount = true;
+    expect(
+      (await registry.listEntityTypesResult(undefined, "synthetic-owner")).registry_coverage
+    ).toMatchObject({ state: "unknown", total: null, exhausted: false });
+    catalog.omitCount = false;
+    catalog.countOverride = 2;
+    expect(
+      (await registry.listEntityTypesResult(undefined, "synthetic-owner")).registry_coverage.state
+    ).toBe("unknown");
+    catalog.countOverride = null;
+    catalog.rows = [row(), row()];
+    expect(
+      (await registry.listEntityTypesResult(undefined, "synthetic-owner")).registry_coverage.reasons
+    ).toContain("duplicate_registry_row");
+    catalog.rows = [{ ...row("foreign_private_type"), scope: "user", user_id: "foreign-owner" }];
+    const foreign = await registry.listEntityTypesResult(undefined, "synthetic-owner");
+    expect(foreign.entity_types).toEqual([]);
+    expect(foreign.registry_coverage).toMatchObject({ state: "unknown", total: null });
+  });
+
+  it("preserves an omitted declaration during an unrelated field update", async () => {
+    const registry = new SchemaRegistryService();
+    const current: any = {
+      ...row(),
+      id: "synthetic-preservation",
+      active: true,
+      reducer_config: { merge_policies: { label: { strategy: "last_write" } } },
+      metadata: { icon: "shape" },
+    };
+    vi.spyOn(registry, "loadActiveSchema").mockResolvedValue(current);
+    vi.spyOn(registry as any, "withSchemaMutation").mockImplementation((fn: any) => fn());
+    vi.spyOn(registry as any, "activateRowInTransaction").mockResolvedValue(undefined);
+    const register = vi
+      .spyOn(registry, "register")
+      .mockImplementation(async (input: any) => ({ ...current, ...input }));
+    await registry.updateSchemaIncremental({
+      entity_type: current.entity_type,
+      fields_to_add: [{ field_name: "detail", field_type: "string" }],
+    });
+    expect(register.mock.calls[0][0].schema_definition.planning).toEqual(
+      current.schema_definition.planning
+    );
   });
 
   it("does not hide invalid legacy declarations behind a complete census", async () => {

@@ -6227,6 +6227,11 @@ paths:
             Defaults to false when `keyword` is present, true when it is not.
           schema: { type: boolean }
         - in: query
+          name: entity_type
+          required: false
+          schema: { type: string }
+          description: Restrict the result to one type; registry census coverage is then unknown.
+        - in: query
           name: limit
           required: false
           schema: { type: integer, minimum: 0, default: 100 }

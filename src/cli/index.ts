@@ -14779,6 +14779,7 @@ timelineCommand
 schemasCommand
   .command("list")
   .description("List schemas")
+  .option("--summary", "Return compact registry declarations and census coverage")
   .option("--entity-type <type>", "Filter by entity type")
   .option("--user-specific", "Show user-specific schemas")
   .option("--user-id <userId>", "Filter by user ID")
@@ -14796,6 +14797,7 @@ schemasCommand
       params: {
         query: {
           entity_type: opts.entityType,
+          summary: opts.summary,
           user_id: resolveEffectiveUserId(opts.userId),
           user_specific: opts.userSpecific,
           limit: Number(opts.limit),

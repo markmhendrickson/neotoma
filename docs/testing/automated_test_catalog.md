@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **816**
-- Backend and repo Vitest files: **762**
+- Total automated test files: **818**
+- Backend and repo Vitest files: **764**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -70,9 +70,9 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 229 |
-| Vitest service tests | 65 |
+| Vitest service tests | 66 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 241 |
+| Vitest integration tests | 242 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 27 |
 | Vitest security tests | 20 |
@@ -346,7 +346,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (65):**
+**Files (66):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -389,6 +389,7 @@ flowchart TD
 - `tests/services/relationship_type_security.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
+- `tests/services/schema_planning_declarations.test.ts`
 - `tests/services/schema_recommendation.test.ts`
 - `tests/services/schema_reference_fields_resolve_target_validation.test.ts`
 - `tests/services/schema_reference_linking.test.ts`
@@ -495,7 +496,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (241):**
+**Files (242):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -682,6 +683,7 @@ flowchart TD
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/sandbox_seed_token_bypass.test.ts`
 - `tests/integration/sandbox_stale_bearer_fallback.test.ts`
+- `tests/integration/schema_planning_surface_parity.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/schema_scope_resolution_parity.test.ts`
 - `tests/integration/schema_scope_surface_parity.test.ts`

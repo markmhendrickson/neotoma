@@ -7302,6 +7302,8 @@ export interface operations {
          *     Defaults to false when `keyword` is present, true when it is not.
          */
         summary?: boolean;
+        /** @description Restrict the result to one type; registry census coverage is then unknown. */
+        entity_type?: string;
         limit?: number;
         offset?: number;
       };
