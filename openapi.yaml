@@ -8821,6 +8821,9 @@ paths:
                 schema_definition:
                   type: object
                   additionalProperties: true
+                  properties:
+                    planning:
+                      $ref: "#/components/schemas/PlanningDeclaration"
                 reducer_config:
                   type: object
                   additionalProperties: true

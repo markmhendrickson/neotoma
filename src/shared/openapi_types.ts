@@ -9337,6 +9337,8 @@ export interface operations {
         "application/json": {
           entity_type: string;
           schema_definition: {
+            planning?: components["schemas"]["PlanningDeclaration"];
+          } & {
             [key: string]: unknown;
           };
           reducer_config: {

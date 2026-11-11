@@ -1021,35 +1021,7 @@ export function buildToolDefinitions(
         "register_schema",
         "Register a new schema or schema version (global or user-specific). This is also where you configure per-field CONFLICT RESOLUTION via reducer_config: pick a merge strategy per field (last_write [default], highest_priority, most_specific, merge_array) plus tie-breakers (observed_at, source_priority). To make an observation's source_priority actually take effect, set that field's strategy to highest_priority here — under the default last_write, source_priority is recorded but ignored."
       ),
-      inputSchema: {
-        type: "object",
-        properties: {
-          entity_type: { type: "string" },
-          schema_definition: {
-            type: "object",
-            description: "Schema definition with fields object",
-          },
-          reducer_config: {
-            type: "object",
-            description:
-              "Per-field conflict-resolution config. merge_policies maps each field to a strategy: last_write (default — latest observed_at wins), highest_priority (the observation with the largest source_priority wins), most_specific, or merge_array; with an optional tie_breaker (observed_at | source_priority). Set highest_priority to honor source_priority — without it, source_priority is stored but ignored.",
-          },
-          schema_version: { type: "string", default: "1.0" },
-          user_specific: { type: "boolean", default: false },
-          user_id: {
-            type: "string",
-            description: "User ID for user-specific schema (required if user_specific=true)",
-          },
-          activate: { type: "boolean", default: false },
-          force: {
-            type: "boolean",
-            description:
-              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
-            default: false,
-          },
-        },
-        required: ["entity_type", "schema_definition", "reducer_config"],
-      },
+      inputSchema: getOpenApiInputSchemaOrThrow("register_schema"),
     },
     {
       name: "create_interpretation",

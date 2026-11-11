@@ -6,12 +6,20 @@ import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import {
+  extractFirstFencedCodeBlock,
+  readMcpInstructionsMarkdown,
+  resolveNeotomaPackageRoot,
+} from "../../src/mcp_instruction_doc.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
 const execute = promisify(execFile);
 const TYPE = "planning_axis_surface";
 const UPPER = "planning_other_stratum";
 const USER = LOCAL_DEV_USER_ID;
+const REGISTER_HTTP = "planning_registered_http_surface";
+const REGISTER_MCP = "planning_registered_mcp_surface";
+const ALL_TYPES = [TYPE, UPPER, REGISTER_HTTP, REGISTER_MCP];
 const fields = { label: { type: "string", required: false } };
 
 async function seed(type: string, level: number, scope: "global" | "user" = "global") {
@@ -37,8 +45,7 @@ describe("planning declaration HTTP / MCP / CLI parity", () => {
   let base: string;
   let server: NeotomaServer;
   beforeAll(async () => {
-    for (const type of [TYPE, UPPER])
-      await db.from("schema_registry").delete().eq("entity_type", type);
+    for (const type of ALL_TYPES) await db.from("schema_registry").delete().eq("entity_type", type);
     await seed(TYPE, 12);
     await seed(UPPER, 888);
     http = createServer(app);
@@ -47,9 +54,27 @@ describe("planning declaration HTTP / MCP / CLI parity", () => {
     server = new NeotomaServer();
   });
   afterAll(async () => {
-    for (const type of [TYPE, UPPER])
-      await db.from("schema_registry").delete().eq("entity_type", type);
+    for (const type of ALL_TYPES) await db.from("schema_registry").delete().eq("entity_type", type);
     await new Promise<void>((resolve) => http.close(() => resolve()));
+  });
+
+  it("delivers canonical planning instructions through extraction, MCP, HTTP and compiled CLI", async () => {
+    const body = extractFirstFencedCodeBlock(
+      readMcpInstructionsMarkdown(resolveNeotomaPackageRoot())!
+    );
+    expect(body).toContain("[TURN LIFECYCLE]");
+    expect(body).toContain("[PLANNING DECLARATIONS]");
+    expect(body).toContain("registry_coverage");
+    const delivered = await fetch(`${base}/mcp-interaction-instructions`);
+    expect(delivered.status).toBe(200);
+    expect(await delivered.text()).toContain(body!);
+    expect((server as any).getMcpInteractionInstructions()).toContain(body!);
+    const { stdout } = await execute(
+      process.execPath,
+      ["dist/cli/index.js", "--api-only", "--base-url", base, "instructions", "print", "--json"],
+      { env: { ...process.env, NEOTOMA_API_BASE_URL: base }, timeout: 15000 }
+    );
+    expect(JSON.parse(stdout).body).toContain(body!);
   });
 
   it("round-trips a declaration-only HTTP update and preserves definition, metadata and scope", async () => {
@@ -201,5 +226,58 @@ describe("planning declaration HTTP / MCP / CLI parity", () => {
     expect(other.entity_types.find((row) => row.entity_type === TYPE)?.planning).toEqual({
       level: 33,
     });
+  });
+  it("registers valid planning and refuses malformed planning without writes on HTTP and MCP", async () => {
+    for (const [surface, type] of [
+      ["http", REGISTER_HTTP],
+      ["mcp", REGISTER_MCP],
+    ]) {
+      const schema_definition = {
+        fields,
+        identity_opt_out: "heuristic_canonical_name",
+        unrelated_declaration: { retained: true },
+        planning: { level: -2.5, read_only: true },
+      };
+      const request = {
+        entity_type: type,
+        schema_definition,
+        reducer_config: { merge_policies: {} },
+        activate: true,
+      };
+      const invalid = {
+        ...request,
+        schema_definition: { ...schema_definition, planning: { level: "high" } },
+      };
+      if (surface === "http") {
+        const response = await fetch(`${base}/register_schema`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(invalid),
+        });
+        expect(response.status).toBe(400);
+        expect(((await response.json()) as any).details.hint).toMatch(/finite number/);
+      } else {
+        await expect(server.executeToolForCli("register_schema", invalid, USER)).rejects.toThrow(
+          /planning/
+        );
+      }
+      const before = await db.from("schema_registry").select("id").eq("entity_type", type);
+      expect(before.error).toBeNull();
+      expect(before.data).toEqual([]);
+      if (surface === "http") {
+        const response = await fetch(`${base}/register_schema`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        expect(response.status).toBe(200);
+      } else {
+        const response = await server.executeToolForCli("register_schema", request, USER);
+        expect(JSON.parse(response.content[0]!.text).success).toBe(true);
+      }
+      expect((await schemaRegistry.loadActiveSchema(type, USER))?.schema_definition).toEqual(
+        schema_definition
+      );
+    }
   });
 });

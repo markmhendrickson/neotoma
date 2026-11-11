@@ -342,6 +342,10 @@ Chat transcript discovery: during onboarding, check for chat transcript exports 
 Session injection: the MCP `initialize` response includes `serverInfo._neotoma.standing_rules` — an array of persistent agent instructions stored as `standing_rule` entities in Neotoma. Each entry has `entity_id`, `title`, `rule_text`, `scope` (optional), and `priority` (higher = more important). Apply all injected rules from the first turn of the session without requiring a separate query. An empty array means no standing rules have been stored yet — UNLESS `serverInfo._neotoma.standing_rules_unavailable` is `true`, in which case the rules lookup FAILED and the empty array carries no information at all. When that flag is present (it appears only on failure, alongside a human-readable `standing_rules_note`), treat this instance's policy as UNKNOWN rather than absent: do not proceed as though the instance is unrestricted, tell the user plainly that you could not read the instance's standing rules, and be conservative about what you write — especially on a shared or client instance where an out-of-scope write is visible to others and cannot be quietly undone. FORBIDDEN: reporting 'no standing rules are configured' when `standing_rules_unavailable` is true.
 Scope filtering: rules with a `scope` field set to a value other than `"global"` or `null` are intended for a specific project, repository, or context. Check whether the rule's scope matches the current context before applying it; skip rules whose scope does not match.
 Storing new rules: to create a standing rule, store an entity with `entity_type: "standing_rule"`, required fields `title` and `rule_text`, and optional `scope` and `priority`. Set `enabled: false` on the entity to suppress injection without deleting the rule.
+
+[PLANNING DECLARATIONS]
+Use only schema_definition.planning = {level: finite number, read_only?: boolean}; names/ranks are instance-defined, never inferred from type names. These marks grant no execution/edit authority. update_schema_incremental accepts planning alone; omission preserves it and other declarations/fields/identity/reducers/row metadata. Existing scoped versioning, grants and effect gates apply.
+Read the entire declared-level set through unfiltered list_entity_types or GET /schemas?summary=true&limit=<budget>&offset=0. Qualify registry_coverage only when all fields/types are present: version="1", state="complete", source="registry", exhausted=true, reasons=[], scope={owner:"authenticated",keyword:null,entity_type:null}, and known total=returned_count=actual row count. Require valid marks on every row. Missing/malformed, filtered/paginated or code-fallback evidence is unknown, never empty/complete. planning_error exposes invalid legacy marks; do not drop them or infer the highest rank from encountered task ancestry.
 ```
 
 ## One-call chat persistence
@@ -419,27 +423,3 @@ metadata, read it back, then soft-delete the old edge. Do not delete the origina
 before verification. Repeating the same endpoints/type is idempotent; unrelated
 `related_to` edges remain unchanged. This is an explicit consumer migration, never
 automatic registry side effect.
-
-## Planning declarations
-
-Planning strata are declared once in `schema_definition.planning` as
-`{ "level": <finite number>, "read_only"?: <boolean> }`. Names and ranks belong
-to the instance; do not infer them from entity-type names. The declaration is
-inert state and never grants execution or edit authority.
-
-Use `update_schema_incremental` with `planning` alone (CLI:
-`neotoma schemas update <type> --planning '<json>'`) to change the declaration
-through the existing versioned, scoped schema operation. Omission preserves the
-current declaration and other fields, identity declarations, reducers and row
-metadata. Existing schema-write grants and effect gates still apply.
-
-For a complete declared-level census, use unfiltered `list_entity_types`, or
-`GET /schemas?summary=true&limit=<budget>&offset=0` (CLI:
-`neotoma schemas list --summary --limit <budget>`). Compact rows project the
-same `planning` declaration. Require every field of `registry_coverage` and a
-complete registry source, exhausted response, empty reasons, authenticated
-unfiltered scope, and equal known total/returned count. Missing, malformed,
-filtered, paginated or code-fallback evidence is unknown, never an empty or
-complete hierarchy. Invalid legacy declarations remain visible as
-`planning_error`; do not silently ignore them or infer a highest rank from only
-the types encountered in task ancestry.

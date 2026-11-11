@@ -152,12 +152,12 @@ describe("cross-user read scoping", () => {
         id: randomUUID(),
         entity_type: privateType,
         schema_version: "1.0.0",
-        schema_definition: JSON.stringify({
+        schema_definition: {
           entity_type: privateType,
           schema_version: "1.0.0",
           fields: {},
-        }),
-        reducer_config: JSON.stringify({}),
+        },
+        reducer_config: {},
         active: 1,
         scope: "user",
         user_id: ownerId,

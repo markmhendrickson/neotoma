@@ -1283,26 +1283,9 @@ Load this document when updating CLI commands, options, or configuration behavio
 - Main-only behaviour is marked
 - Agent Instructions included
 
-## Planning declarations
+## Planning declaration commands
 
-Planning strata are declared once in `schema_definition.planning` as
-`{ "level": <finite number>, "read_only"?: <boolean> }`. Names and ranks belong
-to the instance; do not infer them from entity-type names. The declaration is
-inert state and never grants execution or edit authority.
-
-Use `update_schema_incremental` with `planning` alone (CLI:
-`neotoma schemas update <type> --planning '<json>'`) to change the declaration
-through the existing versioned, scoped schema operation. Omission preserves the
-current declaration and other fields, identity declarations, reducers and row
-metadata. Existing schema-write grants and effect gates still apply.
-
-For a complete declared-level census, use unfiltered `list_entity_types`, or
-`GET /schemas?summary=true&limit=<budget>&offset=0` (CLI:
-`neotoma schemas list --summary --limit <budget>`). Compact rows project the
-same `planning` declaration. Require every field of `registry_coverage` and a
-complete registry source, exhausted response, empty reasons, authenticated
-unfiltered scope, and equal known total/returned count. Missing, malformed,
-filtered, paginated or code-fallback evidence is unknown, never an empty or
-complete hierarchy. Invalid legacy declarations remain visible as
-`planning_error`; do not silently ignore them or infer a highest rank from only
-the types encountered in task ancestry.
+Use `neotoma schemas update <type> --planning '<json>'` for the existing versioned
+schema operation, and `neotoma schemas list --summary --limit <budget> --json`
+for its compact catalog. The canonical declaration, preservation and complete-census
+rules are in `neotoma instructions print` under `[PLANNING DECLARATIONS]`.
