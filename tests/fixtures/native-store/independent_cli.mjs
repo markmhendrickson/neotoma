@@ -20,6 +20,10 @@ const allowed = new Set([
   "NEOTOMA_DISABLE_OFFLINE_FALLBACK",
   "NEOTOMA_BEARER_TOKEN",
 ]);
+// Node 20 adds this disabled libuv runtime flag when spawning a child on Linux.
+if (process.platform === "linux" && process.env.UV_USE_IO_URING === "0") {
+  allowed.add("UV_USE_IO_URING");
+}
 assert.deepEqual(
   Object.keys(process.env).filter((k) => !allowed.has(k)),
   []

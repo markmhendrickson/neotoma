@@ -154,6 +154,12 @@ export function buildToolDefinitions(
       inputSchema: {
         type: "object",
         properties: {
+          read_mode: {
+            type: "string",
+            enum: ["exact_identity"],
+            description:
+              "Bounded same-view read with one entity_type and one snapshot_filters string equality. Supply no other options.",
+          },
           entity_type: {
             type: "string",
             description:
