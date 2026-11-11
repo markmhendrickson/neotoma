@@ -1282,3 +1282,10 @@ Load this document when updating CLI commands, options, or configuration behavio
 - Config path and fields are accurate
 - Main-only behaviour is marked
 - Agent Instructions included
+
+## Planning declaration commands
+
+Use `neotoma schemas update <type> --planning '<json>'` for the existing versioned
+schema operation, and `neotoma schemas list --summary --limit <budget> --json`
+for its compact catalog. The canonical declaration, preservation and complete-census
+rules are in `neotoma instructions print` under `[PLANNING DECLARATIONS]`.

@@ -14779,6 +14779,7 @@ timelineCommand
 schemasCommand
   .command("list")
   .description("List schemas")
+  .option("--summary", "Return compact registry declarations and census coverage")
   .option("--entity-type <type>", "Filter by entity type")
   .option("--user-specific", "Show user-specific schemas")
   .option("--user-id <userId>", "Filter by user ID")
@@ -14796,6 +14797,7 @@ schemasCommand
       params: {
         query: {
           entity_type: opts.entityType,
+          summary: opts.summary,
           user_id: resolveEffectiveUserId(opts.userId),
           user_specific: opts.userSpecific,
           limit: Number(opts.limit),
@@ -15044,6 +15046,10 @@ schemasCommand
     "--canonical-name-fields <json>",
     'JSON array replacing the identity rule, e.g. \'[{"composite":["linkedin_url"]},"email","name"]\' (triggers major version bump; existing reducer_config preserved; governs new writes only)'
   )
+  .option(
+    "--planning <json>",
+    "JSON planning declaration: finite level and optional read_only; preserves other schema data"
+  )
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
@@ -15076,6 +15082,7 @@ schemasCommand
         fields?: string;
         removeFields?: string;
         canonicalNameFields?: string;
+        planning?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
@@ -15094,10 +15101,15 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields) {
+      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields && !opts.planning) {
         throw new Error(
-          "at least one of --fields, --remove-fields, or --canonical-name-fields is required"
+          "at least one of --fields, --remove-fields, --canonical-name-fields, or --planning is required"
         );
+      }
+      let planning: import("../shared/schema_planning.js").PlanningDeclaration | undefined;
+      if (opts.planning !== undefined) {
+        const { PlanningDeclarationSchema } = await import("../shared/schema_planning.js");
+        planning = PlanningDeclarationSchema.parse(JSON.parse(opts.planning));
       }
       let canonicalNameFields: unknown[] | undefined;
       if (opts.canonicalNameFields) {
@@ -15172,7 +15184,7 @@ schemasCommand
         const { data, error } = await api.POST("/register_schema", {
           body: {
             entity_type: entityType,
-            schema_definition: { fields: bootstrapFields },
+            schema_definition: { fields: bootstrapFields, ...(planning ? { planning } : {}) },
             reducer_config: { merge_policies: bootstrapPolicies },
             schema_version: opts.schemaVersion,
             activate: true,
@@ -15213,6 +15225,7 @@ schemasCommand
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
       if (canonicalNameFields) body.canonical_name_fields = canonicalNameFields;
+      if (planning) body.planning = planning;
       const { data, error } = await api.POST("/update_schema_incremental", {
         body: body as any,
       });

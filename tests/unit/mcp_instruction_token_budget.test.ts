@@ -86,7 +86,11 @@ import {
  * Baseline after that merge: measured 151,984 chars (~32,840 tokens),
  * leaving 16 chars of headroom.
  */
-const FULL_BLOCK_MAX_CHARS = 152_000;
+// Planning declarations must be in the delivered canonical fence (PR #2803).
+// Existing rules are unchanged: 151,886 -> 152,932 chars (+1,046, ~226 tokens).
+// Raise only 1,000 chars to 153,000 after condensing the new behavior; this
+// leaves 68 chars. Moving it outside the fence would conceal the runtime cost.
+const FULL_BLOCK_MAX_CHARS = 153_000;
 
 /**
  * Ceiling for the compact payload served when NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1.

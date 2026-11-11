@@ -5934,7 +5934,42 @@ app.get("/schemas", async (req, res) => {
     // restricted WHICH entity types appear; it never corrected the version, so
     // it could not compensate. `userId` is already required above, so scoping
     // here changes no caller's authorization, only the accuracy of the version.
-    const allSchemas = await schemaRegistry.listEntityTypes(keyword, userId);
+    const catalog = await schemaRegistry.listEntityTypesResult(keyword, userId);
+    const allSchemas = catalog.entity_types;
+    const summary = req.query.summary === "true";
+    if (summary) {
+      const selected = filterEntityType
+        ? allSchemas.filter((schema) => schema.entity_type === filterEntityType)
+        : allSchemas;
+      const sorted = [...selected].sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+      const page = sorted.slice(offset, offset + limit);
+      const reasons = [...catalog.registry_coverage.reasons];
+      if (filterEntityType) reasons.push("filtered");
+      if (offset !== 0 || page.length !== sorted.length) reasons.push("paginated");
+      const complete = catalog.registry_coverage.state === "complete" && reasons.length === 0;
+      return res.json({
+        schemas: page.map(
+          ({ entity_type, schema_version, field_names, planning, planning_error }) => ({
+            entity_type,
+            schema_version,
+            field_count: field_names.length,
+            ...(planning ? { planning } : {}),
+            ...(planning_error ? { planning_error } : {}),
+          })
+        ),
+        total: sorted.length,
+        limit,
+        offset,
+        registry_coverage: {
+          ...catalog.registry_coverage,
+          state: complete ? "complete" : "unknown",
+          reasons: [...new Set(reasons)].sort(),
+          returned_count: page.length,
+          exhausted: complete,
+          scope: { ...catalog.registry_coverage.scope, entity_type: filterEntityType || null },
+        },
+      });
+    }
 
     // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
     // Also fetch metadata (including icons) for each schema
@@ -5977,6 +6012,16 @@ app.get("/schemas", async (req, res) => {
 
     return res.json({
       schemas: paginatedSchemas,
+      registry_coverage: {
+        ...catalog.registry_coverage,
+        state: "unknown",
+        exhausted: false,
+        returned_count: paginatedSchemas.length,
+        reasons: [
+          ...new Set([...catalog.registry_coverage.reasons, "legacy_filtered_view"]),
+        ].sort(),
+        scope: { ...catalog.registry_coverage.scope, entity_type: filterEntityType || null },
+      },
       total: productionSchemas.length,
       limit,
       offset,
@@ -12169,6 +12214,7 @@ app.post("/update_schema_incremental", async (req, res) => {
       fields_to_add,
       fields_to_remove,
       canonical_name_fields,
+      planning,
       schema_version,
       // #2374: no local `= false` default. `user_specific` stays
       // `undefined` when the caller omitted it, so `updateSchemaIncremental`
@@ -12263,6 +12309,7 @@ app.post("/update_schema_incremental", async (req, res) => {
         // re-key (the MCP server handler had it, but this Express route — which
         // the CLI offline transport uses — did not).
         canonical_name_fields,
+        planning,
         schema_version,
         user_specific,
         // #2374: pass userId unconditionally — same reasoning as the MCP

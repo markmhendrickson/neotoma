@@ -59,12 +59,12 @@ async function seedSchemaRow(opts: {
     id: randomUUID(),
     entity_type: ENTITY_TYPE,
     schema_version: opts.version,
-    schema_definition: JSON.stringify({
+    schema_definition: {
       entity_type: ENTITY_TYPE,
       schema_version: opts.version,
       fields: { [opts.marker]: { type: "string" } },
-    }),
-    reducer_config: JSON.stringify({}),
+    },
+    reducer_config: {},
     active: 1,
     scope: opts.scope,
     user_id: opts.userId,

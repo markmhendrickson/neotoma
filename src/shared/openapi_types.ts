@@ -1210,7 +1210,10 @@ export interface paths {
      *     returns matching types via hybrid keyword/semantic search; pass
      *     `summary: true` to keep the response shape compact even when keyword is
      *     supplied. Use before storing structured data to determine the correct
-     *     entity_type and its declared field names.
+     *     entity_type and its declared field names. Compact rows also project
+     *     schema_definition.planning when declared. For a full planning-level census,
+     *     request summary=true without keyword or entity_type and with enough limit
+     *     to return the whole catalog; require registry_coverage.state=complete.
      */
     get: operations["listSchemas"];
     put?: never;
@@ -4008,9 +4011,42 @@ export interface components {
         [key: string]: unknown;
       } & components["schemas"]["AgentAttribution"];
     };
+    /** @description Optional registry declaration of a planning stratum. Relative numeric ordering is instance-defined; read_only never grants write authority. */
+    PlanningDeclaration: {
+      /** @description Finite numeric rank. Higher planning ranks are above lower ranks. */
+      level: number;
+      /** @description Read-only reference stratum; omission or false does not authorize edits. */
+      read_only?: boolean;
+    };
+    /** @description Per-call acquisition evidence for the complete principal-scoped registered type census. A filtered, paginated, fallback, invalid or unreadable catalog is unknown. */
+    SchemaRegistryCoverage: {
+      /** @enum {string} */
+      version: "1";
+      /** @enum {string} */
+      state: "complete" | "unknown";
+      /** @enum {string} */
+      source: "registry" | "code_fallback";
+      reasons: string[];
+      total: number | null;
+      returned_count: number;
+      exhausted: boolean;
+      scope: {
+        /** @enum {string} */
+        owner: "authenticated" | "global";
+        keyword: string | null;
+        entity_type: string | null;
+      };
+    };
     EntitySchema: {
       entity_type?: string;
       schema_version?: string;
+      planning?: components["schemas"]["PlanningDeclaration"];
+      /**
+       * @description A legacy planning declaration is malformed; census coverage is unknown.
+       * @enum {string}
+       */
+      planning_error?: "invalid_declaration";
+      field_count?: number;
       field_names?: string[];
       field_summary?: {
         [key: string]: unknown;
@@ -4023,6 +4059,7 @@ export interface components {
        *     storing.
        */
       schema_definition?: {
+        planning?: components["schemas"]["PlanningDeclaration"];
         fields?: {
           [key: string]: {
             type?: string;
@@ -7265,6 +7302,10 @@ export interface operations {
          *     Defaults to false when `keyword` is present, true when it is not.
          */
         summary?: boolean;
+        /** @description Restrict the result to one type; registry census coverage is then unknown. */
+        entity_type?: string;
+        limit?: number;
+        offset?: number;
       };
       header?: never;
       path?: never;
@@ -7279,6 +7320,10 @@ export interface operations {
         };
         content: {
           "application/json": {
+            registry_coverage?: components["schemas"]["SchemaRegistryCoverage"];
+            total?: number;
+            limit?: number;
+            offset?: number;
             schemas?: components["schemas"]["EntitySchema"][];
           };
         };
@@ -9074,6 +9119,8 @@ export interface operations {
                 composite: string[];
               }
           )[];
+          /** @description Replace the optional planning-stratum declaration without rebuilding fields or row metadata. Omit to preserve the current declaration; may be supplied alone. */
+          planning?: components["schemas"]["PlanningDeclaration"];
           schema_version?: string;
           /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global registry row and no code-defined baseline (but has the caller's user-scoped schema). The response's `scope` reports the scope actually written. */
           user_specific?: boolean;
@@ -9290,6 +9337,8 @@ export interface operations {
         "application/json": {
           entity_type: string;
           schema_definition: {
+            planning?: components["schemas"]["PlanningDeclaration"];
+          } & {
             [key: string]: unknown;
           };
           reducer_config: {

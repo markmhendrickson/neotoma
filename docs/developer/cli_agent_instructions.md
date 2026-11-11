@@ -283,3 +283,10 @@ Immutability and corrections: a correction outranks every other write to its fie
 
 Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`, including compare-only `changes: []` participants with a declared expected field and at least one writing participant. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.
 The committed `atomic_keyed_array_disjoint_writers` replay scenario uses the actual isolated HTTP tool. It binds deterministic portable item-version tokens by asserting the server's returned versions, then verifies a stale same-key conflict with current item/version, reviewed reapplication, exact replay and changed-payload refusal. Snapshot observation counts prove refusals/replay add no writes and the disjoint row survives. The cassette contains requests only. Removing the item-version comparison makes the same scenario fail; simultaneous arrival and post-commit event behavior are separately covered by `tests/unit/array_item_patch_atomic.test.ts`, including queued identical entity-CAS retries. This replay does not claim live-model reasoning or simultaneous HTTP arrival.
+
+## Planning declaration commands
+
+Use `neotoma schemas update <type> --planning '<json>'` for the existing versioned
+schema operation, and `neotoma schemas list --summary --limit <budget> --json`
+for its compact catalog. The canonical declaration, preservation and complete-census
+rules are in `neotoma instructions print` under `[PLANNING DECLARATIONS]`.

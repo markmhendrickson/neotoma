@@ -4,6 +4,10 @@ One entry per payload whose declared `outcome` changed in a release. The release
 
 Format: one bullet per flip, keyed by the Neotoma version that introduced the new outcome. Name the fixture path and the before/after state.
 
+## Unreleased
+
+- `v0.27.x/register_schema_invalid_planning` seeded as `rejected`. The optional `schema_definition.planning` declaration is now reserved for `{ level: finite number, read_only?: boolean }`; a malformed value that previously passed as opaque schema metadata returns `400 VALIDATION_INVALID_FORMAT` with a structured `details.hint`. Existing definitions without the declaration are unchanged. Include this compatibility note in the shipping release supplement's **Breaking changes** section.
+
 ## v0.26.0
 
 - `v0.25.x/store_entity_field_named_data_origin` seeded as `rejected` (#2242). `data_origin` inside an `entities[]` item is now a reserved per-entity origin override (an object with at least `kind`), peeled off before field validation like `target_id` / `intent`. An entity whose own free-form field was named `data_origin` now gets `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, with a structured `details.hint` to rename the field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this. Request-level `data_origin` is additive.
