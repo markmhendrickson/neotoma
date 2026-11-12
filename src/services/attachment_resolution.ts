@@ -269,7 +269,8 @@ export async function resolveOwnedObservations(
  * `observed_at` in epoch milliseconds, all served by `idx_observations_entity_id` without touching
  * table rows. Observation rows are immutable in normal operation. The writers
  * that break that are: entity merge (moves rows between entities) and physical
- * deletion (removes rows), both of which change the count or rowid sum; and
+ * deletion (removes rows) and entity split (`entity_split.ts` rewrites
+ * `entity_id`), all of which change the count or rowid sum; and
  * `cryptographicErasure` (src/services/gdpr_deletion.ts), which REWRITES
  * `fields` in place and is NOT detected, because no covered column changes.
  * That admin path does not refresh snapshots itself, so a snapshot over erased
@@ -278,6 +279,9 @@ export async function resolveOwnedObservations(
  * rowid (if it belongs to this entity) and inserting one row reuses the rowid,
  * leaving count, max and sum of rowids unchanged, but the replacement row
  * carries a different timestamp, which changes the sum.
+ * Accepted residual: a caller-supplied `observed_at` combined with physical
+ * deletion of the newest row can in principle reproduce all four figures; that
+ * needs a deletion path that is not on the request path, and is not guarded.
  * It is scoped by entity id only (not user id) so it stays index-only; that is a
  * superset of the owner-scoped set, so it can only over-report change.
  */

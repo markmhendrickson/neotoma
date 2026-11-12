@@ -72,9 +72,13 @@ export interface CreateCorrectionParams {
   speculative?: SpeculativeCorrection;
 }
 
-/** The observation timestamp and reduced snapshot prepared off the write gate. */
+/**
+ * The observation row and reduced snapshot prepared off the write gate. The
+ * transaction inserts this same row (built once, so the observation insert
+ * sites keep their single `buildObservationRow` call per correction).
+ */
 export interface SpeculativeCorrection {
-  observed_at: string;
+  row: ReturnType<typeof buildCorrectionRow>;
   snapshot: SpeculativeSnapshot;
 }
 
@@ -93,6 +97,7 @@ export class SpeculativeSnapshotStaleError extends Error {
 /**
  * Counters for the optimistic path, so hosted logs and tests can see how often
  * it engages and why it falls back. Process-local, never reset in production.
+ * @internal Diagnostic only; not part of any public surface.
  */
 export const correctionSpeculationStats = {
   attempts: 0,
@@ -101,20 +106,42 @@ export const correctionSpeculationStats = {
   fallbacks: {} as Record<string, number>,
 };
 
-/** @internal Test seam: runs after a speculation, before the transaction opens. */
+/**
+ * @internal Test seam: runs after a speculation, before the transaction opens.
+ * Inert unless NODE_ENV is "test", so production can never run a hook.
+ */
 export const speculationTestHooks: {
   afterSpeculate?: (attempt: number) => Promise<void> | void;
 } = {};
 
 const FALLBACK_LOG_INTERVAL_MS = 1000;
+const FALLBACK_SUMMARY_INTERVAL_MS = 10 * 60 * 1000;
 let lastFallbackLogAt = 0;
 let suppressedFallbackLogs = 0;
+let lastFallbackSummaryAt = Date.now();
+let fallbacksSinceSummary: Record<string, number> = {};
+let fastPathSinceSummary = 0;
 
 /** Count a fallback to the in-transaction recompute; log at debug, rate-limited. */
 function noteSpeculationFallback(reason: string, entityId: string): void {
   correctionSpeculationStats.fallbacks[reason] =
     (correctionSpeculationStats.fallbacks[reason] ?? 0) + 1;
+  fallbacksSinceSummary[reason] = (fallbacksSinceSummary[reason] ?? 0) + 1;
   const now = Date.now();
+  // Info-level summary so hosted logs show the fallback rate without debug
+  // logging: at most one line per 10 minutes, emitted by the first fallback
+  // after the interval, and only because fallbacks occurred.
+  if (now - lastFallbackSummaryAt >= FALLBACK_SUMMARY_INTERVAL_MS) {
+    const minutes = Math.round((now - lastFallbackSummaryAt) / 60000);
+    logger.info(
+      `[CORRECT] last ${minutes} min: ${correctionSpeculationStats.fastPathPersists - fastPathSinceSummary} ` +
+        `corrections took the off-gate snapshot path; fallbacks to the in-transaction recompute by ` +
+        `reason: ${JSON.stringify(fallbacksSinceSummary)}`
+    );
+    lastFallbackSummaryAt = now;
+    fallbacksSinceSummary = {};
+    fastPathSinceSummary = correctionSpeculationStats.fastPathPersists;
+  }
   if (now - lastFallbackLogAt < FALLBACK_LOG_INTERVAL_MS) {
     suppressedFallbackLogs += 1;
     return;
@@ -420,7 +447,7 @@ async function speculateCorrection(params: CreateCorrectionParams): Promise<Corr
       speculativeObservation(row)
     );
     if (!result.ok) return result;
-    return { ok: true, speculative: { observed_at: observedAt, snapshot: result.speculative } };
+    return { ok: true, speculative: { row, snapshot: result.speculative } };
   } catch {
     return { ok: false, reason: "error" };
   }
@@ -445,7 +472,7 @@ async function runWithSpeculation<T>(
         break;
       }
       correctionSpeculationStats.attempts += 1;
-      await speculationTestHooks.afterSpeculate?.(i);
+      if (process.env.NODE_ENV === "test") await speculationTestHooks.afterSpeculate?.(i);
       try {
         return await attempt({ ...params, speculative: speculation.speculative });
       } catch (err) {
@@ -612,7 +639,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
   );
 
   const speculative = params.speculative;
-  const row = buildCorrectionRow(params, observationId, speculative?.observed_at);
+  const row = speculative ? speculative.row : buildCorrectionRow(params, observationId);
   row.canonical_hash = params.canonical_hash ?? correctionRequestHash(params);
 
   // The speculative snapshot is valid only for the observation set it was

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import {
@@ -11,7 +12,8 @@ import {
 } from "../../src/services/correction.js";
 import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
 import { buildObservationRow } from "../../src/services/observation_insert.js";
-import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
+import { recomputeSnapshot, schemaIdentity } from "../../src/services/snapshot_computation.js";
+import { logger } from "../../src/utils/logger.js";
 import { fingerprintOwnedObservations } from "../../src/services/attachment_resolution.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { stableSerialize } from "../../src/services/stable_serialize.js";
@@ -31,6 +33,18 @@ function callStore(server: NeotomaServer, params: Record<string, unknown>) {
       store: (p: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
     }
   ).store(params);
+}
+
+/** Remove every row of the test types, whatever its owner (a test reassigns owners). */
+async function purgeTestTypes(): Promise<void> {
+  for (const type of [TYPE, `${TYPE}_same_version`, `${TYPE}_versioned`]) {
+    const { data } = await db.from("entities").select("id").eq("entity_type", type);
+    for (const row of (data ?? []) as Array<{ id: string }>) {
+      await db.from("entity_snapshots").delete().eq("entity_id", row.id);
+      await db.from("observations").delete().eq("entity_id", row.id);
+      await db.from("entities").delete().eq("id", row.id);
+    }
+  }
 }
 
 async function storedSnapshot(entityId: string): Promise<string> {
@@ -53,7 +67,7 @@ async function seedEntity(label: string, bulk: number): Promise<string> {
     entities: [
       {
         entity_type: TYPE,
-        title: `speculative ${label}`,
+        title: `speculative ${label} ${randomUUID()}`,
         status: "open",
         priority: "low",
         tags: ["seed"],
@@ -157,6 +171,7 @@ describe("correct holds the write gate for a short, history-independent time", (
   });
 
   afterAll(async () => {
+    await purgeTestTypes();
     await cleanupEntityType(TYPE, USER_ID);
     await cleanupTestSchema(TYPE, null);
   });
@@ -397,6 +412,7 @@ describe("optimistic correction path: retries, fallbacks and skip conditions", (
     await registerMainSchema();
   });
   afterAll(async () => {
+    await purgeTestTypes();
     await cleanupEntityType(TYPE, USER_ID);
     await cleanupTestSchema(TYPE, null);
   });
@@ -489,6 +505,34 @@ describe("optimistic correction path: retries, fallbacks and skip conditions", (
       await expectSkip("lifecycle_marker", () =>
         createCorrection({ ...base(entityId, "lifecycle"), field: "_deleted", value: true })
       );
+    });
+
+    it("restore marker (_deleted: false)", async () => {
+      const entityId = await seedEntity("skip-restore", 5);
+      await expectSkip("lifecycle_marker", () =>
+        createCorrection({ ...base(entityId, "restore"), field: "_deleted", value: false })
+      );
+    });
+
+    it("a stored observed_at that is not canonical ISO-Z", async () => {
+      const entityId = await seedEntity("skip-format", 5);
+      const row = buildObservationRow({
+        id: `obs_format_${entityId}`,
+        entity_id: entityId,
+        entity_type: TYPE,
+        schema_version: "1.0",
+        source_id: null,
+        interpretation_id: null,
+        observed_at: "2020-01-01T00:00:00Z",
+        specificity_score: 0.5,
+        source_priority: 1,
+        observation_source: "workflow_state",
+        fields: { status: "legacy format" },
+        user_id: USER_ID,
+      });
+      await db.from("observations").insert(row).withoutSnapshotMaterialization();
+      await expectSkip("observed_at_format", () => createCorrection(base(entityId, "format")));
+      await expectSnapshotMatchesFullRecompute(entityId);
     });
 
     it("grouped receipt", async () => {
@@ -605,6 +649,91 @@ describe("optimistic correction path: retries, fallbacks and skip conditions", (
     } finally {
       await cleanupEntityType(SCHEMA_TYPE, USER_ID);
       await cleanupTestSchema(SCHEMA_TYPE, null);
+    }
+  });
+
+  it("schemaIdentity distinguishes registry, code-defined and absent schemas and a version change", async () => {
+    const registryIdentity = await schemaIdentity(TYPE, USER_ID);
+    expect(registryIdentity).toMatch(/^registry:/);
+
+    const load = vi.spyOn(schemaRegistry, "loadActiveSchema").mockResolvedValue(null);
+    try {
+      expect(await schemaIdentity("note", USER_ID)).toMatch(/^code:/);
+      expect(await schemaIdentity("no_such_type_anywhere", USER_ID)).toBe("none");
+    } finally {
+      load.mockRestore();
+    }
+
+    const VERSIONED = `${TYPE}_versioned`;
+    const register = (version: string) =>
+      schemaRegistry.register({
+        entity_type: VERSIONED,
+        schema_version: version,
+        schema_definition: {
+          fields: { title: { type: "string", required: false } },
+          canonical_name_fields: ["title"],
+        },
+        reducer_config: { merge_policies: { title: { strategy: "last_write" as const } } },
+        activate: true,
+      });
+    try {
+      await register("1.0");
+      const v1 = await schemaIdentity(VERSIONED, USER_ID);
+      await register("1.1");
+      const v2 = await schemaIdentity(VERSIONED, USER_ID);
+      expect(v2).not.toBe(v1);
+    } finally {
+      await cleanupTestSchema(VERSIONED, null);
+    }
+  });
+
+  it("speculation hooks are inert outside NODE_ENV=test", async () => {
+    const entityId = await seedEntity("hook-inert", 10);
+    const previous = process.env.NODE_ENV;
+    let ran = false;
+    speculationTestHooks.afterSpeculate = () => {
+      ran = true;
+    };
+    try {
+      process.env.NODE_ENV = "production";
+      await createCorrection(base(entityId, "hook-inert"));
+    } finally {
+      process.env.NODE_ENV = previous;
+      speculationTestHooks.afterSpeculate = undefined;
+    }
+    expect(ran).toBe(false);
+  });
+
+  it("logs an info-level fallback summary at most once per 10 minutes, only when fallbacks occur", async () => {
+    const entityId = await seedEntity("summary", 5);
+    const info = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const realNow = Date.now;
+    try {
+      // Within the interval: a fallback is counted but nothing is summarized.
+      await createCorrection({
+        ...base(entityId, "s1"),
+        canonical_hash: "h1",
+        deferred_events: [],
+      });
+      expect(info.mock.calls.filter((c) => String(c[0]).includes("[CORRECT]"))).toHaveLength(0);
+      // Past the interval: the next fallback emits one summary with counts by reason.
+      Date.now = () => realNow() + 11 * 60 * 1000;
+      await createCorrection({
+        ...base(entityId, "s2"),
+        canonical_hash: "h2",
+        deferred_events: [],
+      });
+      await createCorrection({
+        ...base(entityId, "s3"),
+        canonical_hash: "h3",
+        deferred_events: [],
+      });
+      const lines = info.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("[CORRECT]"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("grouped_receipt");
+    } finally {
+      Date.now = realNow;
+      info.mockRestore();
     }
   });
 });
