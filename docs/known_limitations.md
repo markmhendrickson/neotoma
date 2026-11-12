@@ -2,7 +2,7 @@
 
 This page lists specific behaviours of the current build that a developer or an integrating agent will run into. Each entry says what you will observe, any workaround, and the issue that tracks it. An entry is removed from this page when its fix ships.
 
-Applies to `neotoma@0.27.0`. Every entry has a tracking issue.
+Applies to `neotoma@0.28.0`. Every entry has a tracking issue.
 
 **Install and setup**
 
