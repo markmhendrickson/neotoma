@@ -199,6 +199,14 @@ jobs:
       - name: Run concurrent-backend effect-verified regressions (merge rollback + migration validator)
         run: npx vitest run --no-file-parallelism tests/integration/merge_repoint_relationship_edges.test.ts tests/scripts/validate_libsql_migration.test.ts
 
+      # Correction and observation-insert integration regressions. These live
+      # under tests/integration, which test:unit excludes, so a change to
+      # createCorrection, the observation insert primitive or the optimistic
+      # correction snapshot path was never gated by them on PRs (a stale
+      # buildObservationRow call-count assertion went unnoticed until review).
+      - name: Run correction and observation-insert integration regressions
+        run: npx vitest run --no-file-parallelism tests/integration/observation_insert_sites_routing.test.ts tests/integration/observation_insert_sites_characterization.test.ts tests/integration/observation_insert_sites_attribution.test.ts tests/integration/correct_unknown_field_append.test.ts tests/integration/correction_wins_every_field.test.ts tests/integration/correct_http_mcp_parity.test.ts tests/integration/correct_array_replaces.test.ts tests/integration/correction_scalar_tiebreak_surfaces.test.ts tests/integration/array_item_patch_conflict.test.ts tests/integration/atomic_null_projection.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/correction_speculative_lifecycle_cutover.test.ts
+
       # #2266/#2267 entity-query read-latency regressions. Same gap as the step
       # above: these live under tests/integration, which test:unit excludes, so
       # without this step the fix for the 25-81s `limit: 1` reads — and the
