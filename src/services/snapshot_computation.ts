@@ -14,7 +14,10 @@ import {
   entityIdTenantSalt,
   generateEntityId,
 } from "./entity_resolution.js";
-import { resolveOwnedObservations } from "./attachment_resolution.js";
+import { fingerprintOwnedObservations, resolveOwnedObservations } from "./attachment_resolution.js";
+import { createHash } from "node:crypto";
+import { getSchemaDefinition } from "./schema_definitions.js";
+import { stableSerialize } from "./stable_serialize.js";
 import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 
@@ -167,59 +170,84 @@ async function persistComputedSnapshot(
   return computed as SnapshotRecord;
 }
 
-/**
- * Cheap identity of an entity's physical observation set: row count plus the
- * sum and max of the rowids, read from idx_observations_entity_id alone (rowid
- * is carried by every index, so no table rows are touched). Observations are
- * append-only except merge (moves rows) and GDPR delete (removes them), and
- * both change the count or the rowid sum, so an unchanged fingerprint means the
- * set a snapshot was reduced from is the set that is stored now.
- */
-export async function fingerprintEntityObservations(entityId: string): Promise<string> {
-  const { getDb } = await import("../repositories/db/connection.js");
-  const database = await getDb();
-  const row = (await database
-    .prepare(
-      "SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS m, COALESCE(SUM(rowid), 0) AS s " +
-        "FROM observations WHERE entity_id = ?"
-    )
-    .get(entityId)) as { n: number; m: number; s: number } | undefined;
-  return `${row?.n ?? 0}:${row?.m ?? 0}:${row?.s ?? 0}`;
-}
-
 export interface SpeculativeSnapshot {
   computed: NonNullable<Awaited<ReturnType<typeof observationReducer.computeSnapshot>>>;
-  /** {@link fingerprintEntityObservations} taken BEFORE the observations were read. */
+  /** {@link fingerprintOwnedObservations}, taken BEFORE the observations were read. */
   fingerprint: string;
+  /** {@link schemaIdentity} of the schema the reduction used, taken BEFORE the read. */
+  schemaIdentity: string;
+}
+
+export type SpeculationResult =
+  | { ok: true; speculative: SpeculativeSnapshot }
+  | { ok: false; reason: string };
+
+/**
+ * Identity of the schema the reducer will apply to an entity type for a user:
+ * a content hash of the active registry row (user override or global, exactly
+ * as `loadActiveSchema` resolves it) including its id, or of the code-defined
+ * fallback the reducer uses when the registry has no row, or "none".
+ *
+ * A version string is not an identity: the registry has no unique
+ * (entity_type, schema_version) constraint, a caller may supply the version, and
+ * a user override can share the global row's version. Hashing the definition and
+ * reducer config catches a same-version change, and including the row id catches
+ * a same-content row swap between user and global scope.
+ */
+export async function schemaIdentity(entityType: string, userId: string): Promise<string> {
+  const entry = await schemaRegistry.loadActiveSchema(entityType, userId);
+  const hash = (value: unknown) =>
+    createHash("sha256").update(stableSerialize(value)).digest("hex");
+  if (entry) {
+    return `registry:${entry.id}:${hash({
+      v: entry.schema_version,
+      d: entry.schema_definition,
+      r: entry.reducer_config,
+    })}`;
+  }
+  const code = getSchemaDefinition(entityType);
+  if (code) {
+    return `code:${hash({
+      v: code.schema_version,
+      d: code.schema_definition,
+      r: code.reducer_config,
+    })}`;
+  }
+  return "none";
 }
 
 /**
  * Reduce the snapshot an entity WOULD have once `appended` is inserted, using
  * only reads, so it can run before the write transaction opens (on a reader,
- * off the gate). Returns null whenever the result could differ from what
- * {@link recomputeSnapshot} would compute after the insert; the caller then
- * uses the in-transaction recompute. Cases that return null: a redirected or
- * empty entity, an `appended` observation that is not strictly newer than every
- * stored one (the reducer's tie order and the persisted `source_id` would then
- * depend on storage order), a hidden entity, and any reducer failure.
+ * off the gate). Returns `{ ok: false, reason }` whenever the result could
+ * differ from what {@link recomputeSnapshot} would compute after the insert; the
+ * caller then uses the in-transaction recompute. Reasons: `no_observations`
+ * (redirected or empty entity), `not_strictly_newer` (the appended observation
+ * is not strictly newer than every stored one, so the reducer's tie order and
+ * the persisted `source_id` would depend on storage order), `hidden`, `error`.
  *
- * Inside the transaction the caller must re-check the fingerprint; the result
- * is only valid for the observation set it was computed from.
+ * Inside the transaction the caller must re-check the fingerprint and schema
+ * identity; the result is only valid for the inputs it was computed from.
  */
 export async function speculateSnapshotWithAppendedObservation(
   entityId: string,
   userId: string,
   appended: Observation
-): Promise<SpeculativeSnapshot | null> {
+): Promise<SpeculationResult> {
   try {
-    const fingerprint = await fingerprintEntityObservations(entityId);
+    // Both identities are taken before the observations and schema are read, so
+    // a change landing mid-read can only make them stale, never falsely current.
+    const fingerprint = await fingerprintOwnedObservations(entityId, userId);
+    const identity = await schemaIdentity(appended.entity_type, userId);
     const existing = await resolveOwnedObservations(entityId, userId);
-    if (!existing || existing.length === 0) return null;
+    if (!existing || existing.length === 0) return { ok: false, reason: "no_observations" };
     const appendedAt = Date.parse(appended.observed_at);
-    if (!Number.isFinite(appendedAt)) return null;
+    if (!Number.isFinite(appendedAt)) return { ok: false, reason: "not_strictly_newer" };
     for (const obs of existing) {
       const at = Date.parse(obs.observed_at);
-      if (!Number.isFinite(at) || at >= appendedAt) return null;
+      if (!Number.isFinite(at) || at >= appendedAt) {
+        return { ok: false, reason: "not_strictly_newer" };
+      }
     }
     // The lifecycle context validates that the supplied rows equal the stored
     // set, so it is acquired from the stored set; a plain factual observation
@@ -237,23 +265,23 @@ export async function speculateSnapshotWithAppendedObservation(
       undefined,
       context
     );
-    if (!computed) return null;
-    return { computed, fingerprint };
+    if (!computed) return { ok: false, reason: "hidden" };
+    return { ok: true, speculative: { computed, fingerprint, schemaIdentity: identity } };
   } catch (err) {
     logger.warn(
       `[SNAPSHOT] Speculative snapshot for ${entityId} unavailable, using in-transaction ` +
         `recompute: ${err instanceof Error ? err.message : String(err)}`
     );
-    return null;
+    return { ok: false, reason: "error" };
   }
 }
 
 /**
  * Persist a {@link SpeculativeSnapshot} inside the write transaction, after the
- * caller has re-checked the fingerprint and inserted the appended observation.
- * Everything after the reduction is identical to {@link recomputeSnapshot}. The
- * appended observation is strictly newest, so the persisted `source_id` is the
- * appended row's (a correction has none).
+ * caller has re-checked the fingerprint and schema identity and inserted the
+ * appended observation. Everything after the reduction is identical to
+ * {@link recomputeSnapshot}. The appended observation is strictly newest, so the
+ * persisted `source_id` is the appended row's (a correction has none).
  */
 export async function persistSpeculativeSnapshot(
   speculative: SpeculativeSnapshot,
