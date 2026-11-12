@@ -423,9 +423,8 @@ export class AccessPolicyError extends Error {
       mode: this.mode,
       reason: this.policyReason,
       hint:
-        `Entity type "${this.entityType}" has access policy "${this.mode}" which ` +
-        `does not allow guest "${this.op}". Ask the instance operator to update ` +
-        `the policy with: neotoma access set ${this.entityType} <mode>`,
+        `This link does not grant access here. It may be for a different page, or ` +
+        `it may have been revoked or expired. Ask the person who sent it for a new link.`,
     };
   }
 }

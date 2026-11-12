@@ -103,6 +103,47 @@ async function createRenderedPage(params: {
   return entityId;
 }
 
+async function createPlainEntity(userId: string, text: string): Promise<string> {
+  const entityId = `ent_note_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const now = new Date().toISOString();
+  await db.from("entities").insert({
+    id: entityId,
+    entity_type: "note",
+    canonical_name: `${text}-${entityId}`,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+  });
+  await db.from("observations").insert({
+    entity_id: entityId,
+    entity_type: "note",
+    user_id: userId,
+    fields: { title: text },
+    observed_at: now,
+    source_priority: 0,
+  });
+  await recomputeSnapshot(entityId, userId);
+  return entityId;
+}
+
+async function linkEntities(source: string, target: string, userId: string): Promise<string> {
+  const key = `REFERS_TO:${source}:${target}`;
+  await db.from("relationship_snapshots").upsert({
+    relationship_key: key,
+    relationship_type: "REFERS_TO",
+    source_entity_id: source,
+    target_entity_id: target,
+    schema_version: "1.0",
+    snapshot: {},
+    computed_at: new Date().toISOString(),
+    observation_count: 1,
+    last_observation_at: new Date().toISOString(),
+    provenance: { reducer_field: "obs" },
+    user_id: userId,
+  });
+  return key;
+}
+
 async function cleanupEntities(entityIds: string[]): Promise<void> {
   for (const id of entityIds) {
     await db.from("observations").delete().eq("entity_id", id);
@@ -229,13 +270,7 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
     expect(response.status).toBe(401);
   });
 
-  it("undifferentiated guest access unaffected: no token at all is still denied under closed policy", async () => {
-    // The test server treats an unauthenticated request from 127.0.0.1 (no
-    // Bearer token) as the local dev user (see isLocalRequest fallback in
-    // actions.ts), not as a guest — so this exercises the equivalent
-    // "no-grant" boundary: a caller with no token and no ownership of the
-    // entity must still be denied, proving the reorder did not open a
-    // blanket read on `rendered_page` under a closed policy.
+  it("no credentials: a non-local request with no token is rejected as unauthenticated (401)", async () => {
     const entityId = await createRenderedPage({
       title: "No Token Page",
       htmlBody: "<p>content</p>",
@@ -243,8 +278,14 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
     });
     createdEntityIds.push(entityId);
 
-    const response = await fetch(`${API_BASE}/entities/${entityId}/html`);
-    expect(response.status).toBe(404);
+    // x-forwarded-for makes the loopback request non-local, so it is not
+    // treated as the local dev user.
+    for (const path of [`/entities/${entityId}/html`, `/entities/${entityId}`]) {
+      const response = await fetch(`${API_BASE}${path}`, {
+        headers: { "x-forwarded-for": "203.0.113.9" },
+      });
+      expect(response.status).toBe(401);
+    }
   });
 
   it("re-mint: an older token for the same entity still works independently after a new mint", async () => {
@@ -275,7 +316,7 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
   });
 
   it("other entity types unaffected: a valid token scoped to a different entity is still denied under a different closed type policy", async () => {
-    await setAccessPolicy("issue", "closed");
+    process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "closed";
     try {
       const entityId = `ent_issue_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
       const otherEntityId = `ent_issue_other_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -314,6 +355,7 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
       const response = await fetch(`${API_BASE}/entities/${entityId}/html?access_token=${token}`);
       expect(response.status).toBe(403);
     } finally {
+      delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
       await resetAccessPolicy("issue");
     }
   });
@@ -374,7 +416,7 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
     }
   });
 
-  it("write: a page-scoped token cannot write the page it can read", async () => {
+  it("guard (not dependent on the fix): a page-scoped token cannot batch_correct the page it can read", async () => {
     const entityId = await createRenderedPage({
       title: "Write Target",
       htmlBody: "<p>original</p>",
@@ -402,8 +444,8 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
     expect(await page.text()).not.toContain("pwned");
   });
 
-  it("write: a token naming a closed-policy issue cannot add a thread message", async () => {
-    await setAccessPolicy("issue", "closed");
+  it("write: a token naming a closed-policy issue still cannot add a thread message (unchanged)", async () => {
+    process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "closed";
     try {
       const issueId = `ent_issue_w_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
       const now = new Date().toISOString();
@@ -430,6 +472,158 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
       });
       expect(response.status).toBe(403);
     } finally {
+      delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+      await resetAccessPolicy("issue");
+    }
+  });
+
+  it("confined: a page token does not open relationships (with or without expansion) or observations", async () => {
+    const page = await createRenderedPage({
+      title: "Linked Page",
+      htmlBody: "<p>linked</p>",
+      userId: TEST_USER_ID,
+    });
+    const other = await createPlainEntity(TEST_USER_ID, "unrelated-secret-note");
+    createdEntityIds.push(page, other);
+    const relKey = await linkEntities(page, other, TEST_USER_ID);
+    try {
+      const token = await generateGuestAccessToken({ entityIds: [page], userId: TEST_USER_ID });
+      createdTokens.push(token);
+
+      for (const path of [
+        `/entities/${page}/relationships`,
+        `/entities/${page}/relationships?expand_entities=true`,
+        `/entities/${page}/observations`,
+      ]) {
+        const sep = path.includes("?") ? "&" : "?";
+        const response = await fetch(`${API_BASE}${path}${sep}access_token=${token}`);
+        const body = await response.text();
+        expect(response.status, path).toBe(403);
+        expect(body).not.toContain("unrelated-secret-note");
+      }
+    } finally {
+      await db.from("relationship_snapshots").delete().eq("relationship_key", relKey);
+    }
+  });
+
+  it("merged: a token for a merged-away page never serves the merge target's content", async () => {
+    const target = await createRenderedPage({
+      title: "Merge Target",
+      htmlBody: "<p>TARGET-ONLY-CONTENT</p>",
+      userId: TEST_USER_ID,
+    });
+    const merged = await createRenderedPage({
+      title: "Merged Away",
+      htmlBody: "<p>merged away</p>",
+      userId: TEST_USER_ID,
+    });
+    createdEntityIds.push(target, merged);
+    await db.from("entities").update({ merged_to_entity_id: target }).eq("id", merged);
+    const token = await generateGuestAccessToken({ entityIds: [merged], userId: TEST_USER_ID });
+    createdTokens.push(token);
+
+    for (const path of [`/entities/${merged}/html`, `/entities/${merged}`]) {
+      const response = await fetch(`${API_BASE}${path}?access_token=${token}`);
+      expect(response.status, path).toBe(404);
+      expect(await response.text()).not.toContain("TARGET-ONLY-CONTENT");
+    }
+  });
+
+  it("deleted: a token for a deleted page opens nothing on the link routes or observations", async () => {
+    const page = await createRenderedPage({
+      title: "Deleted Page",
+      htmlBody: "<p>DELETED-PAGE-CONTENT</p>",
+      userId: TEST_USER_ID,
+    });
+    createdEntityIds.push(page);
+    const token = await generateGuestAccessToken({ entityIds: [page], userId: TEST_USER_ID });
+    createdTokens.push(token);
+    const before = await fetch(`${API_BASE}/entities/${page}/html?access_token=${token}`);
+    expect(before.status).toBe(200);
+
+    await db.from("observations").insert({
+      id: randomUUID(),
+      entity_id: page,
+      entity_type: "rendered_page",
+      user_id: TEST_USER_ID,
+      fields: { _deleted: true },
+      observed_at: new Date(Date.now() + 1000).toISOString(),
+      source_priority: 1000,
+    });
+
+    for (const path of [`/entities/${page}/html`, `/entities/${page}`]) {
+      const response = await fetch(`${API_BASE}${path}?access_token=${token}`);
+      expect(response.status, path).toBe(404);
+      expect(await response.text()).not.toContain("DELETED-PAGE-CONTENT");
+    }
+    const obs = await fetch(`${API_BASE}/entities/${page}/observations?access_token=${token}`);
+    expect(obs.status).toBe(403);
+  });
+
+  it("issues: a submitter_scoped issue named by the token keeps its policy-governed read and write paths", async () => {
+    await setAccessPolicy("issue", "submitter_scoped");
+    try {
+      const issueId = `ent_issue_s_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+      const now = new Date().toISOString();
+      await db.from("entities").insert({
+        id: issueId,
+        entity_type: "issue",
+        canonical_name: `scoped-issue-${issueId}`,
+        user_id: TEST_USER_ID,
+        created_at: now,
+        updated_at: now,
+      });
+      createdEntityIds.push(issueId);
+      const token = await generateGuestAccessToken({ entityIds: [issueId], userId: TEST_USER_ID });
+      createdTokens.push(token);
+
+      // Access decision passes via the token named in the submitter-scoped
+      // branch: whatever happens next, it is not an access-policy denial.
+      const write = await fetch(`${API_BASE}/issues/add_message`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ entity_id: issueId, body: "hello", guest_access_token: token }),
+      });
+      expect(write.status).not.toBe(403);
+      expect(write.status).not.toBe(401);
+
+      const read = await fetch(`${API_BASE}/issues/status`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ entity_id: issueId, guest_access_token: token }),
+      });
+      expect(read.status).not.toBe(403);
+      expect(read.status).not.toBe(401);
+    } finally {
+      delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+      await resetAccessPolicy("issue");
+    }
+  });
+
+  it("issues: /issues/status read stays policy-governed (no token precedence) under a closed type policy", async () => {
+    process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "closed";
+    try {
+      const issueId = `ent_issue_c_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+      const now = new Date().toISOString();
+      await db.from("entities").insert({
+        id: issueId,
+        entity_type: "issue",
+        canonical_name: `closed-issue-read-${issueId}`,
+        user_id: TEST_USER_ID,
+        created_at: now,
+        updated_at: now,
+      });
+      createdEntityIds.push(issueId);
+      const token = await generateGuestAccessToken({ entityIds: [issueId], userId: TEST_USER_ID });
+      createdTokens.push(token);
+      const read = await fetch(`${API_BASE}/issues/status`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ entity_id: issueId, guest_access_token: token }),
+      });
+      expect(read.status).toBe(403);
+    } finally {
+      delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
       await resetAccessPolicy("issue");
     }
   });
