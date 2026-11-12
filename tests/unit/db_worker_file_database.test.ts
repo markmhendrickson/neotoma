@@ -949,7 +949,8 @@ describe("WorkerFileDatabase reads do not wait for write transactions", () => {
       expect(msg).toBeDefined();
       expect(msg).toContain("First statement: INSERT INTO gate_t");
       expect(msg).toContain("waited for gate");
-      expect(msg).toContain("reads are not affected");
+      expect(msg).toContain("A long write transaction delays other writes.");
+      expect(msg).not.toContain("reads are not affected");
       expect(msg).not.toContain("secret-value");
     } finally {
       warn.mockRestore();

@@ -150,7 +150,7 @@ export class TransactionGate {
     logger.warn(
       `DB transaction held the gate ${holdMs}ms (waited for gate ${queueWaitMs}ms` +
         `${suppressed > 0 ? `, ${suppressed} similar line(s) suppressed` : ""}). ` +
-        `A long write transaction delays other writes; reads are not affected.` +
+        `A long write transaction delays other writes.` +
         (tag ? ` First statement: ${tag}` : "")
     );
   }
