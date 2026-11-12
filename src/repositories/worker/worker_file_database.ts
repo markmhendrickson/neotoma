@@ -51,6 +51,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
+import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
 import { logger } from "../../utils/logger.js";
 import {
@@ -259,6 +260,8 @@ class WorkerDbRetiredError extends Error {
 type PendingEntry = {
   /** Statement text, kept only so saturation logs can say what is queued. */
   sql: string;
+  /** `Date.now()` when the request was handed to this worker's queue. */
+  enqueuedAt: number;
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   /** Release the timeout timer and abort listener; idempotent. */
@@ -385,6 +388,11 @@ class WorkerConnection {
   /** Statement text of everything this worker currently owns (diagnostics only). */
   inFlightSql(): string[] {
     return [...this.pending.values()].map((entry) => entry.sql);
+  }
+
+  /** `Date.now()` enqueue time of every owned statement, oldest first (diagnostics only). */
+  inFlightEnqueuedAt(): number[] {
+    return [...this.pending.values()].map((entry) => entry.enqueuedAt);
   }
 
   /**
@@ -670,7 +678,7 @@ class WorkerConnection {
       };
 
       if (this.pending.size === 0) this.busyStartedAt = Date.now();
-      this.pending.set(id, { sql, resolve, reject, cleanup });
+      this.pending.set(id, { sql, enqueuedAt: Date.now(), resolve, reject, cleanup });
 
       if (timeoutMs !== undefined && timeoutMs > 0) {
         timer = setTimeout(() => {
@@ -925,6 +933,30 @@ const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
  */
 const DEFAULT_ORPHAN_GRACE_MS = 30_000;
 
+/**
+ * How long the oldest statement that is genuinely WAITING has been queued, in
+ * ms. Input is one list of enqueue timestamps per reader, oldest first. The
+ * first entry of each list is the statement the worker is executing, not one
+ * waiting for it, so it is skipped; a reader with a single statement has
+ * nothing queued. Returns 0 when nothing is waiting.
+ */
+export function oldestQueuedWaitMs(enqueuedAtPerReader: number[][], now: number): number {
+  let oldest = 0;
+  for (const list of enqueuedAtPerReader) {
+    if (list.length < 2) continue;
+    oldest = Math.max(oldest, now - list[1]);
+  }
+  return oldest;
+}
+
+/** First 80 characters of a statement, whitespace collapsed. SQL text only, never bound values. */
+function sqlHead(sql: string): string {
+  return sql.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+/** A write that waits this long for the gate before dispatching is logged. */
+const SLOW_GATE_WAIT_MS = 250;
+
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
 
@@ -1020,6 +1052,10 @@ export class WorkerFileDatabase implements DbDatabase {
   private saturatedSince: number | null = null;
   private lastSaturationLogAt = 0;
   private readonly gate = new TransactionGate();
+  private readonly loopDelay: IntervalHistogram | null;
+  private lastGateWaitLogAt = 0;
+  /** Head of the first statement run in the open transaction; never holds bound values. */
+  private txSqlHead = "";
   private readonly txContext = new AsyncLocalStorage<boolean>();
 
   constructor(
@@ -1049,6 +1085,14 @@ export class WorkerFileDatabase implements DbDatabase {
       0,
       options.orphanGraceMs ?? readEnvInt("NEOTOMA_DB_ORPHAN_GRACE_MS") ?? DEFAULT_ORPHAN_GRACE_MS
     );
+    // Event-loop delay is the symptom a stalled gate or a blocked main thread
+    // shows from outside; 20 ms resolution is cheap enough to leave on.
+    try {
+      this.loopDelay = monitorEventLoopDelay({ resolution: 20 });
+      this.loopDelay.enable();
+    } catch {
+      this.loopDelay = null;
+    }
     // The writer opens eagerly so the DB file exists before any read-only
     // reader connects (read-only opens fail on a missing file).
     this.writerConnection();
@@ -1199,11 +1243,16 @@ export class WorkerFileDatabase implements DbDatabase {
       if (now - this.lastSaturationLogAt < SATURATION_LOG_INTERVAL_MS) return;
       this.lastSaturationLogAt = now;
       const depth = this.readers.reduce((sum, r) => sum + r.inFlight, 0);
+      const queuedWait = oldestQueuedWaitMs(
+        this.readers.map((r) => r.inFlightEnqueuedAt()),
+        now
+      );
       logger.warn(
         `DB reader pool saturated: all ${this.readers.length} readers busy ` +
-          `(${depth} statements queued, ${now - this.saturatedSince}ms). ` +
+          `(${depth} statements in flight, oldest queued wait ${queuedWait}ms, ` +
+          `saturated for ${now - this.saturatedSince}ms). ` +
           `Raise NEOTOMA_DB_READER_WORKERS if this is sustained. ` +
-          `Queued: ${summarizeQueuedStatements(this.readers.flatMap((r) => r.inFlightSql()))}`
+          `In flight: ${summarizeQueuedStatements(this.readers.flatMap((r) => r.inFlightSql()))}`
       );
       return;
     }
@@ -1223,8 +1272,28 @@ export class WorkerFileDatabase implements DbDatabase {
     sql: string,
     params: unknown[] = []
   ): Promise<unknown> {
-    if (!this.txContext.getStore()) await this.gate.whenIdle();
+    if (!this.txContext.getStore()) {
+      await this.waitForGate(sql);
+    } else {
+      this.noteTxSql(sql);
+    }
     return this.writerConnection().request(op, sql, params);
+  }
+
+  /** Wait for queued transactions, logging (rate-limited) when the wait is long. */
+  private async waitForGate(sql: string): Promise<void> {
+    const startedAt = Date.now();
+    await this.gate.whenIdle();
+    const waited = Date.now() - startedAt;
+    if (waited <= SLOW_GATE_WAIT_MS) return;
+    const now = Date.now();
+    if (now - this.lastGateWaitLogAt < SATURATION_LOG_INTERVAL_MS) return;
+    this.lastGateWaitLogAt = now;
+    logger.warn(`DB write waited ${waited}ms for the transaction gate: ${sqlHead(sql)}`);
+  }
+
+  private noteTxSql(sql: string): void {
+    if (this.txSqlHead === "") this.txSqlHead = sqlHead(sql);
   }
 
   /**
@@ -1267,9 +1336,16 @@ export class WorkerFileDatabase implements DbDatabase {
       // Inside a transaction the statement runs on the writer, which is never
       // timed out or abandoned: terminating it mid-transaction would leave the
       // caller unable to tell whether anything committed.
+      this.noteTxSql(sql);
       return this.writerConnection().request(op, sql, params);
     }
-    await this.gate.whenIdle();
+    // No wait for the transaction gate here. Readers are separate read-only WAL
+    // connections that cannot see an uncommitted transaction's rows, so waiting
+    // for it bought no consistency and stalled every read behind every queued
+    // write transaction. The one exception is a pool with no readers, where
+    // `readerConnection()` hands back the writer itself: a read dealt there
+    // would run inside whichever transaction is open, so it must still wait.
+    if (this.readerCount === 0) await this.gate.whenIdle();
     const options: WorkerRequestOptions = {
       timeoutMs: this.statementTimeoutMs,
       signal: abortContext.getStore(),
@@ -1280,7 +1356,9 @@ export class WorkerFileDatabase implements DbDatabase {
       if (isReadonlyRejection(error)) {
         // The read mutates, so it belongs on the writer. Re-run it there
         // untimed for the reason above — a half-applied write is worse than a
-        // slow one.
+        // slow one. It is a write, so unlike a plain read it must not run
+        // inside a transaction opened since: wait for the gate first.
+        await this.gate.whenIdle();
         return this.writerConnection().request(op, sql, params);
       }
       throw error;
@@ -1291,14 +1369,42 @@ export class WorkerFileDatabase implements DbDatabase {
    * @internal Reader-pool occupancy, for tests and diagnostics. `busy` counts
    * readers with at least one statement in flight; `queued` is total depth.
    */
-  readerPoolStats(): { size: number; capacity: number; busy: number; queued: number } {
+  readerPoolStats(): {
+    size: number;
+    capacity: number;
+    busy: number;
+    queued: number;
+    oldestQueuedWaitMs: number;
+    /** Event-loop delay p99/max since the previous snapshot (the histogram resets on each read). */
+    eventLoopDelaySinceLastSnapshotMs: { p99: number; max: number } | null;
+  } {
     let busy = 0;
     let queued = 0;
     for (const reader of this.readers) {
       if (reader.inFlight > 0 || reader === this.pinnedReader) busy += 1;
       queued += reader.inFlight;
     }
-    return { size: this.readers.length, capacity: this.readerCount, busy, queued };
+    const loop = this.loopDelay;
+    // Reset after reading so each snapshot reflects recent behaviour, not the
+    // whole process lifetime.
+    const loopStats = loop
+      ? {
+          p99: Math.round(loop.percentile(99) / 1e4) / 100,
+          max: Math.round(loop.max / 1e4) / 100,
+        }
+      : null;
+    loop?.reset();
+    return {
+      size: this.readers.length,
+      capacity: this.readerCount,
+      busy,
+      queued,
+      oldestQueuedWaitMs: oldestQueuedWaitMs(
+        this.readers.map((r) => r.inFlightEnqueuedAt()),
+        Date.now()
+      ),
+      eventLoopDelaySinceLastSnapshotMs: loopStats,
+    };
   }
 
   /**
@@ -1331,25 +1437,30 @@ export class WorkerFileDatabase implements DbDatabase {
     // Fail loud on nested transaction() — see NESTED_TRANSACTION_ERROR; a
     // gate-serialized nested call self-deadlocks (qa review, PR #1944).
     if (this.txContext.getStore()) throw new Error(NESTED_TRANSACTION_ERROR);
-    return this.gate.runExclusive(() =>
-      this.txContext.run(true, async () => {
-        // IMMEDIATE for the same reason as the sqlite backend: acquire the
-        // write lock where busy_timeout applies instead of failing on a
-        // mid-transaction lock upgrade.
-        await this.writerConnection().request("exec", "BEGIN IMMEDIATE");
-        try {
-          const result = await fn(this);
-          await this.writerConnection().request("exec", "COMMIT");
-          return result;
-        } catch (error) {
+    return this.gate.runExclusive(
+      () =>
+        this.txContext.run(true, async () => {
+          // Reset only once this transaction owns the gate, so a queued one
+          // cannot overwrite the tag of the one still running.
+          this.txSqlHead = "";
+          // IMMEDIATE for the same reason as the sqlite backend: acquire the
+          // write lock where busy_timeout applies instead of failing on a
+          // mid-transaction lock upgrade.
+          await this.writerConnection().request("exec", "BEGIN IMMEDIATE");
           try {
-            await this.writerConnection().request("exec", "ROLLBACK");
-          } catch {
-            // Ignore rollback errors during unwind.
+            const result = await fn(this);
+            await this.writerConnection().request("exec", "COMMIT");
+            return result;
+          } catch (error) {
+            try {
+              await this.writerConnection().request("exec", "ROLLBACK");
+            } catch {
+              // Ignore rollback errors during unwind.
+            }
+            throw error;
           }
-          throw error;
-        }
-      })
+        }),
+      () => this.txSqlHead
     );
   }
 
@@ -1488,6 +1599,7 @@ export class WorkerFileDatabase implements DbDatabase {
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.closed = true;
+    this.loopDelay?.disable();
     // Retired readers are included so an orphaned worker cannot outlive the
     // database it was reading (#2324). Their `terminate()` waits for the
     // worker to return to JavaScript, bounded by the same grace window, so

@@ -20,6 +20,8 @@
  * than deadlocking on the queue.
  */
 
+import { logger } from "../../utils/logger.js";
+
 export interface DbRunResult {
   /** Number of rows changed by the statement. */
   changes: number;
@@ -94,26 +96,66 @@ export function normalizeParams(params: unknown[]): unknown[] {
  */
 export class TransactionGate {
   private tail: Promise<void> = Promise.resolve();
+  private lastSlowHoldLogAt = 0;
+  private suppressedSlowHoldLogs = 0;
 
   /** Resolves once every transaction enqueued so far has settled. */
   whenIdle(): Promise<void> {
     return this.tail;
   }
 
-  /** Enqueue `fn` after all prior transactions; holds the gate until settled. */
-  runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  /**
+   * Enqueue `fn` after all prior transactions; holds the gate until settled.
+   *
+   * `describe` returns a short, parameter-free tag (for example the head of
+   * the first SQL statement) used only when the hold is slow enough to log.
+   * It is read at release time so it can reflect what the transaction ran.
+   */
+  runExclusive<T>(fn: () => Promise<T>, describe?: () => string): Promise<T> {
     const prev = this.tail;
     let release!: () => void;
     this.tail = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const enqueuedAt = Date.now();
     return (async () => {
       await prev;
+      const startedAt = Date.now();
       try {
         return await fn();
       } finally {
+        this.noteHold(Date.now() - startedAt, startedAt - enqueuedAt, describe);
         release();
       }
     })();
   }
+
+  /** Log a transaction that held the gate longer than SLOW_GATE_HOLD_MS. Rate-limited; counts suppressed lines. */
+  private noteHold(holdMs: number, queueWaitMs: number, describe?: () => string): void {
+    if (holdMs <= SLOW_GATE_HOLD_MS) return;
+    const now = Date.now();
+    if (now - this.lastSlowHoldLogAt < SLOW_GATE_LOG_INTERVAL_MS) {
+      this.suppressedSlowHoldLogs += 1;
+      return;
+    }
+    this.lastSlowHoldLogAt = now;
+    const suppressed = this.suppressedSlowHoldLogs;
+    this.suppressedSlowHoldLogs = 0;
+    let tag = "";
+    try {
+      tag = describe ? describe() : "";
+    } catch {
+      tag = "";
+    }
+    logger.warn(
+      `DB transaction held the gate ${holdMs}ms (waited for gate ${queueWaitMs}ms` +
+        `${suppressed > 0 ? `, ${suppressed} similar line(s) suppressed` : ""}). ` +
+        `A long write transaction delays other writes.` +
+        (tag ? ` First statement: ${tag}` : "")
+    );
+  }
 }
+
+/** A transaction holding the gate longer than this is logged. */
+export const SLOW_GATE_HOLD_MS = 3000;
+const SLOW_GATE_LOG_INTERVAL_MS = 1000;

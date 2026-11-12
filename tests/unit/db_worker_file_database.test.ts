@@ -24,6 +24,7 @@ import { holdOrdinaryWorker, holdWriterWorker } from "../helpers/worker_lifetime
 import { logger } from "../../src/utils/logger.js";
 import {
   summarizeQueuedStatements,
+  oldestQueuedWaitMs,
   WorkerFileDatabase,
   WorkerDbCrashError,
   WorkerDbTimeoutError,
@@ -415,8 +416,14 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       const saturated = db.readerPoolStats();
       expect(saturated.busy).toBe(2);
       expect(saturated.queued).toBeGreaterThanOrEqual(2);
+      expect(saturated.oldestQueuedWaitMs).toBe(0);
 
-      await Promise.all(slow);
+      // A third statement queues behind a busy reader, so its wait is visible.
+      const third = db.prepare(SLOW_SQL).get();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(db.readerPoolStats().oldestQueuedWaitMs).toBeGreaterThan(0);
+
+      await Promise.all([...slow, third]);
       expect(db.readerPoolStats().busy).toBe(0);
     } finally {
       await db.close();
@@ -436,7 +443,7 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await Promise.all([...slow, third]);
       const message = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("saturated"));
       expect(message).toBeDefined();
-      expect(message).toContain("Queued: ");
+      expect(message).toContain("In flight: ");
       expect(message).toContain(SLOW_SQL.replace(/\s+/g, " ").trim().slice(0, 70));
     } finally {
       warn.mockRestore();
@@ -835,5 +842,209 @@ describe("pinned worker read view", () => {
     } finally {
       await db.close();
     }
+  });
+});
+
+describe("WorkerFileDatabase reads do not wait for write transactions", () => {
+  it("completes a read outside a transaction while a write transaction is still open", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.prepare("INSERT INTO gate_t (v) VALUES (?)").run("committed");
+
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      let committed = false;
+      const tx = db
+        .transaction(async (conn) => {
+          await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("uncommitted");
+          inserted();
+          await held;
+        })
+        .then(() => {
+          committed = true;
+        });
+
+      await insertedSignal;
+      // Read outside the transaction: must not wait for it, and must not see its row.
+      const rows = (await db.prepare("SELECT v FROM gate_t ORDER BY id").all()) as { v: string }[];
+      expect(committed).toBe(false);
+      expect(rows.map((r) => r.v)).toEqual(["committed"]);
+
+      release();
+      await tx;
+      const after = (await db.prepare("SELECT COUNT(*) AS n FROM gate_t").get()) as { n: number };
+      expect(after.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("still lets a read inside the transaction see its own uncommitted write", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("mine");
+        const row = (await conn.prepare("SELECT v FROM gate_t").get()) as { v: string };
+        expect(row.v).toBe("mine");
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps waiting for the open transaction when the pool has no readers", async () => {
+    const db = makeDb(0);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      const tx = db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("x");
+        inserted();
+        await held;
+      });
+      await insertedSignal;
+      let readDone = false;
+      const read = db
+        .prepare("SELECT COUNT(*) AS n FROM gate_t")
+        .get()
+        .then((r) => {
+          readDone = true;
+          return r as { n: number };
+        });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(readDone).toBe(false);
+      release();
+      await tx;
+      expect((await read).n).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("logs a transaction that holds the gate over three seconds, without bound values", async () => {
+    const db = makeDb(2);
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("secret-value");
+        await new Promise((resolve) => setTimeout(resolve, 3300));
+      });
+      const msg = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("held the gate"));
+      expect(msg).toBeDefined();
+      expect(msg).toContain("First statement: INSERT INTO gate_t");
+      expect(msg).toContain("waited for gate");
+      expect(msg).toContain("A long write transaction delays other writes.");
+      expect(msg).not.toContain("reads are not affected");
+      expect(msg).not.toContain("secret-value");
+    } finally {
+      warn.mockRestore();
+      await db.close();
+    }
+  }, 30_000);
+
+  it("reports event-loop delay and oldest queued wait in the pool snapshot", async () => {
+    const db = makeDb(2);
+    try {
+      await db.prepare("SELECT 1 AS ok").get();
+      const stats = db.readerPoolStats();
+      expect(stats.oldestQueuedWaitMs).toBe(0);
+      expect(stats.eventLoopDelaySinceLastSnapshotMs).not.toBeNull();
+      expect(stats.eventLoopDelaySinceLastSnapshotMs?.max).toBeGreaterThanOrEqual(0);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("WorkerFileDatabase retry of a read that writes", () => {
+  it("waits for an open transaction before running the retried write on the writer", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE rt (id INTEGER PRIMARY KEY, v TEXT)");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      const tx = db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO rt (id, v) VALUES (1, 'tx')").run();
+        inserted();
+        await held;
+      });
+      await insertedSignal;
+
+      // Read-shaped call that writes: rejected read-only on a reader, then
+      // retried on the writer, which must not run inside the open transaction.
+      // The rejection is injected because some worker drivers let the reader
+      // block on the write lock instead of rejecting, which would never reach
+      // the retry path this test pins.
+      const dispatch = vi
+        .spyOn(
+          db as unknown as { dispatchRead: (...a: unknown[]) => Promise<unknown> },
+          "dispatchRead"
+        )
+        .mockRejectedValueOnce(
+          Object.assign(new Error("attempt to write a readonly database"), {
+            code: "SQLITE_READONLY",
+          })
+        );
+      let done = false;
+      const retried = db
+        .prepare("INSERT INTO rt (id, v) VALUES (2, 'retry') RETURNING id, v")
+        .get()
+        .then((r) => {
+          done = true;
+          return r;
+        });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(done).toBe(false);
+
+      release();
+      await tx;
+      expect(await retried).toEqual({ id: 2, v: "retry" });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      const n = (await db.prepare("SELECT COUNT(*) AS n FROM rt").get()) as { n: number };
+      expect(n.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+  }, 30_000);
+});
+
+describe("oldestQueuedWaitMs", () => {
+  it("reports the age of the oldest waiting statement, not the executing one or episode age", () => {
+    // Reader A: executing since 1000 (not waiting), one waiting since 4000.
+    // Reader B: only an executing statement since 500 (nothing waiting).
+    expect(oldestQueuedWaitMs([[1000, 4000], [500]], 5000)).toBe(1000);
+    expect(oldestQueuedWaitMs([[1000], [500]], 5000)).toBe(0);
+    expect(
+      oldestQueuedWaitMs(
+        [
+          [1000, 4500, 4900],
+          [2000, 3000],
+        ],
+        5000
+      )
+    ).toBe(2000);
+    expect(oldestQueuedWaitMs([], 5000)).toBe(0);
   });
 });
