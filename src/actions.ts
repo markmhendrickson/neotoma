@@ -4389,7 +4389,8 @@ async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<v
 async function resolveGuestScopedEntityAccess(
   principal: GuestPrincipal,
   entityId: string,
-  expectedEntityType?: string
+  expectedEntityType?: string,
+  options?: { forWrite?: boolean }
 ): Promise<{ userId: string; entityType: string }> {
   await assertValidGuestAccessToken(principal);
 
@@ -4403,6 +4404,21 @@ async function resolveGuestScopedEntityAccess(
     throw new Error(
       expectedEntityType === "issue" ? "Issue entity not found." : "Entity not found."
     );
+  }
+
+  // An entity-scoped, valid, unexpired guest_access_token that names this
+  // exact entityId is a deliberate per-entity grant and takes precedence over
+  // the type-level policy for THIS entity only. The type-level policy still
+  // governs every path below where no token is present or the token does not
+  // name this entityId (see resolveGuestReadAccess call further down for the
+  // undifferentiated-access case).
+  // Write callers (forWrite) keep the existing policy path so this read-side
+  // precedence never widens a write.
+  if (principal.guestId.accessToken && !options?.forWrite) {
+    const { tokenGrantsAccessTo } = await import("./services/guest_access_token.js");
+    if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
+      return { userId: entity.user_id, entityType: entity.entity_type };
+    }
   }
 
   const { resolveGuestReadAccess } = await import("./services/access_policy.js");
@@ -4420,9 +4436,6 @@ async function resolveGuestScopedEntityAccess(
     if (principal.guestId.accessToken) {
       const { tokenGrantsAccessTo, hashGuestAccessToken } =
         await import("./services/guest_access_token.js");
-      if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
-        return { userId: entity.user_id, entityType: entity.entity_type };
-      }
       if (entity.entity_type === "issue") {
         const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
         // Only the entity owner's own rows count as submitter evidence.
@@ -5588,6 +5601,9 @@ app.get("/entities/:id/html", async (req, res) => {
         hint: "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. Create a grant via Inspector → Agents → Grants.",
         sandbox: { available: false },
       });
+    }
+    if (error instanceof AccessPolicyError) {
+      return sendError(res, 403, error.code, error.message, error.toErrorEnvelope());
     }
     logError("APIError:entity_html", req, error);
     const message = error instanceof Error ? error.message : "Failed to render entity HTML";
@@ -11516,7 +11532,8 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
             await resolveGuestScopedEntityAccess(
               principal,
               parsed.data.entity_id?.trim() || "",
-              "issue"
+              "issue",
+              { forWrite: true }
             )
           ).userId
         : await getAuthenticatedUserId(req, parsed.data.user_id);

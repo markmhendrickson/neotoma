@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **819**
-- Backend and repo Vitest files: **765**
+- Total automated test files: **820**
+- Backend and repo Vitest files: **766**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 229 |
 | Vitest service tests | 66 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 242 |
+| Vitest integration tests | 243 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 28 |
 | Vitest security tests | 20 |
@@ -496,7 +496,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (242):**
+**Files (243):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -582,6 +582,7 @@ flowchart TD
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
 - `tests/integration/guest_subscription_owner_scope.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
+- `tests/integration/guest_token_precedence_over_type_policy.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/http_related_entities_multihop.test.ts`
