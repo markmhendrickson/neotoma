@@ -7,7 +7,7 @@
 
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
-import { observationReducer } from "../reducers/observation_reducer.js";
+import { observationReducer, type Observation } from "../reducers/observation_reducer.js";
 import {
   CanonicalNameUnresolvedError,
   deriveCanonicalNameFromFieldsWithTrace,
@@ -90,16 +90,32 @@ export async function recomputeSnapshot(
     return null;
   }
 
+  const sourceId =
+    typeof (observations[0] as { source_id?: string | null }).source_id === "string"
+      ? (observations[0] as { source_id: string }).source_id || ""
+      : "";
+
+  return persistComputedSnapshot(computed, entityId, userId, sourceId, strictDerivedEffects);
+}
+
+/**
+ * Persist an already-reduced snapshot and run its derived effects (timeline
+ * events, canonical-name evolution). Split out of {@link recomputeSnapshot}
+ * unchanged so the optimistic correction path persists exactly what the full
+ * recompute would.
+ */
+async function persistComputedSnapshot(
+  computed: NonNullable<Awaited<ReturnType<typeof observationReducer.computeSnapshot>>>,
+  entityId: string,
+  userId: string,
+  sourceId: string,
+  strictDerivedEffects: boolean
+): Promise<SnapshotRecord | null> {
   const { error: upsertError } = await db
     .from("entity_snapshots")
     .upsert({ ...computed } as Record<string, unknown>);
 
   if (upsertError) throw new Error(`Failed to upsert snapshot: ${upsertError.message}`);
-
-  const sourceId =
-    typeof (observations[0] as { source_id?: string | null }).source_id === "string"
-      ? (observations[0] as { source_id: string }).source_id || ""
-      : "";
 
   let schema: SchemaDefinition | null = null;
   try {
@@ -149,6 +165,104 @@ export async function recomputeSnapshot(
   }
 
   return computed as SnapshotRecord;
+}
+
+/**
+ * Cheap identity of an entity's physical observation set: row count plus the
+ * sum and max of the rowids, read from idx_observations_entity_id alone (rowid
+ * is carried by every index, so no table rows are touched). Observations are
+ * append-only except merge (moves rows) and GDPR delete (removes them), and
+ * both change the count or the rowid sum, so an unchanged fingerprint means the
+ * set a snapshot was reduced from is the set that is stored now.
+ */
+export async function fingerprintEntityObservations(entityId: string): Promise<string> {
+  const { getDb } = await import("../repositories/db/connection.js");
+  const database = await getDb();
+  const row = (await database
+    .prepare(
+      "SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS m, COALESCE(SUM(rowid), 0) AS s " +
+        "FROM observations WHERE entity_id = ?"
+    )
+    .get(entityId)) as { n: number; m: number; s: number } | undefined;
+  return `${row?.n ?? 0}:${row?.m ?? 0}:${row?.s ?? 0}`;
+}
+
+export interface SpeculativeSnapshot {
+  computed: NonNullable<Awaited<ReturnType<typeof observationReducer.computeSnapshot>>>;
+  /** {@link fingerprintEntityObservations} taken BEFORE the observations were read. */
+  fingerprint: string;
+}
+
+/**
+ * Reduce the snapshot an entity WOULD have once `appended` is inserted, using
+ * only reads, so it can run before the write transaction opens (on a reader,
+ * off the gate). Returns null whenever the result could differ from what
+ * {@link recomputeSnapshot} would compute after the insert; the caller then
+ * uses the in-transaction recompute. Cases that return null: a redirected or
+ * empty entity, an `appended` observation that is not strictly newer than every
+ * stored one (the reducer's tie order and the persisted `source_id` would then
+ * depend on storage order), a hidden entity, and any reducer failure.
+ *
+ * Inside the transaction the caller must re-check the fingerprint; the result
+ * is only valid for the observation set it was computed from.
+ */
+export async function speculateSnapshotWithAppendedObservation(
+  entityId: string,
+  userId: string,
+  appended: Observation
+): Promise<SpeculativeSnapshot | null> {
+  try {
+    const fingerprint = await fingerprintEntityObservations(entityId);
+    const existing = await resolveOwnedObservations(entityId, userId);
+    if (!existing || existing.length === 0) return null;
+    const appendedAt = Date.parse(appended.observed_at);
+    if (!Number.isFinite(appendedAt)) return null;
+    for (const obs of existing) {
+      const at = Date.parse(obs.observed_at);
+      if (!Number.isFinite(at) || at >= appendedAt) return null;
+    }
+    // The lifecycle context validates that the supplied rows equal the stored
+    // set, so it is acquired from the stored set; a plain factual observation
+    // does not change it (visibility is a pure function of rows + context).
+    const { getDb } = await import("../repositories/db/connection.js");
+    const { acquireEntityLifecycleContext } = await import("./entity_lifecycle_storage.js");
+    const context = await acquireEntityLifecycleContext(
+      await getDb(),
+      { id: entityId, user_id: existing[0].user_id, entity_type: existing[0].entity_type },
+      existing
+    );
+    const computed = await observationReducer.computeSnapshot(
+      entityId,
+      [appended, ...existing],
+      undefined,
+      context
+    );
+    if (!computed) return null;
+    return { computed, fingerprint };
+  } catch (err) {
+    logger.warn(
+      `[SNAPSHOT] Speculative snapshot for ${entityId} unavailable, using in-transaction ` +
+        `recompute: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
+
+/**
+ * Persist a {@link SpeculativeSnapshot} inside the write transaction, after the
+ * caller has re-checked the fingerprint and inserted the appended observation.
+ * Everything after the reduction is identical to {@link recomputeSnapshot}. The
+ * appended observation is strictly newest, so the persisted `source_id` is the
+ * appended row's (a correction has none).
+ */
+export async function persistSpeculativeSnapshot(
+  speculative: SpeculativeSnapshot,
+  entityId: string,
+  userId: string,
+  appended: Observation
+): Promise<SnapshotRecord | null> {
+  const sourceId = typeof appended.source_id === "string" ? appended.source_id || "" : "";
+  return persistComputedSnapshot(speculative.computed, entityId, userId, sourceId, false);
 }
 
 /**
