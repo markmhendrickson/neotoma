@@ -257,6 +257,8 @@ class WorkerDbRetiredError extends Error {
 }
 
 type PendingEntry = {
+  /** Statement text, kept only so saturation logs can say what is queued. */
+  sql: string;
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   /** Release the timeout timer and abort listener; idempotent. */
@@ -378,6 +380,11 @@ class WorkerConnection {
    */
   get inFlight(): number {
     return this.pending.size;
+  }
+
+  /** Statement text of everything this worker currently owns (diagnostics only). */
+  inFlightSql(): string[] {
+    return [...this.pending.values()].map((entry) => entry.sql);
   }
 
   /**
@@ -663,7 +670,7 @@ class WorkerConnection {
       };
 
       if (this.pending.size === 0) this.busyStartedAt = Date.now();
-      this.pending.set(id, { resolve, reject, cleanup });
+      this.pending.set(id, { sql, resolve, reject, cleanup });
 
       if (timeoutMs !== undefined && timeoutMs > 0) {
         timer = setTimeout(() => {
@@ -921,6 +928,24 @@ const DEFAULT_ORPHAN_GRACE_MS = 30_000;
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
 
+/**
+ * Compact "what is queued" summary for the saturation warning: the most common
+ * statement shapes (first 70 characters, whitespace collapsed, so parameter
+ * lists and bound values never appear) with their counts. Without it the
+ * warning says the pool is full but not who filled it.
+ */
+export function summarizeQueuedStatements(statements: string[], top = 4): string {
+  const counts = new Map<string, number>();
+  for (const sql of statements) {
+    const shape = sql.replace(/\s+/g, " ").trim().slice(0, 70);
+    counts.set(shape, (counts.get(shape) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const shown = ranked.slice(0, top).map(([shape, n]) => `${n}x "${shape}"`);
+  const rest = ranked.length - shown.length;
+  return shown.join("; ") + (rest > 0 ? `; +${rest} more shapes` : "");
+}
+
 function readEnvInt(name: string): number | undefined {
   const parsed = Number.parseInt(process.env[name] || "", 10);
   return Number.isFinite(parsed) ? parsed : undefined;
@@ -1177,7 +1202,8 @@ export class WorkerFileDatabase implements DbDatabase {
       logger.warn(
         `DB reader pool saturated: all ${this.readers.length} readers busy ` +
           `(${depth} statements queued, ${now - this.saturatedSince}ms). ` +
-          `Raise NEOTOMA_DB_READER_WORKERS if this is sustained.`
+          `Raise NEOTOMA_DB_READER_WORKERS if this is sustained. ` +
+          `Queued: ${summarizeQueuedStatements(this.readers.flatMap((r) => r.inFlightSql()))}`
       );
       return;
     }

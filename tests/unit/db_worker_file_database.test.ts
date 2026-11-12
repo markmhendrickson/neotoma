@@ -21,7 +21,9 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { holdOrdinaryWorker, holdWriterWorker } from "../helpers/worker_lifetime_barrier.js";
+import { logger } from "../../src/utils/logger.js";
 import {
+  summarizeQueuedStatements,
   WorkerFileDatabase,
   WorkerDbCrashError,
   WorkerDbTimeoutError,
@@ -420,6 +422,36 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await db.close();
     }
   }, 120_000);
+
+  it("names the queued statements when the reader pool saturates", async () => {
+    const db = makeDb(2);
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await seedSlowTable(db);
+      await Promise.all(Array.from({ length: 2 }, () => db.prepare("SELECT 1 AS ok").get()));
+      const slow = [db.prepare(SLOW_SQL).get(), db.prepare(SLOW_SQL).get()];
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Every reader is busy, so this read is the one that trips the warning.
+      const third = db.prepare(SLOW_SQL).get();
+      await Promise.all([...slow, third]);
+      const message = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("saturated"));
+      expect(message).toBeDefined();
+      expect(message).toContain("Queued: ");
+      expect(message).toContain(SLOW_SQL.replace(/\s+/g, " ").trim().slice(0, 70));
+    } finally {
+      warn.mockRestore();
+      await db.close();
+    }
+  }, 120_000);
+
+  it("summarizes queued statements by shape without bound values", () => {
+    const summary = summarizeQueuedStatements([
+      "SELECT * FROM entities\n   WHERE id IN (?, ?)",
+      "SELECT * FROM entities WHERE id IN (?, ?)",
+      "SELECT 1",
+    ]);
+    expect(summary).toBe('2x "SELECT * FROM entities WHERE id IN (?, ?)"; 1x "SELECT 1"');
+  });
 
   it("close waits for actual exit when termination rejects, without an unhandled rejection", async () => {
     const db = makeDb();
