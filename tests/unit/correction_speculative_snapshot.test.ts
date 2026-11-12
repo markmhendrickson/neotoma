@@ -183,7 +183,7 @@ describe("correct holds the write gate for a short, history-independent time", (
 
   it("falls back to the in-transaction recompute when the entity changes between read and write", async () => {
     const entityId = await seedEntity("stale", 20);
-    const { holds, restore } = recordGateHolds();
+    const { restore } = recordGateHolds();
     try {
       // A writer that lands between the speculative read and the gate.
       const interloper = createCorrection({

@@ -533,7 +533,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     );
   }
 
-  const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
+  const { entity_id, entity_type, field, value, user_id, idempotency_key } = params;
 
   const observationId = generateObservationId(
     null,
