@@ -5,6 +5,7 @@ import { NEOTOMA_TOOL_NAMES } from "../../src/tool_definitions.js";
 import { listInstallableSkillNames } from "../../src/cli/skills_mirror.js";
 import { INSTALL_COMMANDS } from "../../frontend/src/components/onepager/onepager_copy";
 import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
+import { REPO_VERSION } from "../../frontend/src/site/site_data";
 
 /**
  * Text guards for the agent-facing llms.txt body and the README's checkable claims.
@@ -402,7 +403,8 @@ describe("README checkable claims", () => {
     const steps = ["neotoma init", "neotoma setup --tool claude-code"];
     expect(block![1].trim().split("\n")).toEqual(["npm install -g neotoma", ...steps]);
     expect(INSTALL_COMMANDS.trim().split("\n")).toEqual([
-      `npm install -g neotoma@${packageVersion}`,
+      // The public install pin follows the published package, not an unreleased source candidate.
+      `npm install -g neotoma@${REPO_VERSION}`,
       ...steps,
     ]);
     expect(block![1]).not.toContain("neotoma mcp config");
@@ -421,7 +423,9 @@ describe("README checkable claims", () => {
     // adapter paths can use an already operated instance. Setup-specific HowTo routes
     // retain their own command guards in site_served_claims.test.ts.
     expect(seoSteps).toHaveLength(0);
-    expect(resolveSeoMetadata("/install").jsonLd.some((entry) => entry["@type"] === "WebPage")).toBe(true);
+    expect(
+      resolveSeoMetadata("/install").jsonLd.some((entry) => entry["@type"] === "WebPage")
+    ).toBe(true);
   });
 
   it("keeps the note under the install block to one setup sentence plus the token workaround", () => {
