@@ -4386,7 +4386,13 @@ async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<v
   }
 }
 
-async function resolveGuestScopedEntityAccess(
+/**
+ * Guest access governed ONLY by the type-level access policy (plus the
+ * submitter-scoped token/thumbprint rules). Used by every guest write route and
+ * by every guest read route that is not a share-link route. Never consults the
+ * entity-scoped precedence in resolveGuestShareLinkEntityAccess.
+ */
+async function resolveGuestPolicyGovernedEntityAccess(
   principal: GuestPrincipal,
   entityId: string,
   expectedEntityType?: string
@@ -4485,6 +4491,46 @@ async function resolveGuestScopedEntityAccess(
   }
 
   return { userId: entity.user_id, entityType: entity.entity_type };
+}
+
+type GuestShareLinkAccess =
+  | { kind: "not_found" }
+  | { kind: "found"; userId: string; entityType: string; viaToken: boolean };
+
+/**
+ * Guest READ access for the two share-link routes only: GET /entities/:id/html
+ * and GET /entities/:id. A valid, unexpired, unrevoked guest token that names
+ * exactly this entity id grants access to that entity before the type policy is
+ * consulted. A merged entity is not served through a token (the redirect would
+ * return a different entity's content), and the caller must re-check deletion
+ * and identity on the loaded entity. Every other case falls through to the
+ * policy-governed resolver unchanged. Not for writes and not for other routes.
+ */
+async function resolveGuestShareLinkEntityAccess(
+  principal: GuestPrincipal,
+  entityId: string
+): Promise<GuestShareLinkAccess> {
+  await assertValidGuestAccessToken(principal);
+  const token = principal.guestId.accessToken;
+  if (token) {
+    const { tokenGrantsAccessTo } = await import("./services/guest_access_token.js");
+    if (await tokenGrantsAccessTo(token, entityId)) {
+      const { data: entity } = await db
+        .from("entities")
+        .select("id, entity_type, user_id, merged_to_entity_id")
+        .eq("id", entityId)
+        .single();
+      if (!entity || entity.merged_to_entity_id) return { kind: "not_found" };
+      return {
+        kind: "found",
+        userId: entity.user_id,
+        entityType: entity.entity_type,
+        viaToken: true,
+      };
+    }
+  }
+  const access = await resolveGuestPolicyGovernedEntityAccess(principal, entityId);
+  return { kind: "found", ...access, viaToken: false };
 }
 
 // Inspector SPA shell — early content-negotiation handler. Registered BEFORE
@@ -5421,8 +5467,13 @@ app.get("/entities/:id", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
+    let tokenScopedOwner: string | undefined;
     if (principal.kind === "guest") {
-      await resolveGuestScopedEntityAccess(principal, entityId);
+      const access = await resolveGuestShareLinkEntityAccess(principal, entityId);
+      if (access.kind === "not_found") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      if (access.viaToken) tokenScopedOwner = access.userId;
     } else {
       const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5438,9 +5489,14 @@ app.get("/entities/:id", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const entityWithProvenance = await getEntityWithProvenance(entityId);
+    const entityWithProvenance = await getEntityWithProvenance(entityId, false, tokenScopedOwner);
 
     if (!entityWithProvenance) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+    // A token grants exactly the entity it names: never serve another entity's
+    // content (for example through a merge redirect).
+    if (tokenScopedOwner && entityWithProvenance.entity_id !== entityId) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
@@ -5521,9 +5577,14 @@ app.get("/entities/:id/markdown", async (req, res) => {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
-    logError("APIError:entity_markdown", req, error);
-    const message = error instanceof Error ? error.message : "Failed to render entity markdown";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to render entity markdown",
+      "DB_QUERY_FAILED",
+      "APIError:entity_markdown"
+    );
   }
 });
 
@@ -5536,8 +5597,13 @@ app.get("/entities/:id/html", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
+    let tokenScopedOwner: string | undefined;
     if (principal.kind === "guest") {
-      await resolveGuestScopedEntityAccess(principal, entityId);
+      const access = await resolveGuestShareLinkEntityAccess(principal, entityId);
+      if (access.kind === "not_found") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      if (access.viaToken) tokenScopedOwner = access.userId;
     } else {
       const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5552,8 +5618,13 @@ app.get("/entities/:id/html", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const current = await getEntityWithProvenance(entityId);
+    const current = await getEntityWithProvenance(entityId, false, tokenScopedOwner);
     if (!current) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+    // A token grants exactly the entity it names: never serve another entity's
+    // content (for example through a merge redirect).
+    if (tokenScopedOwner && current.entity_id !== entityId) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
     if (current.entity_type !== "rendered_page") {
@@ -5589,9 +5660,14 @@ app.get("/entities/:id/html", async (req, res) => {
         sandbox: { available: false },
       });
     }
-    logError("APIError:entity_html", req, error);
-    const message = error instanceof Error ? error.message : "Failed to render entity HTML";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to render entity HTML",
+      "DB_QUERY_FAILED",
+      "APIError:entity_html"
+    );
   }
 });
 
@@ -5674,7 +5750,7 @@ app.get("/entities/:id/observations", async (req, res) => {
     let userId: string;
 
     if (principal.kind === "guest") {
-      userId = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
+      userId = (await resolveGuestPolicyGovernedEntityAccess(principal, entityId)).userId;
     } else {
       userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5733,7 +5809,7 @@ app.get("/entities/:id/relationships", async (req, res) => {
     let userId: string;
 
     if (principal.kind === "guest") {
-      userId = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
+      userId = (await resolveGuestPolicyGovernedEntityAccess(principal, entityId)).userId;
     } else {
       userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -11513,7 +11589,7 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
     const userId =
       principal.kind === "guest"
         ? (
-            await resolveGuestScopedEntityAccess(
+            await resolveGuestPolicyGovernedEntityAccess(
               principal,
               parsed.data.entity_id?.trim() || "",
               "issue"
@@ -11723,7 +11799,7 @@ const handleIssuesGetStatusHttp: express.RequestHandler = async (req, res) => {
     const issueEntityId = parsed.data.entity_id?.trim() || "";
     const userId =
       principal.kind === "guest"
-        ? (await resolveGuestScopedEntityAccess(principal, issueEntityId, "issue")).userId
+        ? (await resolveGuestPolicyGovernedEntityAccess(principal, issueEntityId, "issue")).userId
         : await getAuthenticatedUserId(req, parsed.data.user_id);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");

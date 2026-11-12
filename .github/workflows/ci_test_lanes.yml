@@ -308,6 +308,14 @@ jobs:
       - name: Run relationship-write capability surface parity (#2524)
         run: npx vitest run --no-file-parallelism tests/integration/relationship_write_capability_surfaces.test.ts
 
+      # #1948 guest share-link precedence. Lives under tests/integration, which
+      # test:unit excludes, so it needs its own step. Drives real HTTP against
+      # the in-process server with a closed rendered_page policy and asserts the
+      # link grants exactly the named page and nothing else (relationships,
+      # observations, merged, deleted, writes).
+      - name: Run guest share-link token precedence (#1948)
+        run: npx vitest run --no-file-parallelism tests/integration/guest_token_precedence_over_type_policy.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline
