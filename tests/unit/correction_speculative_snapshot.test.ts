@@ -7,10 +7,7 @@ import {
   FieldVersionConflictError,
 } from "../../src/services/correction.js";
 import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
-import {
-  buildObservationRow,
-  insertObservationRow,
-} from "../../src/services/observation_insert.js";
+import { buildObservationRow } from "../../src/services/observation_insert.js";
 import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { stableSerialize } from "../../src/services/stable_serialize.js";
