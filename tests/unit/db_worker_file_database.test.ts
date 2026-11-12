@@ -993,6 +993,19 @@ describe("WorkerFileDatabase retry of a read that writes", () => {
 
       // Read-shaped call that writes: rejected read-only on a reader, then
       // retried on the writer, which must not run inside the open transaction.
+      // The rejection is injected because some worker drivers let the reader
+      // block on the write lock instead of rejecting, which would never reach
+      // the retry path this test pins.
+      const dispatch = vi
+        .spyOn(
+          db as unknown as { dispatchRead: (...a: unknown[]) => Promise<unknown> },
+          "dispatchRead"
+        )
+        .mockRejectedValueOnce(
+          Object.assign(new Error("attempt to write a readonly database"), {
+            code: "SQLITE_READONLY",
+          })
+        );
       let done = false;
       const retried = db
         .prepare("INSERT INTO rt (id, v) VALUES (2, 'retry') RETURNING id, v")
@@ -1007,6 +1020,7 @@ describe("WorkerFileDatabase retry of a read that writes", () => {
       release();
       await tx;
       expect(await retried).toEqual({ id: 2, v: "retry" });
+      expect(dispatch).toHaveBeenCalledTimes(1);
       const n = (await db.prepare("SELECT COUNT(*) AS n FROM rt").get()) as { n: number };
       expect(n.n).toBe(2);
     } finally {
