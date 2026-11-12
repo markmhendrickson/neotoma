@@ -1,57 +1,109 @@
-This minor release lets an atomic correction depend on a record it does not change, makes schema updates atomic, and fixes the contrast of the 404 page's "Go home" button. It also publishes the v0.27.0 security advisory.
+Neotoma v0.28.0 adds coherent exact-identity reads, explicit planning declarations, safer atomic updates and faster current-state retrieval, together with packaged session-recovery workflows and clearer CLI diagnostics.
+
+## Highlights
+
+- **Distinguish a unique identity from missing or unavailable evidence.** `retrieve_entities` can opt into `read_mode: "exact_identity"` and report singleton, absent, ambiguous or unproved evidence from one authenticated database view.
+- **Discover planning levels without guessing from type names.** `schema_definition.planning` declares an instance-defined numeric level and optional read-only marker, with catalog completeness evidence.
+- **Keep related corrections consistent with a record you only need to check.** `correct_transaction` accepts compare-only participants whose preconditions are checked atomically with the writing participants.
+- **Read current state without replaying ordinary observation history.** List, count-certification and snapshot paths use the rows that decide the answer, while exhaustive history remains available for historical and integrity operations.
+- **Recover interrupted agent work with the packaged workflows.** The installable skills now include `continue-session`; `digest` retains its acting default and offers an explicitly read-only report mode.
 
 ## What changed for npm package users
 
-**Compare-only guards in atomic corrections**
+### Exact identity reads
 
-- `correct_transaction` (MCP), `POST /corrections/transaction` (HTTP) and `neotoma request --operation correctTransaction` (CLI) now accept a participant with `changes: []`. Such a participant is a guard: it is checked but not written.
-- A guard must declare at least one field in `expected_snapshot`, and at least one other participant in the same request must make a correction. The guard's scoped identity, type, `expected_observation_count` and expected fields are checked in the same database transaction as the writes. If the guarded record changed, the whole transaction is refused and nothing is written.
-- A guard adds no observation and sends no notification. It is part of the idempotency hash, so an exact replay stays effect-free, and changing the guard under the same key is refused.
-- Agents admitted through agent grants need the `correct` operation on the guard's entity type as well as on the written types.
-- Requests where every participant writes behave exactly as before.
+- HTTP `POST /entities/query`, MCP `retrieve_entities`, and the generic CLI request operation `queryEntities` accept an optional exact mode. Supply only `read_mode`, one `entity_type`, and one `snapshot_filters` string equality on the schema's sole declared canonical identity field. Use POST so the identity value does not appear in a URL.
+- Inspect `exact_identity.state` and `common_view`. A proved singleton includes the owned raw snapshot and field provenance; absent proves no match; ambiguous proves at least two matches. `unproved` means the proof is unavailable or incomplete, never that the identity is absent. The response binds its requested value with a SHA-256 digest rather than echoing that predicate in the scope receipt.
+- Proof currently requires an available pinned file-libSQL reader. Unsupported storage, exhausted reader capacity, malformed evidence or exceeded evidence budgets returns unproved rather than an ordinary query result. Public direct SQLite is not positively supported by this mode. Type and field identifiers must be 1–64 lowercase ASCII letters/digits/underscore, beginning with a letter; the value must contain 1–256 Unicode characters without C0/C1 controls.
+- Evidence caps remain explicit: 2,500 scoped entities, 10,000 distinct entity/raw-JSON identity facts, 16 candidates and 128 observations per candidate. Repeated identical facts are losslessly deduplicated before the fact cap; raw types, case, collisions and candidate history still matter.
+- New exact-read admission remains unavailable while retired native reader work is still alive, including across database-handle replacement. Ordinary routing retains its existing contract. The deadline bounds response/evidence validity; it does not promise immediate native cancellation or a total CPU/physical-scan bound.
 
-**Atomic schema updates**
+### Planning declarations and schema catalogs
 
-- Incremental schema updates (MCP `update_schema_incremental`, HTTP `POST /update_schema_incremental`) and schema registration now resolve the current schema, merge, register and activate inside one database transaction. Concurrent additive updates no longer lose fields, and a failed update no longer leaves a half-activated schema.
-- An update now activates the exact row it just registered. Before, it looked the row up again by version string, which could select an older inactive row with the same version.
-- Non-merge reducer settings on the current schema are kept across incremental updates.
-- Icon generation and schema snapshot export run only after the change commits, and not at all when it is refused or rolled back.
-- `migrate_existing` backfill of historical `raw_fragments` still runs as a separate step after the schema commits.
+- Registration accepts optional `schema_definition.planning = { level: <finite number>, read_only?: <boolean> }`. `update_schema_incremental` and HTTP `POST /update_schema_incremental` accept `planning` alone. `neotoma schemas update <type> --planning '<json>'` exposes that existing versioned operation through the CLI.
+- Omitting planning preserves the current declaration. A declaration-only update preserves the other definition fields, identity rules, reducers, row metadata and scope. Numeric ordering is instance-defined; a read-only marker or its omission grants no execution or editing authority. Existing schema-write grants and effect gates still apply.
+- MCP `list_entity_types` and HTTP `GET /schemas?summary=true&limit=<budget>&offset=0` expose compact declarations and `registry_coverage`. The CLI equivalent is `neotoma schemas list --summary --limit <budget> --json`.
+- A complete census requires an unfiltered authenticated registry result, all rows returned, known matching totals, `version: "1"`, `state: "complete"`, `source: "registry"`, `exhausted: true`, no reasons and valid declarations on every row. A filtered/page-limited result, code fallback, unreadable catalog or malformed legacy declaration is unknown. `planning_error: "invalid_declaration"` exposes invalid legacy marks; it must not be treated as a missing level.
+
+### Compare-only guards and atomic schema updates
+
+- `correct_transaction`, HTTP `POST /corrections/transaction`, and CLI `neotoma request --operation correctTransaction` accept a participant with `changes: []`. The guard must contain at least one declared field in `expected_snapshot`, and another participant must write. The scoped entity identity, type, observation count and expected fields are checked inside the same transaction as the corrections. A stale guard refuses the entire transaction with no writer effect.
+- A guard adds no observation or notification. It participates in the idempotency hash: identical retries remain effect-free; changing the guard under the same key is refused. An admitted agent needs the `correct` operation on guard types as well as writer types. Existing all-writer transactions retain their behavior.
+- Schema registration and incremental schema changes resolve, merge, register and activate atomically. Concurrent additive updates no longer lose fields; activation selects the exact new row rather than another row sharing its version string. Non-merge reducer settings are preserved. A deactivation failure now aborts the change rather than merely logging a warning.
+- Icon generation and schema snapshot export occur after commit and do not escape rollback. Historical `migrate_existing` fragment backfill remains a separate post-commit step; atomic schema metadata does not make that backfill one transaction with registration.
+
+### Retrieval performance and visible details
+
+- Entity-id ordered deep-offset scans seek from the last key instead of repeatedly applying SQL OFFSET to each internal chunk. Visible pagination stays linear in offset; cursor pagination remains the way to avoid that depth cost. Canonical-name ordering retains OFFSET, and the existing cursor contract is unchanged.
+- Current list pages, totals, hidden-entity count certification and snapshots read deciding visibility rows and the newest eligible raw fragment per entity/key. New indexes support fragment selection and attached lifecycle-authority checks. Before-cutover fallback cases, legacy fragments, merge tombstones and historical/provenance operations retain their documented exhaustive paths.
+- Current-state reads no longer re-check historical rows that cannot decide the current answer. Malformed attached lifecycle authority is still refused. Exhaustive provenance, timeline, as-of and lifecycle-storage verification retain their integrity checks. See [the read-path inventory](https://github.com/markmhendrickson/neotoma/blob/b5738a3872eece72a4ba53417330b92e87bb67eb/docs/performance/history_independent_reads.md).
+- A fragment is eligible only when its source still has an observation of that entity. Ties on `last_seen` now choose the greater fragment id instead of scan order. Source-walk trace reasons now apply only to the legacy-fragment path; entity-named fragment read failures use `raw_fragments_unavailable`.
+- This release does not fix observation/fragment growth when an unchanged record is re-stored in an otherwise changed batch, and does not compact existing histories. The storage-growth benchmark remains an expected failure.
+
+### CLI setup and diagnostics
+
+- Setup's transport line describes only the Neotoma MCP entries that invocation generated and recorded as written. It explicitly says other entries, including repaired or re-pointed entries, were not checked. It describes each preset's mechanism without printing endpoint, command or environment values.
+- The local stdio preset discloses its npm update check unless `NO_UPDATE_NOTIFIER=1`. Setup no longer claims an absence of network activity. This changes reporting, not a general network-isolation guarantee.
+- MCP configuration discovery labels `claude_desktop_config.json` as Claude Desktop on supported platforms.
+- Failed single and batch relationship writes print the server's refusal code and message when present; otherwise the existing fixed failure message remains. Other response detail is not printed by this formatter.
 
 ## API surface & contracts
 
-- `openapi.yaml`: in the `correctTransaction` request, `changes` now allows `minItems: 0`. The `changes` and `expected_snapshot` descriptions state the compare-only rules. Generated types are regenerated. `npm run openapi:bc-diff` reports no breaking changes.
-- MCP tool description for `correct_transaction`, the MCP instructions and the CLI agent instructions describe the compare-only form.
+- OpenAPI and generated types include `ExactIdentityRead`, the opt-in `read_mode`, `PlanningDeclaration` and `SchemaRegistryCoverage`; schema catalog responses expose planning metadata and acquisition evidence. Registration's advertised MCP schema now derives from OpenAPI, including the planning restriction.
+- The atomic transaction contract allows an empty `changes` array for guarded participants and documents the required expected fields and at-least-one-writer rule.
+- These are changes to existing tools and routes. The existing release candidate's README count predates the newer containing-main changes; no freshly audited total tool/path count is asserted here.
 
 ## Behavior changes
 
-- `correctTransaction` now checks that every `expected_snapshot` field is declared in the participant's active schema and returns `VALIDATION_ERROR` if one is not. Before, such a request also always failed, because snapshots contain only declared fields, but it failed with `CONFLICT`. A caller that retried on `CONFLICT` now gets a non-retryable validation error for this mistake.
-- When a replay re-reads a committed transaction target, a target whose entity type has changed is now refused as `CONFLICT`.
-- Schema registration now fails if it cannot deactivate the previously active schema. Before, it logged a warning and could leave two active rows.
+- An undeclared `expected_snapshot` field in an atomic transaction now produces `VALIDATION_ERROR` instead of the previous `CONFLICT`. Such requests already failed; callers should correct the invalid field rather than retry it as concurrent modification. Replays also refuse a target whose entity type has changed.
+- Exact-mode invalid requests are rejected rather than silently falling back. GET/HEAD entity-list forms cannot carry exact proofs; use POST. Ordinary queries do not certify uniqueness.
+- Malformed planning declarations are now rejected. The required migration is described under Breaking changes below.
 
-## Fixes
+## Agent-facing instruction changes
 
-- The 404 page's "Go home" button kept the site's link color and was unreadable in some themes. It now uses the button's own foreground color in light and dark mode.
+- Canonical MCP instructions explain compare-only guards, same-key retry after an uncertain response, and refusal to force a conflict by increasing correction priority. CLI instructions point to the same behavioral contract.
+- Retrieval instructions explain exact proof states, request/value bounds, the pinned-reader requirement and that ordinary/unproved queries cannot certify identity. Deep-pagination guidance is condensed while retaining opaque cursor, exhaustion and sort-consistency rules.
+- A delivered `[PLANNING DECLARATIONS]` block directs agents to read valid instance declarations and certify a complete registry census. Agents must treat missing/malformed/filtered/fallback evidence as unknown, must not infer levels from type names or encountered task ancestry, and must preserve existing authority/effect gates. CLI references point to this canonical block.
 
-## Docs site & CI / tooling
+## Plugin / hooks / SDK changes
 
-- New advisory: `docs/security/advisories/2026-11-04-peer-sync-and-agent-grant-scope.md` (the v0.27.0 peer-sync and agent-grant scope fix), listed in the advisories index.
-- `docs/known_limitations.md` drops "A later ordinary write can replace a correction", fixed in v0.27.0.
-- Install pages and observation docs updated to the v0.27.0 behavior.
-- `docs/developer/atomic_corrections.md` and `docs/developer/cli_reference.md` document compare-only guards and their retry rule.
-- CI's atomic-null lane now also runs `tests/integration/correction_transaction_mcp_transport.test.ts`. `test:e2e:graph-render` now includes the 404 page spec.
-
-## Tests and validation
-
-- Compare-only guards: service tests (`src/services/correction_transaction.test.ts`), HTTP and CLI tests (`tests/cli/request_atomic_transaction.test.ts`), MCP transport tests over `POST /mcp` (`tests/integration/correction_transaction_mcp_transport.test.ts`), and a replay eval (`atomic_correction_compare_only_guard`). They cover guarded apply, stale-guard refusal with no writer effect, cross-tenant and wrong-type guards, rollback, and replay without growth.
-- Schema atomicity: `tests/services/schema_registry_atomic.test.ts` covers concurrent callers, same-version collision, rollback on activation or deactivation failure, scope isolation and post-commit effects.
-- 404 contrast: `playwright/tests/not-found.spec.ts` checks the label contrast in both themes.
-- Release prep: type-check passed. Targeted service, CLI, MCP, contract and tenant-isolation suites passed 403 of 404 locally. The one failure is a `/store` reference-path test whose code is not changed in this release, and it passes in CI. CI test lanes are green on the release head.
+- The existing packaged skill distribution grows from 12 installable skills in published v0.27.0 to 13 in this source, adding `continue-session`. It binds exact source sessions, reconstructs accepted work and planning ascent, and conditionally recovers a coordinated family only when the accepted scope includes it. Its document fallback remains available where native skill discovery is unavailable.
+- The status directory remains in place with invocation name `digest`. Default digest reports, acts on movable work and records its digest; `digest --report-only` performs zero writes, including bookkeeping, and takes no next action. `end` and `where` callers select that read-only mode for verified readouts.
+- This is packaged workflow/instruction support. The source and mirror tests do not establish model adherence, live installation, actual compaction or cross-harness recovery.
+- Exact-read transport tests exercise the existing SDK HTTP and local transports and both generic CLI payload forms. This release does not assert a new dedicated SDK method or positive public direct-SQLite proof support.
 
 ## Security hardening
 
-The diff classifier marked this release sensitive because `openapi.yaml` changed. The only contract change is the compare-only guard. Guards stay scoped to the authenticated user, need the `correct` agent-grant operation on their type, and fail closed when absent, cross-tenant, of the wrong type, undeclared or malformed. `security:lint` reports 0 errors, the protected-routes manifest is in sync, and the auth topology matrix passes. See [`security_review.md`](security_review.md). Advisory published in this release: [`2026-11-04-peer-sync-and-agent-grant-scope.md`](../../../security/advisories/2026-11-04-peer-sync-and-agent-grant-scope.md).
+The release security lane (G1 to G4) ran against the full `v0.27.0..v0.28.0` range, including the exact-identity, planning, worker, diagnostic and current-state changes. The [security review](https://github.com/markmhendrickson/neotoma/blob/release/v0.28.0/docs/releases/in_progress/v0.28.0/security_review.md) found no cross-tenant or unauthenticated path and signs off with caveats: the follow-up negative tests it lists are not gating. `security:lint` reports 0 errors, the protected-routes manifest is in sync and the auth topology matrix passes. Deployed security probes are a later release-completion gate; no new probe report is claimed here.
+
+- Compare-only guards retain authenticated-owner scoping and require correction capability for every participating type. A regression could turn them into cross-scope value probes; service, HTTP and MCP negative tests cover absent, wrong-type, malformed and cross-tenant guards. Release G1–G4 must qualify the full range and G5 must verify the deployed runtime.
+- Exact identity reads bind the authenticated owner, refuse user-id overrides, require a coherent pinned view, and return unproved when evidence or worker capacity is unavailable. Identity-bearing request diagnostics are suppressed for exact reads, with ordinary logging controls retained. Cross-owner, malformed-request and worker-settlement tests exercise these boundaries; full-range adversarial review remains required.
+- Planning metadata confers no authority; existing per-type schema-write capability checks remain applicable to declaration-only updates. Malformed writes are refused before a new version is stored, and incomplete catalogs cannot certify a planning census. Scope, preservation, malformed-input and transport-parity tests cover these contracts.
+- Opt-in legacy MCP identifier timing requires both `NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_HEADER` and `NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_TITLE_PREFIX`, a validated single trace header, the configured primary bearer and a narrowly qualified lookup. It records dispatch/completion/header/finish-or-close timing under `mcp_identifier_lookup_timing`, without the identifier itself. It is disabled when configuration/request qualification fails, does not change response behavior and is not a general server-latency measurement.
+- This release adds repository documentation for the already published [GHSA-9xrf-c4rq-h4gw](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-9xrf-c4rq-h4gw), fixed in v0.27.0. The advisory was published on November 4, 2026; v0.28.0 is not its first disclosure or fixing version. See [the advisory and operator actions](https://github.com/markmhendrickson/neotoma/blob/b5738a3872eece72a4ba53417330b92e87bb67eb/docs/security/advisories/2026-11-04-peer-sync-and-agent-grant-scope.md). Operators upgrading from before v0.27.0 should also review that release's peer/grant migration guidance.
+
+## Docs site & CI / tooling
+
+- Localized legal Markdown routes bind to the intended legal source page; canceled fallback continuations stop before acting on the abandoned iframe. The legal text itself is unchanged.
+- Inspector bundled-docs footer links point FAQ to its bundled page and include TypeScript and Python SDK entries. The 404 page's Go home button retains readable label contrast in light and dark mode.
+- Install and observation documentation reflects v0.27.0 corrections. The obsolete limitation that an ordinary write can replace a correction is removed. Candidate docs identify v0.28.0 while the public install pin continues to follow the currently published package.
+- CI contract selectors include correction parity and compare-only MCP transport; acquisition checks include deep-offset scanning; the history-length read benchmark and planning surface/registration contracts run in the existing lanes. Test catalogs and generated OpenAPI types are updated.
+
+## Internal changes
+
+- File-libSQL pinned-reader lifetime tracking preserves custody across handle replacement and settlement. New current-state readers centralize bounded visibility and eligible-fragment acquisition.
+- Test-only corrections assert `entity_version` and `replayed` in HTTP/MCP correction parity and `fallbackReason: "embedding_unavailable"` when semantic embedding generation returns null. These do not claim new semantic-search behavior.
+
+## Tests and validation
+
+- Existing CI run [43173724960](https://github.com/markmhendrickson/neotoma/actions/runs/43173724960) passed all ten jobs for the tested merge `6c523b79db6ad59cdaa5c5c9e814e8cc8666d41d`: baseline, contract parity, security gates, frontend, site export, graph-render smoke, agentic evals, replay scenarios, combined evals and Python SDK. The baseline log proves checkout of that merge and records the native compiled schema gate's 22 invocations.
+- The contract lane passed its history-length read regressions and current selectors; security CI passed classifier/static-rule/manifest/auth-matrix steps. Those results do not replace the release-specific full-range adversarial security and test-coverage review artifacts or authorize release execution.
+- Committed behavior tests cover guarded apply/refusal/replay without growth, schema concurrency/rollback/post-commit effects, planning declaration-only round trips and preservation through HTTP/MCP/built CLI, malformed registration hints/no-write outcomes, exact identity snapshots/provenance/owner isolation/unavailable evidence across transports, and actual native worker settlement. Read-path tests compare bounded/exhaustive answers and cover fragment eligibility and lifecycle modes.
+- Performance evidence is synthetic. The committed history-length benchmark holds equal entity populations with 1 versus 500 observations to its unchanged 2x read bound and observation-row criterion in both lifecycle modes. It deliberately retains an expected failure for re-store storage growth. Production performance and a served release effect are not established.
+- No new build, security lane, test suite or deployed probe was run for this proposal. Its full preview was rendered against the selected tested merge; the final publication commit remains to be established. The older 403-of-404 local release-prep result describes the earlier scope and is not presented as full-range validation.
 
 ## Breaking changes
 
-No breaking changes.
+**Reserved planning declaration shape.** `schema_definition.planning` was previously accepted as opaque metadata. For example, `"planning": { "level": "high" }` now fails schema registration with HTTP `400 VALIDATION_INVALID_FORMAT` and structured `details.hint`. New declarations must be exactly `{ "level": <finite number>, "read_only"?: <boolean> }`; extra declaration keys, non-finite/non-numeric levels and non-boolean read-only values are invalid. The hint is: `Use planning: {"level": <finite number>, "read_only"?: <boolean>}, or omit planning to preserve the current declaration.` Migrate custom opaque metadata to another declaration name, supply a valid numeric planning mark, or omit planning when updating a schema whose existing declaration should be preserved. Existing definitions without planning remain valid. Malformed legacy declarations are exposed by catalog `planning_error`; they cannot support a complete planning census. See [the compatibility record](https://github.com/markmhendrickson/neotoma/blob/b5738a3872eece72a4ba53417330b92e87bb67eb/tests/contract/legacy_payloads/CHANGES.md).
+
+This is a minor release from v0.27.0 under the project's 0.x validation-tightening policy. No additional version change is proposed by these notes.
