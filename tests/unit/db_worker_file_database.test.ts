@@ -24,6 +24,7 @@ import { holdOrdinaryWorker, holdWriterWorker } from "../helpers/worker_lifetime
 import { logger } from "../../src/utils/logger.js";
 import {
   summarizeQueuedStatements,
+  oldestQueuedWaitMs,
   WorkerFileDatabase,
   WorkerDbCrashError,
   WorkerDbTimeoutError,
@@ -835,5 +836,148 @@ describe("pinned worker read view", () => {
     } finally {
       await db.close();
     }
+  });
+});
+
+describe("WorkerFileDatabase reads do not wait for write transactions", () => {
+  it("completes a read outside a transaction while a write transaction is still open", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.prepare("INSERT INTO gate_t (v) VALUES (?)").run("committed");
+
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      let committed = false;
+      const tx = db
+        .transaction(async (conn) => {
+          await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("uncommitted");
+          inserted();
+          await held;
+        })
+        .then(() => {
+          committed = true;
+        });
+
+      await insertedSignal;
+      // Read outside the transaction: must not wait for it, and must not see its row.
+      const rows = (await db.prepare("SELECT v FROM gate_t ORDER BY id").all()) as { v: string }[];
+      expect(committed).toBe(false);
+      expect(rows.map((r) => r.v)).toEqual(["committed"]);
+
+      release();
+      await tx;
+      const after = (await db.prepare("SELECT COUNT(*) AS n FROM gate_t").get()) as { n: number };
+      expect(after.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("still lets a read inside the transaction see its own uncommitted write", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("mine");
+        const row = (await conn.prepare("SELECT v FROM gate_t").get()) as { v: string };
+        expect(row.v).toBe("mine");
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps waiting for the open transaction when the pool has no readers", async () => {
+    const db = makeDb(0);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      const tx = db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("x");
+        inserted();
+        await held;
+      });
+      await insertedSignal;
+      let readDone = false;
+      const read = db
+        .prepare("SELECT COUNT(*) AS n FROM gate_t")
+        .get()
+        .then((r) => {
+          readDone = true;
+          return r as { n: number };
+        });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(readDone).toBe(false);
+      release();
+      await tx;
+      expect((await read).n).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("logs a transaction that holds the gate over a second, without bound values", async () => {
+    const db = makeDb(2);
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("secret-value");
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+      });
+      const msg = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("held the gate"));
+      expect(msg).toBeDefined();
+      expect(msg).toContain("INSERT INTO gate_t");
+      expect(msg).not.toContain("secret-value");
+    } finally {
+      warn.mockRestore();
+      await db.close();
+    }
+  }, 20_000);
+
+  it("reports event-loop delay and oldest queued wait in the pool snapshot", async () => {
+    const db = makeDb(2);
+    try {
+      await db.prepare("SELECT 1 AS ok").get();
+      const stats = db.readerPoolStats();
+      expect(stats.oldestQueuedWaitMs).toBe(0);
+      expect(stats.eventLoopDelayMs).not.toBeNull();
+      expect(stats.eventLoopDelayMs?.max).toBeGreaterThanOrEqual(0);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("oldestQueuedWaitMs", () => {
+  it("reports the age of the oldest waiting statement, not the executing one or episode age", () => {
+    // Reader A: executing since 1000 (not waiting), one waiting since 4000.
+    // Reader B: only an executing statement since 500 (nothing waiting).
+    expect(oldestQueuedWaitMs([[1000, 4000], [500]], 5000)).toBe(1000);
+    expect(oldestQueuedWaitMs([[1000], [500]], 5000)).toBe(0);
+    expect(
+      oldestQueuedWaitMs(
+        [
+          [1000, 4500, 4900],
+          [2000, 3000],
+        ],
+        5000
+      )
+    ).toBe(2000);
+    expect(oldestQueuedWaitMs([], 5000)).toBe(0);
   });
 });
