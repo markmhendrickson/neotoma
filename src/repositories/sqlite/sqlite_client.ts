@@ -744,18 +744,51 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
       )
       .run();
 
-    // `entities` had no index beyond its primary key, so every query scoped by
-    // (user_id, entity_type) — the /entities/query page (WHERE user_id AND
-    // entity_type AND merged_to_entity_id IS NULL ORDER BY id LIMIT n), the
-    // population-certificate scans, and the type-filtered lookups in
-    // services/ — was a full SCAN of the table. At ~300k rows a limit-5 page
-    // cost ~1.1s and bursts saturated the DB reader pool. `id` is last so the
-    // default ORDER BY id (and the keyset seek `id > :cursor`) is served in
-    // index order with no sort step. Idempotent, so it is also built on
-    // existing databases the next time they open.
+    // `entities` had no index beyond its primary key, so every read scoped by
+    // (user_id, entity_type) was a full SCAN of the table: the /entities/query
+    // page (WHERE user_id AND entity_type AND merged_to_entity_id IS NULL
+    // ORDER BY id), the population-certificate scans, and type-filtered lookups
+    // in services/. At ~300k rows a limit-5 page for one type cost ~1.1s on the
+    // hosted instance and bursts saturated the DB reader pool.
+    //
+    // Four indexes, each tied to a query shape the real builder emits (the
+    // plan test captures that SQL from queryEntities, so it cannot drift):
+    //   - (user_id, entity_type, merged_to_entity_id, id): single-type page and
+    //     keyset, ordered by id with no sort; also COVERS the certificate query.
+    //   - (user_id, merged_to_entity_id, id): the type-less default listing
+    //     (and both keyset directions) and multi-type `IN (...)` pages, ordered
+    //     by id with no sort. Without it the planner takes the type index with
+    //     only user_id bound and sorts every row the user owns (measured
+    //     ~0.1ms -> ~220ms at 300k).
+    //   - (user_id, entity_type, merged_to_entity_id, canonical_name, id) and
+    //     (user_id, merged_to_entity_id, canonical_name, id): the same two
+    //     listings with sort_by=canonical_name, so they stay an ordered index
+    //     walk instead of a scan plus top-N sort (the type index alone made
+    //     that sort several times slower than the old scan).
+    // `merged_to_entity_id` sits after the equality columns because every
+    // listing filters `merged_to_entity_id IS NULL`, which SQLite treats as an
+    // equality, so the following column still delivers order. Only
+    // include_merged=true (opt-in, no filter) loses index order and sorts.
+    // All are CREATE INDEX IF NOT EXISTS, so existing databases build them on
+    // next open (one-time) and later opens are a no-op.
     await db
       .prepare(
-        "CREATE INDEX IF NOT EXISTS idx_entities_user_type ON entities(user_id, entity_type, id)"
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_type_live_id ON entities(user_id, entity_type, merged_to_entity_id, id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_live_id ON entities(user_id, merged_to_entity_id, id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_type_live_name ON entities(user_id, entity_type, merged_to_entity_id, canonical_name, id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_live_name ON entities(user_id, merged_to_entity_id, canonical_name, id)"
       )
       .run();
 

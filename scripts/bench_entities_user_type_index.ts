@@ -1,14 +1,15 @@
 /**
- * Timing harness for the idx_entities_user_type index (synthetic data only).
+ * Timing harness for the idx_entities_* indexes (synthetic data only).
  *
  *   npx tsx scripts/bench_entities_user_type_index.ts [rows ...]   (default 300000 1000000)
  *
- * For each row count and each driver (better-sqlite3 and the libsql file
+ * For each row count and each driver (better-sqlite3, and the libsql file
  * driver the hosted worker uses) it builds a throwaway database in a temp dir,
- * drops the index, seeds `entities` + `entity_snapshots` with a skewed type
- * spread, times the page and population-certificate queries, times the index
- * build (via the real `ensureSchema` boot path, and a bare CREATE INDEX on a
- * second copy), then times the queries again. Never touches a real database.
+ * seeds `entities` + `entity_snapshots` with a skewed type spread (5 dominant
+ * types, 150 tail types), times every listing shape with the indexes absent,
+ * builds them through the real `ensureSchema` boot path, and times the same
+ * shapes again. The SQL is the text the real queryEntities builder emits (page
+ * chunk size 200). Never touches a real database.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -28,16 +29,14 @@ const DOMINANT: Array<[string, number]> = [
   ["contact", 0.05],
   ["task", 0.03],
 ];
-const TAIL_TYPES = Array.from({ length: 150 }, (_, i) => `tail_type_${i}`);
-
-function pickType(r: number): string {
+const pickType = (r: number): string => {
   let acc = 0;
   for (const [t, w] of DOMINANT) {
     acc += w;
     if (r < acc) return t;
   }
-  return TAIL_TYPES[Math.floor(((r - acc) / (1 - acc)) * TAIL_TYPES.length) % TAIL_TYPES.length];
-}
+  return `tail_type_${Math.floor(((r - acc) / (1 - acc)) * 150) % 150}`;
+};
 
 function seed(file: string, n: number): void {
   const raw = new Database(file);
@@ -53,20 +52,12 @@ function seed(file: string, n: number): void {
     for (let i = 0; i < n; i++) {
       const type = pickType(Math.random());
       const id = `ent_${randomBytes(12).toString("hex")}`;
-      const name = `${type} ${randomBytes(10).toString("hex")} sample canonical name`;
-      const merged = i % 200 === 0 ? `ent_${randomBytes(12).toString("hex")}` : null;
-      ins.run(
-        id, type, name,
-        i % 5 === 0 ? JSON.stringify([`alias ${i}`, `other alias ${i}`]) : null,
-        ts, ts, USER, ts, ts, merged, merged ? ts : null
-      );
+      const name = `${randomBytes(6).toString("hex")} ${type} sample canonical name`;
+      const merged = i % 200 === 0 ? `ent_merged_${i}` : null;
+      ins.run(id, type, name, i % 5 === 0 ? '["a","b"]' : null, ts, ts, USER, ts, ts, merged, merged ? ts : null);
       // ~99% of entities have a snapshot, like a healthy store.
       if (i % 100 !== 7) {
-        insSnap.run(
-          id, type, "1.0", name,
-          JSON.stringify({ name, status: "active", note: randomBytes(40).toString("hex") }),
-          ts, 3, ts, "{}", USER
-        );
+        insSnap.run(id, type, "1.0", name, JSON.stringify({ name, note: randomBytes(40).toString("hex") }), ts, 3, ts, "{}", USER);
       }
     }
   })();
@@ -74,40 +65,39 @@ function seed(file: string, n: number): void {
   raw.close();
 }
 
-const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const SEL =
+  "SELECT id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at FROM entities";
+const TAIL = "LIMIT 200 OFFSET 0";
+const CERT =
+  "SELECT e.id,e.user_id,e.entity_type FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL AND e.entity_type IN (?) AND s.entity_id IS NULL";
+const LIVE = "merged_to_entity_id IS NULL";
+const QUERIES: Array<[string, string, unknown[]]> = [
+  ["type-less listing", `${SEL} WHERE user_id = ? AND ${LIVE} ORDER BY id ASC ${TAIL}`, [USER]],
+  ["keyset id > ?", `${SEL} WHERE user_id = ? AND ${LIVE} AND id > ? ORDER BY id ASC ${TAIL}`, [USER, "ent_8"]],
+  ["keyset id < ? DESC", `${SEL} WHERE user_id = ? AND ${LIVE} AND id < ? ORDER BY id DESC ${TAIL}`, [USER, "ent_8"]],
+  ["single type, dominant", `${SEL} WHERE user_id = ? AND entity_type = ? AND ${LIVE} ORDER BY id ASC ${TAIL}`, [USER, "email_message"]],
+  ["single type, tail", `${SEL} WHERE user_id = ? AND entity_type = ? AND ${LIVE} ORDER BY id ASC ${TAIL}`, [USER, "tail_type_3"]],
+  ["multi type, dominant+tail", `${SEL} WHERE user_id = ? AND entity_type IN (?, ?) AND ${LIVE} ORDER BY id ASC ${TAIL}`, [USER, "email_message", "tail_type_3"]],
+  ["multi type, two tail", `${SEL} WHERE user_id = ? AND entity_type IN (?, ?) AND ${LIVE} ORDER BY id ASC ${TAIL}`, [USER, "tail_type_4", "tail_type_3"]],
+  ["name sort, type-less", `${SEL} WHERE user_id = ? AND ${LIVE} ORDER BY canonical_name ASC ${TAIL}`, [USER]],
+  ["name sort, dominant", `${SEL} WHERE user_id = ? AND entity_type = ? AND ${LIVE} ORDER BY canonical_name ASC ${TAIL}`, [USER, "email_message"]],
+  ["name sort, tail", `${SEL} WHERE user_id = ? AND entity_type = ? AND ${LIVE} ORDER BY canonical_name ASC ${TAIL}`, [USER, "tail_type_3"]],
+  ["include_merged, type-less", `${SEL} WHERE user_id = ? ORDER BY id ASC ${TAIL}`, [USER]],
+  ["include_merged, tail", `${SEL} WHERE user_id = ? AND entity_type = ? ORDER BY id ASC ${TAIL}`, [USER, "tail_type_3"]],
+  ["certificate, tail", CERT, [USER, "tail_type_3"]],
+  ["certificate, dominant", CERT, [USER, "email_message"]],
+];
 
-async function time(db: DbDatabase, sql: string, params: unknown[], runs = 5): Promise<number> {
-  const samples: number[] = [];
-  for (let i = 0; i < runs; i++) {
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+async function time(db: DbDatabase, sql: string, params: unknown[]): Promise<number> {
+  const xs: number[] = [];
+  for (let i = 0; i < 5; i++) {
     const t = performance.now();
     await db.prepare(sql).all(...params);
-    samples.push(performance.now() - t);
+    xs.push(performance.now() - t);
   }
-  return median(samples);
+  return median(xs);
 }
-
-const QUERIES: Array<[string, string, unknown[]]> = [
-  [
-    "page limit 5 (dominant type)",
-    "SELECT id, entity_type, canonical_name, created_at FROM entities WHERE user_id = ? AND entity_type = ? AND merged_to_entity_id IS NULL ORDER BY id ASC LIMIT 5",
-    [USER, "email_message"],
-  ],
-  [
-    "page limit 5 (tail type)",
-    "SELECT id, entity_type, canonical_name, created_at FROM entities WHERE user_id = ? AND entity_type = ? AND merged_to_entity_id IS NULL ORDER BY id ASC LIMIT 5",
-    [USER, "tail_type_3"],
-  ],
-  [
-    "population certificate (tail type)",
-    "SELECT e.id,e.user_id,e.entity_type FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL AND e.entity_type IN (?) AND s.entity_id IS NULL",
-    [USER, "tail_type_3"],
-  ],
-  [
-    "population certificate (dominant type)",
-    "SELECT e.id,e.user_id,e.entity_type FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL AND e.entity_type IN (?) AND s.entity_id IS NULL",
-    [USER, "email_message"],
-  ],
-];
 
 async function run(n: number, driver: string): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-entidx-bench-"));
@@ -117,45 +107,36 @@ async function run(n: number, driver: string): Promise<void> {
       ? new AsyncSqliteDatabase(file)
       : openLibsqlDatabase(`file:${file}`, { busyTimeoutMs: 60000 });
   try {
-    // Build the schema, drop the new index to model an existing database, seed.
     let db = open();
     await ensureSchema(db);
-    await db.prepare("DROP INDEX IF EXISTS idx_entities_user_type").run();
+    const idx = (await db
+      .prepare("SELECT name FROM sqlite_master WHERE name LIKE 'idx_entities_%'")
+      .all()) as Array<{ name: string }>;
+    for (const { name } of idx) await db.prepare(`DROP INDEX ${name}`).run();
     await db.close();
-    const t0 = performance.now();
     seed(file, n);
-    const seedS = ((performance.now() - t0) / 1000).toFixed(1);
     const sizeBefore = fs.statSync(file).size;
 
     db = open();
-    const before = [];
+    const before: number[] = [];
     for (const [, sql, p] of QUERIES) before.push(await time(db, sql, p));
     const tb = performance.now();
-    await ensureSchema(db); // the boot path: builds the index on this existing DB
-    const bootMs = performance.now() - tb;
+    await ensureSchema(db); // the boot path: builds the indexes on this existing DB
+    const bootS = (performance.now() - tb) / 1000;
     await db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     const sizeAfter = fs.statSync(file).size;
-    const after = [];
+    const after: number[] = [];
     for (const [, sql, p] of QUERIES) after.push(await time(db, sql, p));
-    // Bare build time on a second drop/create cycle.
-    await db.prepare("DROP INDEX idx_entities_user_type").run();
-    const tc = performance.now();
-    await db
-      .prepare("CREATE INDEX idx_entities_user_type ON entities(user_id, entity_type, id)")
-      .run();
-    const createMs = performance.now() - tc;
     await db.close();
 
-    console.log(`\n== ${driver} @ ${n.toLocaleString()} entity rows (seed ${seedS}s) ==`);
+    console.log(`\n== ${driver} @ ${n.toLocaleString()} entity rows ==`);
+    console.log(`first-boot index build (ensureSchema on existing DB): ${bootS.toFixed(2)} s`);
     console.log(
-      `db size: ${(sizeBefore / 1e6).toFixed(0)} MB -> ${(sizeAfter / 1e6).toFixed(0)} MB (+${((sizeAfter - sizeBefore) / 1e6).toFixed(1)} MB)`
-    );
-    console.log(
-      `index build: bare CREATE INDEX ${(createMs / 1000).toFixed(2)} s; ensureSchema on existing DB ${(bootMs / 1000).toFixed(2)} s`
+      `db size: ${(sizeBefore / 1e6).toFixed(0)} MB -> ${(sizeAfter / 1e6).toFixed(0)} MB (+${((sizeAfter - sizeBefore) / 1e6).toFixed(0)} MB)`
     );
     QUERIES.forEach(([label], i) =>
       console.log(
-        `${label.padEnd(40)} before ${before[i].toFixed(1).padStart(8)} ms   after ${after[i].toFixed(2).padStart(8)} ms`
+        `${label.padEnd(28)} before ${before[i].toFixed(1).padStart(8)} ms   after ${after[i].toFixed(1).padStart(8)} ms`
       )
     );
   } finally {
