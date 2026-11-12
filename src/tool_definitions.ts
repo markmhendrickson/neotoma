@@ -163,6 +163,12 @@ export function buildToolDefinitions(
       inputSchema: {
         type: "object",
         properties: {
+          read_mode: {
+            type: "string",
+            enum: ["exact_identity"],
+            description:
+              "Bounded same-view read with one entity_type and one snapshot_filters string equality. Supply no other options.",
+          },
           entity_type: {
             type: "string",
             description:
@@ -824,7 +830,7 @@ export function buildToolDefinitions(
       name: "list_entity_types",
       description: desc(
         "list_entity_types",
-        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
+        "List all available entity types with their schema information and optional planning declarations. registry_coverage certifies a complete registered planning-level census only for an unfiltered, fully acquired principal-scoped registry result; fallback, invalid and incomplete reads are unknown. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
@@ -916,7 +922,7 @@ export function buildToolDefinitions(
       name: "update_schema_incremental",
       description: desc(
         "update_schema_incremental",
-        "Incrementally update a schema by adding or removing fields, or replacing the entity type's identity rule via canonical_name_fields. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
+        "Incrementally update a schema by adding or removing fields, replacing the entity type's identity rule via canonical_name_fields, or replacing schema_definition.planning via a standalone planning declaration. Omitted planning preserves the current declaration; read_only never grants write authority. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
       ),
       inputSchema: {
         type: "object",
@@ -966,6 +972,14 @@ export function buildToolDefinitions(
               ],
             },
           },
+          planning: {
+            type: "object",
+            additionalProperties: false,
+            required: ["level"],
+            description:
+              "Replace the registry planning-stratum declaration; omit to preserve. No edit or execution grant.",
+            properties: { level: { type: "number" }, read_only: { type: "boolean" } },
+          },
           schema_version: {
             type: "string",
             description: "New schema version (auto-increments if not provided)",
@@ -1007,35 +1021,7 @@ export function buildToolDefinitions(
         "register_schema",
         "Register a new schema or schema version (global or user-specific). This is also where you configure per-field CONFLICT RESOLUTION via reducer_config: pick a merge strategy per field (last_write [default], highest_priority, most_specific, merge_array) plus tie-breakers (observed_at, source_priority). To make an observation's source_priority actually take effect, set that field's strategy to highest_priority here — under the default last_write, source_priority is recorded but ignored."
       ),
-      inputSchema: {
-        type: "object",
-        properties: {
-          entity_type: { type: "string" },
-          schema_definition: {
-            type: "object",
-            description: "Schema definition with fields object",
-          },
-          reducer_config: {
-            type: "object",
-            description:
-              "Per-field conflict-resolution config. merge_policies maps each field to a strategy: last_write (default — latest observed_at wins), highest_priority (the observation with the largest source_priority wins), most_specific, or merge_array; with an optional tie_breaker (observed_at | source_priority). Set highest_priority to honor source_priority — without it, source_priority is stored but ignored.",
-          },
-          schema_version: { type: "string", default: "1.0" },
-          user_specific: { type: "boolean", default: false },
-          user_id: {
-            type: "string",
-            description: "User ID for user-specific schema (required if user_specific=true)",
-          },
-          activate: { type: "boolean", default: false },
-          force: {
-            type: "boolean",
-            description:
-              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
-            default: false,
-          },
-        },
-        required: ["entity_type", "schema_definition", "reducer_config"],
-      },
+      inputSchema: getOpenApiInputSchemaOrThrow("register_schema"),
     },
     {
       name: "create_interpretation",

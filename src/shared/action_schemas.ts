@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlanningDeclarationSchema } from "./schema_planning.js";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
 import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
@@ -1220,6 +1221,7 @@ export const UpdateSchemaIncrementalRequestSchema = z
     canonical_name_fields: z
       .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
       .optional(),
+    planning: PlanningDeclarationSchema.optional(),
     schema_version: z.string().optional(),
     // #2374: stays OPTIONAL with no `.default()`. Whether the caller stated
     // an explicit scope intent is itself meaningful — `updateSchemaIncremental`
@@ -1239,10 +1241,11 @@ export const UpdateSchemaIncrementalRequestSchema = z
     (data) =>
       (data.fields_to_add && data.fields_to_add.length > 0) ||
       (data.fields_to_remove && data.fields_to_remove.length > 0) ||
-      data.canonical_name_fields !== undefined,
+      data.canonical_name_fields !== undefined ||
+      data.planning !== undefined,
     {
       message:
-        "At least one of fields_to_add, fields_to_remove, or canonical_name_fields must be provided",
+        "At least one of fields_to_add, fields_to_remove, canonical_name_fields, or planning must be provided",
     }
   )
   .superRefine((data, ctx) => {
@@ -1259,7 +1262,15 @@ export const UpdateSchemaIncrementalRequestSchema = z
 
 export const RegisterSchemaRequestSchema = z.object({
   entity_type: z.string().min(1),
-  schema_definition: z.record(z.unknown()),
+  schema_definition: z.record(z.unknown()).superRefine((value, ctx) => {
+    if (Object.prototype.hasOwnProperty.call(value, "planning")) {
+      const result = PlanningDeclarationSchema.safeParse(value.planning);
+      if (!result.success)
+        for (const issue of result.error.issues) {
+          ctx.addIssue({ ...issue, path: ["planning", ...issue.path] });
+        }
+    }
+  }),
   reducer_config: z.record(z.unknown()),
   schema_version: z.string().default("1.0"),
   user_specific: z.boolean().default(false),

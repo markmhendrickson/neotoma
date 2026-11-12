@@ -86,6 +86,10 @@ import {
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
+import {
+  createMcpLookupReceiptObserver,
+  observeMcpLookupResponse,
+} from "./services/mcp_lookup_timing.js";
 import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
   createAgentIdentity as buildAgentIdentity,
@@ -267,6 +271,11 @@ import {
 import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import {
+  EXACT_IDENTITY_REQUEST_MESSAGE,
+  exactIdentityRequested,
+  readExactIdentity,
+} from "./shared/action_handlers/exact_identity_read.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import {
   prepareEntitySnapshotWithEmbedding,
@@ -318,6 +327,8 @@ export function getResolvedServerMode(): NeotomaSandboxModeName | null {
 }
 
 export const app = express();
+const mcpLookupReceiptObserver = createMcpLookupReceiptObserver();
+if (mcpLookupReceiptObserver) app.use(mcpLookupReceiptObserver);
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
 app.set("trust proxy", true);
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -452,7 +463,12 @@ app.use(
     },
   })
 );
-app.use(morgan("dev"));
+app.use(
+  morgan<express.Request, express.Response>("dev", {
+    // Suppress identity-bearing URLs independently of route spelling or method.
+    skip: (req) => exactIdentityRequested(req.query),
+  })
+);
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
 
@@ -2138,6 +2154,7 @@ app.all("/mcp", async (req, res) => {
       | string
       | undefined;
     let bearerValidated = false;
+    let primaryBearerValidated = false;
 
     // Development connection identities are assigned by this gate, not by the
     // client. A client-sent value is honoured only where the gate would assign
@@ -2187,6 +2204,7 @@ app.all("/mcp", async (req, res) => {
         // same grants. See src/services/bearer_slots.ts.
         const slot = matchConfiguredBearer(token);
         if (slot) {
+          primaryBearerValidated = slot === "primary";
           if (slot === "previous") {
             recordPreviousBearerUse({
               surface: "mcp",
@@ -2376,6 +2394,8 @@ app.all("/mcp", async (req, res) => {
     }
 
     // Legacy session path (2025-11-25 and earlier). Unchanged by #2070.
+    // A qualified lookup can disconnect while stale-session recovery is still pending.
+    const mcpLookupTiming = primaryBearerValidated ? observeMcpLookupResponse(req, res) : undefined;
     // Get or create transport
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
     let serverInstance: NeotomaServer | undefined = sessionId
@@ -2540,6 +2560,7 @@ app.all("/mcp", async (req, res) => {
         // The gate's resolved connection id: the MCP server reads this, never
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
+        mcpLookupTiming,
       },
       () => transport!.handleRequest(req, res, req.body)
     );
@@ -2613,13 +2634,19 @@ function redactSensitiveFields(obj: unknown): unknown {
   return redacted;
 }
 
+function redactEntityReadInput(value: unknown): unknown {
+  return exactIdentityRequested(value)
+    ? { read_mode: "exact_identity" }
+    : redactSensitiveFields(value);
+}
+
 function logDebug(event: string, req: express.Request, extra?: Record<string, unknown>): void {
   const safe = {
     method: req.method,
     path: req.path,
-    query: redactSensitiveFields(req.query),
+    query: redactEntityReadInput(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: redactSensitiveFields(req.body),
+    body: redactEntityReadInput(req.body),
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
@@ -2630,9 +2657,9 @@ function logWarn(event: string, req: express.Request, extra?: Record<string, unk
   const safe = {
     method: req.method,
     path: req.path,
-    query: redactSensitiveFields(req.query),
+    query: redactEntityReadInput(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: redactSensitiveFields(req.body),
+    body: redactEntityReadInput(req.body),
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
@@ -2666,9 +2693,9 @@ function logError(
   const payload = {
     method: req.method,
     path: req.path,
-    query: redactSensitiveFields(req.query),
+    query: redactEntityReadInput(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: redactSensitiveFields(req.body),
+    body: redactEntityReadInput(req.body),
     error:
       error instanceof Error
         ? {
@@ -5133,6 +5160,18 @@ async function runEntitiesQuery(
   res: express.Response,
   rawInput: unknown
 ): Promise<express.Response> {
+  if (exactIdentityRequested(rawInput)) {
+    try {
+      const userId = await getAuthenticatedUserId(req);
+      const exact_identity = await readExactIdentity(rawInput, userId);
+      if (!exact_identity)
+        return sendError(res, 400, "VALIDATION_ERROR", EXACT_IDENTITY_REQUEST_MESSAGE);
+      return res.set("Cache-Control", "no-store").json({ exact_identity });
+    } catch (error) {
+      return handleApiError(req, res, error, "Could not verify exact identity");
+    }
+  }
+
   const parsed = EntitiesQueryRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
@@ -5284,6 +5323,8 @@ function coerceEntitiesQueryParams(query: express.Request["query"]): Record<stri
 // `GET /entities?entity_type=...&search=...` no longer hit a 404 and silently
 // degrade. REQUIRES AUTHENTICATION - identical user scoping to the POST path.
 app.get("/entities", async (req, res) => {
+  if (exactIdentityRequested(req.query))
+    return sendError(res, 400, "VALIDATION_ERROR", "Exact identity requires POST /entities/query.");
   return runEntitiesQuery(req, res, coerceEntitiesQueryParams(req.query));
 });
 
@@ -5893,7 +5934,42 @@ app.get("/schemas", async (req, res) => {
     // restricted WHICH entity types appear; it never corrected the version, so
     // it could not compensate. `userId` is already required above, so scoping
     // here changes no caller's authorization, only the accuracy of the version.
-    const allSchemas = await schemaRegistry.listEntityTypes(keyword, userId);
+    const catalog = await schemaRegistry.listEntityTypesResult(keyword, userId);
+    const allSchemas = catalog.entity_types;
+    const summary = req.query.summary === "true";
+    if (summary) {
+      const selected = filterEntityType
+        ? allSchemas.filter((schema) => schema.entity_type === filterEntityType)
+        : allSchemas;
+      const sorted = [...selected].sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+      const page = sorted.slice(offset, offset + limit);
+      const reasons = [...catalog.registry_coverage.reasons];
+      if (filterEntityType) reasons.push("filtered");
+      if (offset !== 0 || page.length !== sorted.length) reasons.push("paginated");
+      const complete = catalog.registry_coverage.state === "complete" && reasons.length === 0;
+      return res.json({
+        schemas: page.map(
+          ({ entity_type, schema_version, field_names, planning, planning_error }) => ({
+            entity_type,
+            schema_version,
+            field_count: field_names.length,
+            ...(planning ? { planning } : {}),
+            ...(planning_error ? { planning_error } : {}),
+          })
+        ),
+        total: sorted.length,
+        limit,
+        offset,
+        registry_coverage: {
+          ...catalog.registry_coverage,
+          state: complete ? "complete" : "unknown",
+          reasons: [...new Set(reasons)].sort(),
+          returned_count: page.length,
+          exhausted: complete,
+          scope: { ...catalog.registry_coverage.scope, entity_type: filterEntityType || null },
+        },
+      });
+    }
 
     // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
     // Also fetch metadata (including icons) for each schema
@@ -5936,6 +6012,16 @@ app.get("/schemas", async (req, res) => {
 
     return res.json({
       schemas: paginatedSchemas,
+      registry_coverage: {
+        ...catalog.registry_coverage,
+        state: "unknown",
+        exhausted: false,
+        returned_count: paginatedSchemas.length,
+        reasons: [
+          ...new Set([...catalog.registry_coverage.reasons, "legacy_filtered_view"]),
+        ].sort(),
+        scope: { ...catalog.registry_coverage.scope, entity_type: filterEntityType || null },
+      },
       total: productionSchemas.length,
       limit,
       offset,
@@ -10475,14 +10561,16 @@ app.post("/get_entity_snapshot", async (req, res) => {
 
   // Materialization is derived state. Validate owned current authority before
   // serving its row, including restrictive corruption acquisition failures.
+  // The check reads the entity's lifecycle authority rows, not its whole
+  // observation history (#2792).
   try {
-    const { isEntityDeleted } = await import("./services/deletion.js");
+    const { isOwnedEntityHiddenAfterCutover } = await import("./services/current_state_reads.js");
     const { hasRecordedEntityLifecycleCutover } =
       await import("./services/entity_lifecycle_storage.js");
     const { getDb } = await import("./repositories/db/connection.js");
     if (
       (await hasRecordedEntityLifecycleCutover(await getDb())) &&
-      (await isEntityDeleted(entity_id, userId))
+      (await isOwnedEntityHiddenAfterCutover(entity_id, userId))
     )
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
   } catch (err) {
@@ -12126,6 +12214,7 @@ app.post("/update_schema_incremental", async (req, res) => {
       fields_to_add,
       fields_to_remove,
       canonical_name_fields,
+      planning,
       schema_version,
       // #2374: no local `= false` default. `user_specific` stays
       // `undefined` when the caller omitted it, so `updateSchemaIncremental`
@@ -12220,6 +12309,7 @@ app.post("/update_schema_incremental", async (req, res) => {
         // re-key (the MCP server handler had it, but this Express route — which
         // the CLI offline transport uses — did not).
         canonical_name_fields,
+        planning,
         schema_version,
         user_specific,
         // #2374: pass userId unconditionally — same reasoning as the MCP

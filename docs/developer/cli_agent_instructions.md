@@ -156,6 +156,8 @@ neotoma relationships list --entity-id <entity_id>
 
 Use narrow queries first, then expand only if needed.
 
+**Exact identity proof:** use `neotoma request --operation queryEntities --body '<json>' --json` with the request defined in [RETRIEVAL] under “Exact identity proof.” Use the POST form so the identity stays out of the URL.
+
 **Entity-id identifiers:** when the identifier is a literal `entity_id` (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
@@ -208,7 +210,7 @@ When rendering Neotoma Inspector links from CLI-backed memory operations, first 
 After running `neotoma setup --tool <harness> --yes`, two plain-text lines always appear on stdout (after the JSON report, if `--json` is active):
 
 1. **Install-verification line** — grep for `Neotoma installed at` to confirm install succeeded. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`.
-2. **Privacy/transport summary** — `Transport: local stdio MCP (no network egress). ...` Answers the first question from privacy-conscious users about where data goes.
+2. **Transport summary** — begins `Transport:` and describes only the Neotoma MCP entries this run wrote, one clause per entry with its server key and what its preset does. The line describes each written entry's mechanism (local command or HTTP endpoint, signed or not, and whether it forwards to an endpoint) and makes no claim that the entry, or Neotoma, makes no network requests. A preset `c` entry starts the stdio MCP server, which checks the npm registry for updates unless `NO_UPDATE_NOTIFIER=1`. When entries were written, the line adds that any other Neotoma entries in the MCP config are not described and were not checked. Setup may have repaired them or re-pointed them to a new port. When this run recorded no new entry (skipped, already configured, cancelled, dry run, or a repair), it says `Transport: This line describes no Neotoma MCP entry, because this run recorded no new one. Any existing entries, including any setup repaired or re-pointed to a new port, were not checked.` The line never includes a URL, host, port, path or command. The CLI and the stdio MCP server still check the npm registry for updates; set `NO_UPDATE_NOTIFIER=1` to disable those checks.
 
 If the install-verification line is absent, check `neotoma status --json` (the `doctor` alias still works) for `neotoma.path_fix_hint` and surface it to the user.
 
@@ -281,3 +283,10 @@ Immutability and corrections: a correction outranks every other write to its fie
 
 Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`, including compare-only `changes: []` participants with a declared expected field and at least one writing participant. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.
 The committed `atomic_keyed_array_disjoint_writers` replay scenario uses the actual isolated HTTP tool. It binds deterministic portable item-version tokens by asserting the server's returned versions, then verifies a stale same-key conflict with current item/version, reviewed reapplication, exact replay and changed-payload refusal. Snapshot observation counts prove refusals/replay add no writes and the disjoint row survives. The cassette contains requests only. Removing the item-version comparison makes the same scenario fail; simultaneous arrival and post-commit event behavior are separately covered by `tests/unit/array_item_patch_atomic.test.ts`, including queued identical entity-CAS retries. This replay does not claim live-model reasoning or simultaneous HTTP arrival.
+
+## Planning declaration commands
+
+Use `neotoma schemas update <type> --planning '<json>'` for the existing versioned
+schema operation, and `neotoma schemas list --summary --limit <budget> --json`
+for its compact catalog. The canonical declaration, preservation and complete-census
+rules are in `neotoma instructions print` under `[PLANNING DECLARATIONS]`.

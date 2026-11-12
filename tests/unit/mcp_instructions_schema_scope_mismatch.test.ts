@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { load } from "js-yaml";
 
 import { extractFirstFencedCodeBlock } from "../../src/mcp_instruction_doc.js";
 
@@ -29,9 +30,7 @@ describe("ERR_SCHEMA_SCOPE_MISMATCH instruction surfaces (#2454 / PR #2455)", ()
     expect(body).not.toBeNull();
     expect(body).toContain(SCOPE_MISMATCH_ANCHOR);
     expect(body).toContain(ERROR_CODE);
-    expect(body).toMatch(
-      /Schema scope mismatch[\s\S]{0,800}FORBIDDEN[\s\S]{0,200}register_schema/
-    );
+    expect(body).toMatch(/Schema scope mismatch[\s\S]{0,800}FORBIDDEN[\s\S]{0,200}register_schema/);
     expect(body).toMatch(
       /Full data fidelity[\s\S]{0,2000}ERR_SCHEMA_SCOPE_MISMATCH[\s\S]{0,400}register_schema/
     );
@@ -39,13 +38,12 @@ describe("ERR_SCHEMA_SCOPE_MISMATCH instruction surfaces (#2454 / PR #2455)", ()
 
   it("documents the retry path on update_schema_incremental in tool_descriptions.yaml", () => {
     const yamlPath = join(REPO_ROOT, "docs", "developer", "mcp", "tool_descriptions.yaml");
-    const yaml = readFileSync(yamlPath, "utf8");
-    const idx = yaml.indexOf("update_schema_incremental:");
-    expect(idx).toBeGreaterThanOrEqual(0);
-    const slice = yaml.slice(idx, idx + 2500);
-    expect(slice).toContain(ERROR_CODE);
-    expect(slice).toMatch(/user_specific[\s\S]{0,200}found_scope/);
-    expect(slice).toMatch(/Never call register_schema|never register_schema/i);
+    const descriptions = load(readFileSync(yamlPath, "utf8")) as { tools: Record<string, string> };
+    const description = descriptions.tools.update_schema_incremental;
+    expect(typeof description).toBe("string");
+    expect(description).toContain(ERROR_CODE);
+    expect(description).toMatch(/user_specific[\s\S]{0,200}found_scope/);
+    expect(description).toMatch(/Never call register_schema|never register_schema/i);
   });
 
   it("includes a thin CLI ops pointer under Schema audit (not a full behavioral duplicate)", () => {

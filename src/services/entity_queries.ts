@@ -3,6 +3,7 @@ import type { EntityReadTrace } from "../shared/entity_read_contract.js";
 // Provenance chain, merged entity exclusion
 
 import { db } from "../db.js";
+import type { LifecycleTarget } from "./entity_lifecycle_authority.js";
 import {
   decodeCursor,
   encodeCursor,
@@ -243,20 +244,30 @@ async function getLegacyDeletedEntityIds(
   // `_deleted` observation drove the reducer to null) or never observed at all.
   // One bounded, indexed probe over `observations` separates them: an id with
   // NO observation row was never observed, so it is live.
+  // An existence probe per id (#2792): the answer needs one row, not the
+  // candidate's whole history.
   const unresolvedIds = unresolved.map((row) => row.id);
-  let observationQuery = db.from("observations").select("entity_id").in("entity_id", unresolvedIds);
-  if (userId) {
-    observationQuery = observationQuery.eq("user_id", userId);
+  const observed = new Set<string>();
+  {
+    const { getDb } = await import("../repositories/db/connection.js");
+    const connection = await getDb();
+    for (let i = 0; i < unresolvedIds.length; i += 400) {
+      const part = unresolvedIds.slice(i, i + 400);
+      const probe = userId
+        ? "EXISTS (SELECT 1 FROM observations o WHERE o.entity_id = p.id AND o.user_id = ?)"
+        : "EXISTS (SELECT 1 FROM observations o WHERE o.entity_id = p.id)";
+      try {
+        const rows = (await connection
+          .prepare(
+            `WITH p(id) AS (VALUES ${part.map(() => "(?)").join(",")}) SELECT p.id FROM p WHERE ${probe}`
+          )
+          .all(...part, ...(userId ? [userId] : []))) as Array<{ id: string }>;
+        for (const row of rows) observed.add(row.id);
+      } catch (observedError) {
+        throw new Error(`Failed to resolve deleted entities: ${(observedError as Error).message}`);
+      }
+    }
   }
-  const { data: observedRows, error: observedError } = await observationQuery;
-
-  if (observedError) {
-    throw new Error(`Failed to resolve deleted entities: ${observedError.message}`);
-  }
-
-  const observed = new Set<string>(
-    (observedRows || []).map((row: { entity_id: string }) => row.entity_id)
-  );
 
   for (const id of unresolvedIds) {
     if (observed.has(id)) {
@@ -282,22 +293,47 @@ async function getDeletedEntityIds(
 
   // Snapshot presence is derived state, not lifecycle authority. In particular
   // an empty entity may own only its compatibility baseline and no fact snapshot.
+  // Visibility is read from each target's lifecycle authority rows (#2792),
+  // not from its whole observation history.
+  const pending = candidates.filter((candidate) => !candidate.merged_to_entity_id);
+  const { selectHiddenAfterCutover } = await import("./current_state_reads.js");
+  const targets: LifecycleTarget[] = [];
   const { isEntityDeleted } = await import("./deletion.js");
-  for (const candidate of candidates) {
-    if (candidate.merged_to_entity_id) continue;
-    let owner = userId;
-    if (!owner) {
-      const { data, error } = await db
-        .from("entities")
-        .select("user_id")
-        .eq("id", candidate.id)
-        .single();
-      if (error || typeof data?.user_id !== "string")
+  for (let i = 0; i < pending.length; i += 400) {
+    const ids = pending.slice(i, i + 400).map((candidate) => candidate.id);
+    let query = db
+      .from("entities")
+      .select("id, user_id, entity_type, merged_to_entity_id")
+      .in("id", ids);
+    if (userId) query = query.eq("user_id", userId);
+    const { data, error } = await query;
+    if (error)
+      throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+    const rows = new Map(
+      ((data ?? []) as Array<LifecycleTarget & { merged_to_entity_id?: string | null }>).map(
+        (row) => [row.id, row]
+      )
+    );
+    for (const id of ids) {
+      const row = rows.get(id);
+      // No owned entity row: nothing attaches here, so nothing hides it.
+      if (!row) {
+        if (!userId)
+          throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+        continue;
+      }
+      if (typeof row.user_id !== "string" || typeof row.entity_type !== "string")
         throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
-      owner = data.user_id;
+      // A merge tombstone resolves to its survivor; keep the exhaustive path
+      // for that rare redirect rather than re-deriving attachment here.
+      if (row.merged_to_entity_id) {
+        if (await isEntityDeleted(id, row.user_id)) deletedEntityIds.add(id);
+        continue;
+      }
+      targets.push({ id: row.id, user_id: row.user_id, entity_type: row.entity_type });
     }
-    if (await isEntityDeleted(candidate.id, owner!)) deletedEntityIds.add(candidate.id);
   }
+  for (const id of await selectHiddenAfterCutover(targets)) deletedEntityIds.add(id);
 
   return deletedEntityIds;
 }
@@ -414,53 +450,61 @@ export async function queryEntities(
     return [];
   }
 
-  // Build query for entities
-  let entityQuery = db.from("entities").select(ENTITY_BASE_SELECT);
-
-  // Filter by user if provided
-  if (userId) {
-    entityQuery = entityQuery.eq("user_id", userId);
-  }
-
-  // Filter by entity type(s) if provided (singular + plural union)
-  entityQuery = applyTypeFilter(entityQuery, "entity_type");
-
-  // Exclude merged entities unless explicitly requested
-  if (!includeMerged) {
-    entityQuery = entityQuery.is("merged_to_entity_id", null);
-  }
-
-  // Filter by specific entity IDs (e.g. from semantic search, R3 identity
-  // basis pre-filter).
-  if (effectiveEntityIds && effectiveEntityIds.length > 0) {
-    entityQuery = entityQuery.in("id", effectiveEntityIds);
-  }
-
-  if (updatedSince) {
-    entityQuery = entityQuery.gte("updated_at", updatedSince);
-  }
-  if (createdSince) {
-    entityQuery = entityQuery.gte("created_at", createdSince);
-  }
-
+  // Build query for entities. This is a factory because the query builder is
+  // mutable: the scan loop below needs a fresh query per chunk so it can seek
+  // past the previous chunk by key instead of by OFFSET (see that loop).
   const ascending = sortOrder === "asc";
-  if (sortBy === "canonical_name") {
-    entityQuery = entityQuery.order("canonical_name", { ascending });
-  } else {
-    entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
-  }
+  const buildEntityQuery = () => {
+    let entityQuery = db.from("entities").select(ENTITY_BASE_SELECT);
 
-  // #1943: apply the keyset seek to the base entity query. For ascending order
-  // the next page starts strictly after the cursor's id (`id > :id`); for
-  // descending, strictly before (`id < :id`). This is what makes deep pages
-  // O(page) — the DB seeks past prior rows on the primary key instead of the
-  // scan-and-discard loop below re-reading them. Only reachable for the
-  // entity_id sort (cursor is entity_id-only; see decode above).
-  if (decodedCursor) {
-    entityQuery = ascending
-      ? entityQuery.gt("id", decodedCursor.entity_id)
-      : entityQuery.lt("id", decodedCursor.entity_id);
-  }
+    // Filter by user if provided
+    if (userId) {
+      entityQuery = entityQuery.eq("user_id", userId);
+    }
+
+    // Filter by entity type(s) if provided (singular + plural union)
+    entityQuery = applyTypeFilter(entityQuery, "entity_type");
+
+    // Exclude merged entities unless explicitly requested
+    if (!includeMerged) {
+      entityQuery = entityQuery.is("merged_to_entity_id", null);
+    }
+
+    // Filter by specific entity IDs (e.g. from semantic search, R3 identity
+    // basis pre-filter).
+    if (effectiveEntityIds && effectiveEntityIds.length > 0) {
+      entityQuery = entityQuery.in("id", effectiveEntityIds);
+    }
+
+    if (updatedSince) {
+      entityQuery = entityQuery.gte("updated_at", updatedSince);
+    }
+    if (createdSince) {
+      entityQuery = entityQuery.gte("created_at", createdSince);
+    }
+
+    if (sortBy === "canonical_name") {
+      entityQuery = entityQuery.order("canonical_name", { ascending });
+    } else {
+      entityQuery = entityQuery.order("id", {
+        ascending: sortBy === "entity_id" ? ascending : true,
+      });
+    }
+
+    // #1943: apply the keyset seek to the base entity query. For ascending order
+    // the next page starts strictly after the cursor's id (`id > :id`); for
+    // descending, strictly before (`id < :id`). This is what makes deep pages
+    // O(page) — the DB seeks past prior rows on the primary key instead of the
+    // scan-and-discard loop below re-reading them. Only reachable for the
+    // entity_id sort (cursor is entity_id-only; see decode above).
+    if (decodedCursor) {
+      entityQuery = ascending
+        ? entityQuery.gt("id", decodedCursor.entity_id)
+        : entityQuery.lt("id", decodedCursor.entity_id);
+    }
+    return entityQuery;
+  };
+  const entityQuery = buildEntityQuery();
 
   const isSnapshotFieldSort = typeof sortBy === "string" && sortBy.startsWith("snapshot.");
   const hasSnapshotFilters = snapshotFilters && Object.keys(snapshotFilters).length > 0;
@@ -672,11 +716,26 @@ export async function queryEntities(
     let visibleSkipped = 0;
     let exhausted = false;
 
+    // Rows come back in `id` order unless the caller sorts by canonical_name.
+    // For id order, continue each chunk from the last id seen (a primary-key
+    // seek) rather than `OFFSET scanOffset`: SQLite re-walks every skipped row
+    // for each OFFSET, so paging a deep offset by OFFSET cost O(offset^2) row
+    // visits (908 statements and ~10s for offset 90,000 of 100,000 entities).
+    const keysetById = sortBy !== "canonical_name";
+    const idAscending = sortBy === "entity_id" ? ascending : true;
+    let lastScannedId: string | undefined;
+
     while (entities.length < limit && !exhausted) {
-      const { data: chunk, error: chunkError } = await entityQuery.range(
-        scanOffset,
-        scanOffset + scanChunkSize - 1
-      );
+      let chunkQuery = entityQuery;
+      if (keysetById && lastScannedId !== undefined) {
+        chunkQuery = buildEntityQuery();
+        chunkQuery = idAscending
+          ? chunkQuery.gt("id", lastScannedId)
+          : chunkQuery.lt("id", lastScannedId);
+      }
+      const { data: chunk, error: chunkError } = await (keysetById && lastScannedId !== undefined
+        ? chunkQuery.range(0, scanChunkSize - 1)
+        : chunkQuery.range(scanOffset, scanOffset + scanChunkSize - 1));
       if (chunkError) {
         throw new Error(`Failed to query entities: ${chunkError.message}`);
       }
@@ -688,6 +747,7 @@ export async function queryEntities(
       }
 
       scanOffset += rows.length;
+      lastScannedId = rows[rows.length - 1].id as string;
       const chunkDeletedEntityIds = await getDeletedEntityIds(rows, userId);
 
       for (const row of rows) {
@@ -718,7 +778,6 @@ export async function queryEntities(
   }
 
   const entityIds = entities.map((e: any) => e.id);
-  const filteredEntityIds = entityIds;
   // For the lightweight (no-snapshot) projection we still need the `status`
   // field that callers expect on the returned row. We cannot project it with a
   // PostgREST `snapshot->>status` JSON operator here: that syntax is only
@@ -743,213 +802,59 @@ export async function queryEntities(
     (snapshots || []).map((s: EntitySnapshotRow) => [s.entity_id, s])
   );
 
-  // Get raw_fragments for all entities (batch query)
-  const allObservations: Array<{
-    entity_id: string;
-    source_id: string | null;
-    user_id: string | null;
-  }> = [];
-  if (includeSnapshots) {
-    // A full batch is continuation, not evidence of a complete source set.
-    // Keyset acquisition avoids both the old 1000-row truncation and offset
-    // skips. The response still advertises a read interval, never a frozen view.
-    let afterId: string | undefined;
-    for (;;) {
-      let query = db
-        .from("observations")
-        .select("id, entity_id, source_id, user_id")
-        .in("entity_id", filteredEntityIds)
-        .not("source_id", "is", null)
-        .order("id", { ascending: true })
-        .limit(1000);
-      if (userId) query = query.eq("user_id", userId);
-      if (afterId) query = query.gt("id", afterId);
-      const { data, error: observationError } = await query;
-      if (observationError) {
-        readTrace?.reasons.add("raw_fragment_sources_unavailable");
-        break;
-      }
-      const page = data ?? [];
-      allObservations.push(...page);
-      if (page.length < 1000) break;
-      const nextId = page[page.length - 1]?.id;
-      if (typeof nextId !== "string" || (afterId !== undefined && nextId <= afterId)) {
-        readTrace?.reasons.add("raw_fragment_source_cap");
-        break;
-      }
-      afterId = nextId;
-    }
-  }
-
-  // Group observations by entity_id to get source_ids per entity
-  const entitySources = new Map<string, Set<string>>();
-  const entityUserIds = new Map<string, Set<string>>();
-
-  for (const obs of allObservations) {
-    if (!entitySources.has(obs.entity_id)) {
-      entitySources.set(obs.entity_id, new Set());
-      entityUserIds.set(obs.entity_id, new Set());
-    }
-    if (obs.source_id) {
-      entitySources.get(obs.entity_id)!.add(obs.source_id);
-    }
-    if (obs.user_id) {
-      entityUserIds.get(obs.entity_id)!.add(obs.user_id);
-    }
-  }
-
-  // Batch query raw_fragments for all entities
-  const allSourceIds = Array.from(
-    new Set(Array.from(entitySources.values()).flatMap((s) => Array.from(s)))
-  );
-
+  // Current unknown-field fragments for the page (#2792). Fragments that name
+  // their entity are read per (entity, key) from the newest eligible row, so
+  // the cost tracks the page's keys, not how many sync passes stored them.
+  // Legacy fragments (no entity_id) are attributed through their source as
+  // before, and only when the type has any.
   const rawFragmentsByEntity = new Map<string, Record<string, unknown>>();
-
-  if (allSourceIds.length > 0) {
-    // Get entity types for filtering
-    const entityTypes = new Set(entities.map((e: any) => e.entity_type));
-
+  if (includeSnapshots) {
+    const { readCurrentEntityFragments, hasLegacyFragments } =
+      await import("./current_state_reads.js");
+    const entityTypes = new Set<string>(entities.map((e: any) => e.entity_type));
     for (const entityType of entityTypes) {
       const entitiesOfType = entities.filter((e: any) => e.entity_type === entityType);
-      const entityIdsOfType = entitiesOfType.map((e: any) => e.id);
-
-      // Get source_ids for entities of this type
-      const sourceIdsForType = new Set<string>();
-      const userIdsForType = new Set<string>();
-
-      for (const entityId of entityIdsOfType) {
-        const sources = entitySources.get(entityId);
-        const userIds = entityUserIds.get(entityId);
-        if (sources) {
-          sources.forEach((sid) => sourceIdsForType.add(sid));
-        }
-        if (userIds) {
-          userIds.forEach((uid) => userIdsForType.add(uid));
+      const entityIdsOfType: string[] = entitiesOfType.map((e: any) => e.id);
+      const merged = new Map<string, Map<string, { value: unknown; last_seen: string }>>();
+      try {
+        for (const [entityId, byKey] of await readCurrentEntityFragments(
+          entityIdsOfType,
+          entityType,
+          userId
+        ))
+          merged.set(entityId, byKey);
+      } catch {
+        readTrace?.reasons.add("raw_fragments_unavailable");
+      }
+      let legacyPresent = false;
+      try {
+        legacyPresent = await hasLegacyFragments(entityType);
+      } catch {
+        readTrace?.reasons.add("raw_fragments_unavailable");
+      }
+      if (legacyPresent) {
+        const legacy = await readLegacyPageFragments(
+          entityIdsOfType,
+          entityType,
+          userId,
+          readTrace
+        );
+        for (const [entityId, byKey] of legacy) {
+          const target = merged.get(entityId) ?? new Map();
+          for (const [key, candidate] of byKey) {
+            const existing = target.get(key);
+            if (!existing || existing.last_seen < candidate.last_seen) target.set(key, candidate);
+          }
+          merged.set(entityId, target);
         }
       }
-
-      if (sourceIdsForType.size > 0) {
-        const defaultUserId = "00000000-0000-0000-0000-000000000000";
-        const sourceIdList = Array.from(sourceIdsForType);
-        const entityIdSetOfType = new Set<string>(entityIdsOfType);
-
-        // Handle user_id
-        const userFilter =
-          userIdsForType.size > 0
-            ? Array.from(userIdsForType)
-                .map((uid: string) =>
-                  uid === defaultUserId
-                    ? `user_id.eq.${defaultUserId},user_id.is.null`
-                    : `user_id.eq.${uid}`
-                )
-                .join(",")
-            : `user_id.is.null,user_id.eq.${defaultUserId}`;
-        const fragmentSelect = () =>
-          db
-            .from("raw_fragments")
-            .select("fragment_key, fragment_value, last_seen, source_id, entity_id")
-            .eq("entity_type", entityType)
-            .in("source_id", sourceIdList);
-
-        // Bound the fragment fetch to this page. A fragment that names its entity
-        // is fetched by the page's own entity ids (idx_raw_fragments_entity_source)
-        // instead of by source: a source is shared by every entity it stored, and
-        // the page's entities are spread across all of them, so a source-only
-        // filter returned (and JSON-parsed) the fragments of the whole entity type
-        // on every request -- cost that tracked the type's size, not the page's.
-        // Fragments with no entity_id are legacy rows attributed through their
-        // source (below); they are fetched separately and are normally absent.
-        const { data: directFragments, error: directFragmentError } = await fragmentSelect()
-          .in("entity_id", entityIdsOfType)
-          .or(userFilter);
-        const { data: legacyFragments, error: legacyFragmentError } = await fragmentSelect()
-          .is("entity_id", null)
-          .or(userFilter);
-        const fragmentError = directFragmentError ?? legacyFragmentError;
-        const fragments = [...(directFragments ?? []), ...(legacyFragments ?? [])];
-
-        // Only legacy fragments need the source -> entity link, and only for their
-        // own sources; the link query is skipped entirely when there are none.
-        const legacyEntityCountsBySource = new Map<string, Set<string>>();
-        const legacySourceIds = Array.from(
-          new Set<string>(
-            ((legacyFragments ?? []) as Array<{ source_id?: string | null }>)
-              .map((fragment) => fragment.source_id)
-              .filter((sourceId): sourceId is string => typeof sourceId === "string")
-          )
-        );
-        if (legacySourceIds.length > 0) {
-          const { data: observationsForSources, error: sourceLinkError } = await db
-            .from("observations")
-            .select("entity_id, source_id")
-            .eq("entity_type", entityType)
-            .in("source_id", legacySourceIds);
-          if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
-          for (const obs of observationsForSources || []) {
-            if (!obs.source_id || !obs.entity_id) continue;
-            if (!legacyEntityCountsBySource.has(obs.source_id)) {
-              legacyEntityCountsBySource.set(obs.source_id, new Set());
-            }
-            legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
-          }
+      for (const [entityId, byKey] of merged) {
+        const snapshotFields = new Set(Object.keys(snapshotMap.get(entityId)?.snapshot || {}));
+        const cleaned: Record<string, unknown> = {};
+        for (const [key, { value }] of byKey) {
+          if (!snapshotFields.has(key)) cleaned[key] = value;
         }
-
-        if (fragmentError) readTrace?.reasons.add("raw_fragments_unavailable");
-
-        if (fragments && fragments.length > 0) {
-          // Group fragments by entity (via source_id -> entity_id mapping)
-          for (const fragment of fragments) {
-            const fragmentEntityId =
-              typeof (fragment as { entity_id?: unknown }).entity_id === "string"
-                ? (fragment as { entity_id: string }).entity_id
-                : null;
-            const candidateEntityIds = fragmentEntityId
-              ? [fragmentEntityId]
-              : legacyEntityCountsBySource.get(fragment.source_id)?.size === 1
-                ? [Array.from(legacyEntityCountsBySource.get(fragment.source_id) ?? [])[0]]
-                : [];
-
-            for (const entityId of candidateEntityIds) {
-              if (!entityIdSetOfType.has(entityId)) continue;
-              if (!rawFragmentsByEntity.has(entityId)) {
-                rawFragmentsByEntity.set(entityId, {});
-              }
-              const entityFragments = rawFragmentsByEntity.get(entityId)!;
-              const key = fragment.fragment_key;
-              const lastSeen = fragment.last_seen || "";
-
-              // Last-write wins (most recent last_seen)
-              // Store last_seen separately for comparison
-              const lastSeenKey = `__${key}_last_seen`;
-              if (
-                !(key in entityFragments) ||
-                ((entityFragments as any)[lastSeenKey] || "") < lastSeen
-              ) {
-                entityFragments[key] = fragment.fragment_value;
-                (entityFragments as any)[lastSeenKey] = lastSeen; // Track for comparison
-              }
-            }
-          }
-
-          // Clean up __*_last_seen tracking fields and exclude fields already in snapshots
-          for (const [entityId, fragments] of rawFragmentsByEntity.entries()) {
-            const snapshot = snapshotMap.get(entityId);
-            const snapshotFields = new Set(Object.keys(snapshot?.snapshot || {}));
-
-            const cleaned: Record<string, unknown> = {};
-            for (const [key, value] of Object.entries(fragments)) {
-              // Skip tracking fields and fields already in snapshot
-              if (
-                !key.startsWith("__") &&
-                !key.endsWith("_last_seen") &&
-                !snapshotFields.has(key)
-              ) {
-                cleaned[key] = value;
-              }
-            }
-            rawFragmentsByEntity.set(entityId, cleaned);
-          }
-        }
+        rawFragmentsByEntity.set(entityId, cleaned);
       }
     }
   }
@@ -1031,6 +936,121 @@ export function computeNextCursor(
  *
  * Returns null if entity is deleted (has deletion observation).
  */
+/**
+ * Legacy fragments (no entity_id) for a page of one type, attributed through
+ * their source: a fragment belongs to an entity only when its source produced
+ * exactly one entity of that type. This still walks the page entities'
+ * observations to learn their sources, so callers run it only for a type that
+ * has legacy fragments at all (#2792).
+ */
+async function readLegacyPageFragments(
+  entityIds: string[],
+  entityType: string,
+  userId: string | undefined,
+  readTrace?: EntityReadTrace
+): Promise<Map<string, Map<string, { value: unknown; last_seen: string }>>> {
+  const result = new Map<string, Map<string, { value: unknown; last_seen: string }>>();
+  const sources = new Set<string>();
+  const users = new Set<string>();
+  let afterId: string | undefined;
+  for (;;) {
+    let query = db
+      .from("observations")
+      .select("id, entity_id, source_id, user_id")
+      .in("entity_id", entityIds)
+      .not("source_id", "is", null)
+      .order("id", { ascending: true })
+      .limit(1000);
+    if (userId) query = query.eq("user_id", userId);
+    if (afterId) query = query.gt("id", afterId);
+    const { data, error } = await query;
+    if (error) {
+      readTrace?.reasons.add("raw_fragment_sources_unavailable");
+      break;
+    }
+    const page = (data ?? []) as Array<{
+      id: string;
+      source_id: string | null;
+      user_id: string | null;
+    }>;
+    for (const row of page) {
+      if (row.source_id) sources.add(row.source_id);
+      if (row.user_id) users.add(row.user_id);
+    }
+    if (page.length < 1000) break;
+    const nextId = page[page.length - 1]?.id;
+    if (typeof nextId !== "string" || (afterId !== undefined && nextId <= afterId)) {
+      readTrace?.reasons.add("raw_fragment_source_cap");
+      break;
+    }
+    afterId = nextId;
+  }
+  if (sources.size === 0) return result;
+  const defaultUserId = "00000000-0000-0000-0000-000000000000";
+  const userFilter =
+    users.size > 0
+      ? Array.from(users)
+          .map((uid) =>
+            uid === defaultUserId
+              ? `user_id.eq.${defaultUserId},user_id.is.null`
+              : `user_id.eq.${uid}`
+          )
+          .join(",")
+      : `user_id.is.null,user_id.eq.${defaultUserId}`;
+  const { data: fragments, error: fragmentError } = await db
+    .from("raw_fragments")
+    .select("fragment_key, fragment_value, last_seen, first_seen, source_id")
+    .eq("entity_type", entityType)
+    .in("source_id", Array.from(sources))
+    .is("entity_id", null)
+    .or(userFilter);
+  if (fragmentError) {
+    readTrace?.reasons.add("raw_fragments_unavailable");
+    return result;
+  }
+  const legacySourceIds = Array.from(
+    new Set(
+      ((fragments ?? []) as Array<{ source_id?: string | null }>)
+        .map((fragment) => fragment.source_id)
+        .filter((sourceId): sourceId is string => typeof sourceId === "string")
+    )
+  );
+  if (legacySourceIds.length === 0) return result;
+  const { data: links, error: linkError } = await db
+    .from("observations")
+    .select("entity_id, source_id")
+    .eq("entity_type", entityType)
+    .in("source_id", legacySourceIds);
+  if (linkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
+  const entitiesBySource = new Map<string, Set<string>>();
+  for (const link of (links ?? []) as Array<{ entity_id?: string; source_id?: string }>) {
+    if (!link.source_id || !link.entity_id) continue;
+    const set = entitiesBySource.get(link.source_id) ?? new Set<string>();
+    set.add(link.entity_id);
+    entitiesBySource.set(link.source_id, set);
+  }
+  const page = new Set(entityIds);
+  for (const fragment of (fragments ?? []) as Array<{
+    fragment_key: string;
+    fragment_value: unknown;
+    last_seen?: string | null;
+    first_seen?: string | null;
+    source_id: string;
+  }>) {
+    const owners = entitiesBySource.get(fragment.source_id);
+    if (!owners || owners.size !== 1) continue;
+    const entityId = Array.from(owners)[0];
+    if (!page.has(entityId)) continue;
+    const byKey = result.get(entityId) ?? new Map();
+    const lastSeen = fragment.last_seen || fragment.first_seen || "";
+    const existing = byKey.get(fragment.fragment_key);
+    if (!existing || existing.last_seen < lastSeen)
+      byKey.set(fragment.fragment_key, { value: fragment.fragment_value, last_seen: lastSeen });
+    result.set(entityId, byKey);
+  }
+  return result;
+}
+
 export async function getEntityWithProvenance(
   entityId: string,
   includeDeleted: boolean = false,
@@ -1060,7 +1080,16 @@ export async function getEntityWithProvenance(
 
   if (!includeDeleted) {
     const { isEntityDeleted } = await import("./deletion.js");
-    if (await isEntityDeleted(entityId, entity.user_id as string)) return null;
+    // Current visibility from the rows that decide it, not the whole history
+    // (#2792); the exhaustive acquisition remains the fallback.
+    const { isEntityHiddenNow } = await import("./current_state_reads.js");
+    const hidden = await isEntityHiddenNow({
+      id: entity.id as string,
+      user_id: entity.user_id as string,
+      entity_type: entity.entity_type as string,
+    });
+    if (hidden === undefined ? await isEntityDeleted(entityId, entity.user_id as string) : hidden)
+      return null;
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
@@ -1091,106 +1120,41 @@ export async function getEntityWithProvenance(
     effectiveSnapshot = { ...selected, user_id: userId! } as EntitySnapshotRow;
   }
 
-  // Get raw_fragments for this entity
-  // Find all sources that have observations for this entity
-  let sourceObsQuery = db
-    .from("observations")
-    .select("source_id, user_id")
-    .eq("entity_id", entityId)
-    .not("source_id", "is", null);
-  if (userId) {
-    sourceObsQuery = sourceObsQuery.eq("user_id", userId);
-  }
-  const { data: observations } = await sourceObsQuery.limit(100); // Get sample of sources
-
+  // Current unknown-field fragments (#2792): the newest eligible fragment per
+  // key, plus source-attributed legacy fragments when the type has any.
   const rawFragments: Record<string, unknown> = {};
-  if (observations && observations.length > 0) {
-    // Get unique source_ids and user_ids
-    const sourceIds = [
-      ...new Set(observations.map((o: { source_id?: string }) => o.source_id).filter(Boolean)),
-    ] as string[];
-    const userIds = [
-      ...new Set(
-        observations
-          .map((o: { user_id?: string }) => o.user_id)
-          .filter((u: string | undefined): u is string => Boolean(u))
-      ),
-    ];
-    const defaultUserId = "00000000-0000-0000-0000-000000000000";
-
-    // Query raw_fragments for these sources with matching entity_type
-    let fragmentQuery = db
-      .from("raw_fragments")
-      .select("fragment_key, fragment_value, last_seen, first_seen, source_id, entity_id")
-      .eq("entity_type", entity.entity_type)
-      .in("source_id", sourceIds);
-
-    // Handle user_id: check both provided user_ids and default UUID
-    if (userIds.length > 0) {
-      const userIdFilters = userIds.map((uid) =>
-        uid === defaultUserId ? `user_id.eq.${defaultUserId},user_id.is.null` : `user_id.eq.${uid}`
+  {
+    const { readCurrentEntityFragments, hasLegacyFragments } =
+      await import("./current_state_reads.js");
+    const fragmentMap = new Map<string, { value: unknown; last_seen: string }>();
+    try {
+      const current = await readCurrentEntityFragments(
+        [entityId],
+        entity.entity_type as string,
+        userId
       );
-      fragmentQuery = fragmentQuery.or(userIdFilters.join(","));
-    } else {
-      fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
+      for (const [key, candidate] of current.get(entityId) ?? []) fragmentMap.set(key, candidate);
+      if (await hasLegacyFragments(entity.entity_type as string)) {
+        const legacy = await readLegacyPageFragments(
+          [entityId],
+          entity.entity_type as string,
+          userId
+        );
+        for (const [key, candidate] of legacy.get(entityId) ?? []) {
+          const existing = fragmentMap.get(key);
+          if (!existing || existing.last_seen < candidate.last_seen)
+            fragmentMap.set(key, candidate);
+        }
+      }
+    } catch (fragmentError) {
+      console.warn(
+        `Failed to get raw_fragments for entity ${entityId}:`,
+        (fragmentError as Error).message
+      );
     }
-
-    const { data: observationsForSources } = await db
-      .from("observations")
-      .select("entity_id, source_id")
-      .eq("entity_type", entity.entity_type)
-      .in("source_id", sourceIds);
-    const legacyEntityCountsBySource = new Map<string, Set<string>>();
-    for (const obs of observationsForSources || []) {
-      if (!obs.source_id || !obs.entity_id) continue;
-      if (!legacyEntityCountsBySource.has(obs.source_id)) {
-        legacyEntityCountsBySource.set(obs.source_id, new Set());
-      }
-      legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
-    }
-
-    const { data: fragments, error: fragmentError } = await fragmentQuery;
-
-    if (fragmentError) {
-      console.warn(`Failed to get raw_fragments for entity ${entityId}:`, fragmentError.message);
-    } else if (fragments && fragments.length > 0) {
-      // Merge fragments by fragment_key (last_write: most recent last_seen wins)
-      const fragmentMap = new Map<string, { value: unknown; last_seen: string }>();
-
-      for (const fragment of fragments) {
-        const fragmentEntityId =
-          typeof (fragment as { entity_id?: unknown }).entity_id === "string"
-            ? (fragment as { entity_id: string }).entity_id
-            : null;
-        if (fragmentEntityId && fragmentEntityId !== entityId) continue;
-        if (
-          !fragmentEntityId &&
-          (legacyEntityCountsBySource.get(fragment.source_id)?.size ?? 0) !== 1
-        ) {
-          // Legacy fragments have only source_id + entity_type. If that source
-          // produced multiple entities of the same type, attribution is
-          // ambiguous and showing them risks cross-entity contamination.
-          continue;
-        }
-        const key = fragment.fragment_key;
-        const lastSeen = fragment.last_seen || fragment.first_seen || "";
-
-        if (!fragmentMap.has(key) || fragmentMap.get(key)!.last_seen < lastSeen) {
-          fragmentMap.set(key, {
-            value: fragment.fragment_value,
-            last_seen: lastSeen,
-          });
-        }
-      }
-
-      // Convert to plain object, excluding fields already in snapshot
-      const snapshotFields = new Set(Object.keys(effectiveSnapshot?.snapshot || {}));
-      for (const [key, { value }] of fragmentMap.entries()) {
-        // Only include if not already in snapshot (avoid duplicates)
-        if (!snapshotFields.has(key)) {
-          rawFragments[key] = value;
-        }
-      }
+    const snapshotFields = new Set(Object.keys(effectiveSnapshot?.snapshot || {}));
+    for (const [key, { value }] of fragmentMap) {
+      if (!snapshotFields.has(key)) rawFragments[key] = value;
     }
   }
 

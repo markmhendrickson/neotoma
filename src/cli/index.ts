@@ -1551,6 +1551,42 @@ function formatRequestError(error: unknown): string {
   return formatApiError(error);
 }
 
+/**
+ * #2781: the server's refusal as `<code>: <message>` (or whichever of the two
+ * is present) for a failed write. Reads only the envelope's code and message,
+ * never the rest of the response. Returns undefined when neither is present so
+ * the caller keeps its fixed message.
+ *
+ * Not built on `formatRequestError` (docs/foundation/principles.md
+ * #extend-the-mechanism-that-already-generalizes): that formatter always
+ * returns a string, falling back to `formatApiError`, which prints `detail`,
+ * a string `error` or `String(error)` and so would replace the fixed-message
+ * fallback with unrelated response content; it also appends `hint` for
+ * `code` envelopes, which a refusal line does not print.
+ */
+export function refusalDetail(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const envelope = error as {
+    error_code?: unknown;
+    code?: unknown;
+    message?: unknown;
+    error?: unknown;
+  };
+  if (envelope.error && typeof envelope.error === "object") return refusalDetail(envelope.error);
+  const code =
+    typeof envelope.error_code === "string" && envelope.error_code.length > 0
+      ? envelope.error_code
+      : typeof envelope.code === "string" && envelope.code.length > 0
+        ? envelope.code
+        : undefined;
+  const message =
+    typeof envelope.message === "string" && envelope.message.length > 0
+      ? envelope.message
+      : undefined;
+  if (code && message) return `${code}: ${message}`;
+  return code ?? message;
+}
+
 function parseOptionalJson(value?: string): unknown {
   if (!value) {
     return undefined;
@@ -14417,7 +14453,12 @@ relationshipsCommand
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
         } as any,
       });
-      if (error) throw new Error("Failed to create relationships");
+      if (error) {
+        const detail = refusalDetail(error);
+        throw new Error(
+          detail ? `Failed to create relationships: ${detail}` : "Failed to create relationships"
+        );
+      }
       writeOutput(data, outputMode);
       return;
     }
@@ -14435,7 +14476,12 @@ relationshipsCommand
         ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
-    if (error) throw new Error("Failed to create relationship");
+    if (error) {
+      const detail = refusalDetail(error);
+      throw new Error(
+        detail ? `Failed to create relationship: ${detail}` : "Failed to create relationship"
+      );
+    }
     const rel = data as any;
     writeOutput(
       {
@@ -14733,6 +14779,7 @@ timelineCommand
 schemasCommand
   .command("list")
   .description("List schemas")
+  .option("--summary", "Return compact registry declarations and census coverage")
   .option("--entity-type <type>", "Filter by entity type")
   .option("--user-specific", "Show user-specific schemas")
   .option("--user-id <userId>", "Filter by user ID")
@@ -14750,6 +14797,7 @@ schemasCommand
       params: {
         query: {
           entity_type: opts.entityType,
+          summary: opts.summary,
           user_id: resolveEffectiveUserId(opts.userId),
           user_specific: opts.userSpecific,
           limit: Number(opts.limit),
@@ -14998,6 +15046,10 @@ schemasCommand
     "--canonical-name-fields <json>",
     'JSON array replacing the identity rule, e.g. \'[{"composite":["linkedin_url"]},"email","name"]\' (triggers major version bump; existing reducer_config preserved; governs new writes only)'
   )
+  .option(
+    "--planning <json>",
+    "JSON planning declaration: finite level and optional read_only; preserves other schema data"
+  )
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
@@ -15030,6 +15082,7 @@ schemasCommand
         fields?: string;
         removeFields?: string;
         canonicalNameFields?: string;
+        planning?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
@@ -15048,10 +15101,15 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields) {
+      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields && !opts.planning) {
         throw new Error(
-          "at least one of --fields, --remove-fields, or --canonical-name-fields is required"
+          "at least one of --fields, --remove-fields, --canonical-name-fields, or --planning is required"
         );
+      }
+      let planning: import("../shared/schema_planning.js").PlanningDeclaration | undefined;
+      if (opts.planning !== undefined) {
+        const { PlanningDeclarationSchema } = await import("../shared/schema_planning.js");
+        planning = PlanningDeclarationSchema.parse(JSON.parse(opts.planning));
       }
       let canonicalNameFields: unknown[] | undefined;
       if (opts.canonicalNameFields) {
@@ -15126,7 +15184,7 @@ schemasCommand
         const { data, error } = await api.POST("/register_schema", {
           body: {
             entity_type: entityType,
-            schema_definition: { fields: bootstrapFields },
+            schema_definition: { fields: bootstrapFields, ...(planning ? { planning } : {}) },
             reducer_config: { merge_policies: bootstrapPolicies },
             schema_version: opts.schemaVersion,
             activate: true,
@@ -15167,6 +15225,7 @@ schemasCommand
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
       if (canonicalNameFields) body.canonical_name_fields = canonicalNameFields;
+      if (planning) body.planning = planning;
       const { data, error } = await api.POST("/update_schema_incremental", {
         body: body as any,
       });

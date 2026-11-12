@@ -65,6 +65,10 @@ import {
 
 const nodeRequire = createRequire(import.meta.url);
 
+// Shared execution custody survives cached database-handle replacement. Only
+// actual Worker exit releases this hold; ordinary routing does not consult it.
+const retiringReaderWorkers = new Set<Worker>();
+
 /**
  * Resolve the synchronous driver module the worker will load. Preference:
  * `libsql` (libSQL's better-sqlite3-compatible binding — reads/writes the
@@ -146,6 +150,14 @@ parentPort.on("message", (msg) => {
       // Test-only hook: simulate a hard worker crash so supervised-restart is
       // exercisable. Never issued by production code paths.
       process.exit(1);
+    } else if (msg.sql === "__hold_for_test__") {
+      // Deterministic test-only lifetime barrier; no production path issues it.
+      if (process.env.NODE_ENV !== "test") throw new Error("Worker test barrier unavailable");
+      const flags = new Int32Array(msg.params[0]);
+      Atomics.store(flags, 0, 1);
+      Atomics.notify(flags, 0);
+      Atomics.wait(flags, 1, 0);
+      result = { held: true };
     } else if (msg.op === "run") {
       const r = db.prepare(msg.sql).run(...msg.params);
       result = { changes: Number(r.changes ?? 0), lastInsertRowid: r.lastInsertRowid };
@@ -245,6 +257,8 @@ class WorkerDbRetiredError extends Error {
 }
 
 type PendingEntry = {
+  /** Statement text, kept only so saturation logs can say what is queued. */
+  sql: string;
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   /** Release the timeout timer and abort listener; idempotent. */
@@ -261,6 +275,10 @@ export type WorkerRequestOptions = {
 
 class WorkerConnection {
   private worker: Worker | null = null;
+  private liveWorkers = new Map<Worker, Promise<void>>();
+  private exactReadCustody = false;
+  private exactWorkers = new Set<Worker>();
+  private workerGeneration = 0;
   private nextId = 1;
   private pending = new Map<number, PendingEntry>();
   private closed = false;
@@ -310,6 +328,7 @@ class WorkerConnection {
       orphanGraceMs?: number;
       /** Called when this connection retires, so its owner drops it. */
       onRetire?: (connection: WorkerConnection) => void;
+      onExit?: (connection: WorkerConnection) => void;
     } = {}
   ) {}
 
@@ -326,6 +345,34 @@ class WorkerConnection {
     return this.retired;
   }
 
+  get hasLiveWorkers(): boolean {
+    return this.liveWorkers.size > 0;
+  }
+
+  claimExactRead(): void {
+    this.exactReadCustody = true;
+    if (this.worker) this.exactWorkers.add(this.worker);
+  }
+
+  releaseExactRead(): void {
+    if (!this.retired) {
+      this.exactReadCustody = false;
+      if (this.worker) this.exactWorkers.delete(this.worker);
+    }
+  }
+
+  private retainRetiringReader(worker: Worker): void {
+    if (this.options.readonly && this.liveWorkers.has(worker)) retiringReaderWorkers.add(worker);
+  }
+
+  retainForShutdown(): void {
+    for (const worker of this.liveWorkers.keys()) this.retainRetiringReader(worker);
+  }
+
+  get generation(): number | null {
+    return this.worker === null ? null : this.workerGeneration;
+  }
+
   /**
    * How many statements this worker currently owns. The worker executes them
    * strictly FIFO and synchronously, so this is queue depth, not parallelism —
@@ -333,6 +380,11 @@ class WorkerConnection {
    */
   get inFlight(): number {
     return this.pending.size;
+  }
+
+  /** Statement text of everything this worker currently owns (diagnostics only). */
+  inFlightSql(): string[] {
+    return [...this.pending.values()].map((entry) => entry.sql);
   }
 
   /**
@@ -353,6 +405,14 @@ class WorkerConnection {
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
     const worker = new Worker(WORKER_SOURCE, { eval: true, workerData: this.options });
+    if (this.exactReadCustody) this.exactWorkers.add(worker);
+    let exited!: () => void;
+    this.liveWorkers.set(
+      worker,
+      new Promise<void>((resolve) => {
+        exited = resolve;
+      })
+    );
     worker.on("message", (reply: WorkerReply) => {
       // A reply from a RETIRED worker means the orphan has finished its native
       // call and is back in JavaScript — the one moment at which terminating
@@ -394,6 +454,7 @@ class WorkerConnection {
       }
     });
     worker.on("error", (error) => {
+      if (this.worker !== worker) return;
       this.failInFlight(error instanceof Error ? error : new Error(String(error)));
     });
     // A crashed or self-exited worker fires `exit` with a non-zero code. Without
@@ -401,6 +462,14 @@ class WorkerConnection {
     // never settles — a permanent hang. Reject everything in flight and drop the
     // handle so the next request respawns.
     worker.on("exit", (code) => {
+      // Retirement clears/replaces the active handle before physical exit.
+      // Resource custody must therefore be released before that identity guard.
+      this.liveWorkers.delete(worker);
+      this.exactWorkers.delete(worker);
+      retiringReaderWorkers.delete(worker);
+      if (this.orphanWorker === worker) this.orphanWorker = undefined;
+      exited();
+      this.local.onExit?.(this);
       if (this.worker !== worker) return; // already replaced (normal terminate)
       if (code !== 0 && !this.closed) {
         this.failInFlight(new WorkerDbCrashError(`DB worker exited unexpectedly (code ${code})`));
@@ -409,6 +478,7 @@ class WorkerConnection {
     });
     worker.unref();
     this.worker = worker;
+    this.workerGeneration += 1;
     return worker;
   }
 
@@ -494,7 +564,8 @@ class WorkerConnection {
    * abandoned reader lingers until its statement finishes rather than dying at
    * once. On a 2-CPU machine that is real contention. It is the better trade —
    * a lingering thread degrades throughput, whereas the abort takes the whole
-   * instance down and blocks its own recovery — and the grace window bounds it.
+   * instance down and blocks its own recovery. Exact-owned work waits for drain
+   * and retains admission custody; ordinary work keeps its existing grace policy.
    */
   private abandon(error: Error): void {
     // ALREADY RETIRED: a second abort landing on the same connection. Under
@@ -516,6 +587,7 @@ class WorkerConnection {
 
     // Out of service: never dispatched to again, and its replies are ignored.
     this.retired = true;
+    this.retainRetiringReader(worker);
     this.onRetire?.(this);
 
     if (!this.hadInFlightAtRetire) {
@@ -534,7 +606,7 @@ class WorkerConnection {
         clearTimeout(this.orphanTimer);
         this.orphanTimer = undefined;
       }
-      this.orphanWorker = undefined;
+      // Keep the orphan handle until the unconditional actual-exit callback.
       void worker.terminate().catch(() => {});
     };
     this.orphanFinish = finish;
@@ -545,6 +617,7 @@ class WorkerConnection {
     } catch {
       // The worker is already gone; the grace timer below still covers it.
     }
+    if (this.exactWorkers.has(worker)) return; // exact-owned native work must drain safely
     this.orphanTimer = setTimeout(() => {
       this.orphanFinish = undefined;
       logger.warn(
@@ -597,7 +670,7 @@ class WorkerConnection {
       };
 
       if (this.pending.size === 0) this.busyStartedAt = Date.now();
-      this.pending.set(id, { resolve, reject, cleanup });
+      this.pending.set(id, { sql, resolve, reject, cleanup });
 
       if (timeoutMs !== undefined && timeoutMs > 0) {
         timer = setTimeout(() => {
@@ -634,8 +707,9 @@ class WorkerConnection {
    * code rather than an outage. Still worth not doing: an aborting shutdown
    * turns a clean stop into a crash-looking one and muddies the very signal
    * used to diagnose this bug. So give an in-flight statement the same short
-   * chance to finish and report as `abandon` does, then terminate. Bounded by
-   * the same grace window, and it never waits at all when nothing is running.
+   * chance to finish and report as `abandon` does, then terminate. Exact-owned
+   * generations require a drain/exit; ordinary ones keep their existing grace.
+   * Every path waits for actual exit, even if a termination request rejects.
    */
   async terminate(): Promise<void> {
     this.closed = true;
@@ -643,13 +717,12 @@ class WorkerConnection {
     // `failInFlight`, so its orphan is reachable only through `orphanWorker`.
     // Taking it here is what makes closing the database actually wait the
     // orphan out instead of returning while it still runs.
-    const worker = this.worker ?? this.orphanWorker;
+    const workers = [...this.liveWorkers.entries()];
     // Busy means "a statement may still be inside a native call": either this
     // connection has pending requests, or it is an orphan that has not yet
     // reported back. Both need the same wait before it is safe to terminate.
     const wasBusy = this.pending.size > 0 || this.orphanWorker !== undefined;
     this.worker = null;
-    this.orphanWorker = undefined;
     for (const entry of this.pending.values()) entry.cleanup();
     this.pending.clear();
     if (this.orphanTimer !== undefined) {
@@ -657,21 +730,26 @@ class WorkerConnection {
       this.orphanTimer = undefined;
     }
     this.orphanFinish = undefined;
-    if (!worker) return;
-    if (wasBusy) await this.awaitWorkerIdle(worker);
-    // Guarded the same way the two call sites in `abandon()` are (#2483): a
-    // shutdown-time `terminate()` can race a worker that is still inside a
-    // native call exactly as an abort-time one can, and an unguarded rejection
-    // here would turn a clean shutdown into an unhandled rejection.
-    await worker.terminate().catch(() => {});
+    await Promise.all(
+      workers.map(async ([worker, exited]) => {
+        this.retainRetiringReader(worker);
+        worker.ref(); // an awaited close must remain live until the actual exit
+        if (wasBusy) await this.awaitWorkerIdle(worker, this.exactWorkers.has(worker));
+        // Guarded the same way the two call sites in `abandon()` are (#2483): a
+        // shutdown-time `terminate()` can race a worker that is still inside a
+        // native call exactly as an abort-time one can, and an unguarded rejection
+        // here would turn a clean shutdown into an unhandled rejection.
+        await worker.terminate().catch(() => {});
+        await exited;
+      })
+    );
   }
 
   /**
-   * Resolve once `worker` has posted a reply — i.e. it is back in JavaScript
-   * with no native frame on its stack — or once the grace window expires.
-   * Never rejects: a worker that dies on its own is equally safe to terminate.
+   * Resolve on terminal drain/exit; only ordinary generations permit the
+   * existing grace fallback. A termination request itself is not exit evidence.
    */
-  private awaitWorkerIdle(worker: Worker): Promise<void> {
+  private awaitWorkerIdle(worker: Worker, drainOnly = false): Promise<void> {
     return new Promise<void>((resolve) => {
       const done = () => {
         clearTimeout(timer);
@@ -686,14 +764,14 @@ class WorkerConnection {
       const onMessage = (reply: WorkerReply & { drained?: boolean }) => {
         if (reply?.drained) done();
       };
-      const timer = setTimeout(done, this.orphanGraceMs);
-      timer.unref?.();
+      const timer = drainOnly ? undefined : setTimeout(done, this.orphanGraceMs);
+      timer?.unref?.();
       worker.on("message", onMessage);
       worker.on("exit", done);
       try {
         worker.postMessage({ id: this.nextId++, op: "__drained__" });
       } catch {
-        // Already gone — the timer resolves us.
+        // Unknown state is not a drain proof; exact custody waits for actual exit.
       }
     });
   }
@@ -850,6 +928,24 @@ const DEFAULT_ORPHAN_GRACE_MS = 30_000;
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
 
+/**
+ * Compact "what is queued" summary for the saturation warning: the most common
+ * statement shapes (first 70 characters, whitespace collapsed, so parameter
+ * lists and bound values never appear) with their counts. Without it the
+ * warning says the pool is full but not who filled it.
+ */
+export function summarizeQueuedStatements(statements: string[], top = 4): string {
+  const counts = new Map<string, number>();
+  for (const sql of statements) {
+    const shape = sql.replace(/\s+/g, " ").trim().slice(0, 70);
+    counts.set(shape, (counts.get(shape) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const shown = ranked.slice(0, top).map(([shape, n]) => `${n}x "${shape}"`);
+  const rest = ranked.length - shown.length;
+  return shown.join("; ") + (rest > 0 ? `; +${rest} more shapes` : "");
+}
+
 function readEnvInt(name: string): number | undefined {
   const parsed = Number.parseInt(process.env[name] || "", 10);
   return Number.isFinite(parsed) ? parsed : undefined;
@@ -899,6 +995,7 @@ export function currentDbAbortSignal(): AbortSignal | undefined {
 }
 
 export class WorkerFileDatabase implements DbDatabase {
+  private closing: Promise<void> | null = null;
   private readonly dbPath: string;
   private readonly busyTimeoutMs: number;
   private readonly readerCount: number;
@@ -906,6 +1003,8 @@ export class WorkerFileDatabase implements DbDatabase {
   private readonly statementTimeoutMs: number;
   private writer: WorkerConnection | null = null;
   private readers: WorkerConnection[] = [];
+  private pinnedReader: WorkerConnection | null = null;
+  private pinnedReadAbort: AbortController | null = null;
   /**
    * Connections that have been abandoned and left service, but whose orphaned
    * worker may still be finishing a native call (#2324). Held only so
@@ -985,6 +1084,9 @@ export class WorkerFileDatabase implements DbDatabase {
             if (this.writer === connection) this.writer = null;
             this.retiredConnections.add(connection);
           },
+          onExit: (connection) => {
+            if (!connection.hasLiveWorkers) this.retiredConnections.delete(connection);
+          },
         }
       );
     }
@@ -1010,6 +1112,9 @@ export class WorkerFileDatabase implements DbDatabase {
         // the next read, while the retired worker finishes its native call in
         // its own time and is terminated safely once it is back in JavaScript.
         onRetire: (connection) => this.retireReader(connection),
+        onExit: (connection) => {
+          if (!connection.hasLiveWorkers) this.retiredConnections.delete(connection);
+        },
       }
     );
     this.readers.push(reader);
@@ -1024,7 +1129,7 @@ export class WorkerFileDatabase implements DbDatabase {
   private retireReader(connection: WorkerConnection): void {
     const index = this.readers.indexOf(connection);
     if (index >= 0) this.readers.splice(index, 1);
-    this.retiredConnections.add(connection);
+    if (connection.hasLiveWorkers) this.retiredConnections.add(connection);
   }
 
   /**
@@ -1057,6 +1162,7 @@ export class WorkerFileDatabase implements DbDatabase {
 
     let best: WorkerConnection | null = null;
     for (const reader of this.readers) {
+      if (reader === this.pinnedReader) continue;
       if (reader.inFlight === 0) {
         this.noteSaturation(false);
         return reader;
@@ -1096,7 +1202,8 @@ export class WorkerFileDatabase implements DbDatabase {
       logger.warn(
         `DB reader pool saturated: all ${this.readers.length} readers busy ` +
           `(${depth} statements queued, ${now - this.saturatedSince}ms). ` +
-          `Raise NEOTOMA_DB_READER_WORKERS if this is sustained.`
+          `Raise NEOTOMA_DB_READER_WORKERS if this is sustained. ` +
+          `Queued: ${summarizeQueuedStatements(this.readers.flatMap((r) => r.inFlightSql()))}`
       );
       return;
     }
@@ -1188,7 +1295,7 @@ export class WorkerFileDatabase implements DbDatabase {
     let busy = 0;
     let queued = 0;
     for (const reader of this.readers) {
-      if (reader.inFlight > 0) busy += 1;
+      if (reader.inFlight > 0 || reader === this.pinnedReader) busy += 1;
       queued += reader.inFlight;
     }
     return { size: this.readers.length, capacity: this.readerCount, busy, queued };
@@ -1199,7 +1306,11 @@ export class WorkerFileDatabase implements DbDatabase {
    * exercise the supervised-restart path. Returns the promise that rejects with
    * the crash error. Never called by production code.
    */
-  __crashWorkerForTest(which: "writer" | "reader"): Promise<unknown> {
+  __crashWorkerForTest(which: "writer" | "reader" | "pinned"): Promise<unknown> {
+    if (which === "pinned") {
+      if (!this.pinnedReader) throw new Error("No pinned worker to crash");
+      return this.pinnedReader.request("run", "__crash__", []);
+    }
     const conn = which === "writer" ? this.writerConnection() : this.readerConnection();
     return conn.request("run", "__crash__", []);
   }
@@ -1242,7 +1353,140 @@ export class WorkerFileDatabase implements DbDatabase {
     );
   }
 
-  async close(): Promise<void> {
+  /**
+   * Internal: hold one idle read-only worker for a complete bounded read view.
+   * This path never queues for a busy slot, changes the pool cap, or runs on the writer.
+   */
+  async withPinnedReadView<T>(
+    operation: (view: DbConnection) => Promise<T>,
+    timeoutMs = 1000
+  ): Promise<T> {
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2000)
+      throw new RangeError("Invalid pinned read budget");
+    const parentSignal = abortContext.getStore();
+    if (parentSignal?.aborted)
+      throw new WorkerDbAbortError("DB pinned read aborted before dispatch");
+    if (
+      this.closed ||
+      this.readerCount < 2 ||
+      this.pinnedReader ||
+      this.txContext.getStore() ||
+      retiringReaderWorkers.size !== 0
+    )
+      throw new Error("DB pinned reader unavailable");
+    const reader =
+      this.readers.find((candidate) => candidate.inFlight === 0) ??
+      (this.readers.length < this.readerCount ? this.spawnReader() : null);
+    if (!reader) throw new Error("DB pinned reader unavailable");
+
+    this.pinnedReader = reader;
+    reader.claimExactRead();
+    const control = new AbortController();
+    this.pinnedReadAbort = control;
+    const budgetError = new WorkerDbTimeoutError("DB pinned read exceeded its budget", timeoutMs);
+    const deadline = performance.now() + timeoutMs;
+    const verifyBudget = () => {
+      if (performance.now() >= deadline) control.abort(budgetError);
+      control.signal.throwIfAborted();
+    };
+    const timer = setTimeout(() => control.abort(budgetError), timeoutMs);
+    const abort = () => control.abort(new WorkerDbAbortError("DB pinned read aborted by caller"));
+    parentSignal?.addEventListener("abort", abort, { once: true });
+    let generation: number | null = null;
+    let began = false;
+    let active = true;
+    let pending = false;
+
+    const verifyWorker = () => {
+      if (generation === null || reader.generation !== generation)
+        throw new WorkerDbCrashError("DB pinned reader lost its original worker");
+    };
+    const readonly = async (): Promise<never> => {
+      throw new Error("DB pinned reader permits only SELECT statements");
+    };
+    const issue = async (op: "get" | "all", sql: string, params: unknown[]) => {
+      if (!active || pending) throw new Error("DB pinned reader is busy or expired");
+      verifyBudget();
+      verifyWorker();
+      pending = true;
+      try {
+        return await reader.request(op, sql, normalizeParams(params).map(toBindValue), {
+          signal: control.signal,
+        });
+      } finally {
+        pending = false;
+      }
+    };
+    const view: DbConnection = {
+      prepare: (sql) => {
+        if (!/^\s*SELECT\s/i.test(sql) || sql.includes(";"))
+          throw new Error("DB pinned reader permits only SELECT statements");
+        return {
+          get: (...params) => guardAbandonedRead(issue("get", sql, params)),
+          all: (...params) => guardAbandonedRead(issue("all", sql, params) as Promise<unknown[]>),
+          run: readonly,
+        };
+      },
+      exec: readonly,
+    };
+
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      control.signal.addEventListener("abort", () => reject(control.signal.reason), { once: true });
+    });
+    const release = async () => {
+      active = false;
+      clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", abort);
+      if (pending)
+        control.abort(new WorkerDbAbortError("DB pinned read closed before its statement"));
+      try {
+        if (this.closed) throw new WorkerDbAbortError("DB pinned reader is closing");
+        if (!reader.isRetired) {
+          try {
+            if (!began || pending) throw new Error("DB pinned reader custody is uncertain");
+            verifyWorker();
+            await reader.request("exec", "ROLLBACK", [], { timeoutMs: 250 });
+          } catch (error) {
+            if (!reader.isRetired) {
+              this.retireReader(reader);
+              // Admission stays held until actual exit; do not turn uncertain
+              // native cleanup into an unbounded response wait.
+              void reader.terminate().catch(() => {});
+            }
+            throw error;
+          }
+        }
+      } finally {
+        this.pinnedReader = null;
+        this.pinnedReadAbort = null;
+        reader.releaseExactRead();
+      }
+    };
+
+    try {
+      return await Promise.race([
+        cancelled,
+        (async () => {
+          const begin = reader.request("exec", "BEGIN", [], { signal: control.signal });
+          generation = reader.generation;
+          await begin;
+          verifyWorker();
+          began = true;
+          verifyBudget();
+          const result = await operation(view);
+          verifyBudget();
+          if (pending) throw new Error("DB pinned reader has an unfinished statement");
+          verifyWorker();
+          return result;
+        })(),
+      ]);
+    } finally {
+      await release();
+    }
+  }
+
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
     this.closed = true;
     // Retired readers are included so an orphaned worker cannot outlive the
     // database it was reading (#2324). Their `terminate()` waits for the
@@ -1251,9 +1495,20 @@ export class WorkerFileDatabase implements DbDatabase {
     const connections = [this.writer, ...this.readers, ...this.retiredConnections].filter(
       (c): c is WorkerConnection => c !== null
     );
+    let finish!: () => void;
+    let fail!: (error: unknown) => void;
+    this.closing = new Promise<void>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
+    });
+    for (const connection of connections) connection.retainForShutdown();
+    this.pinnedReadAbort?.abort(new WorkerDbAbortError("DB pinned reader is closing"));
     this.writer = null;
     this.readers = [];
-    this.retiredConnections.clear();
-    await Promise.all(connections.map((c) => c.terminate()));
+    Promise.all(connections.map((c) => c.terminate())).then(() => {
+      this.retiredConnections.clear();
+      finish();
+    }, fail);
+    return this.closing;
   }
 }

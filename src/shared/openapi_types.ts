@@ -464,7 +464,7 @@ export interface paths {
     };
     /**
      * List entities
-     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
+     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Exact identity proofs require POST so the identity value is not carried in the URL. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
      */
     get: operations["listEntities"];
     put?: never;
@@ -1210,7 +1210,10 @@ export interface paths {
      *     returns matching types via hybrid keyword/semantic search; pass
      *     `summary: true` to keep the response shape compact even when keyword is
      *     supplied. Use before storing structured data to determine the correct
-     *     entity_type and its declared field names.
+     *     entity_type and its declared field names. Compact rows also project
+     *     schema_definition.planning when declared. For a full planning-level census,
+     *     request summary=true without keyword or entity_type and with enough limit
+     *     to return the whole catalog; require registry_coverage.state=complete.
      */
     get: operations["listSchemas"];
     put?: never;
@@ -2537,6 +2540,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    ExactIdentityRead: {
+      /** @enum {string} */
+      version: "1";
+      /**
+       * @description Singleton identifies one verified visible row. Absent proves no match.
+       *     Ambiguous proves at least two matches. Unproved reports unavailable or
+       *     incomplete proof and cannot be treated as absence. No state falls
+       *     back to an ordinary query.
+       * @enum {string}
+       */
+      state: "singleton" | "absent" | "ambiguous" | "unproved";
+      /** @description True only for a proved state from one authenticated database view. */
+      common_view: boolean;
+      requested_scope: {
+        /** @enum {string} */
+        owner: "authenticated";
+        entity_type: string;
+        field: string;
+        /** @description SHA-256 of the JSON string value, without echoing the predicate. */
+        value_sha256: string;
+      };
+      /** @description The owned raw snapshot and its field provenance, present only for singleton. */
+      entity?: {
+        entity_id: string;
+        entity_type: string;
+        snapshot: {
+          [key: string]: unknown;
+        };
+        provenance: {
+          [key: string]: string;
+        };
+      };
+    };
     /** @description Additive acquisition evidence from the executing entity collection path. Ranked candidate zero, ignored scope, acquisition caps or degradation cannot establish predicate-population absence. Existing legacy fields retain their meaning. The read interval is not a write fence, revision lease or common database view. See query_convergence and issue #2597. */
     EntityReadContract: {
       /** @enum {string} */
@@ -3975,9 +4011,42 @@ export interface components {
         [key: string]: unknown;
       } & components["schemas"]["AgentAttribution"];
     };
+    /** @description Optional registry declaration of a planning stratum. Relative numeric ordering is instance-defined; read_only never grants write authority. */
+    PlanningDeclaration: {
+      /** @description Finite numeric rank. Higher planning ranks are above lower ranks. */
+      level: number;
+      /** @description Read-only reference stratum; omission or false does not authorize edits. */
+      read_only?: boolean;
+    };
+    /** @description Per-call acquisition evidence for the complete principal-scoped registered type census. A filtered, paginated, fallback, invalid or unreadable catalog is unknown. */
+    SchemaRegistryCoverage: {
+      /** @enum {string} */
+      version: "1";
+      /** @enum {string} */
+      state: "complete" | "unknown";
+      /** @enum {string} */
+      source: "registry" | "code_fallback";
+      reasons: string[];
+      total: number | null;
+      returned_count: number;
+      exhausted: boolean;
+      scope: {
+        /** @enum {string} */
+        owner: "authenticated" | "global";
+        keyword: string | null;
+        entity_type: string | null;
+      };
+    };
     EntitySchema: {
       entity_type?: string;
       schema_version?: string;
+      planning?: components["schemas"]["PlanningDeclaration"];
+      /**
+       * @description A legacy planning declaration is malformed; census coverage is unknown.
+       * @enum {string}
+       */
+      planning_error?: "invalid_declaration";
+      field_count?: number;
       field_names?: string[];
       field_summary?: {
         [key: string]: unknown;
@@ -3990,6 +4059,7 @@ export interface components {
        *     storing.
        */
       schema_definition?: {
+        planning?: components["schemas"]["PlanningDeclaration"];
         fields?: {
           [key: string]: {
             type?: string;
@@ -5967,6 +6037,19 @@ export interface operations {
       content: {
         "application/json": {
           /**
+           * @description Opt in to a bounded same-view read with one entity_type and
+           *     one snapshot_filters string equality on its declared sole
+           *     canonical identity field. Type and field names must be lowercase
+           *     identifiers (1–64 ASCII characters). The value must be
+           *     1–256 Unicode characters without control characters.
+           *     Supply no other options or user_id override.
+           *     The exact_identity result distinguishes unavailable proof
+           *     from absence. Only file libSQL with an available pinned
+           *     reader currently supplies proof.
+           * @enum {string}
+           */
+          read_mode?: "exact_identity";
+          /**
            * @description Single entity-type filter. Combined as a union with
            *     `entity_types` when both are supplied.
            */
@@ -6114,6 +6197,7 @@ export interface operations {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
             read_contract?: components["schemas"]["EntityReadContract"];
+            exact_identity?: components["schemas"]["ExactIdentityRead"];
             total?: number;
             limit?: number;
             offset?: number;
@@ -7218,6 +7302,10 @@ export interface operations {
          *     Defaults to false when `keyword` is present, true when it is not.
          */
         summary?: boolean;
+        /** @description Restrict the result to one type; registry census coverage is then unknown. */
+        entity_type?: string;
+        limit?: number;
+        offset?: number;
       };
       header?: never;
       path?: never;
@@ -7232,6 +7320,10 @@ export interface operations {
         };
         content: {
           "application/json": {
+            registry_coverage?: components["schemas"]["SchemaRegistryCoverage"];
+            total?: number;
+            limit?: number;
+            offset?: number;
             schemas?: components["schemas"]["EntitySchema"][];
           };
         };
@@ -9027,6 +9119,8 @@ export interface operations {
                 composite: string[];
               }
           )[];
+          /** @description Replace the optional planning-stratum declaration without rebuilding fields or row metadata. Omit to preserve the current declaration; may be supplied alone. */
+          planning?: components["schemas"]["PlanningDeclaration"];
           schema_version?: string;
           /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global registry row and no code-defined baseline (but has the caller's user-scoped schema). The response's `scope` reports the scope actually written. */
           user_specific?: boolean;
@@ -9243,6 +9337,8 @@ export interface operations {
         "application/json": {
           entity_type: string;
           schema_definition: {
+            planning?: components["schemas"]["PlanningDeclaration"];
+          } & {
             [key: string]: unknown;
           };
           reducer_config: {

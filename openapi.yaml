@@ -23,6 +23,58 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    ExactIdentityRead:
+      type: object
+      additionalProperties: false
+      required: [version, state, common_view, requested_scope]
+      properties:
+        version:
+          type: string
+          enum: ["1"]
+        state:
+          type: string
+          enum: [singleton, absent, ambiguous, unproved]
+          description: |
+            Singleton identifies one verified visible row. Absent proves no match.
+            Ambiguous proves at least two matches. Unproved reports unavailable or
+            incomplete proof and cannot be treated as absence. No state falls
+            back to an ordinary query.
+        common_view:
+          type: boolean
+          description: True only for a proved state from one authenticated database view.
+        requested_scope:
+          type: object
+          additionalProperties: false
+          required: [owner, entity_type, field, value_sha256]
+          properties:
+            owner:
+              type: string
+              enum: [authenticated]
+            entity_type:
+              type: string
+            field:
+              type: string
+            value_sha256:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+              description: SHA-256 of the JSON string value, without echoing the predicate.
+        entity:
+          type: object
+          additionalProperties: false
+          required: [entity_id, entity_type, snapshot, provenance]
+          description: The owned raw snapshot and its field provenance, present only for singleton.
+          properties:
+            entity_id:
+              type: string
+            entity_type:
+              type: string
+            snapshot:
+              type: object
+              additionalProperties: true
+            provenance:
+              type: object
+              additionalProperties:
+                type: string
     EntityReadContract:
       type: object
       additionalProperties: false
@@ -2185,6 +2237,39 @@ components:
           additionalProperties: true
           allOf:
             - $ref: "#/components/schemas/AgentAttribution"
+    PlanningDeclaration:
+      type: object
+      additionalProperties: false
+      required: [level]
+      description: Optional registry declaration of a planning stratum. Relative numeric ordering is instance-defined; read_only never grants write authority.
+      properties:
+        level:
+          type: number
+          description: Finite numeric rank. Higher planning ranks are above lower ranks.
+        read_only:
+          type: boolean
+          description: Read-only reference stratum; omission or false does not authorize edits.
+    SchemaRegistryCoverage:
+      type: object
+      required: [version, state, source, reasons, total, returned_count, exhausted, scope]
+      description: Per-call acquisition evidence for the complete principal-scoped registered type census. A filtered, paginated, fallback, invalid or unreadable catalog is unknown.
+      properties:
+        version: { type: string, enum: ["1"] }
+        state: { type: string, enum: [complete, unknown] }
+        source: { type: string, enum: [registry, code_fallback] }
+        reasons:
+          type: array
+          items: { type: string }
+        total: { type: integer, minimum: 0, nullable: true }
+        returned_count: { type: integer, minimum: 0 }
+        exhausted: { type: boolean }
+        scope:
+          type: object
+          required: [owner, keyword, entity_type]
+          properties:
+            owner: { type: string, enum: [authenticated, global] }
+            keyword: { type: string, nullable: true }
+            entity_type: { type: string, nullable: true }
     EntitySchema:
       type: object
       additionalProperties: true
@@ -2193,6 +2278,14 @@ components:
           type: string
         schema_version:
           type: string
+        planning:
+          $ref: "#/components/schemas/PlanningDeclaration"
+        planning_error:
+          type: string
+          enum: [invalid_declaration]
+          description: A legacy planning declaration is malformed; census coverage is unknown.
+        field_count:
+          type: integer
         field_names:
           type: array
           items:
@@ -2210,6 +2303,8 @@ components:
             agents can read field names, types, and required flags before
             storing.
           properties:
+            planning:
+              $ref: "#/components/schemas/PlanningDeclaration"
             fields:
               type: object
               additionalProperties:
@@ -4322,7 +4417,8 @@ paths:
         behavior instead of a 404. Scoped to the authenticated user. The
         request body of `POST /entities/query` and the query string here accept
         the same field names; complex object fields (`snapshot_filters`) are
-        passed as a JSON-encoded string. Unmatched verbs on `/entities` return
+        passed as a JSON-encoded string. Exact identity proofs require POST
+        so the identity value is not carried in the URL. Unmatched verbs on `/entities` return
         a 404 whose `details.hint` points back at this endpoint and
         `POST /entities/query`.
       operationId: listEntities
@@ -4510,6 +4606,19 @@ paths:
             schema:
               type: object
               properties:
+                read_mode:
+                  type: string
+                  enum: [exact_identity]
+                  description: |
+                    Opt in to a bounded same-view read with one entity_type and
+                    one snapshot_filters string equality on its declared sole
+                    canonical identity field. Type and field names must be lowercase
+                    identifiers (1–64 ASCII characters). The value must be
+                    1–256 Unicode characters without control characters.
+                    Supply no other options or user_id override.
+                    The exact_identity result distinguishes unavailable proof
+                    from absence. Only file libSQL with an available pinned
+                    reader currently supplies proof.
                 entity_type:
                   type: string
                   description: |
@@ -4682,6 +4791,8 @@ paths:
                       $ref: "#/components/schemas/EntitySnapshot"
                   read_contract:
                     $ref: "#/components/schemas/EntityReadContract"
+                  exact_identity:
+                    $ref: "#/components/schemas/ExactIdentityRead"
                   total:
                     type: integer
                   limit:
@@ -6090,7 +6201,10 @@ paths:
         returns matching types via hybrid keyword/semantic search; pass
         `summary: true` to keep the response shape compact even when keyword is
         supplied. Use before storing structured data to determine the correct
-        entity_type and its declared field names.
+        entity_type and its declared field names. Compact rows also project
+        schema_definition.planning when declared. For a full planning-level census,
+        request summary=true without keyword or entity_type and with enough limit
+        to return the whole catalog; require registry_coverage.state=complete.
       operationId: listSchemas
       parameters:
         - in: query
@@ -6112,6 +6226,19 @@ paths:
             schema_version, field_count) even when `keyword` is supplied.
             Defaults to false when `keyword` is present, true when it is not.
           schema: { type: boolean }
+        - in: query
+          name: entity_type
+          required: false
+          schema: { type: string }
+          description: Restrict the result to one type; registry census coverage is then unknown.
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 0, default: 100 }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
       responses:
         "200":
           description: Schemas
@@ -6120,6 +6247,11 @@ paths:
               schema:
                 type: object
                 properties:
+                  registry_coverage:
+                    $ref: "#/components/schemas/SchemaRegistryCoverage"
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
                   schemas:
                     type: array
                     items:
@@ -8308,6 +8440,9 @@ paths:
                             type: array
                             items:
                               type: string
+                planning:
+                  $ref: "#/components/schemas/PlanningDeclaration"
+                  description: Replace the optional planning-stratum declaration without rebuilding fields or row metadata. Omit to preserve the current declaration; may be supplied alone.
                 schema_version:
                   type: string
                 user_specific:
@@ -8686,6 +8821,9 @@ paths:
                 schema_definition:
                   type: object
                   additionalProperties: true
+                  properties:
+                    planning:
+                      $ref: "#/components/schemas/PlanningDeclaration"
                 reducer_config:
                   type: object
                   additionalProperties: true

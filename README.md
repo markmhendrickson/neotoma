@@ -111,12 +111,12 @@ neotoma init
 neotoma setup --tool claude-code
 ```
 
-In v0.27.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
+In the current package source, `neotoma setup --tool claude-code` writes the MCP entries and more. The skill count below includes source changes not yet in published v0.27.0, which contains 12 installable skills; check the package version you actually use:
 
 - Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
 - CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.
 - When `claude` is on your PATH, it runs `claude plugin marketplace add` and `claude plugin install` to install the Neotoma Claude Code plugin (five hooks). Without `claude` on PATH, setup writes everything else and then exits with status 1.
-- When `~/.claude` exists, it links 12 Neotoma skills into `~/.claude/skills`.
+- When `~/.claude` exists, it links 13 Neotoma skills into `~/.claude/skills`.
 
 It also adds two allow rules, `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)`, to `.claude/settings.local.json` (project scope, the default). The first is a wildcard: Claude Code then runs any `neotoma` command without asking, including destructive ones such as `neotoma reset`, `neotoma storage merge-db`, `neotoma backup restore`, and `neotoma processes kill`. `--scope both` also writes the rules to `~/.claude/settings.json`, and `--skip-permissions` writes none. For Cursor the same two rules go to `.cursor/allowlist.json`; for Codex they go to the user-level `~/.codex/config.toml` whatever the scope.
 

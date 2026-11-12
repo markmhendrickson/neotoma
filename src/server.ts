@@ -22,6 +22,11 @@ import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import {
+  EXACT_IDENTITY_REQUEST_MESSAGE,
+  exactIdentityRequested,
+  readExactIdentity,
+} from "./shared/action_handlers/exact_identity_read.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
@@ -147,8 +152,10 @@ import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
+  getRequestContext,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { timeMcpIdentifierLookup } from "./services/mcp_lookup_timing.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
 import {
   emitEntitySnapshotChange,
@@ -2546,8 +2553,11 @@ export class NeotomaServer {
       try {
         const { name, arguments: args } = request.params;
 
-        const cliEquivalent = buildCliEquivalentInvocation(name, args);
-        logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+        const exactIdentity = name === "retrieve_entities" && exactIdentityRequested(args);
+        if (!exactIdentity) {
+          const cliEquivalent = buildCliEquivalentInvocation(name, args);
+          logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+        }
 
         // Check if this is an encrypted request wrapper
         if (name === "encrypted_request" && (args as any)?.encryptedPayload) {
@@ -2597,13 +2607,16 @@ export class NeotomaServer {
             attributionDecision,
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+            mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
           },
           () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
         const resultWithNotice = this.withRuntimeUpdateNotice(result, runtimeUpdateNotice);
-        const resultSummary = summarizeToolResultForLog(name, resultWithNotice);
+        const resultSummary = exactIdentity
+          ? "exact identity proof response"
+          : summarizeToolResultForLog(name, resultWithNotice);
         if (resultSummary) {
           logger.info(`[MCP Server] ${name} → ${resultSummary}`);
         }
@@ -4381,6 +4394,13 @@ export class NeotomaServer {
   private async retrieveEntities(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (exactIdentityRequested(args)) {
+      const userId = this.getAuthenticatedUserId();
+      const exact_identity = await readExactIdentity(args, userId);
+      if (!exact_identity)
+        throw new McpError(ErrorCode.InvalidParams, EXACT_IDENTITY_REQUEST_MESSAGE);
+      return this.buildTextResponse({ exact_identity });
+    }
     const parsed = RetrieveEntitiesRequestSchema.parse(args ?? {});
     const rawArgs =
       args && typeof args === "object" && !Array.isArray(args)
@@ -4617,15 +4637,20 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { entities, total, match_mode, hint } = await retrieveEntityByIdentifierWithFallback({
-      identifier: parsed.identifier,
-      entityType: parsed.entity_type,
-      userId,
-      limit: parsed.limit ?? 100,
-      by: parsed.by,
-      includeObservations: parsed.include_observations,
-      observationsLimit: parsed.observations_limit,
-    });
+    const { entities, total, match_mode, hint } = await timeMcpIdentifierLookup(
+      getRequestContext()?.mcpLookupTiming,
+      parsed,
+      () =>
+        retrieveEntityByIdentifierWithFallback({
+          identifier: parsed.identifier,
+          entityType: parsed.entity_type,
+          userId,
+          limit: parsed.limit ?? 100,
+          by: parsed.by,
+          includeObservations: parsed.include_observations,
+          observationsLimit: parsed.observations_limit,
+        })
+    );
 
     const response: Record<string, unknown> = { entities, total, match_mode };
     // Only surface `hint` when the handler populated it (id-shaped identifier
@@ -5020,11 +5045,12 @@ export class NeotomaServer {
     const schemaRegistry = new SchemaRegistryService();
 
     try {
-      const entityTypes = await schemaRegistry.listEntityTypes(
+      const catalog = await schemaRegistry.listEntityTypesResult(
         parsed.keyword,
         this.getAuthenticatedUserId()
       );
 
+      const entityTypes = catalog.entity_types;
       // When no keyword, always return summary to avoid huge payload (all types × full schema).
       // When keyword is provided, respect summary param (default full detail for the few matches).
       const useSummary =
@@ -5036,7 +5062,10 @@ export class NeotomaServer {
               entity_type: et.entity_type,
               schema_version: et.schema_version,
               field_count: et.field_names?.length || 0,
+              ...(et.planning ? { planning: et.planning } : {}),
+              ...(et.planning_error ? { planning_error: et.planning_error } : {}),
             })),
+            registry_coverage: catalog.registry_coverage,
             total: entityTypes.length,
             keyword: parsed.keyword || null,
             search_method: parsed.keyword
@@ -5047,6 +5076,7 @@ export class NeotomaServer {
           }
         : {
             entity_types: entityTypes,
+            registry_coverage: catalog.registry_coverage,
             total: entityTypes.length,
             keyword: parsed.keyword || null,
             search_method: parsed.keyword
@@ -5389,6 +5419,7 @@ export class NeotomaServer {
         fields_to_add: parsed.fields_to_add,
         fields_to_remove: parsed.fields_to_remove,
         canonical_name_fields: parsed.canonical_name_fields,
+        planning: parsed.planning,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
         user_id: userId,

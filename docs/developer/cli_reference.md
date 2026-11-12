@@ -472,7 +472,7 @@ Config scope for `neotoma init` is a binary switch: `--project-local` writes to 
 After the JSON report, `neotoma setup` always emits two plain-text lines to stdout (regardless of `--json` / `--pretty` mode):
 
 1. **Install-verification line**: a single grep-able line confirming the binary path, version manager, version, data directory, and MCP transport. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`. Agent harnesses grep this line to confirm install succeeded without parsing JSON.
-2. **Transport summary**: the fixed line begins `Transport: local stdio MCP` and is printed whatever transport was chosen. Its claim of zero network traffic describes only the local stdio MCP transport: the CLI and the stdio MCP server still check the npm registry for updates, which the registry sees with ordinary connection metadata. Set `NO_UPDATE_NOTIFIER=1` to disable those checks (see [Update check](#update-check-stderr-notice)). The printed `http` suggestion is inaccurate: `http` is not an accepted `--mcp-transport` value; the signed HTTP proxy preset is `a`.
+2. **Transport summary**: the line begins `Transport:` and describes only the Neotoma MCP entries this run wrote, one clause per entry: its server key and what its `--mcp-transport` preset does. The line describes each written entry's mechanism (local command or HTTP endpoint, signed or not, and whether it forwards to an endpoint) and makes no claim that the entry, or Neotoma, makes no network requests. A preset `c` entry is a local stdio command with no endpoint URL; the server it starts checks the npm registry for updates unless `NO_UPDATE_NOTIFIER=1`. When entries were written, the line adds that any other Neotoma entries in the MCP config are not described and were not checked. Setup may have repaired them or re-pointed them to a new port. When this run recorded no new entry (skipped, already configured, cancelled, dry run, or a repair of existing entries), it reads `Transport: This line describes no Neotoma MCP entry, because this run recorded no new one. Any existing entries, including any setup repaired or re-pointed to a new port, were not checked.` The line never prints a URL, host, port, path, command or environment value. It is not a statement about Neotoma as a whole: the CLI and the stdio MCP server still check the npm registry for updates, which the registry sees with ordinary connection metadata. Set `NO_UPDATE_NOTIFIER=1` to disable those checks (see [Update check](#update-check-stderr-notice)).
 
 Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `neotoma mcp config` or `neotoma cli config` when only one layer needs repair.
 
@@ -1282,3 +1282,10 @@ Load this document when updating CLI commands, options, or configuration behavio
 - Config path and fields are accurate
 - Main-only behaviour is marked
 - Agent Instructions included
+
+## Planning declaration commands
+
+Use `neotoma schemas update <type> --planning '<json>'` for the existing versioned
+schema operation, and `neotoma schemas list --summary --limit <budget> --json`
+for its compact catalog. The canonical declaration, preservation and complete-census
+rules are in `neotoma instructions print` under `[PLANNING DECLARATIONS]`.

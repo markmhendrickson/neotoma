@@ -1714,6 +1714,39 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
       expect(await activeFieldNames(t)).not.toContain("added_field");
     });
 
+    it("REST refuses a declaration-only change for a retrieve-only grant with zero schema writes", async () => {
+      const t = await seedSchema("planning_rest_ro");
+      const before = (await schemaRows(t)).map(({ metadata: _metadata, ...record }) => record);
+      const res = await post(
+        "/update_schema_incremental",
+        { entity_type: t, planning: { level: 17 } },
+        "retrieve-only"
+      );
+      expect(res.status).toBe(403);
+      expect(res.body.error_code).toBe("capability_denied");
+      // Registration generates icons asynchronously; compare every versioned-schema column.
+      expect((await schemaRows(t)).map(({ metadata: _metadata, ...record }) => record)).toEqual(
+        before
+      );
+    });
+
+    it("MCP refuses a declaration-only change outside the granted type with zero schema writes", async () => {
+      const t = await seedSchema("planning_mcp_wrong_type");
+      const before = (await schemaRows(t)).map(({ metadata: _metadata, ...record }) => record);
+      const error = await capture(() =>
+        tool(
+          "updateSchemaIncremental",
+          { entity_type: t, planning: { level: 17 } },
+          "schema-one-type"
+        )
+      );
+      expectDenied(error, "register_schema");
+      // Registration generates icons asynchronously; compare every versioned-schema column.
+      expect((await schemaRows(t)).map(({ metadata: _metadata, ...record }) => record)).toEqual(
+        before
+      );
+    });
+
     it("REST updates for a grant that names register_schema", async () => {
       const t = await seedSchema("inc_rest_ok");
       const res = await post(
