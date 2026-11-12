@@ -648,7 +648,6 @@ class LocalQueryBuilder {
   private countHead = false;
   private expectSingle = false;
   private allowNullSingle = false;
-  private snapshotMaterialization = true;
   private orConditions: Array<{ clause: string; values: unknown[] }> = [];
 
   constructor(table: string) {
@@ -668,18 +667,6 @@ class LocalQueryBuilder {
   insert(payload: Record<string, unknown> | Record<string, unknown>[]): this {
     this.operation = "insert";
     this.insertPayload = Array.isArray(payload) ? payload : [payload];
-    return this;
-  }
-
-  /**
-   * Skip the insert-time snapshot materialization (see the `observations`
-   * branch of insert). For a caller that recomputes and persists the entity's
-   * snapshot itself later in the same transaction: the materialized one would
-   * be overwritten, and building it re-reads and re-reduces every observation
-   * of the entity while the write gate is held. The entity row is still ensured.
-   */
-  withoutSnapshotMaterialization(): this {
-    this.snapshotMaterialization = false;
     return this;
   }
 
@@ -1085,7 +1072,7 @@ class LocalQueryBuilder {
               // Local backend parity: inserts can materialize related state (entities + snapshots).
               if (this.table === "observations") {
                 await ensureEntityRowForObservation(db, payload);
-                if (this.snapshotMaterialization && typeof payload["entity_id"] === "string") {
+                if (typeof payload["entity_id"] === "string") {
                   await recomputeEntitySnapshot(db, payload["entity_id"] as string);
                 }
               }

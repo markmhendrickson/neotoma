@@ -11,16 +11,7 @@ import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
 import { CORRECTION_SOURCE_PRIORITY, CORRECTION_SPECIFICITY_SCORE } from "./correction_identity.js";
 import { buildObservationRow, insertObservationRow } from "./observation_insert.js";
-import {
-  persistSpeculativeSnapshot,
-  recomputeSnapshot,
-  schemaIdentity,
-  speculateSnapshotWithAppendedObservation,
-  type SpeculativeSnapshot,
-} from "./snapshot_computation.js";
-import { logger } from "../utils/logger.js";
-import type { Observation } from "../reducers/observation_reducer.js";
-import { fingerprintOwnedObservations } from "./attachment_resolution.js";
+import { recomputeSnapshot } from "./snapshot_computation.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { getDb } from "../repositories/db/connection.js";
 import {
@@ -30,10 +21,7 @@ import {
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
-import {
-  assertCurrentAgentMayWriteLifecycleMarker,
-  lifecycleOpForFields,
-} from "./mutation_capability.js";
+import { assertCurrentAgentMayWriteLifecycleMarker } from "./mutation_capability.js";
 import { enforceOverridePolicy } from "./override_validation.js";
 import { assertNoOwnerConflict } from "./entity_resolution.js";
 import {
@@ -64,100 +52,7 @@ export interface CreateCorrectionParams {
   defer_substrate_events?: boolean;
   /** @internal Marks that the caller already owns the database transaction. */
   in_transaction?: boolean;
-  /**
-   * @internal Snapshot reduced before the transaction opened (see
-   * {@link speculateCorrection}). Set only by this module's wrappers; neither
-   * public transport accepts it.
-   */
-  speculative?: SpeculativeCorrection;
 }
-
-/**
- * The observation row and reduced snapshot prepared off the write gate. The
- * transaction inserts this same row (built once, so the observation insert
- * sites keep their single `buildObservationRow` call per correction).
- */
-export interface SpeculativeCorrection {
-  row: ReturnType<typeof buildCorrectionRow>;
-  snapshot: SpeculativeSnapshot;
-}
-
-/**
- * Thrown inside the write transaction when the entity's observations or schema
- * changed after the speculative snapshot was reduced. It rolls the (still empty)
- * transaction back and the wrapper retries with a fresh speculation.
- */
-export class SpeculativeSnapshotStaleError extends Error {
-  constructor(readonly reason: "observations_changed" | "schema_changed") {
-    super(`Speculative snapshot is stale: ${reason}.`);
-    this.name = "SpeculativeSnapshotStaleError";
-  }
-}
-
-/**
- * Counters for the optimistic path, so hosted logs and tests can see how often
- * it engages and why it falls back. Process-local, never reset in production.
- * @internal Diagnostic only; not part of any public surface.
- */
-export const correctionSpeculationStats = {
-  attempts: 0,
-  staleRetries: 0,
-  fastPathPersists: 0,
-  fallbacks: {} as Record<string, number>,
-};
-
-/**
- * @internal Test seam: runs after a speculation, before the transaction opens.
- * Inert unless NODE_ENV is "test", so production can never run a hook.
- */
-export const speculationTestHooks: {
-  afterSpeculate?: (attempt: number) => Promise<void> | void;
-} = {};
-
-const FALLBACK_LOG_INTERVAL_MS = 1000;
-const FALLBACK_SUMMARY_INTERVAL_MS = 10 * 60 * 1000;
-let lastFallbackLogAt = 0;
-let suppressedFallbackLogs = 0;
-let lastFallbackSummaryAt = Date.now();
-let fallbacksSinceSummary: Record<string, number> = {};
-let fastPathSinceSummary = 0;
-
-/** Count a fallback to the in-transaction recompute; log at debug, rate-limited. */
-function noteSpeculationFallback(reason: string, entityId: string): void {
-  correctionSpeculationStats.fallbacks[reason] =
-    (correctionSpeculationStats.fallbacks[reason] ?? 0) + 1;
-  fallbacksSinceSummary[reason] = (fallbacksSinceSummary[reason] ?? 0) + 1;
-  const now = Date.now();
-  // Info-level summary so hosted logs show the fallback rate without debug
-  // logging: at most one line per 10 minutes, emitted by the first fallback
-  // after the interval, and only because fallbacks occurred.
-  if (now - lastFallbackSummaryAt >= FALLBACK_SUMMARY_INTERVAL_MS) {
-    const minutes = Math.round((now - lastFallbackSummaryAt) / 60000);
-    logger.info(
-      `[CORRECT] last ${minutes} min: ${correctionSpeculationStats.fastPathPersists - fastPathSinceSummary} ` +
-        `corrections took the off-gate snapshot path; fallbacks to the in-transaction recompute by ` +
-        `reason: ${JSON.stringify(fallbacksSinceSummary)}`
-    );
-    lastFallbackSummaryAt = now;
-    fallbacksSinceSummary = {};
-    fastPathSinceSummary = correctionSpeculationStats.fastPathPersists;
-  }
-  if (now - lastFallbackLogAt < FALLBACK_LOG_INTERVAL_MS) {
-    suppressedFallbackLogs += 1;
-    return;
-  }
-  lastFallbackLogAt = now;
-  const suppressed = suppressedFallbackLogs;
-  suppressedFallbackLogs = 0;
-  logger.debug(
-    `[CORRECT] snapshot computed inside the write transaction (reason: ${reason}, entity ` +
-      `${entityId})${suppressed > 0 ? `; ${suppressed} similar fallback(s) suppressed` : ""}. ` +
-      `Counts by reason: ${JSON.stringify(correctionSpeculationStats.fallbacks)}`
-  );
-}
-
-/** Optimistic attempts before falling back to the in-transaction recompute. */
-export const MAX_SPECULATIVE_ATTEMPTS = 3;
 
 export interface CorrectionResult {
   observation_id: string;
@@ -340,166 +235,15 @@ export function emitCommittedCorrection(event: DeferredCorrectionEvent): void {
   });
 }
 
-function buildCorrectionRow(
-  params: CreateCorrectionParams,
-  observationId: string,
-  observedAt?: string
-) {
-  const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
-  return buildObservationRow({
-    id: observationId,
-    entity_id,
-    entity_type,
-    schema_version,
-    source_id: null,
-    interpretation_id: null,
-    observed_at: observedAt ?? new Date().toISOString(),
-    // Together with a null source, no interpretation and no observation_source,
-    // these two make the row recognisable as a correction to the reducer
-    // (correction_identity.ts). Do not set observation_source here without
-    // changing that predicate in the same change.
-    specificity_score: CORRECTION_SPECIFICITY_SCORE,
-    source_priority: CORRECTION_SOURCE_PRIORITY,
-    fields: { [field]: value },
-    user_id,
-    idempotency_key: idempotency_key || undefined,
-    provenance: getCurrentAttribution(),
-  });
-}
-
-/** The row as the reducer would read it back from storage. */
-function speculativeObservation(row: ReturnType<typeof buildCorrectionRow>): Observation {
-  return {
-    id: row.id,
-    entity_id: row.entity_id,
-    entity_type: row.entity_type,
-    schema_version: row.schema_version,
-    source_id: null as unknown as string,
-    interpretation_id: null,
-    observed_at: row.observed_at,
-    specificity_score: row.specificity_score,
-    source_priority: row.source_priority,
-    observation_source: null,
-    // Storage round-trips fields through JSON.
-    fields: JSON.parse(JSON.stringify(row.fields)) as Record<string, unknown>,
-    // The stored created_at is defaulted at insert (ingestion time, as before).
-    // The reducer reads it only to break ties between equal observed_at, and a
-    // speculated row is strictly newer than every stored one, so any value that
-    // is not earlier than observed_at gives the same result.
-    created_at: (row.created_at as string | undefined) ?? row.observed_at,
-    user_id: row.user_id,
-  };
-}
-
-type CorrectionSpeculation =
-  | { ok: true; speculative: SpeculativeCorrection }
-  | { ok: false; reason: string };
-
-/**
- * Reduce the snapshot a correction will produce BEFORE the write transaction
- * opens, on readers. The write gate is then held only for the insert and the
- * snapshot upsert, not for re-reading and re-reducing the entity's whole
- * observation history. `ok: false` means "use the in-transaction recompute".
- */
-async function speculateCorrection(params: CreateCorrectionParams): Promise<CorrectionSpeculation> {
-  // Grouped receipts and lifecycle markers (delete / restore change visibility)
-  // keep the single in-transaction path.
-  if (params.canonical_hash !== undefined) return { ok: false, reason: "grouped_receipt" };
-  if (lifecycleOpForFields({ [params.field]: params.value })) {
-    return { ok: false, reason: "lifecycle_marker" };
-  }
-  try {
-    // A replay of a committed correction returns its receipt inside the
-    // transaction; do not pay for a full off-gate read to throw it away.
-    if (await existingCorrectionForKey(params)) return { ok: false, reason: "replay" };
-
-    const { data: entity } = await db
-      .from("entities")
-      .select("user_id, entity_type, merged_to_entity_id")
-      .eq("id", params.entity_id)
-      .maybeSingle();
-    if (!entity) return { ok: false, reason: "entity_unavailable" };
-    const stored = entity as {
-      user_id: string | null;
-      entity_type: string;
-      merged_to_entity_id?: string | null;
-    };
-    if (
-      stored.merged_to_entity_id ||
-      stored.entity_type !== params.entity_type ||
-      (stored.user_id !== null && stored.user_id !== params.user_id)
-    ) {
-      return { ok: false, reason: "entity_unavailable" };
-    }
-
-    const observationId = generateObservationId(
-      null,
-      null,
-      params.entity_id,
-      { [params.field]: params.value },
-      params.idempotency_key
-    );
-    const observedAt = new Date().toISOString();
-    const row = buildCorrectionRow(params, observationId, observedAt);
-    const result = await speculateSnapshotWithAppendedObservation(
-      params.entity_id,
-      params.user_id,
-      speculativeObservation(row)
-    );
-    if (!result.ok) return result;
-    return { ok: true, speculative: { row, snapshot: result.speculative } };
-  } catch {
-    return { ok: false, reason: "error" };
-  }
-}
-
-/**
- * Run `attempt` (which opens the write transaction) with a speculative
- * snapshot, retrying with a fresh one when the entity changed in between, and
- * finally without speculation. Results are identical to the unspeculated path.
- */
-async function runWithSpeculation<T>(
-  params: CreateCorrectionParams,
-  attempt: (params: CreateCorrectionParams) => Promise<T>
-): Promise<T> {
-  if (!params.speculative) {
-    let lastStale: string | null = null;
-    for (let i = 0; i < MAX_SPECULATIVE_ATTEMPTS; i++) {
-      const speculation = await speculateCorrection(params);
-      if (!speculation.ok) {
-        noteSpeculationFallback(speculation.reason, params.entity_id);
-        lastStale = null;
-        break;
-      }
-      correctionSpeculationStats.attempts += 1;
-      if (process.env.NODE_ENV === "test") await speculationTestHooks.afterSpeculate?.(i);
-      try {
-        return await attempt({ ...params, speculative: speculation.speculative });
-      } catch (err) {
-        if (err instanceof SpeculativeSnapshotStaleError) {
-          correctionSpeculationStats.staleRetries += 1;
-          lastStale = err.reason;
-          continue;
-        }
-        throw err;
-      }
-    }
-    if (lastStale) noteSpeculationFallback(`stale_exhausted:${lastStale}`, params.entity_id);
-  }
-  return attempt(params);
-}
-
 export async function createCorrection(params: CreateCorrectionParams): Promise<CorrectionResult> {
   if (!params.in_transaction) {
     const database = await getDb();
-    const result = await runWithSpeculation(params, (attempt) =>
-      database.transaction(() =>
-        createCorrection({
-          ...attempt,
-          in_transaction: true,
-          defer_substrate_events: true,
-        })
-      )
+    const result = await database.transaction(() =>
+      createCorrection({
+        ...params,
+        in_transaction: true,
+        defer_substrate_events: true,
+      })
     );
     if (result.deferred_substrate_event) emitCommittedCorrection(result.deferred_substrate_event);
     return { ...result, deferred_substrate_event: undefined };
@@ -628,7 +372,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     );
   }
 
-  const { entity_id, entity_type, field, value, user_id, idempotency_key } = params;
+  const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
 
   const observationId = generateObservationId(
     null,
@@ -638,31 +382,28 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     idempotency_key
   );
 
-  const speculative = params.speculative;
-  const row = speculative ? speculative.row : buildCorrectionRow(params, observationId);
+  const row = buildObservationRow({
+    id: observationId,
+    entity_id,
+    entity_type,
+    schema_version,
+    source_id: null,
+    interpretation_id: null,
+    observed_at: new Date().toISOString(),
+    // Together with a null source, no interpretation and no observation_source,
+    // these two make the row recognisable as a correction to the reducer
+    // (correction_identity.ts). Do not set observation_source here without
+    // changing that predicate in the same change.
+    specificity_score: CORRECTION_SPECIFICITY_SCORE,
+    source_priority: CORRECTION_SOURCE_PRIORITY,
+    fields: { [field]: value },
+    user_id,
+    idempotency_key: idempotency_key || undefined,
+    provenance: getCurrentAttribution(),
+  });
   row.canonical_hash = params.canonical_hash ?? correctionRequestHash(params);
 
-  // The speculative snapshot is valid only for the observation set it was
-  // reduced from. Nothing else can write while this transaction holds the gate,
-  // so one check before the insert covers the whole transaction.
-  if (speculative) {
-    if (
-      (await fingerprintOwnedObservations(entity_id, user_id)) !== speculative.snapshot.fingerprint
-    ) {
-      throw new SpeculativeSnapshotStaleError("observations_changed");
-    }
-    // The reduction used the schema in force at read time. Compare its identity
-    // (content, not version string): a same-version schema registered since then
-    // must be applied, and would otherwise be reflected in the timeline and
-    // canonical name but not in the snapshot.
-    if ((await schemaIdentity(entity_type, user_id)) !== speculative.snapshot.schemaIdentity) {
-      throw new SpeculativeSnapshotStaleError("schema_changed");
-    }
-  }
-
-  // recomputeSnapshot / persistSpeculativeSnapshot below persists the snapshot in
-  // this same transaction, so the insert's own materialization would be redundant.
-  const { error: obsError } = await insertObservationRow(row, { materializeSnapshot: false });
+  const { error: obsError } = await insertObservationRow(row);
 
   if (obsError) {
     if (obsError.code === "23505" && !groupedReceipt) {
@@ -672,15 +413,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     throw new Error(`Failed to create correction: ${obsError.message}`);
   }
 
-  if (speculative) correctionSpeculationStats.fastPathPersists += 1;
-  const snapshot = speculative
-    ? await persistSpeculativeSnapshot(
-        speculative.snapshot,
-        entity_id,
-        user_id,
-        speculativeObservation(row)
-      )
-    : await recomputeSnapshot(entity_id, user_id);
+  const snapshot = await recomputeSnapshot(entity_id, user_id);
   const snap = (snapshot?.snapshot as Record<string, unknown> | null | undefined) ?? null;
   const emitTs = row.observed_at;
   const deferredEvent: DeferredCorrectionEvent = {
@@ -844,28 +577,26 @@ export async function createCorrectionWithVersionPrecondition(
   }
 ): Promise<CorrectionResult> {
   const database = await getDb();
-  const result = await runWithSpeculation(params, (attempt) =>
-    database.transaction(async () => {
-      // A queued identical retry must see the first commit's receipt before
-      // comparing its now-stale version. Both checks share the write boundary.
-      const replay = await findCommittedCorrectionReplay(params);
-      if (replay) return replay;
-      await assertCorrectionVersionPrecondition({
-        entityId: params.entity_id,
-        field: params.field,
-        userId: params.user_id,
-        expectedVersion: params.expected_version,
-        overwrite: params.overwrite,
-      });
-      const written = await createCorrection({
-        ...attempt,
-        in_transaction: true,
-        defer_substrate_events: true,
-      });
-      await params.before_commit?.();
-      return written;
-    })
-  );
+  const result = await database.transaction(async () => {
+    // A queued identical retry must see the first commit's receipt before
+    // comparing its now-stale version. Both checks share the write boundary.
+    const replay = await findCommittedCorrectionReplay(params);
+    if (replay) return replay;
+    await assertCorrectionVersionPrecondition({
+      entityId: params.entity_id,
+      field: params.field,
+      userId: params.user_id,
+      expectedVersion: params.expected_version,
+      overwrite: params.overwrite,
+    });
+    const written = await createCorrection({
+      ...params,
+      in_transaction: true,
+      defer_substrate_events: true,
+    });
+    await params.before_commit?.();
+    return written;
+  });
   if (result.deferred_substrate_event) emitCommittedCorrection(result.deferred_substrate_event);
   return { ...result, deferred_substrate_event: undefined };
 }
