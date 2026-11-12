@@ -97,6 +97,7 @@ export function normalizeParams(params: unknown[]): unknown[] {
 export class TransactionGate {
   private tail: Promise<void> = Promise.resolve();
   private lastSlowHoldLogAt = 0;
+  private suppressedSlowHoldLogs = 0;
 
   /** Resolves once every transaction enqueued so far has settled. */
   whenIdle(): Promise<void> {
@@ -129,12 +130,17 @@ export class TransactionGate {
     })();
   }
 
-  /** Log a transaction that held the gate longer than SLOW_GATE_HOLD_MS. Rate-limited. */
+  /** Log a transaction that held the gate longer than SLOW_GATE_HOLD_MS. Rate-limited; counts suppressed lines. */
   private noteHold(holdMs: number, queueWaitMs: number, describe?: () => string): void {
     if (holdMs <= SLOW_GATE_HOLD_MS) return;
     const now = Date.now();
-    if (now - this.lastSlowHoldLogAt < SLOW_GATE_LOG_INTERVAL_MS) return;
+    if (now - this.lastSlowHoldLogAt < SLOW_GATE_LOG_INTERVAL_MS) {
+      this.suppressedSlowHoldLogs += 1;
+      return;
+    }
     this.lastSlowHoldLogAt = now;
+    const suppressed = this.suppressedSlowHoldLogs;
+    this.suppressedSlowHoldLogs = 0;
     let tag = "";
     try {
       tag = describe ? describe() : "";
@@ -142,12 +148,14 @@ export class TransactionGate {
       tag = "";
     }
     logger.warn(
-      `DB transaction held the gate ${holdMs}ms (queued ${queueWaitMs}ms before start)` +
-        (tag ? `: ${tag}` : "")
+      `DB transaction held the gate ${holdMs}ms (waited for gate ${queueWaitMs}ms` +
+        `${suppressed > 0 ? `, ${suppressed} similar line(s) suppressed` : ""}). ` +
+        `A long write transaction delays other writes; reads are not affected.` +
+        (tag ? ` First statement: ${tag}` : "")
     );
   }
 }
 
 /** A transaction holding the gate longer than this is logged. */
-export const SLOW_GATE_HOLD_MS = 1000;
+export const SLOW_GATE_HOLD_MS = 3000;
 const SLOW_GATE_LOG_INTERVAL_MS = 1000;

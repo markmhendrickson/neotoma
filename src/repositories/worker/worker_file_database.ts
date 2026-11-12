@@ -1252,7 +1252,7 @@ export class WorkerFileDatabase implements DbDatabase {
           `(${depth} statements in flight, oldest queued wait ${queuedWait}ms, ` +
           `saturated for ${now - this.saturatedSince}ms). ` +
           `Raise NEOTOMA_DB_READER_WORKERS if this is sustained. ` +
-          `Queued: ${summarizeQueuedStatements(this.readers.flatMap((r) => r.inFlightSql()))}`
+          `In flight: ${summarizeQueuedStatements(this.readers.flatMap((r) => r.inFlightSql()))}`
       );
       return;
     }
@@ -1375,7 +1375,8 @@ export class WorkerFileDatabase implements DbDatabase {
     busy: number;
     queued: number;
     oldestQueuedWaitMs: number;
-    eventLoopDelayMs: { p99: number; max: number } | null;
+    /** Event-loop delay p99/max since the previous snapshot (the histogram resets on each read). */
+    eventLoopDelaySinceLastSnapshotMs: { p99: number; max: number } | null;
   } {
     let busy = 0;
     let queued = 0;
@@ -1384,6 +1385,15 @@ export class WorkerFileDatabase implements DbDatabase {
       queued += reader.inFlight;
     }
     const loop = this.loopDelay;
+    // Reset after reading so each snapshot reflects recent behaviour, not the
+    // whole process lifetime.
+    const loopStats = loop
+      ? {
+          p99: Math.round(loop.percentile(99) / 1e4) / 100,
+          max: Math.round(loop.max / 1e4) / 100,
+        }
+      : null;
+    loop?.reset();
     return {
       size: this.readers.length,
       capacity: this.readerCount,
@@ -1393,12 +1403,7 @@ export class WorkerFileDatabase implements DbDatabase {
         this.readers.map((r) => r.inFlightEnqueuedAt()),
         Date.now()
       ),
-      eventLoopDelayMs: loop
-        ? {
-            p99: Math.round(loop.percentile(99) / 1e4) / 100,
-            max: Math.round(loop.max / 1e4) / 100,
-          }
-        : null,
+      eventLoopDelaySinceLastSnapshotMs: loopStats,
     };
   }
 

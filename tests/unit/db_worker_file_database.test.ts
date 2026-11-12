@@ -416,8 +416,14 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       const saturated = db.readerPoolStats();
       expect(saturated.busy).toBe(2);
       expect(saturated.queued).toBeGreaterThanOrEqual(2);
+      expect(saturated.oldestQueuedWaitMs).toBe(0);
 
-      await Promise.all(slow);
+      // A third statement queues behind a busy reader, so its wait is visible.
+      const third = db.prepare(SLOW_SQL).get();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(db.readerPoolStats().oldestQueuedWaitMs).toBeGreaterThan(0);
+
+      await Promise.all([...slow, third]);
       expect(db.readerPoolStats().busy).toBe(0);
     } finally {
       await db.close();
@@ -437,7 +443,7 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await Promise.all([...slow, third]);
       const message = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("saturated"));
       expect(message).toBeDefined();
-      expect(message).toContain("Queued: ");
+      expect(message).toContain("In flight: ");
       expect(message).toContain(SLOW_SQL.replace(/\s+/g, " ").trim().slice(0, 70));
     } finally {
       warn.mockRestore();
@@ -930,24 +936,26 @@ describe("WorkerFileDatabase reads do not wait for write transactions", () => {
     }
   });
 
-  it("logs a transaction that holds the gate over a second, without bound values", async () => {
+  it("logs a transaction that holds the gate over three seconds, without bound values", async () => {
     const db = makeDb(2);
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
     try {
       await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
       await db.transaction(async (conn) => {
         await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("secret-value");
-        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await new Promise((resolve) => setTimeout(resolve, 3300));
       });
       const msg = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("held the gate"));
       expect(msg).toBeDefined();
-      expect(msg).toContain("INSERT INTO gate_t");
+      expect(msg).toContain("First statement: INSERT INTO gate_t");
+      expect(msg).toContain("waited for gate");
+      expect(msg).toContain("reads are not affected");
       expect(msg).not.toContain("secret-value");
     } finally {
       warn.mockRestore();
       await db.close();
     }
-  }, 20_000);
+  }, 30_000);
 
   it("reports event-loop delay and oldest queued wait in the pool snapshot", async () => {
     const db = makeDb(2);
@@ -955,12 +963,56 @@ describe("WorkerFileDatabase reads do not wait for write transactions", () => {
       await db.prepare("SELECT 1 AS ok").get();
       const stats = db.readerPoolStats();
       expect(stats.oldestQueuedWaitMs).toBe(0);
-      expect(stats.eventLoopDelayMs).not.toBeNull();
-      expect(stats.eventLoopDelayMs?.max).toBeGreaterThanOrEqual(0);
+      expect(stats.eventLoopDelaySinceLastSnapshotMs).not.toBeNull();
+      expect(stats.eventLoopDelaySinceLastSnapshotMs?.max).toBeGreaterThanOrEqual(0);
     } finally {
       await db.close();
     }
   });
+});
+
+describe("WorkerFileDatabase retry of a read that writes", () => {
+  it("waits for an open transaction before running the retried write on the writer", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE rt (id INTEGER PRIMARY KEY, v TEXT)");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      const tx = db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO rt (id, v) VALUES (1, 'tx')").run();
+        inserted();
+        await held;
+      });
+      await insertedSignal;
+
+      // Read-shaped call that writes: rejected read-only on a reader, then
+      // retried on the writer, which must not run inside the open transaction.
+      let done = false;
+      const retried = db
+        .prepare("INSERT INTO rt (id, v) VALUES (2, 'retry') RETURNING id, v")
+        .get()
+        .then((r) => {
+          done = true;
+          return r;
+        });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(done).toBe(false);
+
+      release();
+      await tx;
+      expect(await retried).toEqual({ id: 2, v: "retry" });
+      const n = (await db.prepare("SELECT COUNT(*) AS n FROM rt").get()) as { n: number };
+      expect(n.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+  }, 30_000);
 });
 
 describe("oldestQueuedWaitMs", () => {
