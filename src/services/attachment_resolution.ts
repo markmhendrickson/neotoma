@@ -255,3 +255,50 @@ export async function resolveOwnedObservations(
   }
   return attached.observations;
 }
+
+/**
+ * Cheap identity of the observation set a snapshot is reduced from, for
+ * optimistic recomputation: if it is unchanged, the set read earlier is the set
+ * stored now. It lives here, beside {@link resolveAttachedObservations}, because
+ * it must follow the same resolution rule: it fingerprints the rows attached to
+ * the RESOLVED entity id (and includes that id, so a changed merge target
+ * changes the fingerprint). A new resolution rule must be reflected here; a test
+ * pins the two against each other.
+ *
+ * What it covers: the row count, the sum and max of rowids, and the sum of
+ * `observed_at` in epoch milliseconds, all served by `idx_observations_entity_id` without touching
+ * table rows. Observation rows are immutable in normal operation. The writers
+ * that break that are: entity merge (moves rows between entities) and physical
+ * deletion (removes rows) and entity split (`entity_split.ts` rewrites
+ * `entity_id`), all of which change the count or rowid sum; and
+ * `cryptographicErasure` (src/services/gdpr_deletion.ts), which REWRITES
+ * `fields` in place and is NOT detected, because no covered column changes.
+ * That admin path does not refresh snapshots itself, so a snapshot over erased
+ * rows is already stale until the next recompute, on any path. The
+ * `observed_at` sum closes the rowid-reuse case: deleting the table's highest
+ * rowid (if it belongs to this entity) and inserting one row reuses the rowid,
+ * leaving count, max and sum of rowids unchanged, but the replacement row
+ * carries a different timestamp, which changes the sum.
+ * Accepted residual: a caller-supplied `observed_at` combined with physical
+ * deletion of the newest row can in principle reproduce all four figures; that
+ * needs a deletion path that is not on the request path, and is not guarded.
+ * It is scoped by entity id only (not user id) so it stays index-only; that is a
+ * superset of the owner-scoped set, so it can only over-report change.
+ */
+export async function fingerprintOwnedObservations(
+  entityId: string,
+  userId: string | null
+): Promise<string> {
+  const target = await resolveAttachmentTarget(entityId, userId);
+  const { getDb } = await import("../repositories/db/connection.js");
+  const database = await getDb();
+  const row = (await database
+    .prepare(
+      "SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS m, COALESCE(SUM(rowid), 0) AS s, " +
+        "COALESCE(SUM(CAST(strftime('%s', observed_at) AS INTEGER) * 1000 + " +
+        "CAST(substr(observed_at, 21, 3) AS INTEGER)), 0) AS t " +
+        "FROM observations WHERE entity_id = ?"
+    )
+    .get(target.resolvedEntityId)) as { n: number; m: number; s: number; t: number } | undefined;
+  return `${target.resolvedEntityId}:${row?.n ?? 0}:${row?.m ?? 0}:${row?.s ?? 0}:${row?.t ?? 0}`;
+}

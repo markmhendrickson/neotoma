@@ -7,15 +7,22 @@
 
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
-import { observationReducer } from "../reducers/observation_reducer.js";
+import { observationReducer, type Observation } from "../reducers/observation_reducer.js";
 import {
   CanonicalNameUnresolvedError,
   deriveCanonicalNameFromFieldsWithTrace,
   entityIdTenantSalt,
   generateEntityId,
 } from "./entity_resolution.js";
-import { resolveOwnedObservations } from "./attachment_resolution.js";
-import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
+import { fingerprintOwnedObservations, resolveOwnedObservations } from "./attachment_resolution.js";
+import { createHash } from "node:crypto";
+import { getSchemaDefinition } from "./schema_definitions.js";
+import { stableSerialize } from "./stable_serialize.js";
+import {
+  schemaRegistry,
+  type SchemaDefinition,
+  type SchemaRegistryEntry,
+} from "./schema_registry.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 
 export interface SnapshotRecord {
@@ -90,16 +97,32 @@ export async function recomputeSnapshot(
     return null;
   }
 
+  const sourceId =
+    typeof (observations[0] as { source_id?: string | null }).source_id === "string"
+      ? (observations[0] as { source_id: string }).source_id || ""
+      : "";
+
+  return persistComputedSnapshot(computed, entityId, userId, sourceId, strictDerivedEffects);
+}
+
+/**
+ * Persist an already-reduced snapshot and run its derived effects (timeline
+ * events, canonical-name evolution). Split out of {@link recomputeSnapshot}
+ * unchanged so the optimistic correction path persists exactly what the full
+ * recompute would.
+ */
+async function persistComputedSnapshot(
+  computed: NonNullable<Awaited<ReturnType<typeof observationReducer.computeSnapshot>>>,
+  entityId: string,
+  userId: string,
+  sourceId: string,
+  strictDerivedEffects: boolean
+): Promise<SnapshotRecord | null> {
   const { error: upsertError } = await db
     .from("entity_snapshots")
     .upsert({ ...computed } as Record<string, unknown>);
 
   if (upsertError) throw new Error(`Failed to upsert snapshot: ${upsertError.message}`);
-
-  const sourceId =
-    typeof (observations[0] as { source_id?: string | null }).source_id === "string"
-      ? (observations[0] as { source_id: string }).source_id || ""
-      : "";
 
   let schema: SchemaDefinition | null = null;
   try {
@@ -149,6 +172,157 @@ export async function recomputeSnapshot(
   }
 
   return computed as SnapshotRecord;
+}
+
+export interface SpeculativeSnapshot {
+  computed: NonNullable<Awaited<ReturnType<typeof observationReducer.computeSnapshot>>>;
+  /** {@link fingerprintOwnedObservations}, taken BEFORE the observations were read. */
+  fingerprint: string;
+  /** {@link schemaIdentity} of the schema the reduction used, taken BEFORE the read. */
+  schemaIdentity: string;
+}
+
+/** Canonical `Date#toISOString()` form: fixed width, UTC. */
+const CANONICAL_ISO_Z = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+export type SpeculationResult =
+  | { ok: true; speculative: SpeculativeSnapshot }
+  | { ok: false; reason: string };
+
+/**
+ * Identity of the schema the reducer will apply to an entity type for a user:
+ * a content hash of the active registry row (user override or global, exactly
+ * as `loadActiveSchema` resolves it) including its id, or of the code-defined
+ * fallback the reducer uses when the registry has no row, or "none".
+ *
+ * A version string is not an identity: the registry has no unique
+ * (entity_type, schema_version) constraint, a caller may supply the version, and
+ * a user override can share the global row's version. Hashing the definition and
+ * reducer config catches a same-version change, and including the row id catches
+ * a same-content row swap between user and global scope.
+ */
+export async function schemaIdentity(entityType: string, userId: string): Promise<string> {
+  return (await resolveSchemaWithIdentity(entityType, userId)).identity;
+}
+
+/**
+ * The schema entry to reduce with together with its identity, from one load. The
+ * speculative reduction pins exactly this entry, so the schema hashed into the
+ * identity is the schema the reducer applies, even if the registry changes (and
+ * changes back) while the reduction runs. `entry` is null for the code-defined
+ * and "none" cases, which the reducer resolves statically.
+ */
+export async function resolveSchemaWithIdentity(
+  entityType: string,
+  userId: string
+): Promise<{ entry: SchemaRegistryEntry | null; identity: string }> {
+  const entry = await schemaRegistry.loadActiveSchema(entityType, userId);
+  const hash = (value: unknown) =>
+    createHash("sha256").update(stableSerialize(value)).digest("hex");
+  if (entry) {
+    const identity = `registry:${entry.id}:${hash({
+      v: entry.schema_version,
+      d: entry.schema_definition,
+      r: entry.reducer_config,
+    })}`;
+    return { entry, identity };
+  }
+  const code = getSchemaDefinition(entityType);
+  if (code) {
+    const identity = `code:${hash({
+      v: code.schema_version,
+      d: code.schema_definition,
+      r: code.reducer_config,
+    })}`;
+    return { entry: null, identity };
+  }
+  return { entry: null, identity: "none" };
+}
+
+/**
+ * Reduce the snapshot an entity WOULD have once `appended` is inserted, using
+ * only reads, so it can run before the write transaction opens (on a reader,
+ * off the gate). Returns `{ ok: false, reason }` whenever the result could
+ * differ from what {@link recomputeSnapshot} would compute after the insert; the
+ * caller then uses the in-transaction recompute. Reasons: `observed_at_format` (a timestamp is not canonical ISO-Z), `no_observations`
+ * (redirected or empty entity), `not_strictly_newer` (the appended observation
+ * is not strictly newer than every stored one, so the reducer's tie order and
+ * the persisted `source_id` would depend on storage order), `hidden`, `error`.
+ *
+ * Inside the transaction the caller must re-check the fingerprint and schema
+ * identity; the result is only valid for the inputs it was computed from.
+ */
+export async function speculateSnapshotWithAppendedObservation(
+  entityId: string,
+  userId: string,
+  appended: Observation
+): Promise<SpeculationResult> {
+  try {
+    // Both identities are taken before the observations and schema are read, so
+    // a change landing mid-read can only make them stale, never falsely current.
+    const fingerprint = await fingerprintOwnedObservations(entityId, userId);
+    const { entry: pinnedSchema, identity } = await resolveSchemaWithIdentity(
+      appended.entity_type,
+      userId
+    );
+    const existing = await resolveOwnedObservations(entityId, userId);
+    if (!existing || existing.length === 0) return { ok: false, reason: "no_observations" };
+    // Assumption: the reducer orders by parsed time while the persisted
+    // `source_id` follows text order, and the two agree only while every
+    // observed_at is canonical UTC toISOString form (fixed width, "Z"). Check
+    // that exactly, and compare as text, so neither ordering can disagree.
+    if (!CANONICAL_ISO_Z.test(appended.observed_at)) {
+      return { ok: false, reason: "observed_at_format" };
+    }
+    for (const obs of existing) {
+      if (!CANONICAL_ISO_Z.test(obs.observed_at))
+        return { ok: false, reason: "observed_at_format" };
+      if (obs.observed_at >= appended.observed_at) {
+        return { ok: false, reason: "not_strictly_newer" };
+      }
+    }
+    // The lifecycle context validates that the supplied rows equal the stored
+    // set, so it is acquired from the stored set; a plain factual observation
+    // does not change it (visibility is a pure function of rows + context).
+    const { getDb } = await import("../repositories/db/connection.js");
+    const { acquireEntityLifecycleContext } = await import("./entity_lifecycle_storage.js");
+    const context = await acquireEntityLifecycleContext(
+      await getDb(),
+      { id: entityId, user_id: existing[0].user_id, entity_type: existing[0].entity_type },
+      existing
+    );
+    const computed = await observationReducer.computeSnapshot(
+      entityId,
+      [appended, ...existing],
+      pinnedSchema ?? undefined,
+      context
+    );
+    if (!computed) return { ok: false, reason: "hidden" };
+    return { ok: true, speculative: { computed, fingerprint, schemaIdentity: identity } };
+  } catch (err) {
+    logger.warn(
+      `[SNAPSHOT] Speculative snapshot for ${entityId} unavailable, using in-transaction ` +
+        `recompute: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return { ok: false, reason: "error" };
+  }
+}
+
+/**
+ * Persist a {@link SpeculativeSnapshot} inside the write transaction, after the
+ * caller has re-checked the fingerprint and schema identity and inserted the
+ * appended observation. Everything after the reduction is identical to
+ * {@link recomputeSnapshot}. The appended observation is strictly newest, so the
+ * persisted `source_id` is the appended row's (a correction has none).
+ */
+export async function persistSpeculativeSnapshot(
+  speculative: SpeculativeSnapshot,
+  entityId: string,
+  userId: string,
+  appended: Observation
+): Promise<SnapshotRecord | null> {
+  const sourceId = typeof appended.source_id === "string" ? appended.source_id || "" : "";
+  return persistComputedSnapshot(speculative.computed, entityId, userId, sourceId, false);
 }
 
 /**
