@@ -557,13 +557,18 @@ describe("counted quantifiers of any length", () => {
   it.each([
     ["inner, six-digit count", "^(a{1,123456})+$"],
     ["inner, open-ended long count", "^(a{123456,})+$"],
-    ["inner, zero-padded counts", "^(a{0001,0002})+$"],
+    ["inner, zero-padded counts", "^(a{000001,000002})+$"],
     ["inner, zero-padded open-ended", "^(a{0000001,})*$"],
     ["outer, six-digit count", "^(a+){123456}$"],
     ["outer, zero-padded count", "^(a+){000006}$"],
     ["outer, zero-padded range", "^(a*){0000001,000009}$"],
     ["outer, count beyond the safe integer range", "^(a+){99999999999999999999}$"],
     ["inner, count beyond the safe integer range", "^(a{1,99999999999999999999})+$"],
+    // The engine reads a count at its ceiling as having no upper limit, so a
+    // fixed count spelled at or above it is open-ended on the inner part.
+    ["inner, fixed count at the engine ceiling", "^(a{2147483647})+$"],
+    ["inner, zero-padded fixed count at the engine ceiling", "^(a{0002147483647})+$"],
+    ["inner, equal range at the engine ceiling", "^(a{2147483647,2147483647})+$"],
   ])("refuses a nested variable quantifier written with %s", (_name, pattern) => {
     refusedAsShape(pattern);
   });
@@ -575,12 +580,22 @@ describe("counted quantifiers of any length", () => {
     "^(a{000003}){000006}$",
     "^(a{99999999999999999999}){2}$",
     "^(a+){0002}$",
+    "^(a{2147483646})+$",
+    "^(a{0002147483646,0002147483646})+$",
   ])("accepts a large bounded count on a part that is not repeated: %s", (pattern) => {
     expect(() => new RegExp(pattern)).not.toThrow();
     expect(validatePattern(pattern).ok).toBe(true);
     expect(validate(schemaWithPattern(pattern))).toBeNull();
   });
 });
+
+/** Counts around the engine's ceiling (2^31 − 1), plain and zero-padded. */
+const BOUNDARY_COUNTS = [
+  "2147483646", "2147483647", "2147483648",
+  "0002147483646", "0002147483647", "0002147483648",
+];
+/** The same counts in the fixed `{n}` and `{n,n}` forms. */
+const BOUNDARY_FIXED = BOUNDARY_COUNTS.flatMap((n) => [`{${n}}`, `{${n},${n}}`]);
 
 describe("hand-written parser agrees with the engine's grammar", () => {
   // Spellings of a brace after an atom. The engine decides which are quantifiers.
@@ -591,9 +606,36 @@ describe("hand-written parser agrees with the engine's grammar", () => {
     "{99999999999999999999,}", "{1,99999999999999999999}",
     "{,5}", "{}", "{,}", "{a}", "{1,a}", "{ 1}", "{1 }", "{1,2,3}", "{-1}", "{+1}",
     "{3", "{3,", "{3,5", "{",
+    // The engine's count ceiling, 2^31 − 1, and its neighbours, plain and
+    // zero-padded, in the fixed `{n}` and `{n,n}` forms.
+    ...BOUNDARY_FIXED,
+    // A reversed range is a syntax error in the engine.
+    "{5,2}", "{2147483647,2147483646}",
+    // Both counts at or above the ceiling read as equal, so this is not reversed.
+    "{2147483648,2147483647}",
   ];
   const withLazy = SPELLINGS.flatMap((q) => [q, `${q}?`]);
   const baseOf = (q: string) => (q.endsWith("?") ? q.slice(0, -1) : q);
+
+  const engineCompiles = (q: string, flags: string): boolean => {
+    try {
+      new RegExp(`^a${baseOf(q)}$`, flags);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * The syntax check runs before the parser, so a spelling the engine reports
+   * as a syntax error in both modes never reaches readQuantifier. It must be
+   * refused as a syntax error instead.
+   */
+  const expectSyntaxRefusal = (q: string) => {
+    const v = validatePattern(`^a${baseOf(q)}$`);
+    expect(v.ok).toBe(false);
+    expect(!v.ok && v.code).toBe("syntax");
+  };
 
   /** The engine's answer, observed: is the brace a quantifier on `a` in non-unicode mode? */
   const engineSaysQuantifier = (q: string): boolean => {
@@ -607,19 +649,65 @@ describe("hand-written parser agrees with the engine's grammar", () => {
   };
 
   it.each(withLazy)("non-unicode mode: %s", (q) => {
+    if (!engineCompiles(q, "")) {
+      expectSyntaxRefusal(q);
+      return;
+    }
     const got = readQuantifier(q, 0);
     expect(got !== null).toBe(q.length > 0 && engineSaysQuantifier(q));
     if (got) expect(got.end).toBe(q.length);
   });
 
   it.each(withLazy)("unicode mode: %s", (q) => {
-    let accepted = true;
-    try {
-      new RegExp(`^a${baseOf(q)}$`, "u");
-    } catch {
-      accepted = false; // a malformed brace is a syntax error in unicode mode
+    if (!engineCompiles(q, "")) {
+      expectSyntaxRefusal(q);
+      return;
     }
+    // a malformed brace is a syntax error in unicode mode only
+    const accepted = engineCompiles(q, "u");
     expect(readQuantifier(q, 0) !== null).toBe(accepted);
+  });
+
+  it("observes the engine reporting a reversed range as a syntax error", () => {
+    for (const q of ["{5,2}", "{2147483647,2147483646}"]) {
+      expect(engineCompiles(q, "")).toBe(false);
+      expect(engineCompiles(q, "u")).toBe(false);
+      expectSyntaxRefusal(q);
+    }
+  });
+
+  /**
+   * The engine's reading of one count, observed through its own ordering check.
+   * V8 reads every count at or above 2^31 − 1 as 2^31 − 1, its marker for "no
+   * upper limit" (its parse-tree trace prints `{2147483647}` as `2147483647 -`,
+   * the same as `{2147483647,}`). A count it reads at that ceiling is out of
+   * order against an upper count of 2^31 − 2; any lower count is not.
+   */
+  const engineReadsAtCeiling = (count: string): boolean =>
+    !engineCompiles(`{${count},2147483646}`, "");
+
+  it.each([...BOUNDARY_FIXED, "{2147483648,2147483647}", "{2147483646,2147483647}"])(
+    "reads the counts in %s the way the engine does at its ceiling",
+    (q) => {
+      const [, lo, hi = lo] = /^\{(\d+)(?:,(\d+))?\}$/.exec(q) as RegExpExecArray;
+      const got = readQuantifier(q, 0);
+      expect(got).not.toBeNull();
+      // Lower count: clamped to the ceiling exactly when the engine clamps it.
+      expect(got!.min).toBe(engineReadsAtCeiling(lo) ? 2 ** 31 - 1 : Number(lo));
+      // Upper count: unbounded exactly when the engine reads it at the ceiling.
+      expect(got!.max === Infinity).toBe(engineReadsAtCeiling(hi));
+      expect(got!.max === Infinity || got!.max === Number(hi)).toBe(true);
+      // A fixed count stays fixed only below the ceiling.
+      expect(got!.min === got!.max).toBe(lo === hi && !engineReadsAtCeiling(hi));
+      // The parser's ordering agrees with the engine's syntax check.
+      expect(got!.min <= got!.max).toBe(engineCompiles(q, ""));
+    }
+  );
+
+  it("observes the engine's ceiling at 2^31 − 1, with and without padding", () => {
+    expect(BOUNDARY_COUNTS.map(engineReadsAtCeiling)).toEqual([
+      false, true, true, false, true, true,
+    ]);
   });
 
   it("agrees with the engine on the lengths a short count matches", () => {
@@ -635,7 +723,12 @@ describe("hand-written parser agrees with the engine's grammar", () => {
 
   it("reads zero-padded and oversized counts as numbers", () => {
     expect(readQuantifier("{000002,000005}", 0)).toMatchObject({ min: 2, max: 5 });
-    expect(readQuantifier("{99999999999999999999}", 0)).toMatchObject({ min: 2 ** 31, max: 2 ** 31 });
+    expect(readQuantifier("{99999999999999999999}", 0)).toMatchObject({
+      min: 2 ** 31 - 1,
+      max: Infinity,
+    });
+    expect(readQuantifier("{2147483646}", 0)).toMatchObject({ min: 2147483646, max: 2147483646 });
+    expect(readQuantifier("{2147483647}", 0)).toMatchObject({ min: 2 ** 31 - 1, max: Infinity });
     expect(readQuantifier("{1,99999999999999999999}", 0)).toMatchObject({ min: 1, max: Infinity });
     expect(readQuantifier("{3,}?", 0)).toMatchObject({ min: 3, max: Infinity, end: 5 });
   });

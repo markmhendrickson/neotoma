@@ -5,7 +5,7 @@
     "fields": {
       "code_list": {
         "type": "string",
-        "constraints": { "pattern": "^(\\d+){0006}$" }
+        "constraints": { "pattern": "^(\\d+){000006}$" }
       }
     },
     "canonical_name_fields": ["code_list"]

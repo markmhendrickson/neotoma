@@ -88,8 +88,15 @@ function newFrame(): Frame {
   return { hasVariable: false, branchStarts: [], currentStart: null, currentEmpty: true };
 }
 
-/** Counts at or above this value are treated as unbounded (engines clamp counts in this range). */
-const COUNT_CAP = 2 ** 31;
+/**
+ * The engine's count ceiling, 2^31 − 1. V8 reads any count at or above this
+ * value as exactly this value, and a repeat whose upper count is this value has
+ * no upper limit. So `{2147483647}` and `{2147483647,2147483647}` repeat at
+ * least 2^31 − 1 times with no maximum, while `{2147483646}` is a fixed count.
+ * readQuantifier applies the same rule: a count at or above the ceiling clamps
+ * to it on the lower side and is unbounded on the upper side.
+ */
+const COUNT_CAP = 2 ** 31 - 1;
 
 /**
  * A counted quantifier, following the engine's grammar in non-unicode mode: a
@@ -124,19 +131,20 @@ export function readQuantifier(p: string, i: number): Quant | null {
     COUNTED_QUANTIFIER.lastIndex = i;
     const m = COUNTED_QUANTIFIER.exec(p);
     if (!m) return null;
-    // Compare as integers of unbounded size, then clamp for the numeric fields.
+    // Compare as integers of unbounded size, then map onto the engine's ceiling:
+    // a count at or above COUNT_CAP is COUNT_CAP as a minimum and unbounded as
+    // a maximum, for the fixed `{n}` form as well as the range forms.
     const cap = BigInt(COUNT_CAP);
-    const clamp = (v: bigint) => (v >= cap ? COUNT_CAP : Number(v));
+    const lower = (v: bigint) => (v >= cap ? COUNT_CAP : Number(v));
+    const upper = (v: bigint) => (v >= cap ? Infinity : Number(v));
     const lo = BigInt(m[1]);
+    min = lower(lo);
     if (m[2] === undefined) {
-      min = max = clamp(lo);
+      max = upper(lo);
     } else if (m[3] === "") {
-      min = clamp(lo);
       max = Infinity;
     } else {
-      const hi = BigInt(m[3]);
-      min = clamp(lo);
-      max = hi === lo ? min : hi >= cap ? Infinity : Number(hi);
+      max = upper(BigInt(m[3]));
     }
     end = i + m[0].length;
   } else {
