@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import { storeConditionalStructured } from "../../src/services/store_conditional.js";
+import { storeStructuredForApi } from "../../src/actions.js";
+import { NeotomaServer } from "../../src/server.js";
+import {
+  MATCH_TIMEOUT_MS,
+  MAX_SUBJECT_LENGTH,
+  REQUEST_PATTERN_BUDGET_MS,
+} from "../../src/services/safe_pattern.js";
 import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../../src/repositories/db/store_condition_schema.js";
@@ -157,4 +164,103 @@ describe("registration entry points refuse patterns outside the registration rul
       })
     ).rejects.toThrow(/is not accepted/);
   });
+});
+
+describe("store requests against stored patterns that run past the time limit", () => {
+  const budgetOwner = "test-stored-pattern-budget";
+  const slowType = "stored_pattern_budget_test";
+  const LONG = "a".repeat(MAX_SUBJECT_LENGTH);
+  const FIELD_COUNT = 30;
+  const fieldNames = Array.from({ length: FIELD_COUNT }, (_, i) => `f${i}`);
+
+  const slowSchema = (pattern: (i: number) => string, id: string) => ({
+    id,
+    entity_type: slowType,
+    schema_version: "1.0",
+    active: true,
+    user_id: budgetOwner,
+    scope: "user",
+    created_at: "2026-01-01T00:00:00.000Z",
+    schema_definition: {
+      fields: {
+        code: { type: "string" },
+        ...Object.fromEntries(
+          fieldNames.map((f, i) => [f, { type: "string", constraints: { pattern: pattern(i) } }])
+        ),
+      },
+      canonical_name_fields: ["code"],
+    },
+    reducer_config: {
+      merge_policies: Object.fromEntries(
+        ["code", ...fieldNames].map((f) => [f, { strategy: "highest_priority" }])
+      ),
+    },
+  });
+
+  async function install(pattern: (i: number) => string) {
+    await db.from("schema_registry").delete().eq("user_id", budgetOwner);
+    const inserted = await db
+      .from("schema_registry")
+      .upsert(slowSchema(pattern, `stored-pattern-budget-${Math.random()}`), { onConflict: "id" });
+    expect(inserted.error).toBeNull();
+  }
+
+  const entity = (n: number, fields: string[]) => ({
+    entity_type: slowType,
+    code: `E${n}`,
+    ...Object.fromEntries(fields.map((f) => [f, LONG])),
+  });
+
+  const rest = (entities: Record<string, unknown>[], key: string) =>
+    storeStructuredForApi({
+      userId: budgetOwner,
+      entities,
+      sourcePriority: 100,
+      idempotencyKey: key,
+    } as Parameters<typeof storeStructuredForApi>[0]);
+
+  const mcp = (entities: Record<string, unknown>[], key: string) =>
+    new NeotomaServer().executeToolForCli("store", { entities, idempotency_key: key }, budgetOwner);
+
+  const surfaces = [
+    ["REST", rest],
+    ["MCP", mcp],
+  ] as const;
+
+  it.each(surfaces)(
+    "%s: many entities sharing one slow pattern finish quickly and are rejected",
+    async (_name, run) => {
+      await install(() => ".*.*.*.*.*x");
+      const entities = Array.from({ length: 40 }, (_, n) => entity(n, ["f0"]));
+      const started = performance.now();
+      await expect(run(entities, `many-${_name}`)).rejects.toThrow(
+        /Constraint violation|constraint/i
+      );
+      // The slow pattern is evaluated once, then remembered for the request.
+      expect(performance.now() - started).toBeLessThan(MATCH_TIMEOUT_MS * 5 + 1500);
+    },
+    30_000
+  );
+
+  it.each(surfaces)(
+    "%s: many distinct slow patterns stop at the request budget and reject the rest",
+    async (_name, run) => {
+      await install((i) => `.*.*.*.*.*x${i}`);
+      const started = performance.now();
+      let error: unknown;
+      try {
+        await run([entity(0, fieldNames), entity(1, fieldNames)], `distinct-${_name}`);
+      } catch (e) {
+        error = e;
+      }
+      const elapsed = performance.now() - started;
+      expect(error).toBeDefined();
+      expect(elapsed).toBeLessThan(REQUEST_PATTERN_BUDGET_MS + MATCH_TIMEOUT_MS + 400);
+      const text = String((error as Error).message);
+      // Every constrained field is rejected, including those checked after the budget ran out.
+      expect(text).toMatch(/constraint/i);
+      if (_name === "MCP") expect(text).toContain(`"f${FIELD_COUNT - 1}"`);
+    },
+    30_000
+  );
 });

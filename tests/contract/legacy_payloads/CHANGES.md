@@ -6,6 +6,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 ## Unreleased
 
+- `v0.28.x/register_schema_repeated_group_pattern` seeded as `rejected`. Schema registration now refuses some regular-expression pattern shapes (backreferences, nested variable quantifiers, overlapping repeated alternations) and enforces pattern length and count limits; the error is `400 SCHEMA_VALIDATION_FAILED` and its `details.hint` explains the rewrite. Schemas that are already stored keep loading. Include this compatibility note in the shipping release supplement's **Breaking changes** section.
 - `v0.27.x/register_schema_invalid_planning` seeded as `rejected`. The optional `schema_definition.planning` declaration is now reserved for `{ level: finite number, read_only?: boolean }`; a malformed value that previously passed as opaque schema metadata returns `400 VALIDATION_INVALID_FORMAT` with a structured `details.hint`. Existing definitions without the declaration are unchanged. Include this compatibility note in the shipping release supplement's **Breaking changes** section.
 
 ## v0.26.0
@@ -38,7 +39,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 ## v0.12.0
 
-- `v0.12.x/store_relationship_non_ent_entity_id` flipped from valid to rejected: store relationship ids now require ent_ prefix.
+- `v0.12.x/store_relationship_non_ent_entity_id` flipped from valid to rejected: store relationship ids now require ent\_ prefix.
 - `v0.12.x/issues_submit_without_reporter_env` seeded as `rejected`. `submit_issue` now requires at least one of `reporter_git_sha` or `reporter_app_version`; submissions missing both fail with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED` and a structured `details.acceptable_field_groups` envelope listing the alternatives. Release supplement: `docs/releases/in_progress/v0.12.0/github_release_supplement.md` § Breaking changes.
 
 ## v0.13.0

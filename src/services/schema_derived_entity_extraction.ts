@@ -11,7 +11,7 @@
  */
 
 import { logger } from "../utils/logger.js";
-import { safePatternTest, MAX_PATTERNS_PER_CONDITION } from "./safe_pattern.js";
+import { safePatternTest, logOncePerRequest, MAX_PATTERNS_PER_CONDITION } from "./safe_pattern.js";
 import type { SchemaDefinition } from "./schema_registry.js";
 
 export interface DerivedEntityExtractionParams {
@@ -86,13 +86,17 @@ export function evaluateCondition(
           if (res.status === "invalid_pattern" && res.code === "syntax") {
             return typeof pattern === "string" && lc.includes(pattern.toLowerCase());
           }
-          logger.warn(
-            `[SCHEMA_DERIVED] matches_any_pattern pattern ignored ` +
-              `(entity_type=${context?.entityType ?? "unknown"}, ` +
-              `schema_version=${context?.schemaVersion ?? "unknown"}, ` +
-              `rule=${context?.ruleIndex ?? "?"}, condition=${context?.conditionIndex ?? "?"}, ` +
-              `pattern=${patternIndex}): ${res.status}` +
-              `${res.status === "invalid_pattern" ? ` (${res.reason})` : ""}.`
+          logOncePerRequest(
+            `derived:${context?.entityType ?? ""}:${context?.ruleIndex ?? ""}:${context?.conditionIndex ?? ""}:${patternIndex}:${res.status}`,
+            () =>
+              logger.warn(
+                `[SCHEMA_DERIVED] matches_any_pattern pattern ignored ` +
+                  `(entity_type=${context?.entityType ?? "unknown"}, ` +
+                  `schema_version=${context?.schemaVersion ?? "unknown"}, ` +
+                  `rule=${context?.ruleIndex ?? "?"}, condition=${context?.conditionIndex ?? "?"}, ` +
+                  `pattern=${patternIndex}): ${res.status}` +
+                  `${res.status === "invalid_pattern" ? ` (${res.reason})` : ""}.`
+              )
           );
           return false;
         });

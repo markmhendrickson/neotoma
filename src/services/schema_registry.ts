@@ -29,7 +29,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import {
   validatePattern,
-  describePatternRefusal,
+  SchemaPatternRefusalError,
   MAX_PATTERNS_PER_CONDITION,
   MAX_PATTERNS_PER_SCHEMA,
 } from "./safe_pattern.js";
@@ -117,9 +117,12 @@ export interface FieldConstraints {
    */
   enum?: Array<string | number>;
   /**
-   * Regular-expression string (passed to `new RegExp(pattern)`) that the
-   * stored value must match. Only applied to `string` fields; ignored for
-   * other types. The pattern is anchored only if the caller includes `^`/`$`.
+   * Regular-expression string that the stored value must match. Only applied
+   * to `string` fields; ignored for other types. The pattern is anchored only
+   * if the caller includes `^`/`$`. Registration limits it to 256 characters
+   * and refuses backreferences, nested variable quantifiers and repeated
+   * alternations with overlapping branches; evaluation is bounded in time and
+   * subject length (see `safe_pattern.ts`).
    */
   pattern?: string;
   /**
@@ -3290,8 +3293,10 @@ export class SchemaRegistryService {
             patternCount += 1;
             const patternCheck = validatePattern(c.pattern);
             if (!patternCheck.ok) {
-              throw new Error(
-                `constraints.pattern for ${fieldName} is not accepted: ${describePatternRefusal(patternCheck)}`
+              throw new SchemaPatternRefusalError(
+                `constraints.pattern for ${fieldName} is not accepted: ${patternCheck.reason}.`,
+                patternCheck.code,
+                patternCheck.remedy
               );
             }
           } else {
@@ -3378,9 +3383,11 @@ export class SchemaRegistryService {
           if (strictPatterns && cond.op === "matches_any_pattern") {
             const patterns = cond.patterns as unknown[];
             if (patterns.length > MAX_PATTERNS_PER_CONDITION) {
-              throw new Error(
+              throw new SchemaPatternRefusalError(
                 `derived_entities[${i}].conditions[${j}].patterns has ${patterns.length} entries; ` +
-                  `at most ${MAX_PATTERNS_PER_CONDITION} are allowed. Split the condition or merge similar patterns.`
+                  `at most ${MAX_PATTERNS_PER_CONDITION} are allowed.`,
+                "count",
+                "Split the condition or merge similar patterns."
               );
             }
             patternCount += patterns.length;
@@ -3388,8 +3395,10 @@ export class SchemaRegistryService {
               const pc = validatePattern(patterns[k]);
               // Syntactically invalid sources keep their substring fallback.
               if (!pc.ok && pc.code !== "syntax") {
-                throw new Error(
-                  `derived_entities[${i}].conditions[${j}].patterns[${k}] is not accepted: ${describePatternRefusal(pc)}`
+                throw new SchemaPatternRefusalError(
+                  `derived_entities[${i}].conditions[${j}].patterns[${k}] is not accepted: ${pc.reason}.`,
+                  pc.code,
+                  pc.remedy
                 );
               }
             }
@@ -3424,9 +3433,11 @@ export class SchemaRegistryService {
     }
 
     if (strictPatterns && patternCount > MAX_PATTERNS_PER_SCHEMA) {
-      throw new Error(
+      throw new SchemaPatternRefusalError(
         `Schema declares ${patternCount} patterns (constraints.pattern plus matches_any_pattern entries); ` +
-          `at most ${MAX_PATTERNS_PER_SCHEMA} are allowed. Remove or merge patterns.`
+          `at most ${MAX_PATTERNS_PER_SCHEMA} are allowed.`,
+        "count",
+        "Remove or merge patterns."
       );
     }
   }

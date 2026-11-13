@@ -15,6 +15,7 @@
  */
 
 import vm from "node:vm";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export const MAX_PATTERN_LENGTH = 256;
 export const MAX_SUBJECT_LENGTH = 10_000;
@@ -25,10 +26,33 @@ export const MATCH_TIMEOUT_MS = 100;
 export const MAX_PATTERNS_PER_CONDITION = 16;
 export const MAX_PATTERNS_PER_SCHEMA = 64;
 export const MAX_CONFORMANCE_RULES_PER_PAGE = 32;
+/** Total evaluation time shared by every pattern check made for one store request, in milliseconds. */
+export const REQUEST_PATTERN_BUDGET_MS = 1_500;
+/** Flags accepted by safePatternTest. */
+const ALLOWED_FLAGS = /^[imsu]*$/;
+/** Subjects up to this length have their result remembered for the rest of the request. */
+const RESULT_CACHE_SUBJECT_MAX = 2_048;
 /** Total wall-clock budget shared by all rules evaluated for one page, in milliseconds. */
 export const CONFORMANCE_TOTAL_BUDGET_MS = 1_000;
 
 export type PatternRefusalCode = "syntax" | "shape" | "length";
+
+/**
+ * Raised when schema registration refuses a pattern or a pattern count. Carries
+ * the refusal kind and the rewrite guidance separately from the message, so API
+ * layers can return the guidance as a structured hint.
+ */
+export class SchemaPatternRefusalError extends Error {
+  readonly code = "SCHEMA_PATTERN_REFUSED";
+  constructor(
+    message: string,
+    readonly refusal: PatternRefusalCode | "count",
+    readonly remedy: string
+  ) {
+    super(message);
+    this.name = "SchemaPatternRefusalError";
+  }
+}
 
 export type PatternValidation =
   | { ok: true }
@@ -44,7 +68,8 @@ export type SafeTestResult =
   | { status: "no_match" }
   | { status: "invalid_pattern"; code: PatternRefusalCode; reason: string }
   | { status: "subject_too_long"; limit: number }
-  | { status: "timeout" };
+  | { status: "timeout" }
+  | { status: "budget_exhausted" };
 
 interface Quant {
   min: number;
@@ -267,17 +292,88 @@ export function validatePattern(pattern: unknown): PatternValidation {
   return result;
 }
 
-let sandbox: vm.Context | null = null;
-const script = new vm.Script("new RegExp(__p, __f).test(__s)");
+// ---------------------------------------------------------------------------
+// Per-request evaluation budget
+// ---------------------------------------------------------------------------
 
-function runWithBudget(pattern: string, flags: string, subject: string): boolean {
-  if (!sandbox) sandbox = vm.createContext({ __p: "", __f: "", __s: "" });
+interface RequestScope {
+  remainingMs: number;
+  /** Patterns (with flags) that exceeded the per-evaluation limit in this request. */
+  timedOut: Set<string>;
+  /** Results already computed in this request, for short subjects. */
+  results: Map<string, boolean>;
+  logged: Set<string>;
+}
+
+const requestScope = new AsyncLocalStorage<RequestScope>();
+
+/**
+ * Run `fn` with one shared evaluation budget. Every safePatternTest call made
+ * inside it (constraint checks and derived-condition checks alike) draws from
+ * the same budget; when it is spent, further checks report "budget_exhausted".
+ * A pattern that timed out is not run again within the same request. Nested
+ * calls share the outermost budget.
+ */
+export function withPatternBudget<T>(fn: () => Promise<T>): Promise<T> {
+  if (requestScope.getStore()) return fn();
+  return requestScope.run(
+    {
+      remainingMs: REQUEST_PATTERN_BUDGET_MS,
+      timedOut: new Set(),
+      results: new Map(),
+      logged: new Set(),
+    },
+    fn
+  );
+}
+
+/** Run `log` at most once per key within the current request (always, outside one). */
+export function logOncePerRequest(key: string, log: () => void): void {
+  const scope = requestScope.getStore();
+  if (scope) {
+    if (scope.logged.has(key)) return;
+    scope.logged.add(key);
+  }
+  log();
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation
+// ---------------------------------------------------------------------------
+
+let sandbox: vm.Context | null = null;
+// Compiled patterns are kept inside the context so repeated checks reuse them.
+const script = new vm.Script("__t(__p, __f, __s)");
+const SETUP = new vm.Script(`
+  var __cache = new Map();
+  function __t(p, f, s) {
+    var k = f + "/" + p;
+    var re = __cache.get(k);
+    if (!re) {
+      if (__cache.size >= 256) __cache.clear();
+      re = new RegExp(p, f);
+      __cache.set(k, re);
+    }
+    return re.test(s);
+  }
+`);
+
+function runWithBudget(
+  pattern: string,
+  flags: string,
+  subject: string,
+  timeoutMs: number
+): boolean {
+  if (!sandbox) {
+    sandbox = vm.createContext({ __p: "", __f: "", __s: "" });
+    SETUP.runInContext(sandbox);
+  }
   const ctx = sandbox as Record<string, unknown>;
   ctx.__p = pattern;
   ctx.__f = flags;
   ctx.__s = subject;
   try {
-    return script.runInContext(sandbox, { timeout: MATCH_TIMEOUT_MS }) === true;
+    return script.runInContext(sandbox, { timeout: timeoutMs }) === true;
   } finally {
     ctx.__s = "";
   }
@@ -285,7 +381,8 @@ function runWithBudget(pattern: string, flags: string, subject: string): boolean
 
 /**
  * Evaluate `pattern` against `subject` under the policy above. Never throws and
- * never reports a match for an invalid, over-long or timed-out evaluation.
+ * never reports a match for an invalid, over-long, timed-out or over-budget
+ * evaluation.
  */
 export function safePatternTest(
   pattern: unknown,
@@ -297,22 +394,45 @@ export function safePatternTest(
   const limit = options.maxSubjectLength ?? MAX_SUBJECT_LENGTH;
   if (subject.length > limit) return { status: "subject_too_long", limit };
   const flags = options.flags ?? "";
+  if (!ALLOWED_FLAGS.test(flags)) {
+    return { status: "invalid_pattern", code: "syntax", reason: "unsupported flags" };
+  }
   try {
     new RegExp("", flags);
   } catch {
     return { status: "invalid_pattern", code: "syntax", reason: "invalid flags" };
   }
+
+  const scope = requestScope.getStore();
+  const key = `${flags}/${pattern as string}`;
+  let resultKey: string | null = null;
+  let timeoutMs = MATCH_TIMEOUT_MS;
+  if (scope) {
+    if (scope.timedOut.has(key)) return { status: "timeout" };
+    if (subject.length <= RESULT_CACHE_SUBJECT_MAX) {
+      resultKey = `${key}\u0000${subject}`;
+      const known = scope.results.get(resultKey);
+      if (known !== undefined) return known ? { status: "match" } : { status: "no_match" };
+    }
+    if (scope.remainingMs <= 0) return { status: "budget_exhausted" };
+    timeoutMs = Math.max(1, Math.min(MATCH_TIMEOUT_MS, Math.ceil(scope.remainingMs)));
+  }
+
+  const started = performance.now();
   try {
-    return runWithBudget(pattern as string, flags, subject)
-      ? { status: "match" }
-      : { status: "no_match" };
+    const matched = runWithBudget(pattern as string, flags, subject, timeoutMs);
+    if (scope && resultKey !== null) scope.results.set(resultKey, matched);
+    return matched ? { status: "match" } : { status: "no_match" };
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === "ERR_SCRIPT_EXECUTION_TIMEOUT") {
       // The sandbox may hold an aborted context; start fresh next time.
       sandbox = null;
+      scope?.timedOut.add(key);
       return { status: "timeout" };
     }
     return { status: "invalid_pattern", code: "syntax", reason: "evaluation failed" };
+  } finally {
+    if (scope) scope.remainingMs -= performance.now() - started;
   }
 }

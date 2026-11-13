@@ -12,6 +12,9 @@ import {
   MAX_PATTERNS_PER_SCHEMA,
   MAX_PATTERN_LENGTH,
   MAX_SUBJECT_LENGTH,
+  REQUEST_PATTERN_BUDGET_MS,
+  SchemaPatternRefusalError,
+  withPatternBudget,
   safePatternTest,
   validatePattern,
 } from "../../src/services/safe_pattern.js";
@@ -221,13 +224,47 @@ describe("registration limits and messages", () => {
     expect(err!.message).toContain(String(MAX_PATTERNS_PER_SCHEMA));
   });
 
-  it("names a remedy in the refusal and states the length limit", () => {
-    expect(validate(schemaWithPattern(NESTED))!.message).toMatch(/bounded count/);
-    expect(validate(schemaWithPattern("^(a)\\1$"))!.message).toMatch(/backreference/);
-    expect(validate(schemaWithPattern("^(a|ab)+$"))!.message).toMatch(/distinct/);
-    expect(validate(schemaWithPattern("a".repeat(MAX_PATTERN_LENGTH + 1)))!.message).toContain(
-      String(MAX_PATTERN_LENGTH)
+  const refusal = (pattern: string) => {
+    const registry = new SchemaRegistryService();
+    try {
+      // @ts-expect-error private method used for test purposes
+      registry["validateSchemaDefinition"](schemaWithPattern(pattern));
+    } catch (err) {
+      return err as SchemaPatternRefusalError;
+    }
+    throw new Error("expected a refusal");
+  };
+
+  it("carries the rewrite guidance as a remedy, separate from the message", () => {
+    const nested = refusal(NESTED);
+    expect(nested).toBeInstanceOf(SchemaPatternRefusalError);
+    expect(nested.refusal).toBe("shape");
+    expect(nested.remedy).toMatch(/bounded count/);
+    expect(nested.message).not.toMatch(/bounded count/);
+    expect(refusal("^(a)\\1$").remedy).toMatch(/backreference/);
+    expect(refusal("^(a|ab)+$").remedy).toMatch(/distinct/);
+  });
+
+  it("states the length limit", () => {
+    const long = refusal("a".repeat(MAX_PATTERN_LENGTH + 1));
+    expect(long.refusal).toBe("length");
+    expect(long.message).toContain(String(MAX_PATTERN_LENGTH));
+  });
+
+  it("raises a typed error for count limits", () => {
+    const perCondition = Array.from(
+      { length: MAX_PATTERNS_PER_CONDITION + 1 },
+      (_, i) => `^p${i}$`
     );
+    const registry = new SchemaRegistryService();
+    try {
+      // @ts-expect-error private method used for test purposes
+      registry["validateSchemaDefinition"](withConditions(perCondition));
+      throw new Error("expected a refusal");
+    } catch (err) {
+      expect(err).toBeInstanceOf(SchemaPatternRefusalError);
+      expect((err as SchemaPatternRefusalError).refusal).toBe("count");
+    }
   });
 });
 
@@ -425,5 +462,83 @@ describe("rendered-page subject cap and flags", () => {
       rules: [{ code: "BAD_FLAGS", pattern: "<p>", flags: "zz", mode: "require_absent" }],
     });
     expect(w.map((x) => x.code)).not.toContain("BAD_FLAGS");
+  });
+});
+
+describe("flags accepted for rendered-page rules", () => {
+  it.each(["i", "m", "s", "u", "im", "iu"])("accepts %s", (flags) => {
+    expect(safePatternTest("<p>", "<p>", { flags }).status).toBe("match");
+  });
+
+  it.each(["v", "iv", "g", "y", "d", "zz"])("refuses %s", (flags) => {
+    expect(safePatternTest("<p>", "<p>", { flags }).status).toBe("invalid_pattern");
+    const w = checkRenderedPageConformance("<p>x</p>", "", {
+      rules: [{ code: "FLAGGED", pattern: "<p>", flags, mode: "require_absent" }],
+    });
+    expect(w.map((x) => x.code)).not.toContain("FLAGGED");
+  });
+});
+
+describe("per-request evaluation budget", () => {
+  const LONG = "a".repeat(MAX_SUBJECT_LENGTH);
+  const slow = (i: number) => `.*.*.*.*.*x${i}`;
+
+  it("does not run a timed-out pattern again within the same request", async () => {
+    await withPatternBudget(async () => {
+      expect(safePatternTest(slow(0), LONG).status).toBe("timeout");
+      const started = performance.now();
+      for (let i = 0; i < 50; i++) {
+        expect(safePatternTest(slow(0), LONG).status).toBe("timeout");
+      }
+      expect(performance.now() - started).toBeLessThan(MATCH_TIMEOUT_MS);
+    });
+  });
+
+  it("stops evaluating when the shared budget is spent", async () => {
+    const statuses: string[] = [];
+    const started = performance.now();
+    await withPatternBudget(async () => {
+      for (let i = 0; i < 40; i++) statuses.push(safePatternTest(slow(i), LONG).status);
+    });
+    const elapsed = performance.now() - started;
+    expect(statuses).toContain("budget_exhausted");
+    expect(statuses[statuses.length - 1]).toBe("budget_exhausted");
+    // Total time stays within the budget plus one evaluation (and slack).
+    expect(elapsed).toBeLessThan(REQUEST_PATTERN_BUDGET_MS + MATCH_TIMEOUT_MS + 500);
+  });
+
+  it("applies to constraint checks and derived conditions alike", async () => {
+    await withPatternBudget(async () => {
+      for (let i = 0; i < 20; i++) safePatternTest(slow(i), LONG);
+      const v = checkFieldConstraints("code", "ok", { pattern: "^[a-z]+$" });
+      expect(v).not.toBeNull();
+      expect(v!.message).toMatch(/evaluation limit/);
+      expect(
+        evaluateCondition(
+          { field: "body", op: "matches_any_pattern", patterns: ["^ok$"] },
+          { body: "ok" }
+        )
+      ).toBe(false);
+    });
+  });
+
+  it("reuses a result computed earlier in the request", async () => {
+    await withPatternBudget(async () => {
+      const first = checkFieldConstraints("code", "AB-1", { pattern: "^[A-Z]{2}-\\d{4}$" });
+      const second = checkFieldConstraints("code", "AB-1", { pattern: "^[A-Z]{2}-\\d{4}$" });
+      expect(first).not.toBeNull();
+      expect(second).toEqual(first);
+    });
+  });
+
+  it("has no effect outside a request", () => {
+    expect(safePatternTest("^a+$", "aaa").status).toBe("match");
+  });
+
+  it("points the caller at the schema when a stored pattern cannot be evaluated", () => {
+    const v = checkFieldConstraints("code", "aaa", { pattern: NESTED });
+    expect(v!.message).toContain("cannot be evaluated safely");
+    expect(v!.message).toMatch(/Rewrite the pattern in the schema/);
+    expect(v!.message).not.toContain(NESTED);
   });
 });

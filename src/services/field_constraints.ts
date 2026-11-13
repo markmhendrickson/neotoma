@@ -7,7 +7,7 @@
  */
 
 import type { FieldConstraints, FieldDefinition } from "./schema_registry.js";
-import { safePatternTest } from "./safe_pattern.js";
+import { safePatternTest, logOncePerRequest } from "./safe_pattern.js";
 import { logger } from "../utils/logger.js";
 
 // Re-export so callers that import from this module can reference the types.
@@ -92,17 +92,38 @@ export function checkFieldConstraints(
         value: undefined,
       };
     }
-    if (res.status === "invalid_pattern" || res.status === "timeout") {
-      // Fail closed: a stored pattern that is no longer acceptable rejects the value.
-      logger.warn(
-        `[FIELD_CONSTRAINTS] Pattern constraint on field "${fieldName}" ` +
-          `(entity_type=${context?.entityType ?? "unknown"}, schema_version=${context?.schemaVersion ?? "unknown"}) ` +
-          `is unusable (${res.status === "timeout" ? "evaluation budget exceeded" : res.reason}); value rejected.`
+    if (res.status === "budget_exhausted") {
+      logOncePerRequest(`fc-budget:${context?.entityType ?? ""}:${fieldName}`, () =>
+        logger.warn(
+          `[FIELD_CONSTRAINTS] Pattern evaluation budget for this request is spent ` +
+            `(entity_type=${context?.entityType ?? "unknown"}, schema_version=${context?.schemaVersion ?? "unknown"}); ` +
+            `remaining pattern-checked values are rejected.`
+        )
       );
       return {
         field: fieldName,
         constraint: "pattern",
-        message: `Field "${fieldName}" has a pattern constraint that cannot be evaluated safely; the value was not accepted.`,
+        message:
+          `Field "${fieldName}" could not be checked against its pattern constraint within this request's ` +
+          `evaluation limit; the value was not accepted. Send fewer entities per request.`,
+        value: undefined,
+      };
+    }
+    if (res.status === "invalid_pattern" || res.status === "timeout") {
+      // Fail closed: a stored pattern that is no longer acceptable rejects the value.
+      logOncePerRequest(`fc:${context?.entityType ?? ""}:${fieldName}:${res.status}`, () =>
+        logger.warn(
+          `[FIELD_CONSTRAINTS] Pattern constraint on field "${fieldName}" ` +
+            `(entity_type=${context?.entityType ?? "unknown"}, schema_version=${context?.schemaVersion ?? "unknown"}) ` +
+            `is unusable (${res.status === "timeout" ? "evaluation time limit exceeded" : res.reason}); value rejected.`
+        )
+      );
+      return {
+        field: fieldName,
+        constraint: "pattern",
+        message:
+          `Field "${fieldName}" has a pattern constraint that cannot be evaluated safely; the value was not accepted. ` +
+          `Rewrite the pattern in the schema and register the updated schema.`,
         value: undefined,
       };
     }

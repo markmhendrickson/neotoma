@@ -133,6 +133,7 @@ import {
 } from "./mcp_http_stateless.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
+import { withPatternBudget, SchemaPatternRefusalError } from "./services/safe_pattern.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import {
@@ -7992,13 +7993,13 @@ async function completeInterpretationRun(params: {
  * own atomic transaction, so both run as before.
  */
 export async function storeStructuredForApi(params: StructuredStoreApiParams) {
+  // One pattern-evaluation budget per store request.
+  const run = () => withPatternBudget(() => storeStructuredForApiUnguarded(params));
   if (params.commit === false || params.expectedEntityAbsent === true) {
-    return storeStructuredForApiUnguarded(params);
+    return run();
   }
   const { runKeyedStoreWrite } = await import("./services/store_write_state.js");
-  return runKeyedStoreWrite(params.userId, params.idempotencyKey, () =>
-    storeStructuredForApiUnguarded(params)
-  );
+  return runKeyedStoreWrite(params.userId, params.idempotencyKey, run);
 }
 
 async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) {
@@ -9216,6 +9217,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
             await import("./services/field_constraints.js");
           const warnViolations = _cvCollect(r.fields, schemaDef.fields, {
             entityType: r.entity_type,
+            schemaVersion: schemaEntry?.schema_version,
           });
           for (const v of warnViolations) {
             schemaStoreWarnings.push({
@@ -12410,6 +12412,12 @@ app.post("/update_schema_incremental", async (req, res) => {
       });
     } catch (err) {
       const code = (err as { code?: string })?.code;
+      if (err instanceof SchemaPatternRefusalError) {
+        return sendError(res, 400, "SCHEMA_VALIDATION_FAILED", err.message, {
+          hint: err.remedy,
+          refusal: err.refusal,
+        });
+      }
       if (code === "ERR_FORBIDDEN_ENTITY_TYPE" || code === "ERR_PLURAL_ENTITY_TYPE") {
         return sendError(res, 400, code, (err as Error).message);
       }
@@ -12692,6 +12700,12 @@ app.post("/register_schema", async (req, res) => {
       const code = (err as { code?: string })?.code;
       const message = err instanceof Error ? err.message : String(err);
       logWarn("ValidationError:register_schema", req, { error: message });
+      if (err instanceof SchemaPatternRefusalError) {
+        return sendError(res, 400, "SCHEMA_VALIDATION_FAILED", message, {
+          hint: err.remedy,
+          refusal: err.refusal,
+        });
+      }
       if (code === "ERR_FORBIDDEN_ENTITY_TYPE" || code === "ERR_PLURAL_ENTITY_TYPE") {
         return sendError(res, 400, code, message);
       }
