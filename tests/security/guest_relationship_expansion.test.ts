@@ -16,7 +16,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { softDeleteEntity } from "../../src/services/deletion.js";
+import { mergeEntities } from "../../src/services/entity_merge.js";
 import {
+  GUEST_TOKEN_INVALID_CODE,
   GUEST_TOKEN_SCOPE_CODE,
   generateGuestAccessToken,
   hashGuestAccessToken,
@@ -33,6 +35,7 @@ const READ_POLICIES: ReadonlySet<Policy> = new Set(["read_only", "submitter_scop
 const OWNER = LOCAL_DEV_USER_ID;
 const PAGE_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_RENDERED_PAGE";
 const CONTACT_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_CONTACT";
+const ISSUE_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_ISSUE";
 
 let baseUrl: string;
 let server: ReturnType<typeof app.listen>;
@@ -85,6 +88,35 @@ async function link(sourceId: string, targetId: string): Promise<void> {
   relationshipKeys.push(relationshipKey);
 }
 
+/** An issue whose own records carry the token's hash (the issue submitter rule). */
+async function createSubmittedIssue(marker: string, token: string): Promise<string> {
+  const id = `ent_is_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const now = new Date().toISOString();
+  await db.from("entities").insert({
+    id,
+    entity_type: "issue",
+    canonical_name: `${marker}-NAME`,
+    user_id: OWNER,
+    created_at: now,
+    updated_at: now,
+  });
+  await db.from("observations").insert({
+    entity_id: id,
+    entity_type: "issue",
+    user_id: OWNER,
+    fields: {
+      title: `${marker}-TITLE`,
+      body: `${marker}-BODY`,
+      guest_access_token_hash: hashGuestAccessToken(token),
+    },
+    observed_at: now,
+    source_priority: 0,
+  });
+  await recomputeSnapshot(id, OWNER);
+  entityIds.push(id);
+  return id;
+}
+
 async function mint(ids: string[]): Promise<string> {
   const token = await generateGuestAccessToken({ entityIds: ids, userId: OWNER });
   tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
@@ -128,6 +160,7 @@ beforeAll(() => {
 afterAll(async () => {
   delete process.env[PAGE_POLICY_ENV];
   delete process.env[CONTACT_POLICY_ENV];
+  delete process.env[ISSUE_POLICY_ENV];
   for (const key of relationshipKeys) {
     await db.from("relationship_snapshots").delete().eq("relationship_key", key);
   }
@@ -305,3 +338,114 @@ describe.each(POLICIES)("related-entity expansion for a guest under policy %s", 
     }
   });
 });
+
+/**
+ * For every related entity, expansion equals the caller's own read of that
+ * entity through GET /entities/{id}: expanded exactly when that read is 200.
+ */
+async function expectExpansionMatchesDetailReads(
+  body: RelationshipsBody,
+  token: string
+): Promise<void> {
+  for (const [id, entry] of Object.entries(body.related_entities ?? {})) {
+    const detail = await guestGet(`/entities/${id}`, token);
+    const expanded = entry.entity_type !== null || entry.canonical_name !== null;
+    expect(expanded, `${id}: expanded=${expanded}, detail=${detail.status}`).toBe(
+      detail.status === 200
+    );
+  }
+}
+
+describe.each(POLICIES)(
+  "related-entity expansion follows each entity's own read decision under policy %s",
+  (policy) => {
+    it("a submitter-scoped related issue whose type policy refuses is not expanded", async () => {
+      process.env[PAGE_POLICY_ENV] = policy;
+      process.env[ISSUE_POLICY_ENV] = "closed";
+      const a = await createEntity("rendered_page", `SUBA-${policy}`);
+      const token = await mint([a]);
+      const issue = await createSubmittedIssue(`SUBI-${policy}`, token);
+      await link(a, issue);
+
+      // The issue's own read route refuses this caller.
+      const detail = await guestGet(`/entities/${issue}`, token);
+      expect(detail.status).toBe(403);
+
+      const res = await guestGet(`/entities/${a}/relationships?expand_entities=true`, token);
+      expect(res.body).not.toContain(`SUBI-${policy}`);
+      if (!READ_POLICIES.has(policy)) {
+        expect(res.status).toBe(403);
+        return;
+      }
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body) as RelationshipsBody;
+      expect(body.outgoing[0]).toMatchObject({
+        relationship_type: "REFERS_TO",
+        target_entity_id: issue,
+        target_entity_name: null,
+        target_entity_type: null,
+      });
+      expectNotExpanded(body, issue);
+      await expectExpansionMatchesDetailReads(body, token);
+    });
+
+    it("a submitter-scoped related issue its type policy allows is expanded, as its own read route allows", async () => {
+      process.env[PAGE_POLICY_ENV] = policy;
+      process.env[ISSUE_POLICY_ENV] = "submitter_scoped";
+      const a = await createEntity("rendered_page", `SUBOKA-${policy}`);
+      const token = await mint([a]);
+      const issue = await createSubmittedIssue(`SUBOKI-${policy}`, token);
+      await link(a, issue);
+      expect((await guestGet(`/entities/${issue}`, token)).status).toBe(200);
+
+      const res = await guestGet(`/entities/${a}/relationships?expand_entities=true`, token);
+      if (!READ_POLICIES.has(policy)) {
+        expect(res.status).toBe(403);
+        return;
+      }
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body) as RelationshipsBody;
+      expect(body.related_entities?.[issue]).toMatchObject({ entity_type: "issue" });
+      await expectExpansionMatchesDetailReads(body, token);
+    });
+
+    it("a merged related entity the token names gets an unexpanded entry", async () => {
+      process.env[PAGE_POLICY_ENV] = policy;
+      process.env[CONTACT_POLICY_ENV] = policy;
+      const a = await createEntity("rendered_page", `MRGA-${policy}`);
+      const m = await createEntity("rendered_page", `MRGM-${policy}`);
+      const target = await createEntity("rendered_page", `MRGT-${policy}`);
+      const token = await mint([a, m]);
+      await mergeEntities({ fromEntityId: m, toEntityId: target, userId: OWNER, mergedBy: "test" });
+      await link(a, m);
+
+      expect((await guestGet(`/entities/${m}`, token)).status).toBe(404);
+      const res = await guestGet(`/entities/${a}/relationships?expand_entities=true`, token);
+      expect(res.body).not.toContain(`MRGM-${policy}`);
+      expect(res.body).not.toContain(`MRGT-${policy}`);
+      if (!READ_POLICIES.has(policy)) {
+        expect(res.status).toBe(403);
+        return;
+      }
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body) as RelationshipsBody;
+      expectNotExpanded(body, m);
+      await expectExpansionMatchesDetailReads(body, token);
+    });
+
+    it("a token with no resolvable grant expands nothing", async () => {
+      process.env[PAGE_POLICY_ENV] = policy;
+      process.env[CONTACT_POLICY_ENV] = policy;
+      const a = await createEntity("rendered_page", `NGA-${policy}`);
+      const b = await createEntity("rendered_page", `NGB-${policy}`);
+      await link(a, b);
+      const unknown = randomUUID();
+      const res = await guestGet(`/entities/${a}/relationships?expand_entities=true`, unknown);
+      expect(res.status).toBe(401);
+      expect(JSON.parse(res.body)).toMatchObject({ error_code: GUEST_TOKEN_INVALID_CODE });
+      expect(res.body).not.toContain("related_entities");
+      expect(res.body).not.toContain(`NGA-${policy}`);
+      expect(res.body).not.toContain(`NGB-${policy}`);
+    });
+  }
+);

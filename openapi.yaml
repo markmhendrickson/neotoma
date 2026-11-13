@@ -5037,11 +5037,17 @@ paths:
             entity_id and decorates each relationship row with convenience
             top-level fields (`source_entity_name`, `target_entity_name`,
             `source_entity_type`, `target_entity_type`, and their labels).
-            For a caller holding only a guest link, only related entities
-            that link covers are expanded. Every other related entity keeps
-            its relationship rows and a `related_entities` entry with
-            `canonical_name` and `entity_type` set to null and no snapshot,
-            and its convenience fields on each row are null.
+            Relationship rows always keep their ids and relationship type.
+            For any caller other than the owner, a related entity is expanded
+            only when that caller could read it through `GET /entities/{id}`
+            (the same access decision, including deletion and merges). Any
+            other related entity keeps a `related_entities` entry whose
+            `canonical_name` and `entity_type` are null and that has no
+            snapshot, and its convenience fields on each row are null. A null
+            `canonical_name` and `entity_type` therefore means the entity is
+            not available to this caller, or has no snapshot yet.
+            Relationship properties (`snapshot` on each row) are edge data
+            and must never hold entity content.
           schema: { type: boolean }
       responses:
         "200":
