@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **823**
-- Backend and repo Vitest files: **769**
+- Total automated test files: **825**
+- Backend and repo Vitest files: **771**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 231 |
+| Vitest unit tests | 232 |
 | Vitest service tests | 66 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 244 |
+| Vitest integration tests | 245 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 28 |
 | Vitest security tests | 20 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (231):**
+**Files (232):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -175,6 +175,7 @@ flowchart TD
 - `tests/unit/db_idempotency_concurrency.test.ts`
 - `tests/unit/db_libsql_nonblocking.test.ts`
 - `tests/unit/db_libsql_remote_class.test.ts`
+- `tests/unit/db_sqlite_gate_order.test.ts`
 - `tests/unit/db_url_misconfig_guard.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_hygiene.test.ts`
@@ -498,7 +499,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (244):**
+**Files (245):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -722,6 +723,7 @@ flowchart TD
 - `tests/integration/store_structured_commit_invariant.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/store_warning_condition_rule.test.ts`
+- `tests/integration/store_worker_backend_gate_contention.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
