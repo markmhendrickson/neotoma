@@ -144,6 +144,15 @@ export class LibsqlDatabase implements DbDatabase {
   /**
    * @internal Statements wait for any open transaction unless they execute
    * inside its async context, in which case they join the open transaction.
+   *
+   * `whenIdle()` is a snapshot and is enough HERE, unlike the sqlite and worker
+   * drivers: `client.transaction()` hands its connection to the transaction
+   * object and the client opens a fresh one for later statements (verified in
+   * @libsql/client's sqlite3 and remote clients), so a statement that slips in
+   * after the snapshot executes on its own connection. It cannot join the
+   * transaction, cannot be lost on its ROLLBACK, and an autocommit write is
+   * visible to every reader as soon as it resolves. The wait only softens lock
+   * contention between those connections.
    */
   async executorForStatement(): Promise<Executor> {
     const activeTx = this.txContext.getStore();

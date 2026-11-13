@@ -1429,7 +1429,11 @@ export class WorkerFileDatabase implements DbDatabase {
    * enqueued after the snapshot (see {@link TransactionGate.runInOrder}).
    */
   private onWriterWhenIdle<T>(sql: string, send: () => Promise<T>): Promise<T> {
-    return this.gate.runInOrder(send, (waited) => this.noteGateWait(sql, waited));
+    return this.gate.runInOrder(
+      send,
+      (waited) => this.noteGateWait(sql, waited),
+      () => sqlHead(sql)
+    );
   }
 
   /** Log (rate-limited) when a write waited long for queued transactions. */

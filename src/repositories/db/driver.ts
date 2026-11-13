@@ -126,12 +126,20 @@ export class TransactionGate {
    *
    * `onWait` receives the time spent queued behind earlier transactions.
    */
-  runInOrder<T>(fn: () => Promise<T>, onWait?: (waitedMs: number) => void): Promise<T> {
+  runInOrder<T>(
+    fn: () => Promise<T>,
+    onWait?: (waitedMs: number) => void,
+    describe?: () => string
+  ): Promise<T> {
     const enqueuedAt = Date.now();
-    return this.runExclusive(() => {
-      onWait?.(Date.now() - enqueuedAt);
-      return fn();
-    });
+    return this.runExclusive(
+      () => {
+        onWait?.(Date.now() - enqueuedAt);
+        return fn();
+      },
+      describe,
+      "statement"
+    );
   }
 
   /**
@@ -141,7 +149,11 @@ export class TransactionGate {
    * the first SQL statement) used only when the hold is slow enough to log.
    * It is read at release time so it can reflect what the transaction ran.
    */
-  runExclusive<T>(fn: () => Promise<T>, describe?: () => string): Promise<T> {
+  runExclusive<T>(
+    fn: () => Promise<T>,
+    describe?: () => string,
+    kind: "transaction" | "statement" = "transaction"
+  ): Promise<T> {
     const prev = this.tail;
     let release!: () => void;
     this.tail = new Promise<void>((resolve) => {
@@ -154,14 +166,19 @@ export class TransactionGate {
       try {
         return await fn();
       } finally {
-        this.noteHold(Date.now() - startedAt, startedAt - enqueuedAt, describe);
+        this.noteHold(Date.now() - startedAt, startedAt - enqueuedAt, describe, kind);
         release();
       }
     })();
   }
 
   /** Log a transaction that held the gate longer than SLOW_GATE_HOLD_MS. Rate-limited; counts suppressed lines. */
-  private noteHold(holdMs: number, queueWaitMs: number, describe?: () => string): void {
+  private noteHold(
+    holdMs: number,
+    queueWaitMs: number,
+    describe?: () => string,
+    kind: "transaction" | "statement" = "transaction"
+  ): void {
     if (holdMs <= SLOW_GATE_HOLD_MS) return;
     const now = Date.now();
     if (now - this.lastSlowHoldLogAt < SLOW_GATE_LOG_INTERVAL_MS) {
@@ -177,9 +194,20 @@ export class TransactionGate {
     } catch {
       tag = "";
     }
+    const waitText =
+      `(waited for gate ${queueWaitMs}ms` +
+      `${suppressed > 0 ? `, ${suppressed} similar line(s) suppressed` : ""})`;
+    if (kind === "statement") {
+      logger.warn(
+        `DB single statement held the gate ${holdMs}ms ${waitText}. ` +
+          `A slow statement delays every write and transaction queued behind it; ` +
+          `this is one statement, not a long transaction.` +
+          (tag ? ` Statement: ${tag}` : "")
+      );
+      return;
+    }
     logger.warn(
-      `DB transaction held the gate ${holdMs}ms (waited for gate ${queueWaitMs}ms` +
-        `${suppressed > 0 ? `, ${suppressed} similar line(s) suppressed` : ""}). ` +
+      `DB transaction held the gate ${holdMs}ms ${waitText}. ` +
         `A long write transaction delays other writes.` +
         (tag ? ` First statement: ${tag}` : "")
     );
