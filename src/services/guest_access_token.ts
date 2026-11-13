@@ -112,7 +112,12 @@ export async function generateGuestAccessToken(params: {
 
 /**
  * Validate a guest access token and return the entity IDs it covers.
- * Returns null if the token is invalid or not found.
+ * Returns null if the token is invalid, expired, revoked, or not found.
+ *
+ * Lifetime is bounded twice: by the TTL stored on the token and by the
+ * currently configured TTL, measured from the earliest recorded creation time
+ * for the token. A later observation can therefore neither lift a revocation
+ * nor extend the lifetime.
  */
 export async function validateGuestAccessToken(token: string): Promise<GuestAccessToken | null> {
   const tokenHash = hashGuestAccessToken(token);
@@ -126,44 +131,69 @@ export async function validateGuestAccessToken(token: string): Promise<GuestAcce
 
   if (!observations || observations.length === 0) return null;
 
+  const matching: Record<string, unknown>[] = [];
   for (const obs of observations) {
     const payload = parseObservationPayload(obs);
-    if (payload?.token_hash !== tokenHash) {
-      continue;
-    }
+    if (payload?.token_hash === tokenHash) matching.push(payload);
+  }
+  if (matching.length === 0) return null;
 
-    const revokedAt = typeof payload.revoked_at === "string" ? payload.revoked_at : null;
-    if (revokedAt) return null;
-
-    const createdAt = typeof payload.created_at === "string" ? payload.created_at : "";
-    const ttlSeconds =
-      typeof payload.ttl_seconds === "number" && Number.isFinite(payload.ttl_seconds)
-        ? payload.ttl_seconds
-        : getGuestTokenTtlSeconds();
-    const createdAtMs = Date.parse(createdAt);
-    if (!Number.isFinite(createdAtMs)) return null;
-    if (Date.now() > createdAtMs + ttlSeconds * 1000) return null;
-
-    return {
-      token,
-      entity_ids: Array.isArray(payload.entity_ids)
-        ? payload.entity_ids.filter((id): id is string => typeof id === "string")
-        : [],
-      thumbprint: typeof payload.thumbprint === "string" ? payload.thumbprint : undefined,
-      created_at: createdAt,
-      ttl_seconds: ttlSeconds,
-      revoked_at: revokedAt,
-    };
+  // Any revocation record revokes the token.
+  for (const payload of matching) {
+    if (typeof payload.revoked_at === "string" && payload.revoked_at) return null;
   }
 
-  return null;
+  const configuredTtl = getGuestTokenTtlSeconds();
+  let createdAtMs = Number.POSITIVE_INFINITY;
+  let ttlSeconds = configuredTtl;
+  for (const payload of matching) {
+    const ms = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
+    if (!Number.isFinite(ms)) return null;
+    createdAtMs = Math.min(createdAtMs, ms);
+    if (typeof payload.ttl_seconds === "number" && Number.isFinite(payload.ttl_seconds)) {
+      ttlSeconds = Math.min(ttlSeconds, payload.ttl_seconds);
+    }
+  }
+  if (!(ttlSeconds > 0)) return null;
+  if (Date.now() > createdAtMs + ttlSeconds * 1000) return null;
+
+  const latest = matching[0];
+  return {
+    token,
+    entity_ids: Array.isArray(latest.entity_ids)
+      ? latest.entity_ids.filter((id): id is string => typeof id === "string")
+      : [],
+    thumbprint: typeof latest.thumbprint === "string" ? latest.thumbprint : undefined,
+    created_at: new Date(createdAtMs).toISOString(),
+    ttl_seconds: ttlSeconds,
+    revoked_at: null,
+  };
+}
+
+export type GuestTokenEntityCheck =
+  | { state: "granted"; grant: GuestAccessToken }
+  | { state: "invalid" }
+  | { state: "other_entity"; grant: GuestAccessToken };
+
+/**
+ * The single check applied wherever a guest access token is presented for an
+ * entity: the token must exist, be unexpired and unrevoked, and name exactly
+ * this entity. Every guest-readable route resolves its token through here.
+ */
+export async function checkGuestTokenForEntity(
+  token: string,
+  entityId: string
+): Promise<GuestTokenEntityCheck> {
+  const grant = await validateGuestAccessToken(token);
+  if (!grant) return { state: "invalid" };
+  return grant.entity_ids.includes(entityId)
+    ? { state: "granted", grant }
+    : { state: "other_entity", grant };
 }
 
 /**
  * Check whether a guest access token grants access to a specific entity.
  */
 export async function tokenGrantsAccessTo(token: string, entityId: string): Promise<boolean> {
-  const validated = await validateGuestAccessToken(token);
-  if (!validated) return false;
-  return validated.entity_ids.includes(entityId);
+  return (await checkGuestTokenForEntity(token, entityId)).state === "granted";
 }

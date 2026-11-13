@@ -4427,52 +4427,25 @@ async function resolveGuestPolicyGovernedEntityAccess(
     });
   }
 
+  // A guest token is a grant for the entities it names and for nothing else,
+  // under every policy mode. A caller holding only a token must present one
+  // that covers this entity; a signed agent identity is judged separately below.
+  const accessToken = principal.guestId.accessToken;
+  if (accessToken && !principal.guestId.thumbprint) {
+    if (!(await guestTokenCoversEntity(accessToken, entityId, entity))) {
+      throw new AccessPolicyError({
+        op: "retrieve",
+        entityType: entity.entity_type,
+        mode: decision.mode,
+        reason: "guest_token_not_valid_for_entity",
+      });
+    }
+    return { userId: entity.user_id, entityType: entity.entity_type };
+  }
+
   if (decision.scopeFilter === "submitter_only") {
-    if (principal.guestId.accessToken) {
-      const { tokenGrantsAccessTo, hashGuestAccessToken } =
-        await import("./services/guest_access_token.js");
-      if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
-        return { userId: entity.user_id, entityType: entity.entity_type };
-      }
-      if (entity.entity_type === "issue") {
-        const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
-        // Only the entity owner's own rows count as submitter evidence.
-        const { data: issueObservations } = await db
-          .from("observations")
-          .select("fields")
-          .eq("entity_id", entityId)
-          .eq("user_id", entity.user_id);
-        for (const observation of issueObservations ?? []) {
-          const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
-          const fields =
-            typeof rawFields === "string"
-              ? JSON.parse(rawFields)
-              : rawFields && typeof rawFields === "object"
-                ? rawFields
-                : undefined;
-          if (
-            (fields as { guest_access_token_hash?: string } | undefined)
-              ?.guest_access_token_hash === tokenHash
-          ) {
-            return { userId: entity.user_id, entityType: entity.entity_type };
-          }
-        }
-        const { data: issueRelationships } = await db
-          .from("relationship_snapshots")
-          .select("target_entity_id")
-          .eq("source_entity_id", entityId)
-          .eq("relationship_type", "REFERS_TO")
-          .eq("user_id", entity.user_id);
-        for (const relationship of issueRelationships ?? []) {
-          const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
-          if (
-            conversationId &&
-            (await tokenGrantsAccessTo(principal.guestId.accessToken, conversationId))
-          ) {
-            return { userId: entity.user_id, entityType: entity.entity_type };
-          }
-        }
-      }
+    if (accessToken && (await guestTokenCoversEntity(accessToken, entityId, entity))) {
+      return { userId: entity.user_id, entityType: entity.entity_type };
     }
 
     const { data: observations } = await db
@@ -4496,6 +4469,60 @@ async function resolveGuestPolicyGovernedEntityAccess(
   }
 
   return { userId: entity.user_id, entityType: entity.entity_type };
+}
+
+/**
+ * Whether a validated guest token covers this entity: it names the entity
+ * directly, or (issues only) it is the submitter's token for the issue, shown
+ * by the token hash recorded on the issue or by a token for the conversation
+ * the issue refers to. Expiry and revocation are decided in
+ * `checkGuestTokenForEntity`, the shared check.
+ */
+async function guestTokenCoversEntity(
+  accessToken: string,
+  entityId: string,
+  entity: { entity_type: string; user_id: string }
+): Promise<boolean> {
+  const { tokenGrantsAccessTo, hashGuestAccessToken } =
+    await import("./services/guest_access_token.js");
+  if (await tokenGrantsAccessTo(accessToken, entityId)) return true;
+  if (entity.entity_type !== "issue") return false;
+
+  const tokenHash = hashGuestAccessToken(accessToken);
+  // Only the entity owner's own rows count as submitter evidence.
+  const { data: issueObservations } = await db
+    .from("observations")
+    .select("fields")
+    .eq("entity_id", entityId)
+    .eq("user_id", entity.user_id);
+  for (const observation of issueObservations ?? []) {
+    const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
+    const fields =
+      typeof rawFields === "string"
+        ? JSON.parse(rawFields)
+        : rawFields && typeof rawFields === "object"
+          ? rawFields
+          : undefined;
+    if (
+      (fields as { guest_access_token_hash?: string } | undefined)?.guest_access_token_hash ===
+      tokenHash
+    ) {
+      return true;
+    }
+  }
+  const { data: issueRelationships } = await db
+    .from("relationship_snapshots")
+    .select("target_entity_id")
+    .eq("source_entity_id", entityId)
+    .eq("relationship_type", "REFERS_TO")
+    .eq("user_id", entity.user_id);
+  for (const relationship of issueRelationships ?? []) {
+    const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
+    if (conversationId && (await tokenGrantsAccessTo(accessToken, conversationId))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 type GuestShareLinkAccess =
