@@ -135,11 +135,7 @@ import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
-import {
-  emitEntitySnapshotChange,
-  emitObservationCreated,
-  shallowFieldsChanged,
-} from "./events/substrate_store_emit.js";
+import { emitStoreWriteEvents } from "./events/substrate_store_emit.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
 import {
   ensureLocalDevUser,
@@ -8819,35 +8815,20 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         observationSource === undefined || observationSource === null
           ? DEFAULT_OBSERVATION_SOURCE
           : String(observationSource);
-      emitObservationCreated({
+      emitStoreWriteEvents({
         user_id: userId,
         entity_id: r.entity_id,
         entity_type: r.entity_type,
         observation_id: obsRow.id,
         timestamp: emitTs,
+        is_new_entity: r.trace.action === "created",
+        prior_snapshot: priorSnapshot,
+        snapshot_after: snapshotAfter,
         source_id: observationSourceId,
         idempotency_key: idempotencyKey,
         observation_source: obsSourceLabel,
         source_peer_id: sourcePeerId ?? undefined,
       });
-      if (snapshotAfter) {
-        const isNewEntity = r.trace.action === "created";
-        emitEntitySnapshotChange({
-          user_id: userId,
-          entity_id: r.entity_id,
-          entity_type: r.entity_type,
-          event_type: isNewEntity ? "entity.created" : "entity.updated",
-          timestamp: emitTs,
-          observation_id: obsRow.id,
-          fields_changed: isNewEntity
-            ? undefined
-            : shallowFieldsChanged(priorSnapshot, snapshotAfter),
-          source_id: observationSourceId,
-          idempotency_key: idempotencyKey,
-          observation_source: obsSourceLabel,
-          source_peer_id: sourcePeerId ?? undefined,
-        });
-      }
 
       // Schema-driven auto-linking: if the entity's active schema declares
       // reference_fields, create typed relationships to the referenced

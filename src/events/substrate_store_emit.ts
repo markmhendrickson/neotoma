@@ -80,6 +80,61 @@ export function emitEntitySnapshotChange(params: {
   });
 }
 
+/**
+ * Emit the post-write events for one stored observation: `observation.created`
+ * followed by exactly one of `entity.created` (the observation created the
+ * entity) or `entity.updated`.
+ *
+ * Subscribers treat `entity.created` as "a new entity appeared", so it must not
+ * depend on the snapshot recompute succeeding. When `snapshot_after` is null
+ * (recompute threw or produced nothing) a new entity still gets
+ * `entity.created` (its payload never carried snapshot data), and an existing
+ * entity gets `entity.updated` with `fields_changed` omitted, which means
+ * "changed, fields unknown".
+ */
+export function emitStoreWriteEvents(params: {
+  user_id: string;
+  entity_id: string;
+  entity_type: string;
+  observation_id: string;
+  timestamp: string;
+  is_new_entity: boolean;
+  prior_snapshot: Record<string, unknown>;
+  snapshot_after: Record<string, unknown> | null;
+  source_id?: string;
+  idempotency_key?: string;
+  observation_source?: string;
+  source_peer_id?: string;
+}): void {
+  emitObservationCreated({
+    user_id: params.user_id,
+    entity_id: params.entity_id,
+    entity_type: params.entity_type,
+    observation_id: params.observation_id,
+    timestamp: params.timestamp,
+    source_id: params.source_id,
+    idempotency_key: params.idempotency_key,
+    observation_source: params.observation_source,
+    source_peer_id: params.source_peer_id,
+  });
+  emitEntitySnapshotChange({
+    user_id: params.user_id,
+    entity_id: params.entity_id,
+    entity_type: params.entity_type,
+    event_type: params.is_new_entity ? "entity.created" : "entity.updated",
+    timestamp: params.timestamp,
+    observation_id: params.observation_id,
+    fields_changed:
+      params.is_new_entity || !params.snapshot_after
+        ? undefined
+        : shallowFieldsChanged(params.prior_snapshot, params.snapshot_after),
+    source_id: params.source_id,
+    idempotency_key: params.idempotency_key,
+    observation_source: params.observation_source,
+    source_peer_id: params.source_peer_id,
+  });
+}
+
 export function emitRelationshipLifecycle(params: {
   user_id: string;
   relationship_key: string;

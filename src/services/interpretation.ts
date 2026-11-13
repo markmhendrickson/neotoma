@@ -10,7 +10,7 @@ import {
   type SchemaDefinition,
   type SchemaRegistryEntry,
 } from "./schema_registry.js";
-import { resolveEntity } from "./entity_resolution.js";
+import { resolveEntityWithTrace } from "./entity_resolution.js";
 import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
@@ -40,11 +40,7 @@ import {
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
-import {
-  emitEntitySnapshotChange,
-  emitObservationCreated,
-  shallowFieldsChanged,
-} from "../events/substrate_store_emit.js";
+import { emitStoreWriteEvents } from "../events/substrate_store_emit.js";
 
 export interface InterpretationConfig {
   provider: string;
@@ -484,6 +480,8 @@ export async function runInterpretation(
     observationId: string;
   }> = [];
   const interpretationInsertedObservationIds = new Set<string>();
+  // Entities this run's resolver newly created (resolver trace, not snapshot-derived).
+  const resolverCreatedEntityIds = new Set<string>();
   const refinementDebug: Array<{
     extracted_keys: string[];
     type_before: string;
@@ -711,11 +709,13 @@ export async function runInterpretation(
       // and warn so the operator can declare canonical_name_fields.
       let entityId: string;
       try {
-        entityId = await resolveEntity({
+        const resolved = await resolveEntityWithTrace({
           entityType,
           fields: fieldsForResolver,
           userId,
         });
+        entityId = resolved.entityId;
+        if (resolved.trace.action === "created") resolverCreatedEntityIds.add(entityId);
       } catch (err) {
         const { CanonicalNameUnresolvedError } = await import("./entity_resolution.js");
         if (err instanceof CanonicalNameUnresolvedError) {
@@ -847,6 +847,36 @@ export async function runInterpretation(
 
     // Compute snapshots for all entities
     for (const entity of entities) {
+      // Substrate events must not depend on the snapshot recompute: a new entity
+      // has to announce itself with `entity.created` even if the snapshot cannot
+      // be computed. Newness comes from the resolver trace; the snapshot's
+      // observation_count === 1 is kept as a second signal when it is available
+      // (it also covers a retry after an earlier run created the entity row but
+      // failed before writing the observation).
+      let storeEventsEmitted = false;
+      let priorSnapshotForEvents: Record<string, unknown> = {};
+      const emitStoreEventsOnce = (
+        snapshotAfter: Record<string, unknown> | null,
+        timestamp: string,
+        observationCount?: number
+      ) => {
+        if (storeEventsEmitted || !interpretationInsertedObservationIds.has(entity.observationId)) {
+          return;
+        }
+        storeEventsEmitted = true;
+        emitStoreWriteEvents({
+          user_id: userId,
+          entity_id: entity.entityId,
+          entity_type: entity.entityType,
+          observation_id: entity.observationId,
+          timestamp,
+          is_new_entity: resolverCreatedEntityIds.has(entity.entityId) || observationCount === 1,
+          prior_snapshot: priorSnapshotForEvents,
+          snapshot_after: snapshotAfter,
+          source_id: sourceId,
+          observation_source: "llm_summary",
+        });
+      };
       try {
         const { data: priorSnapRow } = await db
           .from("entity_snapshots")
@@ -856,6 +886,7 @@ export async function runInterpretation(
           .maybeSingle();
         const priorSnapshot =
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+        priorSnapshotForEvents = priorSnapshot;
 
         // #2343: the observations ATTACHED to this entity, through the
         // declared resolution layer. Scope stays `null` because this fetch was
@@ -874,6 +905,7 @@ export async function runInterpretation(
             `Failed to fetch observations for entity ${entity.entityId}:`,
             fetchError instanceof Error ? fetchError.message : String(fetchError)
           );
+          emitStoreEventsOnce(null, new Date().toISOString());
           continue;
         }
         if (allObservations === null) {
@@ -896,6 +928,7 @@ export async function runInterpretation(
             console.error(
               `Failed to compute snapshot for entity ${entity.entityId}: computeSnapshot returned null`
             );
+            emitStoreEventsOnce(null, new Date().toISOString());
             continue;
           }
 
@@ -959,37 +992,14 @@ export async function runInterpretation(
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
           const emitTs = snapshot.computed_at || new Date().toISOString();
-          if (interpretationInsertedObservationIds.has(entity.observationId)) {
-            emitObservationCreated({
-              user_id: userId,
-              entity_id: entity.entityId,
-              entity_type: entity.entityType,
-              observation_id: entity.observationId,
-              timestamp: emitTs,
-              source_id: sourceId,
-              observation_source: "llm_summary",
-            });
-            const isNewEntity = snapshot.observation_count === 1;
-            emitEntitySnapshotChange({
-              user_id: userId,
-              entity_id: entity.entityId,
-              entity_type: entity.entityType,
-              event_type: isNewEntity ? "entity.created" : "entity.updated",
-              timestamp: emitTs,
-              observation_id: entity.observationId,
-              fields_changed: isNewEntity
-                ? undefined
-                : shallowFieldsChanged(priorSnapshot, newSnapshot),
-              source_id: sourceId,
-              observation_source: "llm_summary",
-            });
-          }
+          emitStoreEventsOnce(newSnapshot, emitTs, snapshot.observation_count);
         }
       } catch (error) {
         console.error(
           `Failed to compute snapshot for entity ${entity.entityId}:`,
           error instanceof Error ? error.message : String(error)
         );
+        emitStoreEventsOnce(null, new Date().toISOString());
         // Continue with other entities
       }
     }
