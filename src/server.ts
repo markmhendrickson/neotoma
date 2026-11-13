@@ -7196,7 +7196,10 @@ export class NeotomaServer {
           : {}),
         ...(result.hint ? { hint: result.hint } : {}),
         relationships_created: interpretationRelationshipsCreated,
-        ...storeWriteCompletionResponseFields(storeWriteCompletion),
+        ...storeWriteCompletionResponseFields(storeWriteCompletion, {
+          hasInterpretation: true,
+          hasIdempotencyKey: Boolean(idempotencyKey),
+        }),
         ...(interpretationRelationshipsRefused.length > 0
           ? { relationships_refused: interpretationRelationshipsRefused }
           : {}),
@@ -8455,7 +8458,10 @@ export class NeotomaServer {
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
       relationships_created: relationshipsCreated,
-      ...storeWriteCompletionResponseFields(storeWriteCompletion),
+      ...storeWriteCompletionResponseFields(storeWriteCompletion, {
+        hasInterpretation: false,
+        hasIdempotencyKey: Boolean(idempotencyKey),
+      }),
       ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });

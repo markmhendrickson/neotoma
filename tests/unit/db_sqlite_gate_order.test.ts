@@ -16,7 +16,6 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { logger } from "../../src/utils/logger.js";
 import { TransactionGate } from "../../src/repositories/db/driver.js";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
-import { openLibsqlDatabase } from "../../src/repositories/libsql/libsql_driver.js";
 import type { DbDatabase } from "../../src/repositories/db/driver.js";
 
 const dir = mkdtempSync(path.join(tmpdir(), "neotoma-gate-order-"));
@@ -52,15 +51,6 @@ async function scenario(db: DbDatabase) {
 describe("non-transaction statements keep their place behind the gate", () => {
   it("sqlite: a write issued before a rolled-back transaction is not undone by it", async () => {
     const db = new AsyncSqliteDatabase(path.join(dir, "s.db"));
-    try {
-      expect((await scenario(db)).map((r) => r.v)).toEqual(["a", "marker"]);
-    } finally {
-      await db.close();
-    }
-  });
-
-  it("libsql: the same sequence keeps the write (statements run on their own connection)", async () => {
-    const db = openLibsqlDatabase(`file:${path.join(dir, "l.db")}`);
     try {
       expect((await scenario(db)).map((r) => r.v)).toEqual(["a", "marker"]);
     } finally {

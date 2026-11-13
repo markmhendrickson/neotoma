@@ -9461,7 +9461,10 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
     relationships_created: relationshipsCreated,
-    ...storeWriteCompletionResponseFields(storeWriteCompletion),
+    ...storeWriteCompletionResponseFields(storeWriteCompletion, {
+      hasInterpretation: Boolean(interpretation),
+      hasIdempotencyKey: Boolean(idempotencyKey),
+    }),
     ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),

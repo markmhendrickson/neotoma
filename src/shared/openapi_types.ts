@@ -4615,6 +4615,32 @@ export interface components {
       };
       success?: boolean;
       /**
+       * @description Present (always `true`) only when every observation and
+       *     relationship was committed but the idempotency completion marker
+       *     could not be confirmed. Absent on a confirmed store. The store is
+       *     not a failure: treat it as success and do not retry.
+       * @enum {boolean}
+       */
+      write_committed?: true;
+      /**
+       * @description Present only with `write_committed`. `unconfirmed` means the
+       *     completion marker on the keyed source was not confirmed. Absent on
+       *     a confirmed store.
+       * @enum {string}
+       */
+      store_write_completion?: "unconfirmed";
+      /**
+       * @description Present only with `write_committed`. States what the caller may do.
+       *     For a store without an interpretation, one optional replay of the
+       *     same `idempotency_key` completes the marker without duplicating
+       *     observations. For a store that carries an `interpretation`, no
+       *     replay is needed and the replay would be refused with
+       *     `ERR_STORE_WRITE_INCOMPLETE`. For a store sent without an
+       *     idempotency key the data is stored and no action is needed. Absent
+       *     on a confirmed store.
+       */
+      store_write_completion_note?: string;
+      /**
        * @description Echoes the request's `commit` flag. `false` means this response
        *     describes a plan/dry-run preview: no source, observation or entity
        *     was persisted and `source_id` is `null`.

@@ -81,9 +81,12 @@ export function legacyWriteLooksIncomplete(params: {
 
 /**
  * Record that every observation for the keyed source has been written.
- * Throws if the marker cannot be persisted: the caller then reports an error
- * rather than a success the next replay could not confirm, and that replay
- * finishes idempotently (observation ids are deterministic).
+ * Throws if the marker cannot be persisted. Store callers do not use it
+ * directly: they call {@link confirmStoreWriteComplete}, which turns that throw
+ * into an `unconfirmed` outcome, because by this point the writes have already
+ * committed and failing the request would tell the client to retry data that
+ * is stored. A same-key replay finishes the marker idempotently (observation
+ * ids are deterministic), except for a store that carries an interpretation.
  */
 export async function markStoreWriteComplete(sourceId: string, userId: string): Promise<void> {
   const { data: row, error: readError } = await db
@@ -137,18 +140,20 @@ export async function markStoreWriteComplete(sourceId: string, userId: string): 
  * Outcome of recording completion once the write itself has committed.
  * `unconfirmed` means every observation and relationship landed but the
  * bookkeeping marker did not (or could not be shown to): the store is NOT a
- * failure, and a replay of the same idempotency key finishes the marker
- * idempotently, because observation ids are deterministic.
+ * failure. Any failure of the marker step, including an abort or a timeout,
+ * maps here, which is safe because the claim rests only on the writes the
+ * caller has already awaited.
  */
 export type StoreWriteCompletion = { state: "complete" } | { state: "unconfirmed"; reason: string };
 
 /**
  * Record completion for a store whose writes have all committed, without
  * turning a bookkeeping failure into a failed request. A 500 here told clients
- * to retry a write that had already landed (and had left the entity's
- * snapshot to be recomputed from whatever the next attempt added). The caller
- * must surface `unconfirmed` in its response so the committed state is
- * distinguishable from both success-with-marker and failure.
+ * to retry a write that had already landed. The caller must surface
+ * `unconfirmed` in its response (see {@link storeWriteCompletionResponseFields})
+ * so the committed state is distinguishable from both success-with-marker and
+ * failure. The warning log carries the source id and the reason only, never the
+ * idempotency key, which can hold caller identifiers.
  */
 export async function confirmStoreWriteComplete(
   sourceId: string,
@@ -166,18 +171,47 @@ export async function confirmStoreWriteComplete(
   }
 }
 
-/** Response fragment for a store whose completion marker was not confirmed. */
+/** What the caller's request lets the response promise about a replay. */
+export interface StoreWriteCompletionContext {
+  /** The request carried an interpretation: its source stays `in_progress`, so a replay is refused. */
+  hasInterpretation: boolean;
+  /** The request carried an idempotency key. */
+  hasIdempotencyKey: boolean;
+}
+
+/**
+ * Response fragment for a store whose completion marker was not confirmed;
+ * empty for a confirmed store. The note promises a same-key replay only where
+ * one works: a store with an interpretation cannot be resumed (the replay is
+ * refused with ERR_STORE_WRITE_INCOMPLETE), and a store without a key has
+ * nothing to replay.
+ */
 export function storeWriteCompletionResponseFields(
-  completion: StoreWriteCompletion
+  completion: StoreWriteCompletion,
+  context: StoreWriteCompletionContext = { hasInterpretation: false, hasIdempotencyKey: true }
 ): Record<string, unknown> {
   if (completion.state === "complete") return {};
+  const committed = "All observations and relationships were committed; this is not a failure. ";
+  let note: string;
+  if (context.hasInterpretation) {
+    note =
+      committed +
+      "Only the idempotency completion marker could not be confirmed. No replay is needed, and " +
+      "do not replay this idempotency_key: a store with an interpretation cannot be resumed and " +
+      "the replay would be refused.";
+  } else if (!context.hasIdempotencyKey) {
+    note = committed + "The data is stored and no action is needed.";
+  } else {
+    note =
+      committed +
+      "Only the idempotency completion marker could not be confirmed. No action is needed; one " +
+      "optional replay of the same idempotency_key completes the marker without duplicating " +
+      "observations.";
+  }
   return {
     write_committed: true,
     store_write_completion: "unconfirmed",
-    store_write_completion_note:
-      "All observations and relationships were committed. Only the idempotency completion marker " +
-      "could not be confirmed, so do not treat this as a failure; replaying the same idempotency_key " +
-      "completes the marker without duplicating observations.",
+    store_write_completion_note: note,
   };
 }
 

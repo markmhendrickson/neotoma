@@ -146,13 +146,19 @@ export class LibsqlDatabase implements DbDatabase {
    * inside its async context, in which case they join the open transaction.
    *
    * `whenIdle()` is a snapshot and is enough HERE, unlike the sqlite and worker
-   * drivers: `client.transaction()` hands its connection to the transaction
-   * object and the client opens a fresh one for later statements (verified in
-   * @libsql/client's sqlite3 and remote clients), so a statement that slips in
-   * after the snapshot executes on its own connection. It cannot join the
-   * transaction, cannot be lost on its ROLLBACK, and an autocommit write is
-   * visible to every reader as soon as it resolves. The wait only softens lock
-   * contention between those connections.
+   * drivers. This class only serves remote sqld/Turso URLs (`file:` URLs are
+   * served by WorkerFileDatabase). There `client.transaction()` opens its own
+   * interactive stream, and statements issued on the client run on a different
+   * one, so a statement that slips in after the snapshot cannot join the
+   * transaction or be undone by its ROLLBACK. Connection settings (busy
+   * timeout and the like) are the server's for remote URLs, see openDb in
+   * connection.ts.
+   *
+   * Known limit: pointed at a local `file:` path directly (tests only; the
+   * product serves those through WorkerFileDatabase), a statement runs on a
+   * fresh connection that carries none of the PRAGMAs applied to the first, so
+   * it has no busy timeout and can fail with SQLITE_BUSY against an open
+   * transaction. Not changed here.
    */
   async executorForStatement(): Promise<Executor> {
     const activeTx = this.txContext.getStore();

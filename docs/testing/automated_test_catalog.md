@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **825**
-- Backend and repo Vitest files: **771**
+- Total automated test files: **827**
+- Backend and repo Vitest files: **773**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 232 |
+| Vitest unit tests | 233 |
 | Vitest service tests | 66 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 245 |
+| Vitest integration tests | 246 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 28 |
 | Vitest security tests | 20 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (232):**
+**Files (233):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -329,6 +329,7 @@ flowchart TD
 - `tests/unit/store_data_origin.test.ts`
 - `tests/unit/store_strict_and_consistency.test.ts`
 - `tests/unit/store_warning_rule.test.ts`
+- `tests/unit/store_write_completion.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
@@ -499,7 +500,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (245):**
+**Files (246):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -711,6 +712,7 @@ flowchart TD
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
+- `tests/integration/store_marker_unconfirmed.test.ts`
 - `tests/integration/store_null_cleared_field_warning.test.ts`
 - `tests/integration/store_partial_write_2144.test.ts`
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
