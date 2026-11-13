@@ -63,11 +63,14 @@ function walk(dir: string, keep: (rel: string) => boolean, out: string[] = []): 
   return out;
 }
 
-/** Every file vitest can load as a test or a test helper. */
+/** Every file vitest or playwright can load as a test or a test helper. */
 function testSources(): string[] {
   return [
-    // Everything under tests/: test files, helpers, fixtures they execute.
-    ...walk(join(REPO_ROOT, "tests"), (rel) => SOURCE_EXT.test(rel)),
+    // Everything under tests/ and playwright/: test files, helpers, fixtures
+    // they execute, playwright's global setup. The pre-commit hook runs both.
+    ...["tests", "playwright"].flatMap((dir) =>
+      walk(join(REPO_ROOT, dir), (rel) => SOURCE_EXT.test(rel))
+    ),
     // Co-located test files (vitest.config.ts `include`).
     ...["src", join("frontend", "src"), join("inspector", "src")].flatMap((dir) =>
       walk(join(REPO_ROOT, dir), (rel) => TEST_FILE.test(rel))
@@ -149,6 +152,19 @@ describe("git environment isolation for tests", () => {
     ).toEqual([]);
   });
 
+  it("no test file keeps its own list of repository-locating variables", () => {
+    // One canonical list: GIT_REPOSITORY_ENV_VARS. A local copy drifts (two
+    // copies on main already differed from the helper by GIT_NAMESPACE).
+    const marker = ["GIT", "ALTERNATE", "OBJECT", "DIRECTORIES"].join("_");
+    const copies = testSources()
+      .filter((file) => readFileSync(file, "utf8").includes(`"${marker}"`))
+      .map((file) => relative(REPO_ROOT, file));
+    expect(
+      copies,
+      "Import GIT_REPOSITORY_ENV_VARS from tests/helpers/git_env.ts instead of listing the variables."
+    ).toEqual([]);
+  });
+
   it("the scan recognises the call shapes it is meant to catch", () => {
     // Pins the detector, so the scan above cannot pass by matching nothing.
     expect(findGitSpawns('execFileSync("git", ["init", dir]);')).toEqual([1]);
@@ -163,9 +179,9 @@ describe("git environment isolation for tests", () => {
     expect(findGitSpawns('gitSync(["init", "-q", dir])')).toEqual([]);
     expect(findGitSpawns("// runs git init in a temp dir")).toEqual([]);
     // The scan actually reads files: a known git-using test is in scope.
-    expect(testSources().map((f) => relative(REPO_ROOT, f))).toContain(
-      join("tests", "unit", "site_ui_source_binding.test.ts")
-    );
+    const scanned = testSources().map((f) => relative(REPO_ROOT, f));
+    expect(scanned).toContain(join("tests", "unit", "site_ui_source_binding.test.ts"));
+    expect(scanned).toContain(join("playwright", "global_setup.ts"));
   });
 
   it("gitSync keeps `git init <tmp>` out of the enclosing repository (raw execFileSync does not)", () => {

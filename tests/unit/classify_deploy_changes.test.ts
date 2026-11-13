@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -6,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { GIT_REPOSITORY_ENV_VARS, gitSync } from "../helpers/git_env";
 
 /**
  * The deploy classifier decides whether a push to main redeploys the operator
@@ -33,25 +34,16 @@ const { decide, main, classifyPackageJsonChange } = classifier as {
 };
 
 /**
- * Variables that point git at a repository other than the one in `cwd`. Git
- * exports some of them to hooks, so when this suite runs inside the repo's own
- * pre-commit hook they name the REAL checkout, and a `git init` in a temp dir
- * would re-initialise that checkout instead (it did once: it set core.bare on
- * the shared clone). They are removed for this file, because `decide()` spawns
- * git with the inherited environment, and restored afterwards.
+ * Git exports repository-locating variables to hooks, so when this suite runs
+ * inside the repo's own pre-commit hook they name the REAL checkout, and a
+ * `git init` in a temp dir would re-initialise that checkout instead (it did
+ * once: it set core.bare on the shared clone). vitest's setup already strips
+ * them; this file also removes them for its own duration, because `decide()`
+ * spawns git with the inherited environment, and restores them afterwards.
+ * The list is the canonical one in tests/helpers/git_env.ts.
  */
-const REPO_LOCATING_VARS = [
-  "GIT_DIR",
-  "GIT_WORK_TREE",
-  "GIT_INDEX_FILE",
-  "GIT_COMMON_DIR",
-  "GIT_OBJECT_DIRECTORY",
-  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_NAMESPACE",
-  "GIT_PREFIX",
-];
 const savedGitVars = new Map<string, string>();
-for (const name of REPO_LOCATING_VARS) {
+for (const name of GIT_REPOSITORY_ENV_VARS) {
   const value = process.env[name];
   if (value !== undefined) savedGitVars.set(name, value);
   delete process.env[name];
@@ -70,19 +62,17 @@ function mkTmp(prefix: string): string {
 }
 
 function git(cwd: string, ...args: string[]): string {
-  const leaked = REPO_LOCATING_VARS.filter((n) => process.env[n] !== undefined);
+  const leaked = GIT_REPOSITORY_ENV_VARS.filter((n) => process.env[n] !== undefined);
   if (leaked.length) throw new Error(`refusing to run git with ${leaked.join(", ")} set`);
-  return execFileSync("git", args, {
+  return gitSync(args, {
     cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
+    env: { ...process.env, HOME: os.tmpdir() },
+    gitEnv: {
       GIT_AUTHOR_NAME: "t",
       GIT_AUTHOR_EMAIL: "t@example.invalid",
       GIT_COMMITTER_NAME: "t",
       GIT_COMMITTER_EMAIL: "t@example.invalid",
       GIT_CONFIG_NOSYSTEM: "1",
-      HOME: os.tmpdir(),
     },
   }).trim();
 }

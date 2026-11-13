@@ -25,6 +25,14 @@
  *      which remove EVERY `GIT_*` variable from the child's environment.
  *      `tests/contract/git_env_isolation.test.ts` fails if a test file spawns
  *      git any other way.
+ *
+ * Limit of the layer-3 scan: it reads test source for a direct call whose
+ * program is `git` (and for simple-git imports). It does NOT see git started
+ * through a shell string (`spawn("sh", ["-c", "git ..."])`, a bash step run
+ * by a test) or by a sub-script a test runs (`node scripts/x.mjs` that calls
+ * git itself). Those are covered only by layers 1 and 2, and only as long as
+ * the test builds the child's `env` from `process.env` (or from
+ * {@link gitChildEnv}) rather than from a copy taken before setup ran.
  */
 import { execFileSync, type ExecFileSyncOptions } from "node:child_process";
 
@@ -42,6 +50,7 @@ export const GIT_REPOSITORY_ENV_VARS = [
   "GIT_OBJECT_DIRECTORY",
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
   "GIT_COMMON_DIR",
+  "GIT_NAMESPACE",
   "GIT_PREFIX",
 ] as const;
 
@@ -79,18 +88,27 @@ export function gitChildEnv(
   return { ...env, ...extra };
 }
 
+export type GitSyncOptions = ExecFileSyncOptions & {
+  /**
+   * Git variables the test sets on purpose (e.g. `GIT_AUTHOR_NAME`,
+   * `GIT_CONFIG_NOSYSTEM`). Applied AFTER the scrub, so they survive it.
+   */
+  gitEnv?: NodeJS.ProcessEnv;
+};
+
 /**
  * `execFileSync("git", args, options)` with the child environment built by
  * {@link gitChildEnv}. An `env` in `options` is used as the base and is
- * scrubbed the same way. Returns stdout as a string (`encoding` defaults to
- * utf8); use `stdio` in `options` as usual.
+ * scrubbed the same way; `gitEnv` is added afterwards. Returns stdout as a
+ * string (`encoding` defaults to utf8); use `stdio` in `options` as usual.
+ * Throws on a non-zero exit, like `execFileSync`.
  */
-export function gitSync(args: readonly string[], options: ExecFileSyncOptions = {}): string {
-  const { env, encoding, ...rest } = options;
+export function gitSync(args: readonly string[], options: GitSyncOptions = {}): string {
+  const { env, encoding, gitEnv, ...rest } = options;
   const out = execFileSync("git", [...args], {
     ...rest,
     encoding: encoding ?? "utf8",
-    env: gitChildEnv(env ?? process.env),
+    env: gitChildEnv(env ?? process.env, gitEnv),
   });
   return typeof out === "string" ? out : (out?.toString() ?? "");
 }

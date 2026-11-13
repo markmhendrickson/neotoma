@@ -111,7 +111,7 @@ export default async function globalSetup() {
   if (removedGitEnv.length > 0) {
     process.stderr.write(
       `[neotoma] removed inherited ${removedGitEnv.join(", ")} from the test environment ` +
-        "so tests that run git act on their own directories, not the enclosing repository.\n"
+        "(expected under a git hook) so tests that run git act on their own directories, not the enclosing repository.\n"
     );
   }
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));

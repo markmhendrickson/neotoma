@@ -1,8 +1,8 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { gitSync } from "../helpers/git_env";
 
 /**
  * Contract: every input to the server image must classify as "deploy".
@@ -102,17 +102,9 @@ export function dockerignoreReincludes(text: string): string[] {
 }
 
 function trackedFiles(p: string): string[] {
-  // Run git against ROOT regardless of any GIT_* variables the caller exports.
-  const gitEnv: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_")) gitEnv[k] = v;
-  return execFileSync("git", ["ls-files", "-z", "--", p], {
-    cwd: ROOT,
-    env: gitEnv,
-    encoding: "utf8",
-  })
-    .split("\0")
-    .filter(Boolean)
-    .sort();
+  // Run git against ROOT regardless of any GIT_* variables the caller exports
+  // (gitSync drops every GIT_* variable from the child's environment).
+  return gitSync(["ls-files", "-z", "--", p], { cwd: ROOT }).split("\0").filter(Boolean).sort();
 }
 
 /**

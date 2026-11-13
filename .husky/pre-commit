@@ -54,7 +54,7 @@ pick_free_port() {
 # tests/helpers/git_env.ts (tests/contract/git_env_isolation.test.ts checks).
 unset_git_repository_env() {
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_PREFIX
 }
 
 run_vitest_suite() {
