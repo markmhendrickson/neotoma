@@ -285,7 +285,10 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await seedSlowTable(db);
 
       const slowStart = Date.now();
-      await expect(db.prepare(SLOW_SQL).get()).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      await expect(db.prepare(SLOW_SQL).get()).rejects.toMatchObject({
+        name: "WorkerDbTimeoutError",
+        message: expect.stringContaining("worker retired and draining (replacement spawned)"),
+      });
       const slowMs = Date.now() - slowStart;
 
       // Rejected on the budget, not after the query's natural duration.

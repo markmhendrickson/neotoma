@@ -226,11 +226,14 @@ export class WorkerDbCrashError extends Error {
 }
 
 /**
- * Thrown when a statement exceeds the per-statement timeout. The worker
- * hosting it is terminated (the synchronous driver offers no other way to stop
- * a running statement) so the pool slot is reclaimed immediately rather than
- * held for the query's full natural duration — the #2217 failure, where two
- * long reads made every subsequent read queue behind them indefinitely.
+ * Thrown when a statement exceeds the per-statement timeout. The caller is
+ * released immediately and the worker hosting the statement is retired and
+ * replaced, so the pool slot is reclaimed rather than held for the query's
+ * full natural duration — the #2217 failure, where two long reads made every
+ * subsequent read queue behind them indefinitely. The worker is NEVER
+ * terminated while it may be inside a native call (that aborts the process,
+ * #2324); it drains and is then terminated. At the retirement cap the worker
+ * stays in the pool instead (see `canRetire`).
  *
  * Only ever raised for reads on the read-only reader pool, so no committed
  * state is at risk: the caller knows nothing was written.
@@ -247,9 +250,9 @@ export class WorkerDbTimeoutError extends Error {
 
 /**
  * Thrown when the caller's AbortSignal fires while a statement is in flight —
- * e.g. the HTTP client hung up. Same mechanism as the timeout: the reader is
- * terminated so abandoned work stops consuming a pool slot instead of running
- * to completion for a response nobody will read.
+ * e.g. the HTTP client hung up. Same mechanism as the timeout: the caller is
+ * released and the reader retired, so abandoned work stops holding a pool slot
+ * for a response nobody will read (the worker drains before it is terminated).
  */
 export class WorkerDbAbortError extends Error {
   constructor(message: string) {
@@ -314,7 +317,7 @@ class WorkerConnection {
   private hadInFlightAtRetire = false;
   /** Terminates the orphaned worker; cleared once it has run. */
   private orphanFinish: (() => void) | undefined;
-  private orphanTimer: ReturnType<typeof setTimeout> | undefined;
+  private orphanTimer: ReturnType<typeof setInterval> | undefined;
   /**
    * The orphaned worker itself, kept because `failInFlight` has already nulled
    * `this.worker` by the time the connection retires. Without this handle
@@ -356,6 +359,10 @@ class WorkerConnection {
        * behind it instead of spawning yet another thread.
        */
       canRetire?: () => boolean;
+      /** Retired workers currently draining, for diagnostics only. */
+      drainingCount?: () => number;
+      /** Retirement cap, for diagnostics only. */
+      retirementCap?: () => number;
     } = {}
   ) {}
 
@@ -503,6 +510,10 @@ class WorkerConnection {
       this.exactWorkers.delete(worker);
       retiringReaderWorkers.delete(worker);
       if (this.orphanWorker === worker) this.orphanWorker = undefined;
+      if (this.orphanWorker === undefined && this.orphanTimer !== undefined) {
+        clearInterval(this.orphanTimer);
+        this.orphanTimer = undefined;
+      }
       exited();
       this.local.onExit?.(this);
       if (this.worker !== worker) return; // already replaced (normal terminate)
@@ -589,25 +600,32 @@ class WorkerConnection {
    *      completion, an acknowledgement of a probe queued after them is the
    *      worker's own proof that it holds no native frame and has none left to
    *      start — which a reply, by construction, is not.
-   *   4. A worker that never reports (genuinely wedged, or a statement longer
-   *      than the window) is terminated anyway after `orphanGraceMs`. That is
-   *      the pre-#2324 behaviour kept as a last resort: it can still abort,
-   *      but only in the case where the alternative is leaking a thread
-   *      forever, instead of on every routine client disconnect.
+   *   4. A worker that is slow to report is NEVER force-terminated: that is
+   *      the pre-#2324 last resort and it is what aborted production on
+   *      2026-11-12. Instead a rate-limited warning names how long it has been
+   *      draining (every `orphanGraceMs`), and the number of draining workers
+   *      is bounded by `canRetire` (at the cap, the worker stays in the pool).
    *
    * The cost is honest and worth stating: peak thread count rises, because an
    * abandoned reader lingers until its statement finishes rather than dying at
    * once. On a 2-CPU machine that is real contention. It is the better trade —
    * a lingering thread degrades throughput, whereas the abort takes the whole
    * instance down and blocks its own recovery. Exact-owned work waits for drain
-   * and retains admission custody; ordinary work keeps its existing grace policy.
+   * and retains admission custody; ordinary work gets the same wait.
    */
-  /** Flag a statement id so the worker skips it if it has not started yet. */
+  /**
+   * Flag a statement id so the worker skips it if it has not started yet. The
+   * skip applies to every connection type, including the writer should it ever
+   * gain a budget or signal (today it has neither, so it is never abandoned).
+   */
   private cancel(id: number): void {
     Atomics.store(this.cancelled, id % this.cancelled.length, id);
   }
 
-  private abandon(error: Error, id?: number): void {
+  private abandon(errorOrFactory: Error | ((workerKept: boolean) => Error), id?: number): void {
+    const make = (workerKept: boolean): Error =>
+      typeof errorOrFactory === "function" ? errorOrFactory(workerKept) : errorOrFactory;
+    const error = make(false);
     // ALREADY RETIRED: a second abort landing on the same connection. Under
     // pool saturation this is the common case, not the exotic one — several
     // requests share one reader, each installs its own abort listener, and a
@@ -645,12 +663,19 @@ class WorkerConnection {
         });
         const now = Date.now();
         if (now - lastCapLogAt >= SATURATION_LOG_INTERVAL_MS) {
+          const suppressed = capLogSuppressed;
           lastCapLogAt = now;
+          capLogSuppressed = 0;
           logger.warn(
-            `DB reader retirement cap reached; rejected a timed-out statement but kept its worker in the pool: ${sqlHead(entry.sql)}`
+            `DB reader retirement cap reached (retired=${this.local.drainingCount?.() ?? "?"}/${this.local.retirementCap?.() ?? "?"}): ` +
+              `a timed-out read was rejected but its worker was kept in the pool, so reads now queue behind busy workers ` +
+              `until retired workers finish draining. Raise NEOTOMA_DB_MAX_RETIRED_WORKERS if this is sustained. ` +
+              `Statement: ${sqlHead(entry.sql)}; ${suppressed} similar warning(s) suppressed since the last one`
           );
+        } else {
+          capLogSuppressed += 1;
         }
-        entry.reject(error);
+        entry.reject(make(true));
       }
       return;
     }
@@ -674,11 +699,13 @@ class WorkerConnection {
     // at which it is provably idle — or when the grace window expires,
     // whichever comes first.
     this.orphanWorker = worker;
+    const retiredAt = Date.now();
     const finish = () => {
       if (this.orphanTimer !== undefined) {
-        clearTimeout(this.orphanTimer);
+        clearInterval(this.orphanTimer);
         this.orphanTimer = undefined;
       }
+      logger.info(`DB retired reader finished draining after ${Date.now() - retiredAt}ms`);
       // Keep the orphan handle until the unconditional actual-exit callback.
       void worker.terminate().catch(() => {});
     };
@@ -690,12 +717,24 @@ class WorkerConnection {
     } catch {
       // The worker is already gone; the grace timer below still covers it.
     }
-    if (this.exactWorkers.has(worker)) return; // exact-owned native work must drain safely
-    // Deliberately NO grace timer: wait for the drain probe however long the
-    // native call takes. Force-terminating a worker still inside the addon
+    // Deliberately NO force-terminate: wait for the drain probe however long
+    // the native call takes. Force-terminating a worker still inside the addon
     // aborts the whole process (neon PendingException, SIGABRT; production
     // 2026-11-12, 13 crash loops), which is worse than a lingering thread. The
     // number of lingering threads is bounded by `canRetire` (see the pool).
+    // Log only, so a slow drain is visible to operators.
+    const everyMs = Math.max(this.orphanGraceMs, 1000);
+    this.orphanTimer = setInterval(() => {
+      const now = Date.now();
+      if (now - lastDrainLogAt < SATURATION_LOG_INTERVAL_MS) return;
+      lastDrainLogAt = now;
+      logger.warn(
+        `DB retired reader still draining after ${now - retiredAt}ms ` +
+          `(${this.local.drainingCount?.() ?? "?"} retired worker(s) draining, cap ${this.local.retirementCap?.() ?? "?"}); ` +
+          `it is not terminated while inside a native call`
+      );
+    }, everyMs);
+    this.orphanTimer.unref?.();
   }
 
   request(
@@ -745,10 +784,13 @@ class WorkerConnection {
       if (timeoutMs !== undefined && timeoutMs > 0) {
         timer = setTimeout(() => {
           this.abandon(
-            new WorkerDbTimeoutError(
-              `DB statement exceeded ${timeoutMs}ms and its worker was terminated to reclaim the pool slot`,
-              timeoutMs
-            ),
+            (workerKept) =>
+              new WorkerDbTimeoutError(
+                workerKept
+                  ? `DB statement exceeded ${timeoutMs}ms; caller released, worker kept in pool (retirement cap reached)`
+                  : `DB statement exceeded ${timeoutMs}ms; caller released, worker retired and draining (replacement spawned)`,
+                timeoutMs
+              ),
             id
           );
         }, timeoutMs);
@@ -797,7 +839,7 @@ class WorkerConnection {
     for (const entry of this.pending.values()) entry.cleanup();
     this.pending.clear();
     if (this.orphanTimer !== undefined) {
-      clearTimeout(this.orphanTimer);
+      clearInterval(this.orphanTimer);
       this.orphanTimer = undefined;
     }
     this.orphanFinish = undefined;
@@ -982,8 +1024,9 @@ class WorkerStatement implements DbStatement {
 const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
 
 /**
- * How long an abandoned ("retired") worker is given to finish its current
- * statement and report back on its own before it is terminated anyway (#2324).
+ * How long `close()` waits for a busy worker before shutting it down anyway,
+ * and the interval at which a still-draining retired worker is warned about
+ * (#2324). A retired worker is never force-terminated on this clock.
  *
  * Terminating a worker that is inside a synchronous native call is what aborts
  * the process, so the normal path waits for the orphan to return to JavaScript
@@ -1024,6 +1067,8 @@ function sqlHead(sql: string): string {
 const SLOW_GATE_WAIT_MS = 250;
 
 let lastCapLogAt = 0;
+let capLogSuppressed = 0;
+let lastDrainLogAt = 0;
 
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
@@ -1135,7 +1180,11 @@ export class WorkerFileDatabase implements DbDatabase {
       readerWorkers?: number;
       /** Per-statement budget for pool reads; `0` disables the timeout. */
       statementTimeoutMs?: number;
-      /** Grace window for an abandoned worker before it is force-terminated. */
+      /**
+       * How long `close()` waits for a busy worker, and how often a slow-draining
+       * retired worker is warned about. Never used to force-terminate a retired
+       * worker.
+       */
       orphanGraceMs?: number;
     } = {}
   ) {
@@ -1224,6 +1273,8 @@ export class WorkerFileDatabase implements DbDatabase {
       {
         orphanGraceMs: this.orphanGraceMs,
         canRetire: () => this.retiredConnections.size < this.maxRetiredWorkers,
+        drainingCount: () => this.retiredConnections.size,
+        retirementCap: () => this.maxRetiredWorkers,
         // Reclaiming the POOL SLOT is the whole of the #2217 requirement, and
         // #2324 is what happens when it is conflated with killing the thread.
         // Dropping the connection here frees the slot at this instant: dispatch
