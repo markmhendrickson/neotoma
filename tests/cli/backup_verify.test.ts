@@ -1,13 +1,13 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
-import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
 import { restoreBackupIntoTarget, runCli } from "../../src/cli/index.ts";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.ts";
+import { spawnSyncLocal } from "../helpers/cli_local_target.js";
 
 type FixtureSqliteStatement = {
   all(...params: unknown[]): unknown[];
@@ -22,7 +22,7 @@ type FixtureSqliteDatabase = {
 };
 
 const nodeRequire = createRequire(import.meta.url);
-const hasLsof = spawnSync("lsof", ["-v"], { stdio: "ignore" }).error === undefined;
+const hasLsof = spawnSyncLocal("lsof", ["-v"], { stdio: "ignore" }).error === undefined;
 
 function activeSqliteDriverName(): "node:sqlite" | "better-sqlite3" {
   try {
@@ -151,7 +151,7 @@ describe("CLI backup verify (smoke)", () => {
       const argv = ["--import", "tsx", "src/cli/bootstrap.ts"];
       if (mode === "json") argv.push("--json");
       argv.push("backup", "create", "--output", outputFile);
-      const run = spawnSync(process.execPath, argv, {
+      const run = spawnSyncLocal(process.execPath, argv, {
         cwd: process.cwd(),
         encoding: "utf8",
         env: {
@@ -191,7 +191,7 @@ describe("CLI backup verify (smoke)", () => {
       const argv = ["--import", "tsx", "src/cli/bootstrap.ts"];
       if (mode === "json") argv.push("--json");
       argv.push("backup", "restore", "--from", source, "--target", targetFile);
-      const run = spawnSync(process.execPath, argv, {
+      const run = spawnSyncLocal(process.execPath, argv, {
         cwd: process.cwd(),
         encoding: "utf8",
         env: {
@@ -227,7 +227,7 @@ describe("CLI backup verify (smoke)", () => {
         await fs.writeFile(manifestPath, JSON.stringify({ contents: null }));
       }
 
-      const run = spawnSync(
+      const run = spawnSyncLocal(
         process.execPath,
         [
           "--import",
@@ -268,7 +268,7 @@ describe("CLI backup verify (smoke)", () => {
       JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
     );
 
-    const run = spawnSync(
+    const run = spawnSyncLocal(
       process.execPath,
       [
         "--import",
@@ -556,7 +556,7 @@ describe("CLI backup verify (smoke)", () => {
   });
 
   it("documents offline restore and failed-publication recovery in compiled command help", async () => {
-    const help = spawnSync(
+    const help = spawnSyncLocal(
       process.execPath,
       ["dist/cli/bootstrap.js", "backup", "restore", "--help"],
       { cwd: process.cwd(), encoding: "utf8" }

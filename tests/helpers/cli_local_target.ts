@@ -46,7 +46,30 @@ import { promisify } from "node:util";
 const execRaw = promisify(exec);
 const execFileRaw = promisify(execFile);
 
-const CLI_ENTRY_MARKER = "dist/cli/index.js";
+/**
+ * Every way the CLI is started: the built entry, the built bootstrap, and the TypeScript
+ * bootstrap run through tsx. Matched on a separator-normalised copy of the command, so a
+ * Windows-style `dist\\cli\\index.js` path cannot slip past.
+ */
+const CLI_ENTRY_RE = /dist\/cli\/index\.js|dist\/cli\/bootstrap\.js|src\/cli\/bootstrap\.ts/g;
+const CLI_ENTRY_SUFFIXES = ["dist/cli/index.js", "dist/cli/bootstrap.js", "src/cli/bootstrap.ts"];
+
+/** Same length as the input, so indices found on it apply to the original string. */
+function normaliseSeparators(text: string): string {
+  return text.replace(/\\/g, "/");
+}
+
+/** Thrown when one command string would start the CLI more than once. */
+export class AmbiguousCliInvocationError extends Error {
+  constructor(count: number) {
+    super(
+      `[cli-local-target] Refusing a command that starts the CLI ${count} times. Chained ` +
+        `invocations cannot all be pinned to the local test server; run each CLI call as its ` +
+        `own command through the helper.`
+    );
+    this.name = "AmbiguousCliInvocationError";
+  }
+}
 
 /** Thrown when a CLI test would resolve to a non-local Neotoma instance. */
 export class NonLocalCliTargetError extends Error {
@@ -54,10 +77,11 @@ export class NonLocalCliTargetError extends Error {
     super(
       `[cli-local-target] Refusing to run a CLI test against a non-local Neotoma target ` +
         `(${source}: ${describeTarget(target)}). CLI tests always run against the local test ` +
-        `server started by vitest.global_setup.ts (localhost, 127.0.0.1 or ::1); there is no ` +
-        `override, including RUN_REMOTE_TESTS=1. The remote URL can come from the shell ` +
-        `environment, from a test's own env or --base-url, or from a repo-root .env file ` +
-        `that the CLI loads with override. Unset or fix that source and re-run.`
+        `server started by vitest.global_setup.ts (localhost, 127.0.0.1, ::1 or 0.0.0.0); ` +
+        `there is no override, including RUN_REMOTE_TESTS=1. The remote URL can come from the ` +
+        `shell environment, from a test's own env or --base-url, or from a repo-root .env file ` +
+        `that the CLI loads with override. Unset or fix that source and re-run. For a ` +
+        `deliberate remote check, run the CLI directly outside the test suite.`
     );
     this.name = "NonLocalCliTargetError";
   }
@@ -163,19 +187,31 @@ export function withLocalBaseUrl(
   envBaseUrl: string | undefined,
   defaultBaseUrl: string
 ): string {
-  const at = command.indexOf(CLI_ENTRY_MARKER);
-  if (at === -1) return command;
+  const normalised = normaliseSeparators(command);
+  const entries = [...normalised.matchAll(CLI_ENTRY_RE)];
+  if (entries.length === 0) return command;
+  if (entries.length > 1) throw new AmbiguousCliInvocationError(entries.length);
+  const at = entries[0].index ?? 0;
 
   // Skip a closing quote so `node "/abs/dist/cli/index.js"` stays one argument.
-  let insertAt = at + CLI_ENTRY_MARKER.length;
+  let insertAt = at + entries[0][0].length;
   if (command[insertAt] === '"' || command[insertAt] === "'") insertAt += 1;
 
   // Help and version output makes no request, and the CLI renders it differently when a
   // global option precedes the flag, so leave those invocations byte-for-byte as written.
   if (isNoNetworkCommand(command.slice(insertAt))) return command;
 
+  // A --base-url inside a quoted payload is data, not a flag: ignore it when deciding
+  // whether the command is already pinned (same quoted-span rule as the help check).
+  const spans = [...command.matchAll(QUOTED)].map((m) => [
+    m.index ?? 0,
+    (m.index ?? 0) + m[0].length,
+  ]);
+  const insideQuotes = (i: number): boolean => spans.some(([from, to]) => i >= from && i < to);
   let sawFlag = false;
   for (const m of command.matchAll(BASE_URL_FLAG)) {
+    const flagAt = (m.index ?? 0) + (/^\s/.test(m[0]) ? 1 : 0);
+    if (flagAt < insertAt || insideQuotes(flagAt)) continue;
     sawFlag = true;
     assertLocalBaseUrl(m[1] ?? m[2] ?? m[3] ?? "", "--base-url");
   }
@@ -193,8 +229,12 @@ export function withLocalBaseUrlArgs(
   envBaseUrl: string | undefined,
   defaultBaseUrl: string
 ): string[] {
-  const entry = args.findIndex((a) => a.endsWith(CLI_ENTRY_MARKER));
+  const isEntry = (a: string): boolean =>
+    CLI_ENTRY_SUFFIXES.some((suffix) => normaliseSeparators(a).endsWith(suffix));
+  const entry = args.findIndex(isEntry);
   if (entry === -1) return [...args];
+  const entryCount = args.filter(isEntry).length;
+  if (entryCount > 1) throw new AmbiguousCliInvocationError(entryCount);
   const rest = args.slice(entry + 1);
   if (rest.some((a) => NO_NETWORK_ARGS.has(a))) return [...args];
 

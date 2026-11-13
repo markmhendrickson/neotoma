@@ -15,8 +15,6 @@ const isolated = await vi.hoisted(async () => {
 
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -43,6 +41,7 @@ import { exportEntitySnapshots } from "../../src/services/snapshot_export.js";
 import { exportMemory } from "../../src/services/memory_export.js";
 import { getDashboardStats } from "../../src/services/dashboard_stats.js";
 import { migrateEntityLifecycleAuthority } from "../../src/services/entity_lifecycle_storage.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
 // These exercise the natural SQLite services. The three regressions are
 // exercised after owned synthetic cutover; the temporal control
@@ -297,7 +296,7 @@ describe("authenticated entity lifecycle", () => {
         "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
     };
     const command = async (args: string[]) => {
-      const { stdout } = await promisify(execFile)(
+      const { stdout } = await execFileLocal(
         process.execPath,
         [
           path.join(root, "dist/cli/bootstrap.js"),

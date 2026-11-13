@@ -53,6 +53,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 vi.resetModules();
 
 const {
+  AmbiguousCliInvocationError,
   NonLocalCliTargetError,
   assertLocalBaseUrl,
   SCRUB_WARNING,
@@ -257,6 +258,115 @@ describe("CLI test local-target guard", () => {
         ])
       ).rejects.toBeInstanceOf(NonLocalCliTargetError);
       expect(spawned).toEqual([]);
+    });
+  });
+
+  describe("every CLI entry point and command shape", () => {
+    it("pins dist/cli/bootstrap.js and src/cli/bootstrap.ts command strings", () => {
+      for (const entry of ["dist/cli/bootstrap.js", "src/cli/bootstrap.ts"]) {
+        const out = withLocalBaseUrl(
+          `node --import tsx "/abs/${entry}" backup create`,
+          undefined,
+          "http://localhost:1"
+        );
+        expect(out).toBe(
+          `node --import tsx "/abs/${entry}" --base-url 'http://localhost:1' backup create`
+        );
+      }
+    });
+
+    it("pins bootstrap argument vectors, including tsx", () => {
+      for (const argv of [
+        ["--import", "tsx", "src/cli/bootstrap.ts", "backup", "create"],
+        ["/abs/dist/cli/bootstrap.js", "backup", "create"],
+      ]) {
+        const out = withLocalBaseUrlArgs(argv, undefined, "http://localhost:1");
+        expect(out).toContain("--base-url");
+        expect(out[out.indexOf("--base-url") + 1]).toBe("http://localhost:1");
+        expect(() =>
+          withLocalBaseUrlArgs(
+            [...argv, "--base-url", FAKE_REMOTE],
+            undefined,
+            "http://localhost:1"
+          )
+        ).toThrow(NonLocalCliTargetError);
+      }
+    });
+
+    it("recognises a Windows-style path and still refuses a non-local target", () => {
+      const win = String.raw`node dist\cli\index.js --base-url ${FAKE_REMOTE} store`;
+      expect(() => withLocalBaseUrl(win, undefined, "http://localhost:1")).toThrow(
+        NonLocalCliTargetError
+      );
+      expect(
+        withLocalBaseUrl(String.raw`node dist\cli\index.js store`, undefined, "http://localhost:1")
+      ).toContain("--base-url 'http://localhost:1'");
+      expect(
+        withLocalBaseUrlArgs(
+          [String.raw`C:\repo\dist\cli\bootstrap.js`, "stats"],
+          undefined,
+          "http://localhost:1"
+        )
+      ).toContain("--base-url");
+    });
+
+    it("refuses a string (or vector) that starts the CLI more than once, before spawning", async () => {
+      await expect(
+        execAsync(`${CLI} store --json && ${CLI} entities list --json`)
+      ).rejects.toBeInstanceOf(AmbiguousCliInvocationError);
+      expect(() => execSyncLocal(`${CLI} stats; node dist/cli/bootstrap.js stats`)).toThrow(
+        AmbiguousCliInvocationError
+      );
+      expect(() =>
+        withLocalBaseUrlArgs(
+          ["dist/cli/index.js", "stats", "dist/cli/bootstrap.js"],
+          undefined,
+          "http://localhost:1"
+        )
+      ).toThrow(AmbiguousCliInvocationError);
+      expect(spawned).toEqual([]);
+    });
+
+    it("ignores a --base-url inside a quoted payload when deciding if the command is pinned", () => {
+      const pinned = withLocalBaseUrl(
+        `${CLI} store --entities '[{"note":"--base-url ${FAKE_REMOTE}"}]'`,
+        undefined,
+        "http://localhost:1"
+      );
+      expect(pinned).toContain(`${CLI} --base-url 'http://localhost:1' store`);
+      // ...but a real flag after a quoted payload that mentions one is still checked.
+      expect(() =>
+        withLocalBaseUrl(
+          `${CLI} store --entities '[{"note":"--base-url http://localhost:9"}]' --base-url ${FAKE_REMOTE}`,
+          undefined,
+          "http://localhost:1"
+        )
+      ).toThrow(NonLocalCliTargetError);
+      // A quoted VALUE of a real flag is still read.
+      expect(() =>
+        withLocalBaseUrl(
+          `${CLI} store --base-url "${FAKE_REMOTE}"`,
+          undefined,
+          "http://localhost:1"
+        )
+      ).toThrow(NonLocalCliTargetError);
+    });
+
+    it("the refusal message lists the same hosts as isLocalBaseUrl and gives the remote-check hint", () => {
+      for (const local of ["localhost", "127.0.0.1", "::1", "0.0.0.0"]) {
+        expect(isLocalBaseUrl(`http://${local === "::1" ? "[::1]" : local}:1`)).toBe(true);
+      }
+      try {
+        assertLocalBaseUrl(FAKE_REMOTE, "NEOTOMA_BASE_URL");
+        throw new Error("expected refusal");
+      } catch (err) {
+        const msg = String((err as Error).message);
+        for (const host of ["localhost", "127.0.0.1", "::1", "0.0.0.0"])
+          expect(msg).toContain(host);
+        expect(msg).toMatch(
+          /for a deliberate remote check, run the CLI directly outside the test suite/i
+        );
+      }
     });
   });
 
