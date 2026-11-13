@@ -34,6 +34,8 @@ vi.mock("../db.js", () => {
             });
           },
           eq: (_col: string, _val: unknown) => ({
+            // Entity lookups made for the issue-submitter rule find nothing.
+            single: async () => ({ data: null, error: null }),
             order: (_col2: string, _opts: unknown) => {
               return Promise.resolve({
                 data: rowsForTable(table).filter(

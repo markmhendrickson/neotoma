@@ -110,14 +110,51 @@ export async function generateGuestAccessToken(params: {
   return token;
 }
 
+/** Stable code and neutral text for every refusal of a presented guest token. */
+export const GUEST_TOKEN_INVALID_CODE = "GUEST_TOKEN_INVALID";
+export const GUEST_TOKEN_INVALID_MESSAGE =
+  "This link is not valid or has expired. Ask the sender for a new link.";
+export const GUEST_TOKEN_SCOPE_CODE = "GUEST_TOKEN_SCOPE";
+export const GUEST_TOKEN_SCOPE_MESSAGE = "This link does not grant access to the requested item.";
+
+/** A presented guest token is unknown, malformed, expired or revoked (HTTP 401). */
+export class GuestTokenInvalidError extends Error {
+  readonly code = GUEST_TOKEN_INVALID_CODE;
+  readonly statusCode = 401;
+  constructor() {
+    super(GUEST_TOKEN_INVALID_MESSAGE);
+    this.name = "GuestTokenInvalidError";
+  }
+}
+
+/** A valid guest token was presented for an item it does not name (HTTP 403). */
+export class GuestTokenScopeError extends Error {
+  readonly code = GUEST_TOKEN_SCOPE_CODE;
+  readonly statusCode = 403;
+  constructor() {
+    super(GUEST_TOKEN_SCOPE_MESSAGE);
+    this.name = "GuestTokenScopeError";
+  }
+}
+
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "" && value !== false;
+}
+
 /**
  * Validate a guest access token and return the entity IDs it covers.
- * Returns null if the token is invalid, expired, revoked, or not found.
+ * Returns null if the token is unknown, malformed, expired or revoked.
  *
- * Lifetime is bounded twice: by the TTL stored on the token and by the
- * currently configured TTL, measured from the earliest recorded creation time
- * for the token. A later observation can therefore neither lift a revocation
- * nor extend the lifetime.
+ * The token's state is the fold of EVERY observation recorded on its entity,
+ * including partial records written by corrections that carry only the
+ * changed field. Records naming a different token hash are ignored. The fold
+ * can only narrow a token, never widen it:
+ *   - any `revoked_at` on any record revokes;
+ *   - the lifetime is the smallest `ttl_seconds` present and the configured
+ *     lifetime, counted from the earliest `created_at` present;
+ *   - the covered entities are the intersection of every `entity_ids` present;
+ *   - differing `thumbprint` values refuse the token.
+ * A record whose fields cannot be read refuses the token.
  */
 export async function validateGuestAccessToken(token: string): Promise<GuestAccessToken | null> {
   const tokenHash = hashGuestAccessToken(token);
@@ -131,39 +168,54 @@ export async function validateGuestAccessToken(token: string): Promise<GuestAcce
 
   if (!observations || observations.length === 0) return null;
 
-  const matching: Record<string, unknown>[] = [];
+  const rows: Record<string, unknown>[] = [];
   for (const obs of observations) {
     const payload = parseObservationPayload(obs);
-    if (payload?.token_hash === tokenHash) matching.push(payload);
+    if (!payload) return null; // unreadable record: fail closed
+    if (isSet(payload.token_hash) && payload.token_hash !== tokenHash) continue;
+    rows.push(payload);
   }
-  if (matching.length === 0) return null;
+  // At least one record must positively carry this token's hash.
+  if (!rows.some((payload) => payload.token_hash === tokenHash)) return null;
 
-  // Any revocation record revokes the token.
-  for (const payload of matching) {
-    if (typeof payload.revoked_at === "string" && payload.revoked_at) return null;
-  }
-
-  const configuredTtl = getGuestTokenTtlSeconds();
   let createdAtMs = Number.POSITIVE_INFINITY;
-  let ttlSeconds = configuredTtl;
-  for (const payload of matching) {
-    const ms = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
-    if (!Number.isFinite(ms)) return null;
-    createdAtMs = Math.min(createdAtMs, ms);
-    if (typeof payload.ttl_seconds === "number" && Number.isFinite(payload.ttl_seconds)) {
+  let ttlSeconds = getGuestTokenTtlSeconds();
+  let entityIds = null as Set<string> | null;
+  const thumbprints = new Set<string>();
+
+  for (const payload of rows) {
+    if (isSet(payload.revoked_at)) return null;
+
+    if (isSet(payload.created_at)) {
+      const ms = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
+      if (Number.isFinite(ms)) createdAtMs = Math.min(createdAtMs, ms);
+    }
+    if (payload.ttl_seconds !== undefined && payload.ttl_seconds !== null) {
+      if (typeof payload.ttl_seconds !== "number" || !Number.isFinite(payload.ttl_seconds)) {
+        return null;
+      }
       ttlSeconds = Math.min(ttlSeconds, payload.ttl_seconds);
     }
+    if (payload.entity_ids !== undefined && payload.entity_ids !== null) {
+      if (!Array.isArray(payload.entity_ids)) return null;
+      const ids = payload.entity_ids.filter((id): id is string => typeof id === "string");
+      const previous: string[] | null = entityIds === null ? null : Array.from(entityIds);
+      entityIds = new Set(previous === null ? ids : previous.filter((id) => ids.includes(id)));
+    }
+    if (isSet(payload.thumbprint) && typeof payload.thumbprint === "string") {
+      thumbprints.add(payload.thumbprint);
+    }
   }
+
+  if (!Number.isFinite(createdAtMs)) return null;
   if (!(ttlSeconds > 0)) return null;
   if (Date.now() > createdAtMs + ttlSeconds * 1000) return null;
+  if (thumbprints.size > 1) return null;
 
-  const latest = matching[0];
   return {
     token,
-    entity_ids: Array.isArray(latest.entity_ids)
-      ? latest.entity_ids.filter((id): id is string => typeof id === "string")
-      : [],
-    thumbprint: typeof latest.thumbprint === "string" ? latest.thumbprint : undefined,
+    entity_ids: entityIds ? Array.from(entityIds) : [],
+    thumbprint: thumbprints.size === 1 ? Array.from(thumbprints)[0] : undefined,
     created_at: new Date(createdAtMs).toISOString(),
     ttl_seconds: ttlSeconds,
     revoked_at: null,
@@ -177,18 +229,62 @@ export type GuestTokenEntityCheck =
 
 /**
  * The single check applied wherever a guest access token is presented for an
- * entity: the token must exist, be unexpired and unrevoked, and name exactly
- * this entity. Every guest-readable route resolves its token through here.
+ * entity. The token must exist, be unexpired and unrevoked (see
+ * `validateGuestAccessToken`), and cover exactly this entity: either by naming
+ * it, or, for an issue, as the submitter's token. The submitter rule is that
+ * the token hash is recorded on one of the issue owner's own records, or the
+ * token names a conversation the issue refers to.
+ *
+ * Every guest-readable route resolves its token through here.
  */
 export async function checkGuestTokenForEntity(
   token: string,
-  entityId: string
+  entityId: string,
+  entity?: { entity_type: string; user_id: string } | null
 ): Promise<GuestTokenEntityCheck> {
   const grant = await validateGuestAccessToken(token);
   if (!grant) return { state: "invalid" };
-  return grant.entity_ids.includes(entityId)
-    ? { state: "granted", grant }
-    : { state: "other_entity", grant };
+  if (grant.entity_ids.includes(entityId)) return { state: "granted", grant };
+
+  const resolved =
+    entity ??
+    ((await db.from("entities").select("entity_type, user_id").eq("id", entityId).single())
+      .data as { entity_type: string; user_id: string } | null);
+  if (resolved && resolved.entity_type === "issue") {
+    if (await issueRecordsToken(token, entityId, resolved.user_id, grant)) {
+      return { state: "granted", grant };
+    }
+  }
+  return { state: "other_entity", grant };
+}
+
+async function issueRecordsToken(
+  token: string,
+  issueId: string,
+  ownerId: string,
+  grant: GuestAccessToken
+): Promise<boolean> {
+  const tokenHash = hashGuestAccessToken(token);
+  const { data: issueObservations } = await db
+    .from("observations")
+    .select("fields")
+    .eq("entity_id", issueId)
+    .eq("user_id", ownerId);
+  for (const observation of issueObservations ?? []) {
+    const fields = parseObservationPayload(observation as { fields?: unknown });
+    if (fields?.guest_access_token_hash === tokenHash) return true;
+  }
+  const { data: relationships } = await db
+    .from("relationship_snapshots")
+    .select("target_entity_id")
+    .eq("source_entity_id", issueId)
+    .eq("relationship_type", "REFERS_TO")
+    .eq("user_id", ownerId);
+  for (const relationship of relationships ?? []) {
+    const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
+    if (conversationId && grant.entity_ids.includes(conversationId)) return true;
+  }
+  return false;
 }
 
 /**

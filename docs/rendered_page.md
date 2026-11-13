@@ -78,6 +78,15 @@ Notes:
 - Guest tokens are stored **hash-only** (SHA-256) at rest; the raw token cannot be recovered, so each call mints a fresh token rather than re-returning a prior one.
 - Token lifetime is bounded by `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` (default 30 days).
 
+### Link lifetime and renewal
+
+- A link works for the shorter of its stored lifetime and the currently configured `NEOTOMA_GUEST_TOKEN_TTL_SECONDS`, counted from when it was minted. The default is 30 days.
+- Raising the setting does not extend links that were minted with a shorter lifetime; lowering it shortens links that already exist.
+- A link covers only the page it was minted for. Revoking it, or narrowing or shortening it with a correction, takes effect on the next request; records added later can only narrow a link, never extend it.
+- To renew, call `publish_rendered_page` again for the page. It mints a fresh link; the old one expires on its own schedule.
+- A request that also carries a signed agent identity is judged by that identity's own grant. A guest token presented alongside it is never treated as a grant for another page.
+- A refused link returns `401` with code `GUEST_TOKEN_INVALID` when it is unknown, expired or revoked, and `403` with code `GUEST_TOKEN_SCOPE` when it does not cover the requested item.
+
 ## Example
 
 ```jsonc
