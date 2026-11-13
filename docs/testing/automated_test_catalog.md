@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **833**
-- Backend and repo Vitest files: **779**
+- Total automated test files: **834**
+- Backend and repo Vitest files: **780**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 

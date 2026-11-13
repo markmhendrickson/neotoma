@@ -1550,7 +1550,7 @@ export function buildToolDefinitions(
       name: "publish_rendered_page",
       description: desc(
         "publish_rendered_page",
-        "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, OR inline { title, html_body, custom_css } to create one first. Mints a guest_access_token scoped to that page and returns the absolute `…/entities/<id>/html?access_token=<token>` URL plus ttl_seconds — the link works for non-authenticated viewers. html_body is injected verbatim into a server template; do NOT include <html>/<head>/<body> wrappers. Note: each call mints a fresh token (raw tokens are not stored, only hashed), so repeated calls return new working URLs rather than a single stable one."
+        "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, OR inline { title, html_body, custom_css } to create one first. Mints a guest_access_token scoped to that page and returns the absolute `…/entities/<id>/html?access_token=<token>` URL plus ttl_seconds — the link works for non-authenticated viewers. html_body is injected verbatim into a server template; do NOT include <html>/<head>/<body> wrappers. Note: each call mints a fresh token (raw tokens are not stored, only hashed), so repeated calls return new working URLs rather than a single stable one. A link opens only that page and lasts the shorter of its stored lifetime and NEOTOMA_GUEST_TOKEN_TTL_SECONDS (default 30 days); if a link returns 401 GUEST_TOKEN_INVALID, call publish_rendered_page again for a fresh link."
       ),
       inputSchema: {
         type: "object",

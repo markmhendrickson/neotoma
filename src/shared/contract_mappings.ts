@@ -275,6 +275,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "entities get",
   },
   {
+    operationId: "getEntityHtml",
+    method: "get",
+    path: "/entities/{id}/html",
+    adapter: "cli",
+    cliCommand: "request --operation getEntityHtml",
+  },
+  {
     operationId: "getEntityObservations",
     method: "get",
     path: "/entities/{id}/observations",

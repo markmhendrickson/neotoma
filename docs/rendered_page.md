@@ -85,7 +85,8 @@ Notes:
 - A link covers only the page it was minted for. Revoking it, or narrowing or shortening it with a correction, takes effect on the next request; records added later can only narrow a link, never extend it.
 - To renew, call `publish_rendered_page` again for the page. It mints a fresh link; the old one expires on its own schedule.
 - A request that also carries a signed agent identity is judged by that identity's own grant. A guest token presented alongside it is never treated as a grant for another page.
-- A refused link returns `401` with code `GUEST_TOKEN_INVALID` when it is unknown, expired or revoked, and `403` with code `GUEST_TOKEN_SCOPE` when it does not cover the requested item.
+- Deleting a link's token record refuses the link, and restoring the record does not lift that. A token record that was merged, or that took part in a merge or split, refuses the link rather than combining records. Like every later record, these can only narrow a link.
+- A refused link returns `401` with code `GUEST_TOKEN_INVALID` when it is unknown, malformed or unreadable, expired, revoked or deleted, or when it is sent to a route that does not accept links (for example `/entities/:id/markdown`). It returns `403` with code `GUEST_TOKEN_SCOPE` when it is valid but does not cover the requested item. If the token records cannot be read from storage the response is a `5xx`, never a grant.
 
 ## Example
 

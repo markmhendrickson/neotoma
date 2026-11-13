@@ -22,6 +22,37 @@ components:
         - MCP OAuth JWT (recommended for CLI and web clients)
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
+  responses:
+    GuestTokenInvalid:
+      description: >
+        A guest link was presented and is not valid: unknown, malformed, expired,
+        revoked, deleted, or sent to a route that does not accept links. The cause
+        is not reported. The holder needs a new link; for a rendered page, call
+        `publish_rendered_page` again.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ErrorEnvelope"
+              - type: object
+                properties:
+                  error_code:
+                    type: string
+                    enum: [GUEST_TOKEN_INVALID]
+    GuestTokenScope:
+      description: >
+        A valid guest link was presented for an item it does not cover. The holder
+        needs a link for that item.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ErrorEnvelope"
+              - type: object
+                properties:
+                  error_code:
+                    type: string
+                    enum: [GUEST_TOKEN_SCOPE]
   schemas:
     ExactIdentityRead:
       type: object
@@ -4916,6 +4947,47 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
+
+  /entities/{id}/html:
+    get:
+      summary: Render a rendered_page entity as HTML
+      description: >
+        Serves a `rendered_page` entity as a standalone HTML page. Authenticated
+        users read their own pages. A guest link (`access_token` query parameter
+        or `Authorization: Bearer`) opens only the page it was minted for, while
+        it is unexpired and unrevoked. A link lasts the shorter of its stored
+        lifetime and `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` (default 30 days); call
+        `publish_rendered_page` again for a fresh link.
+      operationId: getEntityHtml
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: access_token
+          required: false
+          description: Guest link token for this page.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Rendered page
+          content:
+            text/html:
+              schema: { type: string }
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
+        "404":
+          description: Entity not found or not a rendered_page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /entities/{id}/observations:
     get:
@@ -4938,6 +5010,10 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Observation"
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
 
   /entities/{id}/relationships:
     get:
@@ -4998,6 +5074,10 @@ paths:
                         entity_type_label:
                           type: string
                           nullable: true
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
 
   /entities/duplicates:
     get:
@@ -7684,9 +7764,12 @@ paths:
             `store` capability for `issue`, `conversation` and `conversation_message`,
             or no `create_relationship` capability for `REFERS_TO` from `issue` to a
             linked entity's type. Checked before any write; nothing was written.
+            Also `GUEST_TOKEN_SCOPE` when a valid guest token does not cover the requested item.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
 
   /issues/submit:
     post:
@@ -7866,6 +7949,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
 
   /issues/status:
     post:
@@ -7906,6 +7991,10 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
+        "401":
+          $ref: "#/components/responses/GuestTokenInvalid"
 
   /issues/sync:
     post:
@@ -9845,16 +9934,13 @@ paths:
                   webhook_secret:
                     type: string
         "401":
-          description: Guest credential is missing, invalid, expired, or revoked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+          $ref: "#/components/responses/GuestTokenInvalid"
         "403":
           description: |
             Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
             Also `capability_denied` when the admitted agent's grant has no `store`
             capability for `subscription`; nothing was written.
+            Also `GUEST_TOKEN_SCOPE` when a valid guest token does not cover the requested item.
           content:
             application/json:
               schema:
@@ -9889,16 +9975,13 @@ paths:
                 type: object
                 additionalProperties: true
         "401":
-          description: Guest credential is missing, invalid, expired, or revoked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+          $ref: "#/components/responses/GuestTokenInvalid"
         "403":
           description: |
             Subscription is not wholly inside the guest entity grant
             Also `capability_denied` when the admitted agent's grant has no `correct`
             capability for `subscription`; nothing was written.
+            Also `GUEST_TOKEN_SCOPE` when a valid guest token does not cover the requested item.
           content:
             application/json:
               schema:
@@ -9928,11 +10011,9 @@ paths:
                 type: object
                 additionalProperties: true
         "401":
-          description: Guest credential is missing, invalid, expired, or revoked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+          $ref: "#/components/responses/GuestTokenInvalid"
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
 
   /get_subscription_status:
     post:
@@ -9963,11 +10044,9 @@ paths:
                 type: object
                 additionalProperties: true
         "401":
-          description: Guest credential is missing, invalid, expired, or revoked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+          $ref: "#/components/responses/GuestTokenInvalid"
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
 
   /events/stream:
     get:
@@ -9993,17 +10072,15 @@ paths:
               schema:
                 type: string
         "401":
-          description: Guest credential is missing, invalid, expired, or revoked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+          $ref: "#/components/responses/GuestTokenInvalid"
         "404":
-          description: Subscription does not exist or is outside the guest entity grant
+          description: Subscription does not exist
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          $ref: "#/components/responses/GuestTokenScope"
 
   /peers:
     get:

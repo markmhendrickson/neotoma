@@ -7,14 +7,19 @@
  */
 import { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { app, resolveGuestUserId } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { createCorrection } from "../../src/services/correction.js";
+import { softDeleteEntity, restoreEntity } from "../../src/services/deletion.js";
+import { mergeEntities } from "../../src/services/entity_merge.js";
+import { splitEntity } from "../../src/services/entity_split.js";
 import {
   GUEST_TOKEN_INVALID_CODE,
   GUEST_TOKEN_INVALID_MESSAGE,
+  GUEST_TOKEN_SCOPE_CODE,
+  GUEST_TOKEN_SCOPE_MESSAGE,
   GuestTokenInvalidError,
   generateGuestAccessToken,
   hashGuestAccessToken,
@@ -153,6 +158,33 @@ function expectInvalidTokenBody(body: string): void {
   expect(parsed.message).toBe(GUEST_TOKEN_INVALID_MESSAGE);
 }
 
+function expectScopeBody(body: string): void {
+  const parsed = JSON.parse(body) as { error_code?: string; message?: string };
+  expect(parsed.error_code).toBe(GUEST_TOKEN_SCOPE_CODE);
+  expect(parsed.message).toBe(GUEST_TOKEN_SCOPE_MESSAGE);
+}
+
+/**
+ * An accepted issue request got past the access check into the route's own
+ * logic: status returns the issue; add_message reaches the thread step (this
+ * fixture has no thread, so it reports that rather than an access refusal).
+ */
+function expectIssueRouteReached(
+  route: string,
+  res: { status: number; body: string },
+  marker: string
+): void {
+  expect([401, 403]).not.toContain(res.status);
+  if (route === "status") {
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({ title: marker });
+  } else {
+    expect(res.body).toContain("Issue conversation relationship is missing");
+    expect(res.body).not.toContain(GUEST_TOKEN_SCOPE_CODE);
+    expect(res.body).not.toContain(GUEST_TOKEN_INVALID_CODE);
+  }
+}
+
 async function post(path: string, payload: unknown): Promise<{ status: number; body: string }> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
@@ -213,6 +245,7 @@ describe.each(POLICIES)("guest token entity binding under policy %s", (policy) =
       const res = await get(path, token);
       expect(res.status, `${policy} ${path}`).toBe(403);
       expect(res.body).not.toContain(`B-CONTENT-${policy}`);
+      expectScopeBody(res.body);
     }
     // The markdown route does not accept guest tokens at all.
     const md = await get(`/entities/${b}/markdown`, token);
@@ -222,6 +255,7 @@ describe.each(POLICIES)("guest token entity binding under policy %s", (policy) =
     // An unknown item gets the same answer as an item the token does not name.
     const unknown = await get(`/entities/ent_missing_${randomUUID().slice(0, 8)}/html`, token);
     expect(unknown.status).toBe(403);
+    expectScopeBody(unknown.body);
   });
 
   it("guest token reads on its own entity follow the type policy for non-share routes", async () => {
@@ -255,8 +289,10 @@ describe.each(POLICIES)("guest token entity binding under policy %s", (policy) =
     setPolicy();
     const a = await createPage("Page L", `L-CONTENT-${policy}`);
     const stale = await mintAged(a, 80 * DAY_MS, 365 * 24 * 3600);
-    for (const path of [`/entities/${a}/html`, `/entities/${a}`]) {
-      expect((await get(path, stale)).status, `${policy} ${path}`).toBe(401);
+    for (const route of READ_ROUTES) {
+      const res = await get(route(a), stale);
+      expect(res.status, `${policy} ${route(a)}`).toBe(401);
+      expectInvalidTokenBody(res.body);
     }
   });
 
@@ -264,10 +300,11 @@ describe.each(POLICIES)("guest token entity binding under policy %s", (policy) =
     setPolicy();
     const a = await createPage("Page R", `R-CONTENT-${policy}`);
     const revoked = await mintAged(a, DAY_MS, 30 * 24 * 3600, new Date().toISOString());
-    for (const path of [`/entities/${a}/html`, `/entities/${a}`]) {
-      const res = await get(path, revoked);
-      expect(res.status, `${policy} ${path}`).toBe(401);
+    for (const route of READ_ROUTES) {
+      const res = await get(route(a), revoked);
+      expect(res.status, `${policy} ${route(a)}`).toBe(401);
       expect(res.body).not.toContain("CONTENT");
+      expectInvalidTokenBody(res.body);
     }
   });
 
@@ -422,6 +459,7 @@ describe.each(POLICIES)(
         observed_at: now,
         source_priority: 0,
       });
+      await recomputeSnapshot(id, OWNER);
       entityIds.push(id);
       return id;
     }
@@ -461,7 +499,7 @@ describe.each(POLICIES)(
             guest_access_token: ownToken,
           });
           if (readsAllowed) {
-            expect([401, 403], `own ${policy}`).not.toContain(own.status);
+            expectIssueRouteReached(route.name, own, marker);
           } else {
             expect(own.status, `own ${policy}`).toBe(403);
             expect(own.body).not.toContain(marker);
@@ -477,7 +515,7 @@ describe.each(POLICIES)(
             guest_access_token: convToken,
           });
           if (readsAllowed) {
-            expect([401, 403], `conversation ${policy}`).not.toContain(viaConversation.status);
+            expectIssueRouteReached(route.name, viaConversation, `${marker}-conv`);
           } else {
             expect(viaConversation.status).toBe(403);
           }
@@ -565,6 +603,327 @@ describe("guest token owner resolution", () => {
         expectInvalidTokenBody(res.body);
       }
     }
+  });
+});
+
+describe.each(POLICIES)("deleted guest token records under policy %s", (policy) => {
+  const setPolicy = () => {
+    process.env[POLICY_ENV] = policy;
+  };
+
+  it("a deleted token entity refuses the token, and a restore does not lift it", async () => {
+    setPolicy();
+    const a = await createPage("Page D", `D-CONTENT-${policy}`);
+    const token = await mint(a);
+    expect((await get(`/entities/${a}/html`, token)).status).toBe(200);
+
+    const deleted = await softDeleteEntity(tokenEntityOf(token), "guest_access_token", OWNER);
+    expect(deleted.success, JSON.stringify(deleted)).toBe(true);
+    for (const route of READ_ROUTES) {
+      const res = await get(route(a), token);
+      expect(res.status, `${policy} deleted ${route(a)}`).toBe(401);
+      expect(res.body).not.toContain("CONTENT");
+      expectInvalidTokenBody(res.body);
+    }
+
+    const restored = await restoreEntity(tokenEntityOf(token), "guest_access_token", OWNER);
+    expect(restored.success, JSON.stringify(restored)).toBe(true);
+    for (const route of READ_ROUTES) {
+      const res = await get(route(a), token);
+      expect(res.status, `${policy} restored ${route(a)}`).toBe(401);
+      expectInvalidTokenBody(res.body);
+    }
+  });
+});
+
+describe("guest token records moved between entities", () => {
+  async function plainEntity(label: string): Promise<string> {
+    const id = `ent_plain_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    const now = new Date().toISOString();
+    await db.from("entities").insert({
+      id,
+      entity_type: "note",
+      canonical_name: `${label}-${id}`,
+      user_id: OWNER,
+      created_at: now,
+      updated_at: now,
+    });
+    await db.from("observations").insert({
+      id: randomUUID(),
+      entity_id: id,
+      entity_type: "note",
+      user_id: OWNER,
+      fields: { title: label },
+      observed_at: now,
+      source_priority: 0,
+    });
+    entityIds.push(id);
+    return id;
+  }
+
+  it("a token entity merged into another entity refuses the token", async () => {
+    const a = await createPage("Page MG1", "MG1");
+    const token = await mint(a);
+    const other = await plainEntity("merge target");
+    expect((await get(`/entities/${a}/html`, token)).status).toBe(200);
+    await mergeEntities({
+      fromEntityId: tokenEntityOf(token),
+      toEntityId: other,
+      userId: OWNER,
+      mergedBy: "test",
+    });
+    for (const route of READ_ROUTES) {
+      expect((await get(route(a), token)).status, route(a)).toBe(401);
+    }
+    expect(await validateGuestAccessToken(token)).toBeNull();
+  });
+
+  it("an entity merged into a token entity refuses the token", async () => {
+    const a = await createPage("Page MG2", "MG2");
+    const token = await mint(a);
+    const other = await plainEntity("merge source");
+    await mergeEntities({
+      fromEntityId: other,
+      toEntityId: tokenEntityOf(token),
+      userId: OWNER,
+      mergedBy: "test",
+    });
+    for (const route of READ_ROUTES) {
+      expect((await get(route(a), token)).status, route(a)).toBe(401);
+    }
+  });
+
+  it("a split of a token entity refuses the token", async () => {
+    const a = await createPage("Page SP", "SP");
+    const token = await mint(a);
+    const revokedAt = new Date().toISOString();
+    await correctToken(token, "revoked_at", revokedAt);
+    expect(await validateGuestAccessToken(token)).toBeNull();
+    await splitEntity({
+      sourceEntityId: tokenEntityOf(token),
+      userId: OWNER,
+      predicate: { observation_field_equals: { field: "revoked_at", value: revokedAt } },
+      newEntity: {
+        entity_type: "guest_access_token",
+        canonical_name: `split-${randomUUID()}`,
+      },
+      idempotencyKey: `split-${randomUUID()}`,
+      splitBy: "test",
+    });
+    tokenEntityIds.push(tokenEntityOf(token));
+    for (const route of READ_ROUTES) {
+      expect((await get(route(a), token)).status, route(a)).toBe(401);
+    }
+    expect(await validateGuestAccessToken(token)).toBeNull();
+  });
+});
+
+describe("guest token record handling", () => {
+  it("a record with an unparseable creation time refuses the token", async () => {
+    const a = await createPage("Page UC", "UC");
+    const token = await mint(a);
+    expect(await validateGuestAccessToken(token)).not.toBeNull();
+    await correctToken(token, "created_at", "not-a-date");
+    expect(await validateGuestAccessToken(token)).toBeNull();
+    expect((await get(`/entities/${a}/html`, token)).status).toBe(401);
+  });
+
+  it("a storage error while reading token records is a server error, never a grant", async () => {
+    const a = await createPage("Page SE", "SE-CONTENT");
+    const token = await mint(a);
+    const realFrom = db.from.bind(db);
+    const spy = vi.spyOn(db, "from").mockImplementation(((table: string) => {
+      const real = realFrom(table);
+      if (table !== "observations") return real;
+      return new Proxy(real, {
+        get(target, prop, receiver) {
+          if (prop !== "select") return Reflect.get(target, prop, receiver);
+          return (...args: unknown[]) => {
+            const query = (target as any).select(...args);
+            return new Proxy(query, {
+              get(queryTarget, queryProp, queryReceiver) {
+                if (queryProp !== "eq") return Reflect.get(queryTarget, queryProp, queryReceiver);
+                return (column: string, value: unknown) =>
+                  column === "entity_id" && String(value).startsWith("guest_token_")
+                    ? { order: async () => ({ data: null, error: { message: "read failure" } }) }
+                    : (queryTarget as any).eq(column, value);
+              },
+            });
+          };
+        },
+      });
+    }) as typeof db.from);
+    try {
+      await expect(validateGuestAccessToken(token)).rejects.toThrow(/could not be read/);
+      for (const route of READ_ROUTES) {
+        const res = await get(route(a), token);
+        expect(res.status, route(a)).toBeGreaterThanOrEqual(500);
+        expect(res.body).not.toContain("SE-CONTENT");
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a guest token sent as a bearer credential gets the same answers", async () => {
+    const a = await createPage("Page BR", "BR-CONTENT");
+    const b = await createPage("Page BR2", "BR2-CONTENT");
+    const valid = await mint(a);
+    const expired = await mintAged(a, 365 * DAY_MS, 3600);
+    const bearer = async (path: string, token: string) => {
+      const response = await fetch(`${baseUrl}${path}`, {
+        headers: { Authorization: `Bearer ${token}`, "x-forwarded-for": "203.0.113.9" },
+      });
+      return { status: response.status, body: await response.text() };
+    };
+    const ok = await bearer(`/entities/${a}/html`, valid);
+    expect(ok.status).toBe(200);
+    for (const route of READ_ROUTES) {
+      const refused = await bearer(route(a), expired);
+      expect(refused.status, route(a)).toBe(401);
+      expectInvalidTokenBody(refused.body);
+    }
+    const other = await bearer(`/entities/${b}/html`, valid);
+    expect(other.status).toBe(403);
+    expectScopeBody(other.body);
+  });
+});
+
+describe("issue submitter rule", () => {
+  const ISSUE_ENV = "NEOTOMA_ACCESS_POLICY_ISSUE";
+
+  async function issueWithRecordedHash(token: string, recordedUserId: string): Promise<string> {
+    const id = `ent_issue_h_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    const now = new Date().toISOString();
+    await db.from("entities").insert({
+      id,
+      entity_type: "issue",
+      canonical_name: `hash-issue-${id}`,
+      user_id: OWNER,
+      created_at: now,
+      updated_at: now,
+    });
+    await db.from("observations").insert({
+      id: randomUUID(),
+      entity_id: id,
+      entity_type: "issue",
+      user_id: OWNER,
+      fields: { title: "HASH-ISSUE-CONTENT" },
+      observed_at: now,
+      source_priority: 0,
+    });
+    await db.from("observations").insert({
+      id: randomUUID(),
+      entity_id: id,
+      entity_type: "issue",
+      user_id: recordedUserId,
+      fields: { guest_access_token_hash: hashGuestAccessToken(token) },
+      observed_at: now,
+      source_priority: 0,
+    });
+    await recomputeSnapshot(id, OWNER);
+    entityIds.push(id);
+    return id;
+  }
+
+  it("a token whose hash is recorded on the issue owner's records is accepted under submitter_scoped", async () => {
+    process.env[ISSUE_ENV] = "submitter_scoped";
+    try {
+      const unrelated = await createPage("Page IH", "IH");
+      const token = await mint(unrelated);
+      const issue = await issueWithRecordedHash(token, OWNER);
+      const res = await post("/issues/status", { entity_id: issue, guest_access_token: token });
+      expect(res.status, res.body).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({ title: "HASH-ISSUE-CONTENT" });
+    } finally {
+      delete process.env[ISSUE_ENV];
+    }
+  });
+
+  it("a hash recorded under a different user does not count", async () => {
+    process.env[ISSUE_ENV] = "submitter_scoped";
+    try {
+      const unrelated = await createPage("Page IH2", "IH2");
+      const token = await mint(unrelated);
+      const issue = await issueWithRecordedHash(token, "00000000-0000-0000-0000-000000000099");
+      const res = await post("/issues/status", { entity_id: issue, guest_access_token: token });
+      expect(res.status).toBe(403);
+      expect(res.body).not.toContain("HASH-ISSUE-CONTENT");
+    } finally {
+      delete process.env[ISSUE_ENV];
+    }
+  });
+});
+
+describe("guest subscription and event routes", () => {
+  async function jsonPost(path: string, token: string, body: Record<string, unknown>) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "x-forwarded-for": "203.0.113.9",
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: await response.text() };
+  }
+
+  const subscriptionRoutes = (subscriptionId: string, entityId: string) => [
+    { path: "/subscribe", body: { entity_ids: [entityId], delivery_method: "sse" } },
+    { path: "/unsubscribe", body: { subscription_id: subscriptionId } },
+    { path: "/list_subscriptions", body: {} },
+    { path: "/get_subscription_status", body: { subscription_id: subscriptionId } },
+  ];
+
+  it("expired and revoked tokens get the stable 401 on every subscription and event route", async () => {
+    const a = await createPage("Page SB", "SB");
+    const expired = await mintAged(a, 365 * DAY_MS, 3600);
+    const revoked = await mintAged(a, DAY_MS, 30 * 24 * 3600, new Date().toISOString());
+    for (const token of [expired, revoked]) {
+      for (const route of subscriptionRoutes("sub-x", a)) {
+        const res = await jsonPost(route.path, token, route.body);
+        expect(res.status, route.path).toBe(401);
+        expectInvalidTokenBody(res.body);
+      }
+      const stream = await fetch(`${baseUrl}/events/stream?subscription_id=sub-x`, {
+        headers: { Authorization: `Bearer ${token}`, "x-forwarded-for": "203.0.113.9" },
+      });
+      expect(stream.status).toBe(401);
+      expectInvalidTokenBody(await stream.text());
+    }
+  });
+
+  it("a token used outside its grant gets 403 with the scope code on every route", async () => {
+    const a = await createPage("Page SB1", "SB1");
+    const b = await createPage("Page SB2", "SB2");
+    const tokenA = await mint(a);
+    const tokenB = await mint(b);
+    const created = await jsonPost("/subscribe", tokenA, {
+      entity_ids: [a],
+      delivery_method: "sse",
+    });
+    expect(created.status, created.body).toBe(200);
+    const subscriptionId = (JSON.parse(created.body) as { subscription_id: string })
+      .subscription_id;
+
+    const outOfGrant = [
+      { path: "/subscribe", body: { entity_ids: [a], delivery_method: "sse" } },
+      { path: "/unsubscribe", body: { subscription_id: subscriptionId } },
+      { path: "/get_subscription_status", body: { subscription_id: subscriptionId } },
+    ];
+    for (const route of outOfGrant) {
+      const res = await jsonPost(route.path, tokenB, route.body);
+      expect(res.status, route.path).toBe(403);
+      expectScopeBody(res.body);
+    }
+    const stream = await fetch(`${baseUrl}/events/stream?subscription_id=${subscriptionId}`, {
+      headers: { Authorization: `Bearer ${tokenB}`, "x-forwarded-for": "203.0.113.9" },
+    });
+    expect(stream.status).toBe(403);
+    expectScopeBody(await stream.text());
+
+    await jsonPost("/unsubscribe", tokenA, { subscription_id: subscriptionId });
   });
 });
 

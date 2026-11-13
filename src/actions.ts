@@ -4189,14 +4189,9 @@ async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> 
     return true;
   }
 
-  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
-  if (headerAuth.startsWith("Bearer ") && guestPrincipal.accessToken) {
-    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-    if (!(await validateGuestAccessToken(guestPrincipal.accessToken))) {
-      return false;
-    }
-  }
-
+  // The presented token is validated by the route's guest resolver, which
+  // answers an invalid token with 401 GUEST_TOKEN_INVALID whether it arrived
+  // as `access_token` or as `Authorization: Bearer`.
   stampGuestPrincipal(req, guestPrincipal);
   return true;
 }
@@ -4287,7 +4282,7 @@ export async function resolveGuestUserId(
   if (principal.guestId.accessToken) {
     // A presented token must pass the shared validity check (known, unexpired,
     // unrevoked) before it maps to an owner.
-    if (!(await validateGuestToken(principal.guestId.accessToken))) {
+    if (!(await principalGuestGrant(principal))) {
       throw new GuestTokenInvalidError();
     }
     const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
@@ -4358,8 +4353,7 @@ async function resolveGuestSubscriptionScope(
   }
 
   if (principal.guestId.accessToken) {
-    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-    const tokenGrant = await validateGuestAccessToken(principal.guestId.accessToken);
+    const tokenGrant = await principalGuestGrant(principal);
     if (!tokenGrant) {
       throw new GuestTokenInvalidError();
     }
@@ -4368,9 +4362,7 @@ async function resolveGuestSubscriptionScope(
       throw new Error("Not authenticated - guest access token did not resolve an owner");
     }
     if (!tokenGrant.entity_ids.length) {
-      throw new Error(
-        "Guest access token grants no entity scope; subscription and event routes require a token minted with entity_ids"
-      );
+      throw new GuestTokenScopeError();
     }
     return { userId, entityIds: tokenGrant.entity_ids };
   }
@@ -4389,13 +4381,28 @@ async function resolveGuestSubscriptionScope(
   );
 }
 
-async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
-  const accessToken = principal.guestId.accessToken;
-  if (!accessToken) return;
+/** A principal's token is validated once per request; the result is shared. */
+const principalGrantCache = new WeakMap<
+  GuestPrincipal,
+  Promise<Awaited<ReturnType<typeof validateGuestToken>>>
+>();
 
-  const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-  const tokenGrant = await validateGuestAccessToken(accessToken);
-  if (!tokenGrant) {
+function principalGuestGrant(principal: GuestPrincipal) {
+  const accessToken = principal.guestId.accessToken;
+  if (!accessToken) return Promise.resolve(null);
+  let cached = principalGrantCache.get(principal);
+  if (!cached) {
+    cached = validateGuestToken(accessToken);
+    principalGrantCache.set(principal, cached);
+    // Do not keep a failed read: the next call reads again.
+    cached.catch(() => principalGrantCache.delete(principal));
+  }
+  return cached;
+}
+
+async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
+  if (!principal.guestId.accessToken) return;
+  if (!(await principalGuestGrant(principal))) {
     throw new GuestTokenInvalidError();
   }
 }
@@ -4436,7 +4443,14 @@ async function resolveGuestPolicyGovernedEntityAccess(
   // that covers this entity; a signed agent identity is judged separately.
   const tokenCovers =
     accessToken !== undefined &&
-    (await checkGuestTokenForEntity(accessToken, entityId, entity)).state === "granted";
+    (
+      await checkGuestTokenForEntity(
+        accessToken,
+        entityId,
+        entity,
+        await principalGuestGrant(principal)
+      )
+    ).state === "granted";
   if (tokenOnly && !tokenCovers) {
     throw new GuestTokenScopeError();
   }
@@ -4506,8 +4520,13 @@ async function resolveGuestShareLinkEntityAccess(
   if (token) {
     // Share links are granted only by a token that NAMES the entity; the
     // issue-submitter rule applies through the policy-governed resolver only.
-    const grant = await validateGuestToken(token);
-    if (grant?.entity_ids.includes(entityId)) {
+    const check = await checkGuestTokenForEntity(
+      token,
+      entityId,
+      undefined,
+      await principalGuestGrant(principal)
+    );
+    if (check.state === "granted" && check.reason === "named") {
       const { data: entity } = await db
         .from("entities")
         .select("id, entity_type, user_id, merged_to_entity_id")
@@ -13292,12 +13311,7 @@ app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
       const granted = new Set(guestScope);
       const withinScope = requested.length > 0 && requested.every((id) => granted.has(id));
       if (!withinScope) {
-        return sendError(
-          res,
-          403,
-          "FORBIDDEN",
-          "Guest access token does not grant entity_ids for this subscription"
-        );
+        throw new GuestTokenScopeError();
       }
       // Guest delivery must stay bound to the guest credential's lifetime.
       // Only SSE delivery revalidates the token on every event; webhook and
@@ -13368,12 +13382,7 @@ app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
         subscription_id: parsed.data.subscription_id,
       });
       if (!target || !subscriptionWithinGuestScope(guestScope, target.watch_entity_ids)) {
-        return sendError(
-          res,
-          403,
-          "FORBIDDEN",
-          "Guest access token does not grant access to this subscription"
-        );
+        throw new GuestTokenScopeError();
       }
     }
     // Agent grants: unsubscribing corrects the subscription (active=false).
@@ -13442,9 +13451,13 @@ app.post("/get_subscription_status", async (req, res) => {
       subscription_id: parsed.data.subscription_id,
     });
     if (
-      !row ||
-      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, row.watch_entity_ids))
+      guestScope !== null &&
+      row &&
+      !subscriptionWithinGuestScope(guestScope, row.watch_entity_ids)
     ) {
+      throw new GuestTokenScopeError();
+    }
+    if (!row) {
       return res.json({ subscription: null });
     }
     return res.json({ subscription: redactSubscriptionForClient(row) });
@@ -13596,9 +13609,13 @@ app.get("/events/stream", async (req, res) => {
 
     const sub = await getSubscriptionStatus({ userId, subscription_id });
     if (
-      !sub ||
-      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, sub.watch_entity_ids))
+      guestScope !== null &&
+      sub &&
+      !subscriptionWithinGuestScope(guestScope, sub.watch_entity_ids)
     ) {
+      throw new GuestTokenScopeError();
+    }
+    if (!sub) {
       return sendError(res, 404, "NOT_FOUND", "subscription not found");
     }
     if (!sub.active) {
@@ -13616,8 +13633,12 @@ app.get("/events/stream", async (req, res) => {
     const guestAccessToken = principal.kind === "guest" ? principal.guestId.accessToken : undefined;
     const authorize = guestAccessToken
       ? async (): Promise<boolean> => {
-          const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-          const grant = await validateGuestAccessToken(guestAccessToken);
+          let grant: Awaited<ReturnType<typeof validateGuestToken>>;
+          try {
+            grant = await validateGuestToken(guestAccessToken);
+          } catch {
+            return false; // records unreadable: stop the stream, never grant
+          }
           return (
             grant !== null &&
             grant.entity_ids.length > 0 &&

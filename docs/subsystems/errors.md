@@ -95,12 +95,16 @@ Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new fiel
 
 ### Auth Errors
 
-| Code            | Meaning                  | HTTP | Retry? |
-| --------------- | ------------------------ | ---- | ------ |
-| `AUTH_REQUIRED` | No token provided        | 401  | No     |
-| `AUTH_INVALID`  | Invalid token            | 401  | No     |
-| `AUTH_EXPIRED`  | Token expired            | 401  | No     |
-| `FORBIDDEN`     | Insufficient permissions | 403  | No     |
+| Code                  | Meaning                                                                                                                                                   | HTTP | Retry?                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------------------------------------------------- |
+| `AUTH_REQUIRED`       | No token provided                                                                                                                                         | 401  | No                                                                           |
+| `AUTH_INVALID`        | Invalid token                                                                                                                                             | 401  | No                                                                           |
+| `AUTH_EXPIRED`        | Token expired                                                                                                                                             | 401  | No                                                                           |
+| `FORBIDDEN`           | Insufficient permissions                                                                                                                                  | 403  | No                                                                           |
+| `GUEST_TOKEN_INVALID` | Guest link is unknown, malformed, expired, revoked or deleted, or was sent to a route that does not accept links. The cause is deliberately not reported. | 401  | No (get a new link; for a rendered page, call `publish_rendered_page` again) |
+| `GUEST_TOKEN_SCOPE`   | A valid guest link was presented for an item it does not cover                                                                                            | 403  | No (get a link for that item)                                                |
+
+`GUEST_TOKEN_INVALID` and `GUEST_TOKEN_SCOPE` are separate from `AUTH_INVALID`, `AUTH_EXPIRED` and `FORBIDDEN` because the person holding the link has no credential to refresh or permission to request: they need a new link from whoever shared it. The message text is the same for every cause of `GUEST_TOKEN_INVALID`.
 
 ### Database Errors
 

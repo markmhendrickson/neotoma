@@ -115,7 +115,8 @@ export const GUEST_TOKEN_INVALID_CODE = "GUEST_TOKEN_INVALID";
 export const GUEST_TOKEN_INVALID_MESSAGE =
   "This link is not valid or has expired. Ask the sender for a new link.";
 export const GUEST_TOKEN_SCOPE_CODE = "GUEST_TOKEN_SCOPE";
-export const GUEST_TOKEN_SCOPE_MESSAGE = "This link does not grant access to the requested item.";
+export const GUEST_TOKEN_SCOPE_MESSAGE =
+  "This link does not give access to this item. Ask the sender for a link to it.";
 
 /** A presented guest token is unknown, malformed, expired or revoked (HTTP 401). */
 export class GuestTokenInvalidError extends Error {
@@ -143,40 +144,49 @@ function isSet(value: unknown): boolean {
 
 /**
  * Validate a guest access token and return the entity IDs it covers.
- * Returns null if the token is unknown, malformed, expired or revoked.
+ * Returns null if the token is unknown, malformed, expired, revoked or deleted.
+ * Throws (never grants) when the token records cannot be read from storage.
  *
- * The token's state is the fold of EVERY observation recorded on its entity,
- * including partial records written by corrections that carry only the
- * changed field. Records naming a different token hash are ignored. The fold
- * can only narrow a token, never widen it:
- *   - any `revoked_at` on any record revokes;
+ * The token's state is the fold of EVERY record on its entity, including
+ * partial records written by corrections and lifecycle records. Records can
+ * only narrow a token:
+ *   - any `revoked_at` revokes;
+ *   - any `_deleted: true` record refuses the token, and a later restore
+ *     (`_deleted: false`) does not lift it;
  *   - the lifetime is the smallest `ttl_seconds` present and the configured
  *     lifetime, counted from the earliest `created_at` present;
  *   - the covered entities are the intersection of every `entity_ids` present;
- *   - differing `thumbprint` values refuse the token.
- * A record whose fields cannot be read refuses the token.
+ *   - differing `thumbprint` values refuse the token;
+ *   - a record that cannot be read, or that names a different token hash,
+ *     refuses the token;
+ *   - a token entity that was merged, or that took part in a merge or split,
+ *     refuses the token rather than combining records.
  */
 export async function validateGuestAccessToken(token: string): Promise<GuestAccessToken | null> {
   const tokenHash = hashGuestAccessToken(token);
   const tokenEntityId = deriveTokenEntityId(token);
 
-  const { data: observations } = await db
+  const { data: observations, error: observationsError } = await db
     .from("observations")
     .select("fields")
     .eq("entity_id", tokenEntityId)
     .order("observed_at", { ascending: false });
-
+  if (observationsError) {
+    throw new Error(`Guest token records could not be read: ${observationsError.message}`);
+  }
   if (!observations || observations.length === 0) return null;
 
   const rows: Record<string, unknown>[] = [];
   for (const obs of observations) {
     const payload = parseObservationPayload(obs);
     if (!payload) return null; // unreadable record: fail closed
-    if (isSet(payload.token_hash) && payload.token_hash !== tokenHash) continue;
+    if (isSet(payload.token_hash) && payload.token_hash !== tokenHash) return null;
     rows.push(payload);
   }
   // At least one record must positively carry this token's hash.
   if (!rows.some((payload) => payload.token_hash === tokenHash)) return null;
+
+  if (!(await tokenEntityIsIntact(tokenEntityId))) return null;
 
   let createdAtMs = Number.POSITIVE_INFINITY;
   let ttlSeconds = getGuestTokenTtlSeconds();
@@ -185,10 +195,12 @@ export async function validateGuestAccessToken(token: string): Promise<GuestAcce
 
   for (const payload of rows) {
     if (isSet(payload.revoked_at)) return null;
+    if (payload._deleted === true) return null;
 
     if (isSet(payload.created_at)) {
       const ms = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
-      if (Number.isFinite(ms)) createdAtMs = Math.min(createdAtMs, ms);
+      if (!Number.isFinite(ms)) return null;
+      createdAtMs = Math.min(createdAtMs, ms);
     }
     if (payload.ttl_seconds !== undefined && payload.ttl_seconds !== null) {
       if (typeof payload.ttl_seconds !== "number" || !Number.isFinite(payload.ttl_seconds)) {
@@ -222,8 +234,43 @@ export async function validateGuestAccessToken(token: string): Promise<GuestAcce
   };
 }
 
+/**
+ * The token entity must exist, must not have been merged into another entity,
+ * and must not appear in a merge or split record (which can move records
+ * between entities). Any of those refuses the token rather than combining.
+ */
+async function tokenEntityIsIntact(tokenEntityId: string): Promise<boolean> {
+  const { data: entity, error } = await db
+    .from("entities")
+    .select("id, merged_to_entity_id")
+    .eq("id", tokenEntityId)
+    .maybeSingle();
+  if (error) throw new Error(`Guest token entity could not be read: ${error.message}`);
+  if (!entity || (entity as { merged_to_entity_id?: string | null }).merged_to_entity_id) {
+    return false;
+  }
+  const lookups: Array<[string, string]> = [
+    ["entity_merges", "from_entity_id"],
+    ["entity_merges", "to_entity_id"],
+    ["entity_splits", "source_entity_id"],
+    ["entity_splits", "new_entity_id"],
+  ];
+  for (const [table, column] of lookups) {
+    const { data, error: lookupError } = await db
+      .from(table)
+      .select("id")
+      .eq(column, tokenEntityId)
+      .limit(1);
+    if (lookupError) {
+      throw new Error(`Guest token history could not be read: ${lookupError.message}`);
+    }
+    if (Array.isArray(data) && data.length > 0) return false;
+  }
+  return true;
+}
+
 export type GuestTokenEntityCheck =
-  | { state: "granted"; grant: GuestAccessToken }
+  | { state: "granted"; reason: "named" | "submitter"; grant: GuestAccessToken }
   | { state: "invalid" }
   | { state: "other_entity"; grant: GuestAccessToken };
 
@@ -231,20 +278,23 @@ export type GuestTokenEntityCheck =
  * The single check applied wherever a guest access token is presented for an
  * entity. The token must exist, be unexpired and unrevoked (see
  * `validateGuestAccessToken`), and cover exactly this entity: either by naming
- * it, or, for an issue, as the submitter's token. The submitter rule is that
- * the token hash is recorded on one of the issue owner's own records, or the
- * token names a conversation the issue refers to.
+ * it (`reason: "named"`), or, for an issue, as the submitter's token
+ * (`reason: "submitter"`). The submitter rule is that the token hash is
+ * recorded on one of the issue owner's own records, or the token names a
+ * conversation the issue refers to.
  *
+ * Pass `validated` when the token was already validated for this request.
  * Every guest-readable route resolves its token through here.
  */
 export async function checkGuestTokenForEntity(
   token: string,
   entityId: string,
-  entity?: { entity_type: string; user_id: string } | null
+  entity?: { entity_type: string; user_id: string } | null,
+  validated?: GuestAccessToken | null
 ): Promise<GuestTokenEntityCheck> {
-  const grant = await validateGuestAccessToken(token);
+  const grant = validated ?? (await validateGuestAccessToken(token));
   if (!grant) return { state: "invalid" };
-  if (grant.entity_ids.includes(entityId)) return { state: "granted", grant };
+  if (grant.entity_ids.includes(entityId)) return { state: "granted", reason: "named", grant };
 
   const resolved =
     entity ??
@@ -252,7 +302,7 @@ export async function checkGuestTokenForEntity(
       .data as { entity_type: string; user_id: string } | null);
   if (resolved && resolved.entity_type === "issue") {
     if (await issueRecordsToken(token, entityId, resolved.user_id, grant)) {
-      return { state: "granted", grant };
+      return { state: "granted", reason: "submitter", grant };
     }
   }
   return { state: "other_entity", grant };
