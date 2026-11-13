@@ -154,12 +154,19 @@ export function readQuantifier(p: string, i: number): Quant | null {
   return { min, max, end };
 }
 
-const MAX_OUTER_REPEAT_WITH_VARIABLE_INNER = 5;
+/**
+ * The most times a group whose inner part has variable length may repeat. A
+ * higher or unbounded outer count on such a group is refused at registration.
+ */
+export const MAX_OUTER_REPEAT_WITH_VARIABLE_INNER = 5;
 const MAX_GROUP_DEPTH = 20;
 
 const REMEDY = {
   backref: "Remove the backreference and match the repeated text with an explicit group instead.",
-  nested: "Use a bounded count such as {1,32} on the inner part, or remove the inner quantifier.",
+  // Every rewrite named here is accepted by the validator; a test feeds each back through it.
+  nested:
+    "Use a fixed count on the inner part (for example {3} instead of + or {1,32}), remove the inner quantifier, " +
+    `or repeat the group at most ${MAX_OUTER_REPEAT_WITH_VARIABLE_INNER} times.`,
   alternation:
     "Make the alternation branches distinct (for example by anchoring each with different leading text), or remove the repetition around them.",
   structure: "Check the pattern for unbalanced parentheses or an unfinished character class.",

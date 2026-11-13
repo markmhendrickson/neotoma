@@ -8,6 +8,7 @@ import {
   CONFORMANCE_TOTAL_BUDGET_MS,
   MATCH_TIMEOUT_MS,
   MAX_CONFORMANCE_RULES_PER_PAGE,
+  MAX_OUTER_REPEAT_WITH_VARIABLE_INNER,
   MAX_PATTERNS_PER_CONDITION,
   MAX_PATTERNS_PER_SCHEMA,
   MAX_PATTERN_LENGTH,
@@ -240,8 +241,8 @@ describe("registration limits and messages", () => {
     const nested = refusal(NESTED);
     expect(nested).toBeInstanceOf(SchemaPatternRefusalError);
     expect(nested.refusal).toBe("shape");
-    expect(nested.remedy).toMatch(/bounded count/);
-    expect(nested.message).not.toMatch(/bounded count/);
+    expect(nested.remedy).toMatch(/fixed count on the inner part/);
+    expect(nested.message).not.toMatch(/fixed count on the inner part/);
     expect(refusal("^(a)\\1$").remedy).toMatch(/backreference/);
     expect(refusal("^(a|ab)+$").remedy).toMatch(/distinct/);
   });
@@ -541,6 +542,60 @@ describe("per-request evaluation budget", () => {
     expect(v!.message).toContain("cannot be evaluated safely");
     expect(v!.message).toMatch(/Rewrite the pattern in the schema/);
     expect(v!.message).not.toContain(NESTED);
+  });
+});
+
+describe("the nested-quantifier hint suggests only accepted rewrites", () => {
+  const M = MAX_OUTER_REPEAT_WITH_VARIABLE_INNER;
+
+  const remedyFor = (pattern: string): string => {
+    const v = validatePattern(pattern);
+    expect(v.ok).toBe(false);
+    if (v.ok) throw new Error("expected a refusal");
+    expect(v.code).toBe("shape");
+    return v.remedy;
+  };
+
+  const accepted = (pattern: string) => {
+    expect(() => new RegExp(pattern)).not.toThrow();
+    expect(validatePattern(pattern)).toEqual({ ok: true });
+    expect(validate(schemaWithPattern(pattern))).toBeNull();
+  };
+
+  it("names a fixed inner count, removing the inner quantifier, and the outer limit from its constant", () => {
+    const remedy = remedyFor(NESTED);
+    expect(remedy).toContain(
+      "Use a fixed count on the inner part (for example {3} instead of + or {1,32})"
+    );
+    expect(remedy).toContain("remove the inner quantifier");
+    expect(remedy).toContain(`repeat the group at most ${M} times`);
+  });
+
+  // [refused pattern, fixed inner count, inner quantifier removed, group repeated at most M times]
+  it.each([
+    ["^(a+)+$", "^(a{3})+$", "^(a)+$", `^(a+){1,${M}}$`],
+    ["^(a*)*$", "^(a{3})*$", "^(a)*$", `^(a*){0,${M}}$`],
+    ["^(?:[a-z]+)+$", "^(?:[a-z]{3})+$", "^(?:[a-z])+$", `^(?:[a-z]+){1,${M}}$`],
+    ["^(\\w+\\s?)*$", "^(\\w{3}\\s)*$", "^(\\w\\s)*$", `^(\\w+\\s?){0,${M}}$`],
+    ["^(\\d{1,32}){6}$", "^(\\d{3}){6}$", "^(\\d){6}$", `^(\\d{1,32}){${M}}$`],
+    ["^(a+){000006}$", "^(a{3}){000006}$", "^(a){000006}$", `^(a+){${M}}$`],
+    ["^(a{1,123456})+$", "^(a{3})+$", "^(a)+$", `^(a{1,123456}){1,${M}}$`],
+  ])("%s: each suggested rewrite is accepted", (original, fixedInner, noInner, boundedOuter) => {
+    expect(remedyFor(original)).toContain(`at most ${M} times`);
+    accepted(fixedInner);
+    accepted(noInner);
+    accepted(boundedOuter);
+  });
+
+  it("states the outer limit exactly: one more repeat is refused", () => {
+    accepted(`^(a+){1,${M}}$`);
+    remedyFor(`^(a+){1,${M + 1}}$`);
+    remedyFor(`^(a+){${M + 1}}$`);
+  });
+
+  it("does not suggest a bounded inner range, which is still variable and still refused", () => {
+    remedyFor("^(a{1,32})+$");
+    expect(remedyFor(NESTED)).not.toMatch(/Use a bounded count/);
   });
 });
 

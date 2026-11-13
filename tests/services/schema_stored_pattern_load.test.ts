@@ -178,7 +178,7 @@ describe("registration entry points refuse patterns outside the registration rul
     expect(body.error.error_code).toBe("SCHEMA_VALIDATION_FAILED");
     expect(body.error.details.refusal).toBe("shape");
     // Same rewrite guidance as the other shape refusals, and the pattern is not echoed.
-    expect(body.error.hint).toMatch(/bounded count/);
+    expect(body.error.hint).toMatch(/fixed count on the inner part/);
     expect(body.error.message).not.toContain(pattern);
   });
 
@@ -210,7 +210,7 @@ describe("registration entry points refuse patterns outside the registration rul
     };
     expect(body.error_code).toBe("SCHEMA_VALIDATION_FAILED");
     expect(body.details.refusal).toBe("shape");
-    expect(body.details.hint).toMatch(/bounded count/);
+    expect(body.details.hint).toMatch(/fixed count on the inner part/);
     expect(body.message).not.toContain(pattern);
   });
 
