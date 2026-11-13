@@ -45,12 +45,12 @@ name: Deploy operator instance
 on:
   push:
     branches: [main]
-    # Docs-only and marketing-site commits do not change the served build.
-    # Skipping them avoids pointless redeploys of a stateful, always-on machine.
-    paths-ignore:
-      - "docs/**"
-      - "site/**"
-      - "**/*.md"
+    # No paths-ignore: whether a push changes the served build is decided by
+    # the "Classify changes" step below, which diffs from the commit the
+    # instance actually serves. A paths filter diffs only this push, so after
+    # a failed deploy it would let a docs-only follow-up skip a runtime change,
+    # and its `**/*.md` pattern also matched the SKILL.md bundle assets under
+    # src/ that are copied into the image.
   workflow_dispatch:
     inputs:
       ref:
@@ -120,11 +120,41 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.resolve.outputs.ref }}
-          # Nothing after this step runs git against the remote (the CI wait
-          # authenticates `gh` through GH_TOKEN), so do not leave the workflow
+          # The only git call against the remote after this step is the
+          # classifier's anonymous history fetch (public repo), and the CI wait
+          # authenticates `gh` through GH_TOKEN, so do not leave the workflow
           # token in .git/config, which `flyctl deploy --remote-only` uploads
           # along with the tree.
           persist-credentials: false
+
+      # ── SKIP DEPLOYS THAT CANNOT CHANGE THE IMAGE ─────────────────────────
+      # Each deploy replaces the machine and blocks writes for ~30s at boot.
+      # A push that touches only docs, the marketing frontend, tests, CI config
+      # or package.json metadata cannot change what the instance runs.
+      #
+      # The diff base is the git_sha the instance SERVES (unauthenticated
+      # GET /), not github.event.before: after a failed deploy, `before` is a
+      # commit that never reached the instance, and diffing from it would let
+      # a docs-only follow-up leave a runtime change undeployed. If the served
+      # sha cannot be read, or is not an ancestor of this commit, it deploys.
+      # workflow_dispatch always deploys. Rules and their reasons are in
+      # scripts/classify_deploy_changes.mjs.
+      #
+      # The steps below are gated on `deploy != 'false'`, so they run unless
+      # the classifier positively decided to skip. If this step itself fails,
+      # they skip by the usual failure rule and the escalation step fires, so a
+      # broken classifier is a visible failure, never a quiet skip. A skip is
+      # explained in the run summary.
+      - name: Classify changes
+        if: steps.gate.outputs.configured == 'true'
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ steps.resolve.outputs.ref }}
+          HOST: ${{ secrets.OPERATOR_INSTANCE_HOST }}
+        run: |
+          node scripts/classify_deploy_changes.mjs \
+            --event "$EVENT" --head "$HEAD_SHA" --served-url "https://${HOST}/"
 
       # ── SAFETY GATE ───────────────────────────────────────────────────────
       # Only deploy a commit whose CI is GREEN.
@@ -146,7 +176,7 @@ jobs:
       # for queueing without hanging a runner indefinitely. A timeout is NOT
       # treated as success — it fails, and failure escalates.
       - name: Wait for CI to pass on this commit
-        if: steps.gate.outputs.configured == 'true' && !inputs.skip_ci_gate
+        if: steps.gate.outputs.configured == 'true' && !inputs.skip_ci_gate && steps.classify.outputs.deploy != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -206,7 +236,7 @@ jobs:
           done
 
       - name: Setup flyctl
-        if: steps.gate.outputs.configured == 'true'
+        if: steps.gate.outputs.configured == 'true' && steps.classify.outputs.deploy != 'false'
         uses: superfly/flyctl-actions/setup-flyctl@master
 
       # -c fly.operator.toml is LOAD-BEARING, not tidiness. `flyctl deploy`
@@ -236,7 +266,7 @@ jobs:
       # VITE_PUBLIC_BASE_PATH must be "/" (a "/inspector/" build renders a blank
       # page while /health still returns ok).
       - name: Deploy to Fly (operator instance)
-        if: steps.gate.outputs.configured == 'true'
+        if: steps.gate.outputs.configured == 'true' && steps.classify.outputs.deploy != 'false'
         env:
           FLY_API_TOKEN: ${{ secrets.OPERATOR_INSTANCE_FLY_TOKEN || secrets.FLY_API_TOKEN }}
           APP: ${{ secrets.OPERATOR_INSTANCE_APP }}
@@ -262,7 +292,7 @@ jobs:
       # authenticated GET /entities?limit=1 timed out at 60s. Checks (a)-(d)
       # would all have passed through that. See ateles#577.
       - name: Verify deploy
-        if: steps.gate.outputs.configured == 'true'
+        if: steps.gate.outputs.configured == 'true' && steps.classify.outputs.deploy != 'false'
         env:
           EXPECTED_SHA: ${{ steps.resolve.outputs.ref }}
           HOST: ${{ secrets.OPERATOR_INSTANCE_HOST }}
