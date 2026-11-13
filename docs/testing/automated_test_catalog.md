@@ -70,12 +70,12 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 231 |
-| Vitest service tests | 66 |
+| Vitest service tests | 67 |
 | Source-adjacent tests | 70 |
 | Vitest integration tests | 244 |
 | Vitest CLI tests | 93 |
 | Vitest contract tests | 28 |
-| Vitest security tests | 20 |
+| Vitest security tests | 21 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -348,7 +348,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (66):**
+**Files (67):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -400,6 +400,7 @@ flowchart TD
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/schema_seeding_preserves_custom_identity.test.ts`
+- `tests/services/schema_stored_pattern_load.test.ts`
 - `tests/services/session_seed_schema.test.ts`
 - `tests/services/store_condition_identity.test.ts`
 - `tests/services/store_condition_keys.test.ts`
@@ -884,7 +885,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (20):**
+**Files (21):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
@@ -895,6 +896,7 @@ flowchart TD
 - `tests/security/proxy_bind_host.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
+- `tests/security/schema_pattern_bounds.test.ts`
 - `tests/security/schemas_per_type_scope_guard.test.ts`
 - `tests/security/scoped_source_and_relationship_reads.test.ts`
 - `tests/security/sort_by_sql_injection.test.ts`
