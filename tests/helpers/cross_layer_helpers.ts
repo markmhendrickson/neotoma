@@ -6,13 +6,10 @@
  * for subsequent database state verification.
  */
 
-import { exec } from "child_process";
-import { promisify } from "util";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-
-const execAsync = promisify(exec);
+import { execAsync } from "./cli_local_target.js";
 
 export const CLI_PATH = "node dist/cli/index.js";
 

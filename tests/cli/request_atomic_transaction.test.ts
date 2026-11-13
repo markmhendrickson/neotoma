@@ -1,14 +1,13 @@
-import { execFile } from "node:child_process";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { createClient } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   startIsolatedNeotomaServer,
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = execFileLocal;
 let server: IsolatedServer;
 const type = "eval_atomic_cli";
 async function post(path: string, body: unknown) {

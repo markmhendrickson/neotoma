@@ -261,6 +261,8 @@ npm run test:integration
 npm run test:e2e     # Playwright (Inspector)
 ```
 
+Tests that spawn the CLI always run against the local test server that the vitest global setup starts; there is no override, not even `RUN_REMOTE_TESTS=1`, and a repo-root `.env` loaded with override can be the source of a remote URL that the test run refuses.
+
 ## Documentation
 
 Documentation is stored under `docs/` (start at the [documentation index](docs/README.md)) and served in-app at `/docs`, browsable in the Inspector.

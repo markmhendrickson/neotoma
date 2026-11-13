@@ -5,9 +5,17 @@ import path from "node:path";
 import fs from "node:fs";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { SCRUB_WARNING, scrubNonLocalBaseUrl } from "./tests/helpers/cli_local_target.js";
 
 // Load .env file before setting any defaults
 dotenv.config(); // Load .env
+
+// Drop a non-local NEOTOMA_BASE_URL that the .env just loaded (or the shell supplied) so
+// in-process code cannot reach a real instance. Limit: a later import of src/config.ts
+// reloads a repo-root .env with override, so this is best-effort in workers; spawned CLI
+// tests are pinned separately by tests/helpers/cli_local_target.ts, which has no opt-out.
+// RUN_REMOTE_TESTS=1 is the in-process opt-out.
+if (scrubNonLocalBaseUrl(process.env)) process.stderr.write(`${SCRUB_WARNING}\n`);
 
 /**
  * Fail the run — do not just warn — if any code under test writes inside the

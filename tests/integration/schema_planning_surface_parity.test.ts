@@ -1,6 +1,4 @@
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -12,8 +10,9 @@ import {
   resolveNeotomaPackageRoot,
 } from "../../src/mcp_instruction_doc.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
-const execute = promisify(execFile);
+const execute = execFileLocal;
 const TYPE = "planning_axis_surface";
 const UPPER = "planning_other_stratum";
 const USER = LOCAL_DEV_USER_ID;
