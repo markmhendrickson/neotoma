@@ -148,6 +148,21 @@ Replay rules for a keyed store:
 | `in_progress` | Not a replay. The write runs again over the same source. Observation ids are deterministic (source, entity, fields), so entities already written resolve to their existing observation and only the missing ones are added; entities left empty by the interruption get their observation and snapshot. |
 | none (row written before the marker) | HTTP `/store` counts the observations on the keyed source against the request's distinct entity payloads and resumes when it is short. MCP `store` replays as before. |
 
+Committed, marker unconfirmed. The marker is written after every observation and
+relationship has committed, so a failure of that step (a read-back that does not
+see the update, a missing source row, an abort or a timeout) is not a failed
+store. The store answers success and adds `write_committed: true`,
+`store_write_completion: "unconfirmed"` and `store_write_completion_note` to its
+response; a confirmed store carries none of them. The source stays `in_progress`
+until a same-key replay finishes the marker, which the table above already does
+idempotently, so for a store without an interpretation the note offers one
+optional same-key replay and the observation count does not change. A store that
+carries an interpretation is the exception: its source cannot be resumed and a
+same-key replay is refused with `ERR_STORE_WRITE_INCOMPLETE`, so the note says
+the data is committed, no replay is needed, and the key must not be replayed.
+Resuming interpretation sources is tracked separately. A store sent without an
+idempotency key has no key to replay and needs no action.
+
 A resumed write answers like a first write, not like a replay: `replayed` is
 `false`, and entities the interrupted attempt created report `action:
 matched_existing` and count as `entities_created: 0` even though they received

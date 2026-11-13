@@ -133,6 +133,10 @@ import {
 } from "./mcp_http_stateless.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
+import {
+  storeWriteCompletionResponseFields,
+  type StoreWriteCompletion,
+} from "./services/store_write_state.js";
 import { withPatternBudget, SchemaPatternRefusalError } from "./services/safe_pattern.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
@@ -9024,9 +9028,10 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
   // that on the keyed source so a replay of this key knows the write finished
   // (#2144). Before this point a replay resumes the write instead of reporting
   // whatever happened to land.
+  let storeWriteCompletion: StoreWriteCompletion = { state: "complete" };
   if (commit && storageResult) {
-    const { markStoreWriteComplete } = await import("./services/store_write_state.js");
-    await markStoreWriteComplete(storageResult.sourceId, userId);
+    const { confirmStoreWriteComplete } = await import("./services/store_write_state.js");
+    storeWriteCompletion = await confirmStoreWriteComplete(storageResult.sourceId, userId);
   }
 
   // R3: aggregate non-fatal resolver warnings across the batch so callers
@@ -9462,6 +9467,10 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
     relationships_created: relationshipsCreated,
+    ...storeWriteCompletionResponseFields(storeWriteCompletion, {
+      hasInterpretation: Boolean(interpretation),
+      hasIdempotencyKey: Boolean(idempotencyKey),
+    }),
     ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
