@@ -6,6 +6,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 ## Unreleased
 
+- `v0.28.x/register_schema_repeated_group_pattern` seeded as `rejected`. Schema registration now refuses some regular-expression pattern shapes (for example backreferences, some nested variable quantifiers and some overlapping repeated alternations; the list is not exhaustive) and enforces pattern length and count limits; the error is `400 SCHEMA_VALIDATION_FAILED` and its `details.hint` explains the rewrite. Schemas that are already stored keep loading. Include this compatibility note in the shipping release supplement's **Breaking changes** section.
 - `v0.27.x/register_schema_invalid_planning` seeded as `rejected`. The optional `schema_definition.planning` declaration is now reserved for `{ level: finite number, read_only?: boolean }`; a malformed value that previously passed as opaque schema metadata returns `400 VALIDATION_INVALID_FORMAT` with a structured `details.hint`. Existing definitions without the declaration are unchanged. Include this compatibility note in the shipping release supplement's **Breaking changes** section.
 
 ## v0.26.0

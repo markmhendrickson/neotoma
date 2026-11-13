@@ -13,6 +13,7 @@ import {
 import { db } from "./db.js";
 import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
+import { withPatternBudget, SchemaPatternRefusalError } from "./services/safe_pattern.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
 import { collapsedEntityReadContract } from "./shared/entity_read_contract.js";
@@ -5472,6 +5473,16 @@ export class NeotomaServer {
         ...(scopeWritten === "user" ? { user_id: updatedSchema.user_id ?? null } : {}),
       });
     } catch (error: any) {
+      if (error instanceof SchemaPatternRefusalError) {
+        return this.buildTextResponse({
+          error: {
+            error_code: "SCHEMA_VALIDATION_FAILED",
+            message: error.message,
+            hint: error.remedy,
+            details: { entity_type: parsed.entity_type, refusal: error.refusal },
+          },
+        });
+      }
       // Detect R2 identity-configuration error from the base schema.
       // When the existing schema lacks canonical_name_fields and identity_opt_out,
       // the incremental update's register() call raises the R2 error. Surface a
@@ -5703,6 +5714,16 @@ export class NeotomaServer {
         name_lint_warnings: nameLintWarnings,
       });
     } catch (error: any) {
+      if (error instanceof SchemaPatternRefusalError) {
+        return this.buildTextResponse({
+          error: {
+            error_code: "SCHEMA_VALIDATION_FAILED",
+            message: error.message,
+            hint: error.remedy,
+            details: { entity_type: parsed.entity_type, refusal: error.refusal },
+          },
+        });
+      }
       throw new McpError(ErrorCode.InternalError, `Failed to register schema: ${error.message}`);
     }
   }
@@ -6539,15 +6560,18 @@ export class NeotomaServer {
     // Same rule for every internal caller, before any write or key claim.
     const { assertStoreEntityTypesNamed } = await import("./services/store_admission.js");
     assertStoreEntityTypesNamed(entities);
+    // One pattern-evaluation budget per store request.
     const run = () =>
-      this.storeStructuredInternalUnguarded(
-        userId,
-        entities,
-        sourcePriority,
-        idempotencyKey,
-        originalFilename,
-        relationships,
-        options
+      withPatternBudget(() =>
+        this.storeStructuredInternalUnguarded(
+          userId,
+          entities,
+          sourcePriority,
+          idempotencyKey,
+          originalFilename,
+          relationships,
+          options
+        )
       );
     if (!idempotencyKey || options.commit === false || options.expectedEntityAbsent === true) {
       return run();
@@ -7488,7 +7512,8 @@ export class NeotomaServer {
         const cvPolicy = schema.schema_definition.constraint_violation_policy ?? "reject";
         const violations = collectConstraintViolations(
           validFields,
-          schema.schema_definition.fields
+          schema.schema_definition.fields,
+          { entityType, schemaVersion: schema.schema_version }
         );
         if (violations.length > 0) {
           if (cvPolicy === "reject") {
