@@ -1,0 +1,5 @@
+endpoint: POST /register_schema
+outcome: rejected
+error_code: SCHEMA_VALIDATION_FAILED
+hint_match: /bounded count/
+notes: Schema registration reads a counted quantifier ({n}, {n,} or {n,m}) with a count of any number of digits, including zero-padded counts, the same way the regular-expression engine does. A pattern whose repeated group has a variable-length part and a count above the accepted limit is refused with refusal kind "shape" and the same hint as other shape refusals, which suggests a bounded count on the repeated part. Schemas that are already stored keep loading.
