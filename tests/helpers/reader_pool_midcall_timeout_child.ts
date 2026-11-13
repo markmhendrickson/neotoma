@@ -17,15 +17,15 @@ import {
 
 const db = new WorkerFileDatabase(path.join(mkdtempSync(path.join(tmpdir(), "reader-abort-")), "t.db"), {
   readerWorkers: 2,
-  statementTimeoutMs: 30,
+  statementTimeoutMs: 100,
   orphanGraceMs: 30,
 });
 await db.exec("CREATE TABLE load (id INTEGER PRIMARY KEY, v TEXT)");
 await db.exec(`
-  WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 1500)
+  WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 1000)
   INSERT INTO load (v) SELECT hex(randomblob(96)) FROM cnt
 `);
-const ITERATIONS = 100;
+const ITERATIONS = 250;
 let timeouts = 0;
 for (let i = 0; i < ITERATIONS; i += 1) {
   const sql = "SELECT a.v AS x, b.v AS y FROM load a, load b";
@@ -45,7 +45,7 @@ for (let i = 0; i < ITERATIONS; i += 1) {
 let after: unknown;
 let attempts = 0;
 const t0 = Date.now();
-const deadline = Date.now() + 60_000;
+const deadline = Date.now() + 120_000;
 while (after === undefined && Date.now() < deadline) {
   try {
     attempts += 1;

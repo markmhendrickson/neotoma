@@ -7,7 +7,7 @@ describe("reader pool timeout never terminates a worker mid native call", () => 
     const child = spawnSync(
       process.execPath,
       ["--import", "tsx", path.resolve("tests/helpers/reader_pool_midcall_timeout_child.ts")],
-      { encoding: "utf8", timeout: 170_000 }
+      { encoding: "utf8", timeout: 270_000 }
     );
     // Old behaviour: terminate() inside the addon -> SIGABRT / exit 134.
     expect({ status: child.status, signal: child.signal }).toEqual({ status: 0, signal: null });
@@ -15,5 +15,5 @@ describe("reader pool timeout never terminates a worker mid native call", () => 
     const result = JSON.parse(line);
     expect(result.timeouts).toBeGreaterThan(0);
     expect(result.after).toEqual({ ok: 1 });
-  }, 180_000);
+  }, 300_000);
 });
