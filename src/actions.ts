@@ -4545,6 +4545,111 @@ async function resolveGuestShareLinkEntityAccess(
   return { kind: "found", ...access, viaToken: false };
 }
 
+/**
+ * Whether an entity is currently deleted, decided the same way as the entity
+ * detail and HTML routes (see `getEntityWithProvenance`).
+ */
+async function entityIsHiddenNow(entity: {
+  id: string;
+  user_id: string;
+  entity_type: string;
+}): Promise<boolean> {
+  const { isEntityHiddenNow } = await import("./services/current_state_reads.js");
+  const hidden = await isEntityHiddenNow(entity);
+  if (hidden !== undefined) return hidden;
+  const { isEntityDeleted } = await import("./services/deletion.js");
+  return isEntityDeleted(entity.id, entity.user_id);
+}
+
+type GuestEntityReadAccess =
+  | { kind: "not_found" }
+  | { kind: "found"; userId: string; entityType: string };
+
+/**
+ * Guest READ access for GET /entities/:id/observations and
+ * GET /entities/:id/relationships. Access is decided by the policy-governed
+ * resolver; a deleted entity then answers `not_found`, as the entity detail and
+ * HTML routes do. When the caller's token covers the entity, deletion is
+ * reported before the type policy, matching the share-link routes; otherwise it
+ * is reported only after access is granted, so an entity the caller may not
+ * read never answers differently for being deleted.
+ */
+async function resolveGuestEntityReadAccess(
+  principal: GuestPrincipal,
+  entityId: string
+): Promise<GuestEntityReadAccess> {
+  await assertValidGuestAccessToken(principal);
+  const token = principal.guestId.accessToken;
+  if (token) {
+    const { data: entity } = await db
+      .from("entities")
+      .select("id, entity_type, user_id")
+      .eq("id", entityId)
+      .maybeSingle();
+    const row = entity as { id: string; entity_type: string; user_id: string } | null;
+    if (row) {
+      const check = await checkGuestTokenForEntity(
+        token,
+        entityId,
+        row,
+        await principalGuestGrant(principal)
+      );
+      if (check.state === "granted" && (await entityIsHiddenNow(row))) {
+        return { kind: "not_found" };
+      }
+    }
+  }
+  const access = await resolveGuestPolicyGovernedEntityAccess(principal, entityId);
+  if (
+    await entityIsHiddenNow({
+      id: entityId,
+      user_id: access.userId,
+      entity_type: access.entityType,
+    })
+  ) {
+    return { kind: "not_found" };
+  }
+  return { kind: "found", ...access };
+}
+
+/** A guest caller presenting only an access token, with no signed agent identity. */
+function isTokenOnlyGuest(principal: RoutePrincipal): principal is GuestPrincipal {
+  return (
+    principal.kind === "guest" &&
+    Boolean(principal.guestId.accessToken) &&
+    !principal.guestId.thumbprint
+  );
+}
+
+/**
+ * The related entities a token-only guest may see expanded: those the token
+ * covers (see `checkGuestTokenForEntity`) that are neither merged nor deleted.
+ * Every other related entity keeps its relationship row but is not expanded.
+ */
+async function relatedEntitiesCoveredByGuestToken(
+  principal: GuestPrincipal,
+  rows: Array<{
+    id: string;
+    entity_type: string;
+    user_id: string;
+    merged_to_entity_id?: string | null;
+  }>
+): Promise<Set<string>> {
+  const token = principal.guestId.accessToken;
+  const covered = new Set<string>();
+  if (!token) return covered;
+  const grant = await principalGuestGrant(principal);
+  if (!grant) return covered;
+  for (const row of rows) {
+    if (row.merged_to_entity_id) continue;
+    const check = await checkGuestTokenForEntity(token, row.id, row, grant);
+    if (check.state !== "granted") continue;
+    if (await entityIsHiddenNow(row)) continue;
+    covered.add(row.id);
+  }
+  return covered;
+}
+
 // Inspector SPA shell — early content-negotiation handler. Registered BEFORE
 // the auth gate and the JSON data routes (/sources, /entities/:id, /schemas, …)
 // so that a browser navigating to a SPA client route (Accept: text/html) gets
@@ -5775,7 +5880,11 @@ app.get("/entities/:id/observations", async (req, res) => {
     let userId: string;
 
     if (principal.kind === "guest") {
-      userId = (await resolveGuestPolicyGovernedEntityAccess(principal, entityId)).userId;
+      const access = await resolveGuestEntityReadAccess(principal, entityId);
+      if (access.kind === "not_found") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      userId = access.userId;
     } else {
       userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5834,7 +5943,11 @@ app.get("/entities/:id/relationships", async (req, res) => {
     let userId: string;
 
     if (principal.kind === "guest") {
-      userId = (await resolveGuestPolicyGovernedEntityAccess(principal, entityId)).userId;
+      const access = await resolveGuestEntityReadAccess(principal, entityId);
+      if (access.kind === "not_found") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      userId = access.userId;
     } else {
       userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5890,14 +6003,46 @@ app.get("/entities/:id/relationships", async (req, res) => {
       }
       if (relatedIds.size > 0) {
         const idsArr = Array.from(relatedIds);
-        const [snapshotsResult, entitiesResult] = await Promise.all([
-          db.from("entity_snapshots").select("*").in("entity_id", idsArr).eq("user_id", userId),
-          db
+        // A caller holding only a guest token sees expanded content only for
+        // related entities its token covers. The others keep their
+        // relationship rows and an entry with no name, type or snapshot.
+        let expandIds = idsArr;
+        if (isTokenOnlyGuest(principal)) {
+          const { data: relatedRows, error: relatedRowsError } = await db
             .from("entities")
-            .select("id, canonical_name, entity_type")
+            .select("id, entity_type, user_id, merged_to_entity_id")
             .in("id", idsArr)
-            .eq("user_id", userId),
-        ]);
+            .eq("user_id", userId);
+          if (relatedRowsError) throw relatedRowsError;
+          const covered = await relatedEntitiesCoveredByGuestToken(
+            principal,
+            (relatedRows ?? []) as Array<{
+              id: string;
+              entity_type: string;
+              user_id: string;
+              merged_to_entity_id?: string | null;
+            }>
+          );
+          expandIds = idsArr.filter((id) => covered.has(id));
+        }
+        const [snapshotsResult, entitiesResult] =
+          expandIds.length > 0
+            ? await Promise.all([
+                db
+                  .from("entity_snapshots")
+                  .select("*")
+                  .in("entity_id", expandIds)
+                  .eq("user_id", userId),
+                db
+                  .from("entities")
+                  .select("id, canonical_name, entity_type")
+                  .in("id", expandIds)
+                  .eq("user_id", userId),
+              ])
+            : [
+                { data: [] as any[], error: null },
+                { data: [] as any[], error: null },
+              ];
 
         // Merge snapshot + entity rows so callers always get canonical_name
         // and entity_type even when the snapshot row is missing.

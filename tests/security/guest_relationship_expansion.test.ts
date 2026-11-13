@@ -1,0 +1,307 @@
+/**
+ * Related-entity expansion for a guest returns only entities the guest's link
+ * covers, under every type-level access policy mode. A caller holding only a
+ * guest token keeps every relationship row (ids and relationship type), but a
+ * related entity its token does not cover gets no name, type or snapshot.
+ *
+ * Also: the observations and relationships routes answer 404 for a deleted
+ * entity the token covers, as the entity detail and HTML routes do.
+ *
+ * Drives the real request path over a live server.
+ */
+import { AddressInfo } from "node:net";
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { app } from "../../src/actions.js";
+import { db } from "../../src/db.js";
+import { softDeleteEntity } from "../../src/services/deletion.js";
+import {
+  GUEST_TOKEN_SCOPE_CODE,
+  generateGuestAccessToken,
+  hashGuestAccessToken,
+} from "../../src/services/guest_access_token.js";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
+
+const POLICIES = ["closed", "read_only", "submit_only", "submitter_scoped", "open"] as const;
+type Policy = (typeof POLICIES)[number];
+
+/** Policies under which a guest may read an entity's relationships. */
+const READ_POLICIES: ReadonlySet<Policy> = new Set(["read_only", "submitter_scoped", "open"]);
+
+const OWNER = LOCAL_DEV_USER_ID;
+const PAGE_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_RENDERED_PAGE";
+const CONTACT_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_CONTACT";
+
+let baseUrl: string;
+let server: ReturnType<typeof app.listen>;
+const entityIds: string[] = [];
+const tokenEntityIds: string[] = [];
+const relationshipKeys: string[] = [];
+
+async function createEntity(
+  entityType: "rendered_page" | "contact",
+  marker: string
+): Promise<string> {
+  const prefix = entityType === "rendered_page" ? "ent_rp" : "ent_ct";
+  const id = `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const now = new Date().toISOString();
+  await db.from("entities").insert({
+    id,
+    entity_type: entityType,
+    canonical_name: `${marker}-NAME`,
+    user_id: OWNER,
+    created_at: now,
+    updated_at: now,
+  });
+  await db.from("observations").insert({
+    entity_id: id,
+    entity_type: entityType,
+    user_id: OWNER,
+    fields:
+      entityType === "rendered_page"
+        ? { title: `${marker}-TITLE`, html_body: `<p>${marker}-BODY</p>` }
+        : { name: `${marker}-TITLE`, notes: `${marker}-BODY` },
+    observed_at: now,
+    source_priority: 0,
+  });
+  await recomputeSnapshot(id, OWNER);
+  entityIds.push(id);
+  return id;
+}
+
+async function link(sourceId: string, targetId: string): Promise<void> {
+  const relationshipKey = `REFERS_TO:${sourceId}:${targetId}`;
+  await db.from("relationship_snapshots").insert({
+    relationship_key: relationshipKey,
+    relationship_type: "REFERS_TO",
+    source_entity_id: sourceId,
+    target_entity_id: targetId,
+    schema_version: "1",
+    snapshot: JSON.stringify({}),
+    user_id: OWNER,
+  });
+  relationshipKeys.push(relationshipKey);
+}
+
+async function mint(ids: string[]): Promise<string> {
+  const token = await generateGuestAccessToken({ entityIds: ids, userId: OWNER });
+  tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+  return token;
+}
+
+/** A remote request (not the local owner), optionally carrying a guest token. */
+async function guestGet(path: string, token: string): Promise<{ status: number; body: string }> {
+  const sep = path.includes("?") ? "&" : "?";
+  const response = await fetch(`${baseUrl}${path}${sep}access_token=${token}`, {
+    headers: { "x-forwarded-for": "203.0.113.9" },
+  });
+  return { status: response.status, body: await response.text() };
+}
+
+/** A loopback request with no credentials resolves to the local owner. */
+async function ownerGet(path: string): Promise<{ status: number; body: string }> {
+  const response = await fetch(`${baseUrl}${path}`);
+  return { status: response.status, body: await response.text() };
+}
+
+type RelationshipsBody = {
+  outgoing: Array<Record<string, unknown>>;
+  incoming: Array<Record<string, unknown>>;
+  relationships: Array<Record<string, unknown>>;
+  related_entities?: Record<string, Record<string, unknown>>;
+};
+
+/** A related entity entry carries no name, type, label or snapshot. */
+function expectNotExpanded(body: RelationshipsBody, id: string): void {
+  const entry = body.related_entities?.[id];
+  expect(entry, `entry for ${id}`).toBeDefined();
+  expect(entry).toEqual({ entity_id: id, canonical_name: null, entity_type: null });
+}
+
+beforeAll(() => {
+  server = app.listen(0);
+  baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+
+afterAll(async () => {
+  delete process.env[PAGE_POLICY_ENV];
+  delete process.env[CONTACT_POLICY_ENV];
+  for (const key of relationshipKeys) {
+    await db.from("relationship_snapshots").delete().eq("relationship_key", key);
+  }
+  for (const id of tokenEntityIds) {
+    await db.from("observations").delete().eq("entity_id", id);
+    await db.from("entities").delete().eq("id", id);
+  }
+  for (const id of entityIds) {
+    await db.from("observations").delete().eq("entity_id", id);
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    await db.from("entities").delete().eq("id", id);
+  }
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+describe.each(POLICIES)("related-entity expansion for a guest under policy %s", (policy) => {
+  /** A covered page A, linked to a contact (outgoing) and to page B (incoming). */
+  async function fixture(tag: string) {
+    const a = await createEntity("rendered_page", `A-${tag}-${policy}`);
+    const b = await createEntity("rendered_page", `B-${tag}-${policy}`);
+    const c = await createEntity("contact", `C-${tag}-${policy}`);
+    await link(a, c);
+    await link(b, a);
+    return { a, b, c };
+  }
+
+  function expectGuestExpansion(
+    res: { status: number; body: string },
+    ids: { a: string; b: string; c: string },
+    hiddenMarkers: string[]
+  ): void {
+    for (const marker of hiddenMarkers) expect(res.body).not.toContain(marker);
+    if (!READ_POLICIES.has(policy)) {
+      expect(res.status).toBe(403);
+      return;
+    }
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body) as RelationshipsBody;
+    // Relationship rows stay, with their ids and relationship type.
+    expect(body.outgoing).toHaveLength(1);
+    expect(body.outgoing[0]).toMatchObject({
+      relationship_type: "REFERS_TO",
+      source_entity_id: ids.a,
+      target_entity_id: ids.c,
+      target_entity_name: null,
+      target_entity_type: null,
+      target_entity_type_label: null,
+    });
+    expect(body.incoming).toHaveLength(1);
+    expect(body.incoming[0]).toMatchObject({
+      relationship_type: "REFERS_TO",
+      source_entity_id: ids.b,
+      target_entity_id: ids.a,
+      source_entity_name: null,
+      source_entity_type: null,
+      source_entity_type_label: null,
+    });
+    expectNotExpanded(body, ids.c);
+    expectNotExpanded(body, ids.b);
+  }
+
+  it("expansion for a token-only guest shows no content of a linked entity of another type or a linked page", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = policy;
+    const ids = await fixture("same");
+    const token = await mint([ids.a]);
+    const res = await guestGet(`/entities/${ids.a}/relationships?expand_entities=true`, token);
+    expectGuestExpansion(res, ids, [`B-same-${policy}`, `C-same-${policy}`]);
+  });
+
+  it("an open policy on the linked type does not expand an entity the token does not cover", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = "open";
+    const ids = await fixture("open");
+    const token = await mint([ids.a]);
+    const res = await guestGet(`/entities/${ids.a}/relationships?expand_entities=true`, token);
+    expectGuestExpansion(res, ids, [`B-open-${policy}`, `C-open-${policy}`]);
+  });
+
+  it("expansion for a token-only guest returns a related entity the token also covers", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = policy;
+    const ids = await fixture("both");
+    const token = await mint([ids.a, ids.b]);
+    const res = await guestGet(`/entities/${ids.a}/relationships?expand_entities=true`, token);
+    expect(res.body).not.toContain(`C-both-${policy}`);
+    if (!READ_POLICIES.has(policy)) {
+      expect(res.status).toBe(403);
+      return;
+    }
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body) as RelationshipsBody;
+    expect(body.related_entities?.[ids.b]).toMatchObject({
+      entity_id: ids.b,
+      entity_type: "rendered_page",
+      canonical_name: expect.stringContaining(`B-both-${policy}`),
+    });
+    expect(res.body).toContain(`B-both-${policy}-BODY`);
+    expect(body.incoming[0]).toMatchObject({
+      source_entity_id: ids.b,
+      source_entity_name: expect.stringContaining(`B-both-${policy}`),
+      source_entity_type: "rendered_page",
+    });
+    expectNotExpanded(body, ids.c);
+  });
+
+  it("expansion for a token-only guest leaves out a covered related entity that was deleted", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = policy;
+    const ids = await fixture("gone");
+    const token = await mint([ids.a, ids.b]);
+    const deleted = await softDeleteEntity(ids.b, "rendered_page", OWNER);
+    expect(deleted.success, JSON.stringify(deleted)).toBe(true);
+    const res = await guestGet(`/entities/${ids.a}/relationships?expand_entities=true`, token);
+    expectGuestExpansion(res, ids, [`B-gone-${policy}`, `C-gone-${policy}`]);
+  });
+
+  it("the owner still gets full expansion", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = policy;
+    const ids = await fixture("owner");
+    const res = await ownerGet(`/entities/${ids.a}/relationships?expand_entities=true`);
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body) as RelationshipsBody;
+    expect(body.related_entities?.[ids.b]).toMatchObject({
+      entity_type: "rendered_page",
+      canonical_name: expect.stringContaining(`B-owner-${policy}`),
+    });
+    expect(body.related_entities?.[ids.c]).toMatchObject({
+      entity_type: "contact",
+      canonical_name: expect.stringContaining(`C-owner-${policy}`),
+    });
+    expect(res.body).toContain(`B-owner-${policy}-BODY`);
+    expect(body.outgoing[0]).toMatchObject({
+      target_entity_name: expect.stringContaining(`C-owner-${policy}`),
+    });
+    expect(body.incoming[0]).toMatchObject({
+      source_entity_name: expect.stringContaining(`B-owner-${policy}`),
+    });
+  });
+
+  it("observations and relationships answer 404 for a deleted entity the token covers, like the detail and HTML routes", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = policy;
+    const a = await createEntity("rendered_page", `DEL-A-${policy}`);
+    const token = await mint([a]);
+    const deleted = await softDeleteEntity(a, "rendered_page", OWNER);
+    expect(deleted.success, JSON.stringify(deleted)).toBe(true);
+    for (const path of [
+      `/entities/${a}`,
+      `/entities/${a}/html`,
+      `/entities/${a}/observations`,
+      `/entities/${a}/relationships`,
+      `/entities/${a}/relationships?expand_entities=true`,
+    ]) {
+      const res = await guestGet(path, token);
+      expect(res.status, `${policy} ${path}`).toBe(404);
+      expect(res.body).not.toContain(`DEL-A-${policy}`);
+      expect(JSON.parse(res.body)).toMatchObject({ error_code: "RESOURCE_NOT_FOUND" });
+    }
+  });
+
+  it("a deleted entity the token does not cover gets the same 403 as a live one", async () => {
+    process.env[PAGE_POLICY_ENV] = policy;
+    process.env[CONTACT_POLICY_ENV] = policy;
+    const a = await createEntity("rendered_page", `KEEP-A-${policy}`);
+    const b = await createEntity("rendered_page", `DEL-B-${policy}`);
+    const token = await mint([a]);
+    const deleted = await softDeleteEntity(b, "rendered_page", OWNER);
+    expect(deleted.success, JSON.stringify(deleted)).toBe(true);
+    for (const path of [`/entities/${b}/observations`, `/entities/${b}/relationships`]) {
+      const res = await guestGet(path, token);
+      expect(res.status, `${policy} ${path}`).toBe(403);
+      expect(JSON.parse(res.body)).toMatchObject({ error_code: GUEST_TOKEN_SCOPE_CODE });
+    }
+  });
+});

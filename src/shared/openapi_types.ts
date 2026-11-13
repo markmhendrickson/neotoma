@@ -6432,12 +6432,21 @@ export interface operations {
       };
       401: components["responses"]["GuestTokenInvalid"];
       403: components["responses"]["GuestTokenScope"];
+      /** @description Entity not found or deleted */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   getEntityRelationships: {
     parameters: {
       query?: {
-        /** @description When `true`, the response includes `related_entities` keyed by entity_id and decorates each relationship row with convenience top-level fields (`source_entity_name`, `target_entity_name`, `source_entity_type`, `target_entity_type`, and their labels). */
+        /** @description When `true`, the response includes `related_entities` keyed by entity_id and decorates each relationship row with convenience top-level fields (`source_entity_name`, `target_entity_name`, `source_entity_type`, `target_entity_type`, and their labels). For a caller holding only a guest link, only related entities that link covers are expanded. Every other related entity keeps its relationship rows and a `related_entities` entry with `canonical_name` and `entity_type` set to null and no snapshot, and its convenience fields on each row are null. */
         expand_entities?: boolean;
       };
       header?: never;
@@ -6475,6 +6484,15 @@ export interface operations {
       };
       401: components["responses"]["GuestTokenInvalid"];
       403: components["responses"]["GuestTokenScope"];
+      /** @description Entity not found or deleted */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listPotentialDuplicates: {

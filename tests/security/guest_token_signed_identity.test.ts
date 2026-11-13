@@ -30,6 +30,7 @@ let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
 const entityIds: string[] = [];
 const tokenEntityIds: string[] = [];
+const relationshipKeys: string[] = [];
 
 async function createPage(marker: string): Promise<string> {
   const id = `ent_rp_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -55,8 +56,23 @@ async function createPage(marker: string): Promise<string> {
   return id;
 }
 
+async function link(sourceId: string, targetId: string): Promise<void> {
+  const relationshipKey = `REFERS_TO:${sourceId}:${targetId}`;
+  await db.from("relationship_snapshots").insert({
+    relationship_key: relationshipKey,
+    relationship_type: "REFERS_TO",
+    source_entity_id: sourceId,
+    target_entity_id: targetId,
+    schema_version: "1",
+    snapshot: JSON.stringify({}),
+    user_id: OWNER,
+  });
+  relationshipKeys.push(relationshipKey);
+}
+
 async function get(path: string, token: string): Promise<{ status: number; body: string }> {
-  const response = await fetch(`${baseUrl}${path}?access_token=${token}`, {
+  const sep = path.includes("?") ? "&" : "?";
+  const response = await fetch(`${baseUrl}${path}${sep}access_token=${token}`, {
     headers: { "x-forwarded-for": "203.0.113.9" },
   });
   return { status: response.status, body: await response.text() };
@@ -69,6 +85,9 @@ beforeAll(() => {
 
 afterAll(async () => {
   delete process.env[POLICY_ENV];
+  for (const key of relationshipKeys) {
+    await db.from("relationship_snapshots").delete().eq("relationship_key", key);
+  }
   for (const id of tokenEntityIds) {
     await db.from("observations").delete().eq("entity_id", id);
     await db.from("entities").delete().eq("id", id);
@@ -98,6 +117,33 @@ describe.each(["closed", "submit_only", "submitter_scoped"] as const)(
         expect(res.status, `${policy} ${path}`).toBe(403);
         expect(res.body).not.toContain(`SIG-B-${policy}`);
       }
+    });
+  }
+);
+
+describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"] as const)(
+  "signed identity reading related-entity expansion under policy %s",
+  (policy) => {
+    it("is judged by the identity's own policy, and expands related entities when allowed", async () => {
+      process.env[POLICY_ENV] = policy;
+      const a = await createPage(`SIGX-A-${policy}`);
+      const b = await createPage(`SIGX-B-${policy}`);
+      await link(b, a);
+      const token = await generateGuestAccessToken({ entityIds: [a], userId: OWNER });
+      tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+
+      const res = await get(`/entities/${a}/relationships?expand_entities=true`, token);
+      if (policy === "closed" || policy === "submit_only") {
+        expect(res.status, policy).toBe(403);
+        expect(res.body).not.toContain(`SIGX-B-${policy}`);
+        return;
+      }
+      expect(res.status, policy).toBe(200);
+      const body = JSON.parse(res.body) as {
+        related_entities?: Record<string, Record<string, unknown>>;
+      };
+      expect(body.related_entities?.[b]).toMatchObject({ entity_type: "rendered_page" });
+      expect(res.body).toContain(`SIGX-B-${policy}`);
     });
   }
 );
