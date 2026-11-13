@@ -7,7 +7,6 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { exec } from "child_process";
 import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";

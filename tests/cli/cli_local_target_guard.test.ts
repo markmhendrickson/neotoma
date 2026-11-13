@@ -16,7 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { promisify } from "node:util";
 
-const spawned: Array<{ command: string; env: NodeJS.ProcessEnv | undefined }> = [];
+const spawned: Array<{ command: string; env: NodeJS.ProcessEnv | undefined; args?: string[] }> = [];
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -28,14 +28,41 @@ vi.mock("node:child_process", async (importOriginal) => {
     spawned.push({ command, env: options?.env });
     return Promise.resolve({ stdout: "{}", stderr: "" });
   };
-  return { ...actual, exec };
+  const execFile = vi.fn();
+  (execFile as unknown as Record<symbol, unknown>)[promisify.custom] = (
+    file: string,
+    args: string[],
+    options?: { env?: NodeJS.ProcessEnv }
+  ) => {
+    spawned.push({ command: [file, ...args].join(" "), env: options?.env, args });
+    return Promise.resolve({ stdout: "{}", stderr: "" });
+  };
+  const execSync = vi.fn((command: string, options?: { env?: NodeJS.ProcessEnv }) => {
+    spawned.push({ command, env: options?.env });
+    return "{}";
+  });
+  const spawnSync = vi.fn((file: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
+    spawned.push({ command: [file, ...args].join(" "), env: options?.env, args });
+    return { stdout: "{}", stderr: "", status: 0 };
+  });
+  return { ...actual, exec, execFile, execSync, spawnSync };
 });
+
+// vitest.setup.ts already loaded the helper with the real child_process; reload it so the
+// mock above is the one it promisifies.
+vi.resetModules();
 
 const {
   NonLocalCliTargetError,
   assertLocalBaseUrl,
+  SCRUB_WARNING,
   execAsync,
+  execFileLocal,
+  execSyncLocal,
   isLocalBaseUrl,
+  scrubNonLocalBaseUrl,
+  spawnSyncLocal,
+  withLocalBaseUrlArgs,
   localCliEnv,
   localTestBaseUrl,
   withLocalBaseUrl,
@@ -103,7 +130,7 @@ describe("CLI test local-target guard", () => {
 
       expect(spawned).toHaveLength(1);
       const { command, env } = spawned[0];
-      expect(command).toContain(`${CLI} --base-url ${localTestBaseUrl()} store`);
+      expect(command).toContain(`${CLI} --base-url '${localTestBaseUrl()}' store`);
       expect(isLocalBaseUrl(localTestBaseUrl())).toBe(true);
       expect(env?.NEOTOMA_BASE_URL).toBeUndefined();
       expect(env?.NEOTOMA_BEARER_TOKEN).toBeUndefined();
@@ -117,14 +144,14 @@ describe("CLI test local-target guard", () => {
       });
       expect(spawned[0].env?.NEOTOMA_BASE_URL).toBeUndefined();
       expect(spawned[0].env?.NEOTOMA_USER_ID).toBe("u");
-      expect(spawned[0].command).toContain("--base-url http://localhost:");
+      expect(spawned[0].command).toContain("--base-url 'http://localhost:");
     });
 
     it("promotes a loopback NEOTOMA_BASE_URL set by the test to the flag", async () => {
       await execAsync(`${CLI} entities list --json`, {
         env: { ...process.env, NEOTOMA_BASE_URL: "http://127.0.0.1:1" },
       });
-      expect(spawned[0].command).toContain(`${CLI} --base-url http://127.0.0.1:1 entities`);
+      expect(spawned[0].command).toContain(`${CLI} --base-url 'http://127.0.0.1:1' entities`);
     });
 
     it("keeps an explicit loopback --base-url and leaves non-CLI commands alone", async () => {
@@ -140,17 +167,156 @@ describe("CLI test local-target guard", () => {
     });
   });
 
+  describe("hardening", () => {
+    it("quotes the injected origin and drops userinfo, path and query from it", () => {
+      const out = withLocalBaseUrl(
+        `${CLI} store`,
+        "http://user:pw@localhost:1/tenant?x=1",
+        "http://localhost:2"
+      );
+      expect(out).toBe(`${CLI} --base-url 'http://localhost:1' store`);
+      expect(out).not.toMatch(/user|pw|tenant/);
+    });
+
+    it("checks every --base-url occurrence, not just the first", async () => {
+      await expect(
+        execAsync(`${CLI} --base-url http://localhost:1 store --base-url ${FAKE_REMOTE}`)
+      ).rejects.toBeInstanceOf(NonLocalCliTargetError);
+      expect(spawned).toEqual([]);
+    });
+
+    it("treats --help as no-network only as a real argument, not inside a quoted payload", () => {
+      const pinned = withLocalBaseUrl(
+        `${CLI} store --entities '[{"title":"--help"}]'`,
+        undefined,
+        "http://localhost:1"
+      );
+      expect(pinned).toContain("--base-url 'http://localhost:1'");
+      const dq = withLocalBaseUrl(
+        `${CLI} store --entities "[\\"-h\\"]"`,
+        undefined,
+        "http://localhost:1"
+      );
+      expect(dq).toContain("--base-url");
+      expect(withLocalBaseUrl(`${CLI} store --version`, undefined, "http://localhost:1")).toBe(
+        `${CLI} store --version`
+      );
+    });
+  });
+
+  describe("sync and execFile variants", () => {
+    it("execSyncLocal pins the base URL, scrubs ambient env, and refuses non-local", () => {
+      vi.stubEnv("NEOTOMA_BASE_URL", FAKE_REMOTE);
+      execSyncLocal(`${CLI} stats --json`);
+      expect(spawned[0].command).toContain("--base-url 'http://localhost:");
+      expect(spawned[0].env?.NEOTOMA_BASE_URL).toBeUndefined();
+      spawned.length = 0;
+      expect(() => execSyncLocal(`${CLI} --base-url ${FAKE_REMOTE} stats`)).toThrow(
+        NonLocalCliTargetError
+      );
+      expect(spawned).toEqual([]);
+    });
+
+    it("spawnSyncLocal pins an argument vector and refuses non-local", () => {
+      spawnSyncLocal("node", ["/abs/dist/cli/index.js", "schemas", "list"]);
+      expect(spawned[0].args?.slice(0, 3)).toEqual([
+        "/abs/dist/cli/index.js",
+        "--base-url",
+        expect.stringMatching(/^http:\/\/localhost:\d+$/),
+      ]);
+      spawned.length = 0;
+      expect(() =>
+        spawnSyncLocal("node", ["/abs/dist/cli/index.js", "--base-url", FAKE_REMOTE, "stats"])
+      ).toThrow(NonLocalCliTargetError);
+      expect(() =>
+        spawnSyncLocal("node", ["/abs/dist/cli/index.js", `--base-url=${FAKE_REMOTE}`])
+      ).toThrow(NonLocalCliTargetError);
+      expect(spawned).toEqual([]);
+    });
+
+    it("withLocalBaseUrlArgs leaves help argument vectors and non-CLI vectors alone", () => {
+      expect(
+        withLocalBaseUrlArgs(["/x/dist/cli/index.js", "--help"], undefined, "http://localhost:1")
+      ).toEqual(["/x/dist/cli/index.js", "--help"]);
+      expect(withLocalBaseUrlArgs(["-e", "1"], undefined, "http://localhost:1")).toEqual([
+        "-e",
+        "1",
+      ]);
+    });
+
+    it("execFileLocal pins and refuses non-local", async () => {
+      await execFileLocal(process.execPath, ["/abs/dist/cli/index.js", "stats"]);
+      expect(spawned[0].args).toContain("--base-url");
+      spawned.length = 0;
+      await expect(
+        execFileLocal(process.execPath, [
+          "/abs/dist/cli/index.js",
+          "--base-url",
+          FAKE_REMOTE,
+          "stats",
+        ])
+      ).rejects.toBeInstanceOf(NonLocalCliTargetError);
+      expect(spawned).toEqual([]);
+    });
+  });
+
+  describe("setup-file scrub (scrubNonLocalBaseUrl)", () => {
+    it("deletes a fake remote URL and its token, and reports it", () => {
+      const env: NodeJS.ProcessEnv = {
+        NEOTOMA_BASE_URL: FAKE_REMOTE,
+        NEOTOMA_BEARER_TOKEN: "fake-token-for-test",
+      };
+      expect(scrubNonLocalBaseUrl(env)).toBe(true);
+      expect(env.NEOTOMA_BASE_URL).toBeUndefined();
+      expect(env.NEOTOMA_BEARER_TOKEN).toBeUndefined();
+    });
+
+    it("keeps everything under RUN_REMOTE_TESTS=1 (in-process opt-out only)", () => {
+      const env: NodeJS.ProcessEnv = { RUN_REMOTE_TESTS: "1", NEOTOMA_BASE_URL: FAKE_REMOTE };
+      expect(scrubNonLocalBaseUrl(env)).toBe(false);
+      expect(env.NEOTOMA_BASE_URL).toBe(FAKE_REMOTE);
+    });
+
+    it("treats an unparseable URL as non-local and leaves loopback or empty alone", () => {
+      const bad: NodeJS.ProcessEnv = { NEOTOMA_BASE_URL: "not a url" };
+      expect(scrubNonLocalBaseUrl(bad)).toBe(true);
+      expect(bad.NEOTOMA_BASE_URL).toBeUndefined();
+      const local: NodeJS.ProcessEnv = { NEOTOMA_BASE_URL: "http://127.0.0.1:3080" };
+      expect(scrubNonLocalBaseUrl(local)).toBe(false);
+      expect(local.NEOTOMA_BASE_URL).toBe("http://127.0.0.1:3080");
+      expect(scrubNonLocalBaseUrl({})).toBe(false);
+    });
+
+    it("the warning names RUN_REMOTE_TESTS=1 and carries no URL", () => {
+      expect(SCRUB_WARNING).toMatch(/RUN_REMOTE_TESTS=1/);
+      expect(SCRUB_WARNING).not.toMatch(/https?:\/\//);
+    });
+
+    it("the refusal message names the .env source and the no-override rule, host only", () => {
+      try {
+        assertLocalBaseUrl("https://u:tok@example.invalid/t/p", "NEOTOMA_BASE_URL");
+        throw new Error("expected refusal");
+      } catch (err) {
+        const msg = String((err as Error).message);
+        expect(msg).toMatch(/always run against the local test server/);
+        expect(msg).toMatch(/\.env/);
+        expect(msg).toMatch(/example\.invalid/);
+        expect(msg).not.toMatch(/tok|\/t\/p|u:/);
+      }
+    });
+  });
+
   describe("pure helpers", () => {
     it("withLocalBaseUrl inserts the flag directly after the CLI entry point", () => {
       expect(withLocalBaseUrl(`${CLI} store --json`, undefined, "http://localhost:19080")).toBe(
-        `${CLI} --base-url http://localhost:19080 store --json`
+        `${CLI} --base-url 'http://localhost:19080' store --json`
       );
     });
 
     it("keeps a quoted absolute CLI path as one argument", () => {
       expect(
         withLocalBaseUrl('node "/abs/dist/cli/index.js" api start', undefined, "http://localhost:1")
-      ).toBe('node "/abs/dist/cli/index.js" --base-url http://localhost:1 api start');
+      ).toBe("node \"/abs/dist/cli/index.js\" --base-url 'http://localhost:1' api start");
     });
 
     it("leaves help and version invocations untouched (no request is made)", () => {

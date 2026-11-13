@@ -1,8 +1,6 @@
 import { beforeAll, afterAll, it, expect, vi } from "vitest";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import path from "node:path";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -12,6 +10,7 @@ import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
 import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 const kind = "null_projection_" + randomUUID().replaceAll("-", "");
 const ids: string[] = [];
 let server: ReturnType<typeof createServer>, base: string;
@@ -298,7 +297,7 @@ it("compiled generic request carries opt-in and refuses a malformed flag", async
     NODE_OPTIONS: process.env.NODE_OPTIONS,
   };
   const run = (value: unknown) =>
-    promisify(execFile)(
+    execFileLocal(
       process.execPath,
       [
         path.join(process.cwd(), "dist/cli/index.js"),
