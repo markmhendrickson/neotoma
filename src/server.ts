@@ -7817,7 +7817,12 @@ export class NeotomaServer {
             `Failed to get observations for entity ${createdEntity.entityId}:`,
             err instanceof Error ? err.message : String(err)
           );
-          emitStoreEventsOnce(null, new Date().toISOString());
+          // Whether the id was merged away is unknown. A new entity cannot be, so
+          // it still announces itself; for an existing entity the entity event is
+          // omitted rather than risk a phantom event under a tombstone id.
+          if (createdEntity.action === "created") {
+            emitStoreEventsOnce(null, new Date().toISOString());
+          }
           continue;
         }
         if (allObservations === null) {

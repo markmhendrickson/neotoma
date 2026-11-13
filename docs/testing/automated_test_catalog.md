@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **823**
-- Backend and repo Vitest files: **769**
+- Total automated test files: **824**
+- Backend and repo Vitest files: **770**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -70,7 +70,7 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 231 |
-| Vitest service tests | 66 |
+| Vitest service tests | 67 |
 | Source-adjacent tests | 70 |
 | Vitest integration tests | 244 |
 | Vitest CLI tests | 91 |
@@ -348,7 +348,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (66):**
+**Files (67):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -406,6 +406,7 @@ flowchart TD
 - `tests/services/store_condition_schema.test.ts`
 - `tests/services/store_conditional_race.test.ts`
 - `tests/services/store_conditional.test.ts`
+- `tests/services/store_entity_created_emission.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_issues_missing_token.test.ts`

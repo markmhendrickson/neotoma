@@ -1,4 +1,5 @@
 import { getCurrentAgentIdentity } from "../services/request_context.js";
+import { logger } from "../utils/logger.js";
 import { substrateEventBus } from "./substrate_event_bus.js";
 import type { SubstrateEvent } from "./types.js";
 
@@ -90,7 +91,7 @@ export function emitEntitySnapshotChange(params: {
  * (recompute threw or produced nothing) a new entity still gets
  * `entity.created` (its payload never carried snapshot data), and an existing
  * entity gets `entity.updated` with `fields_changed` omitted, which means
- * "changed, fields unknown".
+ * "changed, fields unknown". A degraded emission is logged at debug level.
  */
 export function emitStoreWriteEvents(params: {
   user_id: string;
@@ -101,6 +102,12 @@ export function emitStoreWriteEvents(params: {
   is_new_entity: boolean;
   prior_snapshot: Record<string, unknown>;
   snapshot_after: Record<string, unknown> | null;
+  /**
+   * When false only `observation.created` is emitted. Used for an id that
+   * redirects to a survivor (merged away): it owns no entity, so no entity
+   * event is announced under it.
+   */
+  emit_entity_event?: boolean;
   source_id?: string;
   idempotency_key?: string;
   observation_source?: string;
@@ -117,6 +124,13 @@ export function emitStoreWriteEvents(params: {
     observation_source: params.observation_source,
     source_peer_id: params.source_peer_id,
   });
+  if (params.emit_entity_event === false) return;
+  if (!params.snapshot_after) {
+    logger.debug(
+      `[substrate_event] snapshot unavailable for ${params.entity_id}; ` +
+        `emitting degraded ${params.is_new_entity ? "entity.created" : "entity.updated"}`
+    );
+  }
   emitEntitySnapshotChange({
     user_id: params.user_id,
     entity_id: params.entity_id,

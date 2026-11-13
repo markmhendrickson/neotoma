@@ -480,8 +480,11 @@ export async function runInterpretation(
     observationId: string;
   }> = [];
   const interpretationInsertedObservationIds = new Set<string>();
-  // Entities this run's resolver newly created (resolver trace, not snapshot-derived).
-  const resolverCreatedEntityIds = new Set<string>();
+  // Observations whose row made the resolver CREATE their entity (resolver trace,
+  // not snapshot-derived). Keyed per observation, not per entity: when two rows of
+  // one run resolve to the same new entity only the creating row announces it.
+  const entityCreatingObservationIds = new Set<string>();
+  let resolvedCreatedEntity = false;
   const refinementDebug: Array<{
     extracted_keys: string[];
     type_before: string;
@@ -715,7 +718,7 @@ export async function runInterpretation(
           userId,
         });
         entityId = resolved.entityId;
-        if (resolved.trace.action === "created") resolverCreatedEntityIds.add(entityId);
+        resolvedCreatedEntity = resolved.trace.action === "created";
       } catch (err) {
         const { CanonicalNameUnresolvedError } = await import("./entity_resolution.js");
         if (err instanceof CanonicalNameUnresolvedError) {
@@ -823,6 +826,7 @@ export async function runInterpretation(
 
       observationsCreated++;
       interpretationInsertedObservationIds.add(observationId);
+      if (resolvedCreatedEntity) entityCreatingObservationIds.add(observationId);
       entities.push({
         entityId,
         entityType,
@@ -870,7 +874,8 @@ export async function runInterpretation(
           entity_type: entity.entityType,
           observation_id: entity.observationId,
           timestamp,
-          is_new_entity: resolverCreatedEntityIds.has(entity.entityId) || observationCount === 1,
+          is_new_entity:
+            entityCreatingObservationIds.has(entity.observationId) || observationCount === 1,
           prior_snapshot: priorSnapshotForEvents,
           snapshot_after: snapshotAfter,
           source_id: sourceId,
@@ -905,7 +910,11 @@ export async function runInterpretation(
             `Failed to fetch observations for entity ${entity.entityId}:`,
             fetchError instanceof Error ? fetchError.message : String(fetchError)
           );
-          emitStoreEventsOnce(null, new Date().toISOString());
+          // Merged-away status is unknown: a new entity cannot be, so it still
+          // announces itself; for an existing entity the event is omitted.
+          if (entityCreatingObservationIds.has(entity.observationId)) {
+            emitStoreEventsOnce(null, new Date().toISOString());
+          }
           continue;
         }
         if (allObservations === null) {

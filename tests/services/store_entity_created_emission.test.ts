@@ -34,6 +34,7 @@ import { runInterpretation } from "../../src/services/interpretation.js";
 import type { InterpretationConfig } from "../../src/services/interpretation.js";
 import { observationReducer } from "../../src/reducers/observation_reducer.js";
 import { substrateEventBus } from "../../src/events/substrate_event_bus.js";
+import { mergeEntities } from "../../src/services/entity_merge.js";
 import { emitStoreWriteEvents } from "../../src/events/substrate_store_emit.js";
 import type { SubstrateEvent } from "../../src/events/types.js";
 import { cleanupTestEntityType } from "../helpers/test_schema_helpers.js";
@@ -191,11 +192,14 @@ describe("interpretation event emission", () => {
       entity_type: INTERP_TYPE,
       schema_version: "1.0",
       schema_definition: {
-        fields: { label: { type: "string" } },
+        fields: { label: { type: "string" }, note: { type: "string" } },
         canonical_name_fields: ["label"],
       },
       reducer_config: {
-        merge_policies: { label: { strategy: "last_write", tie_breaker: "observed_at" } },
+        merge_policies: {
+          label: { strategy: "last_write", tie_breaker: "observed_at" },
+          note: { strategy: "last_write", tie_breaker: "observed_at" },
+        },
       },
       active: true,
       scope: "global",
@@ -259,4 +263,65 @@ describe("interpretation event emission", () => {
       expect(cap.events.filter((e) => e.event_type === "observation.created")).toHaveLength(1);
     }
   );
+
+  it("emits exactly one entity.created when two rows of one run resolve to the same new entity", async () => {
+    const label = `interp-shared-${randomUUID()}`;
+    const cap = capture();
+    try {
+      await runInterpretation({
+        userId: TEST_USER,
+        sourceId,
+        extractedData: [
+          { entity_type: INTERP_TYPE, label, note: "first" },
+          { entity_type: INTERP_TYPE, label, note: "second" },
+        ],
+        config: CONFIG,
+      });
+    } finally {
+      cap.stop();
+    }
+    expect(cap.events.filter((e) => e.event_type === "entity.created")).toHaveLength(1);
+    expect(cap.events.filter((e) => e.event_type === "entity.updated")).toHaveLength(1);
+    expect(cap.events.filter((e) => e.event_type === "observation.created")).toHaveLength(2);
+    expect(new Set(cap.events.map((e) => e.entity_id)).size).toBe(1);
+  });
+});
+
+describe("REST store of a merged-away id", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const storeRest = (entity: Record<string, unknown>) =>
+    storeStructuredForApi({
+      userId: TEST_USER,
+      entities: [entity],
+      idempotencyKey: `emit-${randomUUID()}`,
+      sourcePriority: 100,
+    }) as Promise<{ entities: Array<{ entity_id: string }> }>;
+
+  async function mergedAwayPair() {
+    const from = (await storeRest({ entity_type: "task", title: `merge-from-${randomUUID()}` }))
+      .entities[0].entity_id;
+    const to = (await storeRest({ entity_type: "task", title: `merge-to-${randomUUID()}` }))
+      .entities[0].entity_id;
+    await mergeEntities({
+      fromEntityId: from,
+      toEntityId: to,
+      userId: TEST_USER,
+      mergedBy: "test",
+    });
+    return { from, to };
+  }
+
+  it("emits no entity event for a write targeting a merged-away id", async () => {
+    const { from } = await mergedAwayPair();
+    const cap = capture();
+    try {
+      await storeRest({ entity_type: "task", title: "ignored", target_id: from, description: "x" });
+    } finally {
+      cap.stop();
+    }
+    expect(cap.events.filter((e) => e.event_type.startsWith("entity."))).toHaveLength(0);
+  });
 });
