@@ -605,6 +605,24 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_id, entity_type, entity_id)"
       )
       .run();
+    // Idempotency-key replay lookups. `correct`/`store` look up
+    // `WHERE user_id = ? AND idempotency_key = ?` on observations (existingCorrectionForKey,
+    // correction_transaction receipts) and on sources (store/raw_storage admission), the
+    // former inside a write transaction that holds the single write gate. With no index
+    // each was a full table scan, so gate hold time grew with table size (14-58 s per
+    // correct on hosted, 2026-11-13). Partial: every lookup compares the key with `=`,
+    // which implies NOT NULL, and most rows carry no key. Placed after the
+    // idempotency_key addColumnIfMissing calls above so it is safe on old databases.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_user_idempotency ON observations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sources_user_idempotency ON sources(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+      )
+      .run();
     await addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     await addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
