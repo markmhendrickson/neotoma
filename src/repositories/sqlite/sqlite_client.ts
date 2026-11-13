@@ -1,5 +1,6 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
+import { logger } from "../../utils/logger.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -483,6 +484,31 @@ async function addColumnIfMissing(
 }
 
 /**
+ * Create an index, logging only when it is actually built. On a large existing
+ * table the first build blocks the single connection (and so all writes) until it
+ * finishes, so the operator needs a visible start and end line. Silent when the
+ * index already exists.
+ */
+async function createIndexLogged(
+  db: DbConnection,
+  name: string,
+  table: string,
+  ddl: string
+): Promise<void> {
+  const existing = await db
+    .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'index' AND name = ?")
+    .get(name);
+  if (existing) {
+    await db.prepare(ddl).run();
+    return;
+  }
+  logger.info(`Building index ${name} on ${table} (one-time, blocks writes until done)`);
+  const started = Date.now();
+  await db.prepare(ddl).run();
+  logger.info(`Built index ${name} on ${table} in ${Date.now() - started} ms`);
+}
+
+/**
  * Runs all DDL/backfill inside one `database.transaction()`. Relies on the
  * transaction backend taking the write lock up front (`BEGIN IMMEDIATE`, or
  * the libsql driver's `"write"` mode) rather than deferring it to the first
@@ -613,16 +639,18 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // correct on hosted, 2026-11-13). Partial: every lookup compares the key with `=`,
     // which implies NOT NULL, and most rows carry no key. Placed after the
     // idempotency_key addColumnIfMissing calls above so it is safe on old databases.
-    await db
-      .prepare(
-        "CREATE INDEX IF NOT EXISTS idx_observations_user_idempotency ON observations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
-      )
-      .run();
-    await db
-      .prepare(
-        "CREATE INDEX IF NOT EXISTS idx_sources_user_idempotency ON sources(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
-      )
-      .run();
+    await createIndexLogged(
+      db,
+      "idx_observations_user_idempotency",
+      "observations",
+      "CREATE INDEX IF NOT EXISTS idx_observations_user_idempotency ON observations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+    );
+    await createIndexLogged(
+      db,
+      "idx_sources_user_idempotency",
+      "sources",
+      "CREATE INDEX IF NOT EXISTS idx_sources_user_idempotency ON sources(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+    );
     await addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     await addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");

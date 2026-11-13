@@ -10,7 +10,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logger } from "../../src/utils/logger.js";
 import {
   applyConnectionPragmas,
   ensureSchema,
@@ -62,4 +63,24 @@ describe("idempotency_key lookup indexes", () => {
       expect(detail).not.toMatch(/SCAN/);
     });
   }
+
+  it("logs the one-time index build only when the index is missing", async () => {
+    const spy = vi.spyOn(logger, "info").mockImplementation(() => {});
+    try {
+      await ensureSchema(database); // already built: silent
+      expect(spy).not.toHaveBeenCalled();
+      await database.exec("DROP INDEX idx_observations_user_idempotency");
+      await ensureSchema(database);
+      const lines = spy.mock.calls.map((c) => String(c[0]));
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toBe(
+        "Building index idx_observations_user_idempotency on observations (one-time, blocks writes until done)"
+      );
+      expect(lines[1]).toMatch(
+        /^Built index idx_observations_user_idempotency on observations in \d+ ms$/
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
