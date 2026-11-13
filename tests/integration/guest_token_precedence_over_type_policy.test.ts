@@ -529,7 +529,7 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
     }
   });
 
-  it("deleted: a token for a deleted page opens nothing on the link routes or observations", async () => {
+  it("deleted: a token for a deleted page answers 404 on the link, observations and relationships routes", async () => {
     const page = await createRenderedPage({
       title: "Deleted Page",
       htmlBody: "<p>DELETED-PAGE-CONTENT</p>",
@@ -551,13 +551,16 @@ describe("guest_access_token precedence over closed type-level policy (#1948)", 
       source_priority: 1000,
     });
 
-    for (const path of [`/entities/${page}/html`, `/entities/${page}`]) {
+    for (const path of [
+      `/entities/${page}/html`,
+      `/entities/${page}`,
+      `/entities/${page}/observations`,
+      `/entities/${page}/relationships`,
+    ]) {
       const response = await fetch(`${API_BASE}${path}?access_token=${token}`);
       expect(response.status, path).toBe(404);
       expect(await response.text()).not.toContain("DELETED-PAGE-CONTENT");
     }
-    const obs = await fetch(`${API_BASE}/entities/${page}/observations?access_token=${token}`);
-    expect(obs.status).toBe(403);
   });
 
   it("issues: a submitter_scoped issue named by the token keeps its policy-governed read and write paths", async () => {

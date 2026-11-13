@@ -72,6 +72,7 @@ import {
   assetEntityTypeForMimeType,
 } from "./services/mutation_capability.js";
 import { AccessPolicyError, type GuestIdentity } from "./services/access_policy.js";
+import type { EntityWithProvenance } from "./services/entity_queries.js";
 import {
   GUEST_TOKEN_INVALID_CODE,
   GUEST_TOKEN_INVALID_MESSAGE,
@@ -4545,6 +4546,167 @@ async function resolveGuestShareLinkEntityAccess(
   return { kind: "found", ...access, viaToken: false };
 }
 
+/**
+ * Whether an entity is currently deleted, decided the same way as the entity
+ * detail and HTML routes (see `getEntityWithProvenance`).
+ */
+async function entityIsHiddenNow(entity: {
+  id: string;
+  user_id: string;
+  entity_type: string;
+}): Promise<boolean> {
+  const { isEntityHiddenNow } = await import("./services/current_state_reads.js");
+  const hidden = await isEntityHiddenNow(entity);
+  if (hidden !== undefined) return hidden;
+  const { isEntityDeleted } = await import("./services/deletion.js");
+  return isEntityDeleted(entity.id, entity.user_id);
+}
+
+type GuestEntityReadAccess =
+  | { kind: "not_found" }
+  | { kind: "found"; userId: string; entityType: string };
+
+/**
+ * Guest READ access for GET /entities/:id/observations and
+ * GET /entities/:id/relationships. Access is decided by the policy-governed
+ * resolver; a deleted entity then answers `not_found`, as the entity detail and
+ * HTML routes do. When the caller's token covers the entity, deletion is
+ * reported before the type policy, matching the share-link routes; otherwise it
+ * is reported only after access is granted, so an entity the caller may not
+ * read never answers differently for being deleted.
+ */
+async function resolveGuestEntityReadAccess(
+  principal: GuestPrincipal,
+  entityId: string
+): Promise<GuestEntityReadAccess> {
+  await assertValidGuestAccessToken(principal);
+  const token = principal.guestId.accessToken;
+  if (token) {
+    const { data: entity } = await db
+      .from("entities")
+      .select("id, entity_type, user_id")
+      .eq("id", entityId)
+      .maybeSingle();
+    const row = entity as { id: string; entity_type: string; user_id: string } | null;
+    if (row) {
+      const check = await checkGuestTokenForEntity(
+        token,
+        entityId,
+        row,
+        await principalGuestGrant(principal)
+      );
+      if (check.state === "granted" && (await entityIsHiddenNow(row))) {
+        return { kind: "not_found" };
+      }
+    }
+  }
+  const access = await resolveGuestPolicyGovernedEntityAccess(principal, entityId);
+  if (
+    await entityIsHiddenNow({
+      id: entityId,
+      user_id: access.userId,
+      entity_type: access.entityType,
+    })
+  ) {
+    return { kind: "not_found" };
+  }
+  return { kind: "found", ...access };
+}
+
+/** Upper bound on related entities evaluated for one guest expansion request. */
+export const GUEST_EXPANSION_MAX_RELATED_ENTITIES = 50;
+
+type GuestEntityDetailRead =
+  | { kind: "readable"; entity: EntityWithProvenance }
+  | { kind: "not_found" }
+  | { kind: "refused"; error: Error };
+
+/**
+ * The single read decision for one entity and one guest caller, used by
+ * GET /entities/:id, GET /entities/:id/html and related-entity expansion, so
+ * they cannot differ. Access is resolved by `resolveGuestShareLinkEntityAccess`
+ * (a token that names the entity, otherwise the type policy with the
+ * submitter-scoped rules); a deleted or merged entity is `not_found` for every
+ * caller. Whatever it returns as `readable` has `entity_id` equal to the
+ * requested id. A refusal is returned with the error the route answers with,
+ * never thrown, so a caller can decide per entity.
+ */
+async function decideGuestEntityDetailRead(
+  principal: GuestPrincipal,
+  entityId: string
+): Promise<GuestEntityDetailRead> {
+  let access: GuestShareLinkAccess;
+  try {
+    access = await resolveGuestShareLinkEntityAccess(principal, entityId);
+  } catch (error) {
+    if (
+      error instanceof GuestTokenInvalidError ||
+      error instanceof GuestTokenScopeError ||
+      error instanceof AccessPolicyError
+    ) {
+      return { kind: "refused", error };
+    }
+    throw error;
+  }
+  if (access.kind === "not_found") return { kind: "not_found" };
+  // A merged entity is answered as absent for every guest caller: the decision
+  // is about the requested entity only, so a merge redirect is never followed.
+  const { data: row, error: rowError } = await db
+    .from("entities")
+    .select("id, merged_to_entity_id")
+    .eq("id", entityId)
+    .eq("user_id", access.userId)
+    .maybeSingle();
+  if (rowError) throw rowError;
+  if (!row || (row as { merged_to_entity_id?: string | null }).merged_to_entity_id) {
+    return { kind: "not_found" };
+  }
+  const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+  const entity = await getEntityWithProvenance(entityId, false, access.userId);
+  if (!entity) return { kind: "not_found" };
+  // Invariant: whatever this decision returns as readable is the requested
+  // entity, never another one.
+  if (entity.entity_id !== entityId) return { kind: "not_found" };
+  return { kind: "readable", entity };
+}
+
+/**
+ * The related entities a guest caller may see expanded: exactly those for which
+ * `decideGuestEntityDetailRead` answers `readable` with that same entity, owned
+ * by the owner whose graph is being read. Applies to every guest caller (token
+ * only, token with a signed identity, signed identity only). Every other
+ * related entity keeps its relationship row but is not expanded.
+ *
+ * At most `GUEST_EXPANSION_MAX_RELATED_ENTITIES` related entities are evaluated
+ * per request, in ascending id order; any beyond that bound are not expanded.
+ */
+async function relatedEntitiesReadableByGuest(
+  principal: GuestPrincipal,
+  ownerId: string,
+  relatedIds: string[]
+): Promise<Set<string>> {
+  const readable = new Set<string>();
+  if (relatedIds.length === 0) return readable;
+  // Only entities that exist in the owner's graph are considered.
+  const { data: rows, error } = await db
+    .from("entities")
+    .select("id")
+    .in("id", relatedIds)
+    .eq("user_id", ownerId);
+  if (error) throw error;
+  const candidates = ((rows ?? []) as Array<{ id: string }>)
+    .map((row) => row.id)
+    .sort()
+    .slice(0, GUEST_EXPANSION_MAX_RELATED_ENTITIES);
+  for (const id of candidates) {
+    const decision = await decideGuestEntityDetailRead(principal, id);
+    if (decision.kind === "readable" && decision.entity.entity_id === id) {
+      readable.add(id);
+    }
+  }
+  return readable;
+}
+
 // Inspector SPA shell — early content-negotiation handler. Registered BEFORE
 // the auth gate and the JSON data routes (/sources, /entities/:id, /schemas, …)
 // so that a browser navigating to a SPA client route (Accept: text/html) gets
@@ -5489,36 +5651,31 @@ app.get("/entities/:id", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
-    let tokenScopedOwner: string | undefined;
     if (principal.kind === "guest") {
-      const access = await resolveGuestShareLinkEntityAccess(principal, entityId);
-      if (access.kind === "not_found") {
+      // The same per-entity decision related-entity expansion uses.
+      const decision = await decideGuestEntityDetailRead(principal, entityId);
+      if (decision.kind === "refused") throw decision.error;
+      if (decision.kind === "not_found") {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
-      if (access.viaToken) tokenScopedOwner = access.userId;
-    } else {
-      const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
-      const { data: entity, error: entityError } = await db
-        .from("entities")
-        .select("id, user_id")
-        .eq("id", entityId)
-        .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
-        .single();
+      return res.json(decision.entity);
+    }
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const { data: entity, error: entityError } = await db
+      .from("entities")
+      .select("id, user_id")
+      .eq("id", entityId)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
 
-      if (entityError || !entity) {
-        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-      }
+    if (entityError || !entity) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const entityWithProvenance = await getEntityWithProvenance(entityId, false, tokenScopedOwner);
+    const entityWithProvenance = await getEntityWithProvenance(entityId, false);
 
     if (!entityWithProvenance) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-    }
-    // A token grants exactly the entity it names: never serve another entity's
-    // content (for example through a merge redirect).
-    if (tokenScopedOwner && entityWithProvenance.entity_id !== entityId) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
@@ -5619,13 +5776,12 @@ app.get("/entities/:id/html", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
-    let tokenScopedOwner: string | undefined;
+    let current: EntityWithProvenance | null;
     if (principal.kind === "guest") {
-      const access = await resolveGuestShareLinkEntityAccess(principal, entityId);
-      if (access.kind === "not_found") {
-        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-      }
-      if (access.viaToken) tokenScopedOwner = access.userId;
+      // The same per-entity decision as GET /entities/:id.
+      const decision = await decideGuestEntityDetailRead(principal, entityId);
+      if (decision.kind === "refused") throw decision.error;
+      current = decision.kind === "readable" ? decision.entity : null;
     } else {
       const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5637,16 +5793,10 @@ app.get("/entities/:id/html", async (req, res) => {
       if (entityError || !entity) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
+      const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+      current = await getEntityWithProvenance(entityId, false);
     }
-
-    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const current = await getEntityWithProvenance(entityId, false, tokenScopedOwner);
     if (!current) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-    }
-    // A token grants exactly the entity it names: never serve another entity's
-    // content (for example through a merge redirect).
-    if (tokenScopedOwner && current.entity_id !== entityId) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
     if (current.entity_type !== "rendered_page") {
@@ -5775,7 +5925,11 @@ app.get("/entities/:id/observations", async (req, res) => {
     let userId: string;
 
     if (principal.kind === "guest") {
-      userId = (await resolveGuestPolicyGovernedEntityAccess(principal, entityId)).userId;
+      const access = await resolveGuestEntityReadAccess(principal, entityId);
+      if (access.kind === "not_found") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      userId = access.userId;
     } else {
       userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5834,7 +5988,11 @@ app.get("/entities/:id/relationships", async (req, res) => {
     let userId: string;
 
     if (principal.kind === "guest") {
-      userId = (await resolveGuestPolicyGovernedEntityAccess(principal, entityId)).userId;
+      const access = await resolveGuestEntityReadAccess(principal, entityId);
+      if (access.kind === "not_found") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      userId = access.userId;
     } else {
       userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
@@ -5890,14 +6048,32 @@ app.get("/entities/:id/relationships", async (req, res) => {
       }
       if (relatedIds.size > 0) {
         const idsArr = Array.from(relatedIds);
-        const [snapshotsResult, entitiesResult] = await Promise.all([
-          db.from("entity_snapshots").select("*").in("entity_id", idsArr).eq("user_id", userId),
-          db
-            .from("entities")
-            .select("id, canonical_name, entity_type")
-            .in("id", idsArr)
-            .eq("user_id", userId),
-        ]);
+        // A guest caller sees expanded content only for related entities it
+        // could read through GET /entities/:id. The others keep their
+        // relationship rows and an entry with no name, type or snapshot.
+        let expandIds = idsArr;
+        if (principal.kind === "guest") {
+          const readable = await relatedEntitiesReadableByGuest(principal, userId, idsArr);
+          expandIds = idsArr.filter((id) => readable.has(id));
+        }
+        const [snapshotsResult, entitiesResult] =
+          expandIds.length > 0
+            ? await Promise.all([
+                db
+                  .from("entity_snapshots")
+                  .select("*")
+                  .in("entity_id", expandIds)
+                  .eq("user_id", userId),
+                db
+                  .from("entities")
+                  .select("id, canonical_name, entity_type")
+                  .in("id", expandIds)
+                  .eq("user_id", userId),
+              ])
+            : [
+                { data: [] as any[], error: null },
+                { data: [] as any[], error: null },
+              ];
 
         // Merge snapshot + entity rows so callers always get canonical_name
         // and entity_type even when the snapshot row is missing.
