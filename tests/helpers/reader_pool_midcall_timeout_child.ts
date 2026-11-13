@@ -43,9 +43,12 @@ for (let i = 0; i < ITERATIONS; i += 1) {
 // Capacity returns once the draining orphans finish; until then a read may
 // itself hit the (deliberately tiny) budget while queued behind one.
 let after: unknown;
+let attempts = 0;
+const t0 = Date.now();
 const deadline = Date.now() + 60_000;
 while (after === undefined && Date.now() < deadline) {
   try {
+    attempts += 1;
     after = await db.prepare("SELECT 1 AS ok").get();
   } catch (error) {
     if (!(error instanceof WorkerDbTimeoutError)) throw error;
@@ -53,4 +56,4 @@ while (after === undefined && Date.now() < deadline) {
   }
 }
 await db.close();
-console.log(JSON.stringify({ timeouts, after }));
+console.log(JSON.stringify({ timeouts, after, attempts, recoveryMs: Date.now() - t0 }));
