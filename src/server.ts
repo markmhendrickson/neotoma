@@ -158,11 +158,7 @@ import {
 } from "./services/request_context.js";
 import { timeMcpIdentifierLookup } from "./services/mcp_lookup_timing.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
-import {
-  emitEntitySnapshotChange,
-  emitObservationCreated,
-  shallowFieldsChanged,
-} from "./events/substrate_store_emit.js";
+import { emitStoreWriteEvents } from "./events/substrate_store_emit.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import { identifyEntityBySignals } from "./services/entity_signal_resolver.js";
 import {
@@ -7794,6 +7790,34 @@ export class NeotomaServer {
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
     for (const createdEntity of createdEntities) {
+      // Substrate events must not depend on the snapshot recompute: a new entity
+      // has to announce itself with `entity.created` even when the snapshot
+      // cannot be computed. `emitted` keeps this to one emission per entity.
+      let storeEventsEmitted = false;
+      let priorSnapshotForEvents: Record<string, unknown> = {};
+      const emitStoreEventsOnce = (
+        snapshotAfter: Record<string, unknown> | null,
+        timestamp: string
+      ) => {
+        if (storeEventsEmitted || !insertedObservationIds.has(createdEntity.observationId)) {
+          return;
+        }
+        storeEventsEmitted = true;
+        emitStoreWriteEvents({
+          user_id: userId,
+          entity_id: createdEntity.entityId,
+          entity_type: createdEntity.entityType,
+          observation_id: createdEntity.observationId,
+          timestamp,
+          is_new_entity: createdEntity.action === "created",
+          prior_snapshot: priorSnapshotForEvents,
+          snapshot_after: snapshotAfter,
+          source_id: storageResult.sourceId,
+          idempotency_key: idempotencyKey,
+          observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
+          source_peer_id: sourcePeerId ?? undefined,
+        });
+      };
       try {
         const { data: priorSnapRow } = await db
           .from("entity_snapshots")
@@ -7803,6 +7827,7 @@ export class NeotomaServer {
           .maybeSingle();
         const priorSnapshot =
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+        priorSnapshotForEvents = priorSnapshot;
         priorSnapshotByEntityId.set(createdEntity.entityId, priorSnapshot);
 
         // #2343: the observations ATTACHED to this entity, through the
@@ -7820,6 +7845,12 @@ export class NeotomaServer {
             `Failed to get observations for entity ${createdEntity.entityId}:`,
             err instanceof Error ? err.message : String(err)
           );
+          // Whether the id was merged away is unknown. A new entity cannot be, so
+          // it still announces itself; for an existing entity the entity event is
+          // omitted rather than risk a phantom event under a tombstone id.
+          if (createdEntity.action === "created") {
+            emitStoreEventsOnce(null, new Date().toISOString());
+          }
           continue;
         }
         if (allObservations === null) {
@@ -7856,7 +7887,9 @@ export class NeotomaServer {
           );
 
           if (!snapshot) {
-            continue; // Skip snapshot and timeline derivation if snapshot computation failed
+            // Skip snapshot and timeline derivation, but still announce the write.
+            emitStoreEventsOnce(null, new Date().toISOString());
+            continue;
           }
 
           // Issue #1839: record the post-reduction snapshot before the embedding
@@ -7940,39 +7973,7 @@ export class NeotomaServer {
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
           const emitTs = snapshot.computed_at || new Date().toISOString();
-          if (insertedObservationIds.has(createdEntity.observationId)) {
-            emitObservationCreated({
-              user_id: userId,
-              entity_id: createdEntity.entityId,
-              entity_type: createdEntity.entityType,
-              observation_id: createdEntity.observationId,
-              timestamp: emitTs,
-              source_id: storageResult.sourceId,
-              idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
-              source_peer_id: sourcePeerId ?? undefined,
-            });
-            const isNewEntity = createdEntity.action === "created";
-            const entityEventType = isNewEntity
-              ? ("entity.created" as const)
-              : ("entity.updated" as const);
-            const fieldsChanged = isNewEntity
-              ? undefined
-              : shallowFieldsChanged(priorSnapshot, newSnapshot);
-            emitEntitySnapshotChange({
-              user_id: userId,
-              entity_id: createdEntity.entityId,
-              entity_type: createdEntity.entityType,
-              event_type: entityEventType,
-              timestamp: emitTs,
-              observation_id: createdEntity.observationId,
-              fields_changed: fieldsChanged,
-              source_id: storageResult.sourceId,
-              idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
-              source_peer_id: sourcePeerId ?? undefined,
-            });
-          }
+          emitStoreEventsOnce(newSnapshot, emitTs);
 
           // Schema-driven auto-linking of reference_fields → typed edges.
           if (timelineSchema?.reference_fields?.length) {
@@ -8011,7 +8012,10 @@ export class NeotomaServer {
           `Failed to compute snapshot for entity ${createdEntity.entityId}:`,
           error instanceof Error ? error.message : "Unknown error"
         );
+        emitStoreEventsOnce(null, new Date().toISOString());
       }
+      // Empty observation set: nothing to snapshot, but the observation was written.
+      emitStoreEventsOnce(null, new Date().toISOString());
     }
 
     // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation).
