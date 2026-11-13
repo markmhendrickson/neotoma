@@ -23,6 +23,11 @@
  * conformance result — these are advisory, like `store_warnings`.
  */
 
+import { safePatternTest } from "../safe_pattern.js";
+
+/** Subject cap for rendered-page rules (page bodies exceed the field-value cap). */
+const CONFORMANCE_MAX_SUBJECT_LENGTH = 1_000_000;
+
 export type ConformanceSeverity = "warn" | "block";
 
 export interface RenderedPageWarning {
@@ -99,13 +104,14 @@ function evaluateRule(
   if (!rule || typeof rule.pattern !== "string" || typeof rule.code !== "string") return null;
   const target = rule.target ?? "both";
   const haystack = target === "html" ? html : target === "css" ? css : `${css}\n${html}`;
-  let re: RegExp;
-  try {
-    re = new RegExp(rule.pattern, rule.flags ?? "i");
-  } catch {
-    return null; // malformed rule → skip (fail-open)
-  }
-  const present = re.test(haystack);
+  // Page bodies are far larger than field values, so this sink has a larger
+  // subject cap. Unusable rules and oversized pages skip the rule.
+  const res = safePatternTest(rule.pattern, haystack, {
+    flags: rule.flags ?? "i",
+    maxSubjectLength: CONFORMANCE_MAX_SUBJECT_LENGTH,
+  });
+  if (res.status !== "match" && res.status !== "no_match") return null;
+  const present = res.status === "match";
   const violated = rule.mode === "require_absent" ? present : !present;
   if (!violated) return null;
   return {

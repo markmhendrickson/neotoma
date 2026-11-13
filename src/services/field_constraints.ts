@@ -7,6 +7,8 @@
  */
 
 import type { FieldConstraints, FieldDefinition } from "./schema_registry.js";
+import { safePatternTest } from "./safe_pattern.js";
+import { logger } from "../utils/logger.js";
 
 // Re-export so callers that import from this module can reference the types.
 export type { FieldConstraints } from "./schema_registry.js";
@@ -66,13 +68,34 @@ export function checkFieldConstraints(
 
   // --- pattern (strings only) ---
   if (typeof value === "string" && constraints.pattern !== undefined) {
-    const re = new RegExp(constraints.pattern);
-    if (!re.test(value)) {
+    const res = safePatternTest(constraints.pattern, value);
+    if (res.status === "no_match") {
       return {
         field: fieldName,
         constraint: "pattern",
         message: `Field "${fieldName}" value "${value}" does not match the required pattern /${constraints.pattern}/.`,
         value,
+      };
+    }
+    if (res.status === "subject_too_long") {
+      return {
+        field: fieldName,
+        constraint: "pattern",
+        message: `Field "${fieldName}" value exceeds ${res.limit} characters and cannot be checked against its pattern constraint.`,
+        value: undefined,
+      };
+    }
+    if (res.status === "invalid_pattern" || res.status === "timeout") {
+      // Fail closed: a stored pattern that is no longer acceptable rejects the value.
+      logger.warn(
+        `[FIELD_CONSTRAINTS] Pattern constraint on field "${fieldName}" is unusable ` +
+          `(${res.status === "timeout" ? "evaluation budget exceeded" : res.reason}); value rejected.`
+      );
+      return {
+        field: fieldName,
+        constraint: "pattern",
+        message: `Field "${fieldName}" has a pattern constraint that cannot be evaluated safely; the value was not accepted.`,
+        value: undefined,
       };
     }
   }

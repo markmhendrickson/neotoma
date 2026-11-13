@@ -27,6 +27,7 @@ import { spawn } from "child_process";
 import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { validatePattern } from "./safe_pattern.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3272,12 +3273,10 @@ export class SchemaRegistryService {
           if (typeof c.pattern !== "string") {
             throw new Error(`constraints.pattern for ${fieldName} must be a string`);
           }
-          try {
-            // eslint-disable-next-line no-new
-            new RegExp(c.pattern);
-          } catch {
+          const patternCheck = validatePattern(c.pattern);
+          if (!patternCheck.ok) {
             throw new Error(
-              `constraints.pattern for ${fieldName} is not a valid regular expression: "${c.pattern}"`
+              `constraints.pattern for ${fieldName} is not accepted: ${patternCheck.reason}`
             );
           }
           if (fieldDef.type !== "string") {
@@ -3350,6 +3349,17 @@ export class SchemaRegistryService {
             throw new Error(
               `derived_entities[${i}].conditions[${j}] with op "matches_any_pattern" must have a non-empty patterns array`
             );
+          }
+          if (cond.op === "matches_any_pattern") {
+            for (let k = 0; k < cond.patterns!.length; k++) {
+              const pc = validatePattern(cond.patterns![k]);
+              // Syntactically invalid sources keep their substring fallback.
+              if (!pc.ok && pc.reason !== "not a valid regular expression") {
+                throw new Error(
+                  `derived_entities[${i}].conditions[${j}].patterns[${k}] is not accepted: ${pc.reason}`
+                );
+              }
+            }
           }
         }
         if (typeof rule.derived_entity_type !== "string" || !rule.derived_entity_type.trim()) {

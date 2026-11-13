@@ -11,6 +11,7 @@
  */
 
 import { logger } from "../utils/logger.js";
+import { safePatternTest } from "./safe_pattern.js";
 import type { SchemaDefinition } from "./schema_registry.js";
 
 export interface DerivedEntityExtractionParams {
@@ -65,14 +66,21 @@ export function evaluateCondition(
       if (!strValue) return false;
       const lc = strValue.toLowerCase();
       return condition.patterns.some((pattern) => {
-        try {
-          // Treat pattern as a RegExp source string first; fall back to
-          // substring match if RegExp construction fails.
-          const re = new RegExp(pattern, "i");
-          return re.test(strValue);
-        } catch {
-          return lc.includes(pattern.toLowerCase());
+        // Pattern is a RegExp source evaluated under bounds. A pattern that is
+        // not acceptable (or a subject that is too long) is ignored: it never
+        // matches. Only a syntactically invalid source keeps the historical
+        // plain-substring behavior.
+        const res = safePatternTest(pattern, strValue, { flags: "i" });
+        if (res.status === "match") return true;
+        if (res.status === "no_match") return false;
+        if (res.status === "invalid_pattern" && res.reason === "not a valid regular expression") {
+          return typeof pattern === "string" && lc.includes(pattern.toLowerCase());
         }
+        logger.warn(
+          `[SCHEMA_DERIVED] matches_any_pattern pattern ignored (${res.status}` +
+            `${res.status === "invalid_pattern" ? `: ${res.reason}` : ""}).`
+        );
+        return false;
       });
     }
 
