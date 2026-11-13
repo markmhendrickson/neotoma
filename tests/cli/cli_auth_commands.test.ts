@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { exec } from "child_process";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { promisify } from "util";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
 describe("CLI auth commands", () => {

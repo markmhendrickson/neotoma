@@ -1,11 +1,9 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 
 const CLI_PATH = "node dist/cli/index.js";
 

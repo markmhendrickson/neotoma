@@ -9,6 +9,26 @@ import { fileURLToPath } from "node:url";
 // Load .env file before setting any defaults
 dotenv.config(); // Load .env
 
+// A non-local NEOTOMA_BASE_URL (from the shell or from the .env just loaded) would aim
+// every spawned `node dist/cli/index.js` and in-process client at a real, possibly
+// production, instance. Drop it for the whole run; CLI tests pin their own loopback target
+// via tests/helpers/cli_local_target.ts. RUN_REMOTE_TESTS=1 opts into remote on purpose.
+if (process.env.RUN_REMOTE_TESTS !== "1") {
+  const ambientBase = process.env.NEOTOMA_BASE_URL?.trim();
+  if (ambientBase) {
+    let host = "";
+    try {
+      host = new URL(ambientBase).hostname.replace(/^\[|\]$/g, "");
+    } catch {
+      // unparseable: treated as non-local below
+    }
+    if (!["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(host)) {
+      delete process.env.NEOTOMA_BASE_URL;
+      delete process.env.NEOTOMA_BEARER_TOKEN;
+    }
+  }
+}
+
 /**
  * Fail the run — do not just warn — if any code under test writes inside the
  * operator's REAL home directory instead of the isolated stand-in that

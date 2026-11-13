@@ -8,13 +8,12 @@
 
 import { describe, it, expect } from "vitest";
 import { exec } from "child_process";
-import { promisify } from "util";
 import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import Database from "../../src/repositories/sqlite/sqlite_driver.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
 function createTestDb(path: string, rows: Array<{ id: string; value: string }>): void {

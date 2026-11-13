@@ -91,6 +91,21 @@ function announceMissingPrerequisites(): void {
   }
 }
 
+function scrubNonLocalBaseUrlFromEnv(): void {
+  if (process.env.RUN_REMOTE_TESTS === "1") return;
+  const base = process.env.NEOTOMA_BASE_URL?.trim();
+  if (!base) return;
+  let host = "";
+  try {
+    host = new URL(base).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    // unparseable: treated as non-local
+  }
+  if (["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(host)) return;
+  delete process.env.NEOTOMA_BASE_URL;
+  delete process.env.NEOTOMA_BEARER_TOKEN;
+}
+
 /**
  * Global Vitest setup.
  *
@@ -108,6 +123,12 @@ export default async function globalSetup() {
 
   process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || vitestDir;
   process.env.NODE_ENV = "test";
+
+  // A non-local NEOTOMA_BASE_URL (shell, or a project env file) would make the in-process
+  // test server treat itself as a remote instance and would aim every spawned CLI at a real
+  // instance. Drop it before the server starts and before workers fork; vitest.setup.ts
+  // repeats this for what a worker's own dotenv load re-adds. RUN_REMOTE_TESTS=1 opts out.
+  scrubNonLocalBaseUrlFromEnv();
 
   // Unit/smoke suites share this HTTP process. Blank the issues target unless the
   // caller deliberately set one — otherwise loadIssuesConfig falls back to
