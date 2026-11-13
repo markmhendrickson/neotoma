@@ -285,7 +285,10 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await seedSlowTable(db);
 
       const slowStart = Date.now();
-      await expect(db.prepare(SLOW_SQL).get()).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      await expect(db.prepare(SLOW_SQL).get()).rejects.toMatchObject({
+        name: "WorkerDbTimeoutError",
+        message: expect.stringContaining("worker retired and draining (replacement spawned)"),
+      });
       const slowMs = Date.now() - slowStart;
 
       // Rejected on the budget, not after the query's natural duration.
@@ -295,6 +298,29 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       const row = await db.prepare("SELECT 1 AS ok").get();
       expect(row).toEqual({ ok: 1 });
     } finally {
+      await db.close();
+    }
+  }, 120_000);
+
+  it("at the retirement cap, still rejects a timed-out read but keeps its worker (queueing, no extra thread)", async () => {
+    const previous = process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS;
+    process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS = "1";
+    const db = makeDb(2, { statementTimeoutMs: 250 });
+    try {
+      await seedSlowTable(db);
+      await Promise.all([db.prepare("SELECT 1").get(), db.prepare("SELECT 1").get()]);
+      const results = await Promise.allSettled([
+        db.prepare(SLOW_SQL).get(),
+        db.prepare(SLOW_SQL).get(),
+      ]);
+      for (const r of results) {
+        expect(r.status).toBe("rejected");
+        expect((r as PromiseRejectedResult).reason).toBeInstanceOf(WorkerDbTimeoutError);
+      }
+      expect(await db.prepare("SELECT 1 AS ok").get()).toEqual({ ok: 1 });
+    } finally {
+      if (previous === undefined) delete process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS;
+      else process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS = previous;
       await db.close();
     }
   }, 120_000);
@@ -625,7 +651,11 @@ describe("pinned worker read view", () => {
       control.abort();
       control.abort();
       await rejected;
-      await vi.waitFor(() => expect(requested).toHaveBeenCalled());
+      // Past the (now close()-only) grace window the worker must still NOT be
+      // terminated while it is inside its native call; that is what aborted
+      // production on 2026-11-12.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(requested).not.toHaveBeenCalled();
       expect(exited).toBe(false);
       const scans = vi.fn();
       for (let attempt = 0; attempt < 4; attempt++)
@@ -646,6 +676,8 @@ describe("pinned worker read view", () => {
       expect(db.close()).toBe(closing);
       expect(closed).toBe(false);
       held.release();
+      // Terminated only once it has drained (back in JavaScript).
+      await vi.waitFor(() => expect(requested).toHaveBeenCalled());
       requested.mockRestore();
       await terminate();
       await closing;
