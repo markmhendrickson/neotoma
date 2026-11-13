@@ -220,7 +220,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
           });
         const violations = collectConstraintViolations(
           prepared.validFields,
-          schema.schema_definition.fields
+          schema.schema_definition.fields,
+          { entityType, schemaVersion: schema.schema_version }
         );
         if (
           violations.length &&
@@ -287,7 +288,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
                 unknown_fields: Object.keys(prepared.unknownFields).sort(),
                 constraint_warnings: collectConstraintViolations(
                   prepared.validFields,
-                  schema.schema_definition.fields
+                  schema.schema_definition.fields,
+                  { entityType, schemaVersion: schema.schema_version }
                 ).map((v) => ({ field: v.field, constraint: v.constraint })),
               },
             };

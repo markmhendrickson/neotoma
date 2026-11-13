@@ -28,6 +28,12 @@ export interface ConstraintViolation {
   value: unknown;
 }
 
+/** Optional identification used only in log lines about unusable patterns. */
+export interface ConstraintContext {
+  entityType?: string;
+  schemaVersion?: string;
+}
+
 // ---------------------------------------------------------------------------
 // checkFieldConstraints — single-field, single-violation (first match wins)
 // ---------------------------------------------------------------------------
@@ -44,7 +50,8 @@ export interface ConstraintViolation {
 export function checkFieldConstraints(
   fieldName: string,
   value: unknown,
-  constraints: FieldConstraints
+  constraints: FieldConstraints,
+  context?: ConstraintContext
 ): ConstraintViolation | null {
   // --- numeric bounds ---
   if (typeof value === "number") {
@@ -88,8 +95,9 @@ export function checkFieldConstraints(
     if (res.status === "invalid_pattern" || res.status === "timeout") {
       // Fail closed: a stored pattern that is no longer acceptable rejects the value.
       logger.warn(
-        `[FIELD_CONSTRAINTS] Pattern constraint on field "${fieldName}" is unusable ` +
-          `(${res.status === "timeout" ? "evaluation budget exceeded" : res.reason}); value rejected.`
+        `[FIELD_CONSTRAINTS] Pattern constraint on field "${fieldName}" ` +
+          `(entity_type=${context?.entityType ?? "unknown"}, schema_version=${context?.schemaVersion ?? "unknown"}) ` +
+          `is unusable (${res.status === "timeout" ? "evaluation budget exceeded" : res.reason}); value rejected.`
       );
       return {
         field: fieldName,
@@ -161,7 +169,8 @@ function strictishEqual(a: string | number, b: unknown): boolean {
  */
 export function collectConstraintViolations(
   fields: Record<string, unknown>,
-  schemaFields: Record<string, FieldDefinition>
+  schemaFields: Record<string, FieldDefinition>,
+  context?: ConstraintContext
 ): ConstraintViolation[] {
   const violations: ConstraintViolation[] = [];
   for (const [fieldName, fieldDef] of Object.entries(schemaFields)) {
@@ -170,7 +179,7 @@ export function collectConstraintViolations(
     if (!(fieldName in fields)) continue;
     const value = fields[fieldName];
     if (value === undefined) continue;
-    const violation = checkFieldConstraints(fieldName, value, fieldDef.constraints);
+    const violation = checkFieldConstraints(fieldName, value, fieldDef.constraints, context);
     if (violation !== null) {
       violations.push(violation);
     }

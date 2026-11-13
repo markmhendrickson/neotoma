@@ -21,12 +21,28 @@ export const MAX_SUBJECT_LENGTH = 10_000;
 /** Wall-clock budget for a single evaluation, in milliseconds. */
 export const MATCH_TIMEOUT_MS = 100;
 
-export type PatternValidation = { ok: true } | { ok: false; reason: string };
+/** Per-schema and per-request counts accepted at registration and evaluation. */
+export const MAX_PATTERNS_PER_CONDITION = 16;
+export const MAX_PATTERNS_PER_SCHEMA = 64;
+export const MAX_CONFORMANCE_RULES_PER_PAGE = 32;
+/** Total wall-clock budget shared by all rules evaluated for one page, in milliseconds. */
+export const CONFORMANCE_TOTAL_BUDGET_MS = 1_000;
+
+export type PatternRefusalCode = "syntax" | "shape" | "length";
+
+export type PatternValidation =
+  | { ok: true }
+  | { ok: false; code: PatternRefusalCode; reason: string; remedy: string };
+
+/** One-line message for a refusal, naming what to change. Never includes the pattern. */
+export function describePatternRefusal(v: Extract<PatternValidation, { ok: false }>): string {
+  return `${v.reason}. ${v.remedy}`;
+}
 
 export type SafeTestResult =
   | { status: "match" }
   | { status: "no_match" }
-  | { status: "invalid_pattern"; reason: string }
+  | { status: "invalid_pattern"; code: PatternRefusalCode; reason: string }
   | { status: "subject_too_long"; limit: number }
   | { status: "timeout" };
 
@@ -81,6 +97,20 @@ function readQuantifier(p: string, i: number): Quant | null {
 const MAX_OUTER_REPEAT_WITH_VARIABLE_INNER = 5;
 const MAX_GROUP_DEPTH = 20;
 
+const REMEDY = {
+  backref: "Remove the backreference and match the repeated text with an explicit group instead.",
+  nested: "Use a bounded count such as {1,32} on the inner part, or remove the inner quantifier.",
+  alternation:
+    "Make the alternation branches distinct (for example by anchoring each with different leading text), or remove the repetition around them.",
+  structure: "Check the pattern for unbalanced parentheses or an unfinished character class.",
+  depth: "Flatten the pattern so groups are nested at most 20 deep.",
+  classes: "Escape any literal [ inside a character class as \\[.",
+};
+
+function shape(reason: string, remedy: string): PatternValidation {
+  return { ok: false, code: "shape", reason, remedy };
+}
+
 function analyze(pattern: string): PatternValidation {
   const stack: Frame[] = [newFrame()];
   const top = () => stack[stack.length - 1];
@@ -101,31 +131,35 @@ function analyze(pattern: string): PatternValidation {
 
     if (c === "\\") {
       const next = pattern[i + 1];
-      if (next === undefined) return { ok: false, reason: "trailing escape" };
+      if (next === undefined) return shape("trailing escape", REMEDY.structure);
       if (/[1-9]/.test(next) || (next === "k" && pattern[i + 2] === "<")) {
-        return { ok: false, reason: "backreferences are not allowed" };
+        return shape("backreferences are not allowed", REMEDY.backref);
       }
       atomToken = pattern.slice(i, i + 2);
       atomEnd = i + 2;
     } else if (c === "[") {
+      // `[]` and `[^]` are complete classes in JavaScript, so a `]` directly
+      // after the opening bracket closes the class.
       let j = i + 1;
       if (pattern[j] === "^") j += 1;
-      if (pattern[j] === "]") j += 1;
       while (j < n && pattern[j] !== "]") {
+        if (pattern[j] === "[") {
+          return shape("nested character classes are not allowed", REMEDY.classes);
+        }
         j += pattern[j] === "\\" ? 2 : 1;
       }
-      if (j >= n) return { ok: false, reason: "unterminated character class" };
+      if (j >= n) return shape("unterminated character class", REMEDY.structure);
       atomToken = pattern.slice(i, j + 1);
       atomEnd = j + 1;
     } else if (c === "(") {
-      if (stack.length >= MAX_GROUP_DEPTH) return { ok: false, reason: "groups nested too deeply" };
+      if (stack.length >= MAX_GROUP_DEPTH) return shape("groups nested too deeply", REMEDY.depth);
       stack.push(newFrame());
       i += 1;
       // Skip group prefix such as (?:  (?=  (?!  (?<=  (?<!  (?<name>
       if (pattern[i] === "?") {
         if (pattern[i + 1] === "<" && pattern[i + 2] !== "=" && pattern[i + 2] !== "!") {
           const close = pattern.indexOf(">", i);
-          if (close === -1) return { ok: false, reason: "malformed group name" };
+          if (close === -1) return shape("malformed group name", REMEDY.structure);
           i = close + 1;
         } else if (pattern[i + 1] === "<") {
           i += 3;
@@ -135,7 +169,7 @@ function analyze(pattern: string): PatternValidation {
       }
       continue;
     } else if (c === ")") {
-      if (stack.length === 1) return { ok: false, reason: "unbalanced group" };
+      if (stack.length === 1) return shape("unbalanced group", REMEDY.structure);
       const f = stack.pop() as Frame;
       f.branchStarts.push(f.currentEmpty ? "" : (f.currentStart as string));
       closedFrame = f;
@@ -164,7 +198,7 @@ function analyze(pattern: string): PatternValidation {
         const seen = new Set<string>();
         for (const b of closedFrame.branchStarts) {
           if (b === "" || seen.has(b)) {
-            return { ok: false, reason: "repeated alternation with overlapping branches" };
+            return shape("repeated alternation with overlapping branches", REMEDY.alternation);
           }
           seen.add(b);
         }
@@ -174,7 +208,7 @@ function analyze(pattern: string): PatternValidation {
         closedFrame.hasVariable &&
         (q.max === Infinity || q.max > MAX_OUTER_REPEAT_WITH_VARIABLE_INNER)
       ) {
-        return { ok: false, reason: "nested unbounded quantifiers are not allowed" };
+        return shape("nested variable quantifiers are not allowed", REMEDY.nested);
       }
       noteAtom("(");
       if (variable || closedFrame.hasVariable) top().hasVariable = true;
@@ -186,7 +220,7 @@ function analyze(pattern: string): PatternValidation {
     i = q ? q.end : atomEnd;
   }
 
-  if (stack.length !== 1) return { ok: false, reason: "unbalanced group" };
+  if (stack.length !== 1) return shape("unbalanced group", REMEDY.structure);
   return { ok: true };
 }
 
@@ -198,9 +232,21 @@ const VALIDATION_CACHE_MAX = 512;
  * includes the pattern text.
  */
 export function validatePattern(pattern: unknown): PatternValidation {
-  if (typeof pattern !== "string") return { ok: false, reason: "pattern must be a string" };
+  if (typeof pattern !== "string") {
+    return {
+      ok: false,
+      code: "syntax",
+      reason: "pattern must be a string",
+      remedy: "Provide the pattern as a string.",
+    };
+  }
   if (pattern.length > MAX_PATTERN_LENGTH) {
-    return { ok: false, reason: `pattern exceeds ${MAX_PATTERN_LENGTH} characters` };
+    return {
+      ok: false,
+      code: "length",
+      reason: `pattern exceeds the ${MAX_PATTERN_LENGTH}-character limit`,
+      remedy: `Shorten the pattern to at most ${MAX_PATTERN_LENGTH} characters.`,
+    };
   }
   const cached = validationCache.get(pattern);
   if (cached) return cached;
@@ -209,7 +255,12 @@ export function validatePattern(pattern: unknown): PatternValidation {
     new RegExp(pattern); // syntax check
     result = analyze(pattern);
   } catch {
-    result = { ok: false, reason: "not a valid regular expression" };
+    result = {
+      ok: false,
+      code: "syntax",
+      reason: "not a valid regular expression",
+      remedy: "Correct the pattern syntax.",
+    };
   }
   if (validationCache.size >= VALIDATION_CACHE_MAX) validationCache.clear();
   validationCache.set(pattern, result);
@@ -242,14 +293,14 @@ export function safePatternTest(
   options: { flags?: string; maxSubjectLength?: number } = {}
 ): SafeTestResult {
   const v = validatePattern(pattern);
-  if (!v.ok) return { status: "invalid_pattern", reason: v.reason };
+  if (!v.ok) return { status: "invalid_pattern", code: v.code, reason: v.reason };
   const limit = options.maxSubjectLength ?? MAX_SUBJECT_LENGTH;
   if (subject.length > limit) return { status: "subject_too_long", limit };
   const flags = options.flags ?? "";
   try {
     new RegExp("", flags);
   } catch {
-    return { status: "invalid_pattern", reason: "invalid flags" };
+    return { status: "invalid_pattern", code: "syntax", reason: "invalid flags" };
   }
   try {
     return runWithBudget(pattern as string, flags, subject)
@@ -262,6 +313,6 @@ export function safePatternTest(
       sandbox = null;
       return { status: "timeout" };
     }
-    return { status: "invalid_pattern", reason: "evaluation failed" };
+    return { status: "invalid_pattern", code: "syntax", reason: "evaluation failed" };
   }
 }

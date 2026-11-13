@@ -7485,7 +7485,8 @@ export class NeotomaServer {
         const cvPolicy = schema.schema_definition.constraint_violation_policy ?? "reject";
         const violations = collectConstraintViolations(
           validFields,
-          schema.schema_definition.fields
+          schema.schema_definition.fields,
+          { schemaVersion: schema.schema_version }
         );
         if (violations.length > 0) {
           if (cvPolicy === "reject") {

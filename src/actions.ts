@@ -8686,7 +8686,8 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
       const cvPolicy = cvSchemaEntry.schema_definition.constraint_violation_policy ?? "reject";
       const violations = collectConstraintViolations(
         r.fields,
-        cvSchemaEntry.schema_definition.fields
+        cvSchemaEntry.schema_definition.fields,
+        { entityType: r.entity_type, schemaVersion: cvSchemaEntry.schema_version }
       );
       if (violations.length === 0) continue;
 
@@ -8903,6 +8904,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
               entityType: r.entity_type,
               fields: r.fields,
               schema: schemaEntry2.schema_definition,
+              schemaVersion: schemaEntry2.schema_version,
               userId,
               sourceId: observationSourceId,
               idempotencyKey,
@@ -9212,7 +9214,9 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         if (cvPolicy === "warn") {
           const { collectConstraintViolations: _cvCollect } =
             await import("./services/field_constraints.js");
-          const warnViolations = _cvCollect(r.fields, schemaDef.fields);
+          const warnViolations = _cvCollect(r.fields, schemaDef.fields, {
+            entityType: r.entity_type,
+          });
           for (const v of warnViolations) {
             schemaStoreWarnings.push({
               code: "CONSTRAINT_VIOLATION",

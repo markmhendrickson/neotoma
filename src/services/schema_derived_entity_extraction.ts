@@ -11,7 +11,7 @@
  */
 
 import { logger } from "../utils/logger.js";
-import { safePatternTest } from "./safe_pattern.js";
+import { safePatternTest, MAX_PATTERNS_PER_CONDITION } from "./safe_pattern.js";
 import type { SchemaDefinition } from "./schema_registry.js";
 
 export interface DerivedEntityExtractionParams {
@@ -19,6 +19,8 @@ export interface DerivedEntityExtractionParams {
   entityType: string;
   fields: Record<string, unknown>;
   schema: SchemaDefinition | null | undefined;
+  /** Version of `schema`; used only to identify it in log lines. */
+  schemaVersion?: string;
   userId: string;
   sourceId?: string;
   idempotencyKey: string;
@@ -43,7 +45,13 @@ export interface DerivedEntityExtractionResult {
  */
 export function evaluateCondition(
   condition: NonNullable<SchemaDefinition["derived_entities"]>[number]["conditions"][number],
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  context?: {
+    entityType?: string;
+    schemaVersion?: string;
+    ruleIndex?: number;
+    conditionIndex?: number;
+  }
 ): boolean {
   const rawValue = payload[condition.field];
 
@@ -65,23 +73,29 @@ export function evaluateCondition(
       const strValue = typeof rawValue === "string" ? rawValue : null;
       if (!strValue) return false;
       const lc = strValue.toLowerCase();
-      return condition.patterns.some((pattern) => {
-        // Pattern is a RegExp source evaluated under bounds. A pattern that is
-        // not acceptable (or a subject that is too long) is ignored: it never
-        // matches. Only a syntactically invalid source keeps the historical
-        // plain-substring behavior.
-        const res = safePatternTest(pattern, strValue, { flags: "i" });
-        if (res.status === "match") return true;
-        if (res.status === "no_match") return false;
-        if (res.status === "invalid_pattern" && res.reason === "not a valid regular expression") {
-          return typeof pattern === "string" && lc.includes(pattern.toLowerCase());
-        }
-        logger.warn(
-          `[SCHEMA_DERIVED] matches_any_pattern pattern ignored (${res.status}` +
-            `${res.status === "invalid_pattern" ? `: ${res.reason}` : ""}).`
-        );
-        return false;
-      });
+      return condition.patterns
+        .slice(0, MAX_PATTERNS_PER_CONDITION)
+        .some((pattern, patternIndex) => {
+          // Pattern is a RegExp source evaluated under bounds. A pattern that is
+          // not acceptable (or a subject that is too long) is ignored: it never
+          // matches. Only a syntactically invalid source keeps the historical
+          // plain-substring behavior.
+          const res = safePatternTest(pattern, strValue, { flags: "i" });
+          if (res.status === "match") return true;
+          if (res.status === "no_match") return false;
+          if (res.status === "invalid_pattern" && res.code === "syntax") {
+            return typeof pattern === "string" && lc.includes(pattern.toLowerCase());
+          }
+          logger.warn(
+            `[SCHEMA_DERIVED] matches_any_pattern pattern ignored ` +
+              `(entity_type=${context?.entityType ?? "unknown"}, ` +
+              `schema_version=${context?.schemaVersion ?? "unknown"}, ` +
+              `rule=${context?.ruleIndex ?? "?"}, condition=${context?.conditionIndex ?? "?"}, ` +
+              `pattern=${patternIndex}): ${res.status}` +
+              `${res.status === "invalid_pattern" ? ` (${res.reason})` : ""}.`
+          );
+          return false;
+        });
     }
 
     default:
@@ -127,7 +141,14 @@ export async function extractDerivedEntities(
     const rule = rules[ruleIdx];
 
     // Evaluate all conditions; all must pass.
-    const conditionsMet = rule.conditions.every((cond) => evaluateCondition(cond, params.fields));
+    const conditionsMet = rule.conditions.every((cond, conditionIndex) =>
+      evaluateCondition(cond, params.fields, {
+        entityType: params.entityType,
+        schemaVersion: params.schemaVersion,
+        ruleIndex: ruleIdx,
+        conditionIndex,
+      })
+    );
 
     if (!conditionsMet) {
       result.skipped++;
