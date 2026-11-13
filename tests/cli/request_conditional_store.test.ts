@@ -1,12 +1,11 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import {
   startIsolatedNeotomaServer,
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
-const run = promisify(execFile);
+const run = execFileLocal;
 import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 let server: IsolatedServer;
 const type = "conditional_cli_test";
 beforeAll(async () => {

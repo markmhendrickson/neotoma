@@ -1,10 +1,8 @@
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -12,6 +10,7 @@ import { NeotomaServer } from "../../src/server.js";
 import { resolveOwnedObservations } from "../../src/services/attachment_resolution.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
 vi.mock("../../src/embeddings.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/embeddings.js")>();
@@ -23,7 +22,7 @@ vi.mock("../../src/embeddings.js", async (importOriginal) => {
 
 const USER_ID = LOCAL_DEV_USER_ID;
 const TYPE = "test_scalar_tiebreak_2394";
-const execFileAsync = promisify(execFile);
+const execFileAsync = execFileLocal;
 const CLI_PATH = resolve("dist/cli/index.js");
 let apiBase: string;
 

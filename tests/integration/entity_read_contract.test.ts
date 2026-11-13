@@ -1,7 +1,5 @@
 import { beforeAll, afterAll, beforeEach, afterEach, it, expect, vi } from "vitest";
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { mkdir, access } from "node:fs/promises";
 import path from "node:path";
@@ -16,6 +14,7 @@ import { LOCAL_DEV_USER_ID as userId } from "../../src/services/local_auth.js";
 import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
 // Only the embedding-provider boundary is synthetic; all retrieval/HTTP/MCP/DB paths are native.
 vi.mock("openai", () => ({
@@ -47,7 +46,7 @@ async function nativeCliCommand(args: string[]) {
     NODE_OPTIONS:
       "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
   };
-  const { stdout } = await promisify(execFile)(
+  const { stdout } = await execFileLocal(
     process.execPath,
     [binary, "--api-only", "--base-url", base, "--json", "--no-log-file", ...args],
     { cwd, env, timeout: 15000, maxBuffer: 1024 * 1024 }
@@ -1382,7 +1381,7 @@ it("the owned CLI network guard permits real loopback and refuses external socke
       } finally { await new Promise(resolve => server.close(resolve)); }
     })().catch(() => { process.stderr.write("Owned network control failed"); process.exitCode=1; });
   `;
-  const { stdout } = await promisify(execFile)(
+  const { stdout } = await execFileLocal(
     process.execPath,
     ["-e", child, path.join(root, "tests/helpers/owned_loopback_only.cjs")],
     {

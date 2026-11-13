@@ -9,16 +9,14 @@
  */
 
 import { describe, expect, it, afterAll } from "vitest";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 
 import { db } from "../../src/db.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";
 const ENTITY_TYPE = "store_data_origin_probe";

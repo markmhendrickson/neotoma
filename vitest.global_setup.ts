@@ -9,6 +9,7 @@ import {
   announceSkip,
   hasPrerequisite,
 } from "./tests/helpers/test_prerequisites.js";
+import { SCRUB_WARNING, scrubNonLocalBaseUrl } from "./tests/helpers/cli_local_target.js";
 import { resolveHarnessForceMode } from "./src/shared/harness_force_mode.js";
 
 /**
@@ -108,6 +109,14 @@ export default async function globalSetup() {
 
   process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || vitestDir;
   process.env.NODE_ENV = "test";
+
+  // A non-local NEOTOMA_BASE_URL (shell, or a project env file) would make the in-process
+  // test server treat itself as a remote instance and would be inherited by every worker.
+  // Drop it before the server starts and before workers fork. Limit: a later import of
+  // src/config.ts reloads a repo-root .env with override, so this does not stop a .env
+  // from re-adding it in-process; spawned CLI tests are protected separately by
+  // tests/helpers/cli_local_target.ts. RUN_REMOTE_TESTS=1 is the in-process opt-out.
+  if (scrubNonLocalBaseUrl(process.env)) process.stderr.write(`${SCRUB_WARNING}\n`);
 
   // Unit/smoke suites share this HTTP process. Blank the issues target unless the
   // caller deliberately set one — otherwise loadIssuesConfig falls back to

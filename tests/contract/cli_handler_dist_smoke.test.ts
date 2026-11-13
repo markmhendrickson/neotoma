@@ -16,7 +16,7 @@
  * built dist/ directory.
  */
 import { describe, expect, it } from "vitest";
-import { spawnSync } from "node:child_process";
+import { spawnSyncLocal } from "../helpers/cli_local_target.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli/index.js");
 
 function runCli(args: string[]): { stdout: string; stderr: string; status: number | null } {
-  const result = spawnSync("node", [CLI, ...args], {
+  const result = spawnSyncLocal("node", [CLI, ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 20_000,

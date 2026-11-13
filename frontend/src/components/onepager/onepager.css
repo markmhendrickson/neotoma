@@ -2744,6 +2744,23 @@
 .dark .plan-home > .plan-ground-band {
   background: var(--band);
 }
+/* The paper-art plates are cream and the light reading band is nearly the same tone
+   (about 1.01:1), so the figures dissolved into the section. Frame each plate with an
+   edge that holds at least 3:1 against both the band and the plate. Outline, not border,
+   so the figure's size and the page layout do not move. The dark band already separates
+   the plates (about 10:1), so it needs no frame. */
+.plan-home > .plan-ground-band {
+  --plan-figure-edge: #4c5a5f;
+}
+.plan-home > .plan-ground-band .plan-step-art .paper-scene,
+.plan-home > .plan-ground-band .plan-example-content .paper-scene {
+  outline: 2px solid var(--plan-figure-edge);
+  outline-offset: 0;
+}
+.dark .plan-home > .plan-ground-band .plan-step-art .paper-scene,
+.dark .plan-home > .plan-ground-band .plan-example-content .paper-scene {
+  outline: 0;
+}
 .plan-home > .plan-interface-sheet {
   border-bottom: 1px solid var(--line);
 }
