@@ -63,7 +63,7 @@ interface SubstrateEvent {
   relationship_type?: string;
   source_entity_id?: string;    // relationship-only
   target_entity_id?: string;    // relationship-only
-  fields_changed?: string[];    // sorted; populated for entity.updated
+  fields_changed?: string[];    // sorted; entity.updated only (absent = changed, fields unknown)
   action: SubstrateEntityAction;
   source_id?: string;
   idempotency_key?: string;
@@ -73,7 +73,12 @@ interface SubstrateEvent {
 }
 ```
 
-`fields_changed` is computed by `shallowFieldsChanged(before, after)` in `src/events/substrate_store_emit.ts` so all entity-update events carry a sorted, JSON-stable diff.
+`fields_changed` is computed by `shallowFieldsChanged(before, after)` in `src/events/substrate_store_emit.ts` so entity-update events carry a sorted, JSON-stable diff.
+
+- **`entity.created` does not depend on the snapshot.** It is emitted for a new entity even when the snapshot step fails (the recompute throws or yields nothing). Treat `entity.created` as the "a new entity appeared" signal; `observation.created` is not a substitute.
+- **On `entity.updated`, an absent `fields_changed` means "changed, fields unknown"**, for example when the snapshot could not be computed. It does not mean nothing changed. An empty array means the snapshot was computed and no field differed.
+- **On `entity.created`, `fields_changed` is not applicable** and is normally absent.
+- An id that was merged away owns no entity: a write that targets it emits no entity event.
 
 ## Emit helpers
 

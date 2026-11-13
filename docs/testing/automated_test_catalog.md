@@ -70,7 +70,7 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 233 |
-| Vitest service tests | 68 |
+| Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
 | Vitest integration tests | 244 |
 | Vitest CLI tests | 93 |
@@ -350,7 +350,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (68):**
+**Files (69):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -409,6 +409,7 @@ flowchart TD
 - `tests/services/store_condition_schema.test.ts`
 - `tests/services/store_conditional_race.test.ts`
 - `tests/services/store_conditional.test.ts`
+- `tests/services/store_entity_created_emission.test.ts`
 - `tests/services/store_worker_backend_gate_contention.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
