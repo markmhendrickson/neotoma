@@ -877,6 +877,97 @@ describe("pinned worker read view", () => {
   });
 });
 
+describe("WorkerFileDatabase read-your-writes under write-gate contention", () => {
+  // A non-transaction write used to await a snapshot of the gate tail taken when
+  // it was issued. A transaction enqueued after that snapshot (a second client's
+  // correction) began on the single writer connection first, so the write
+  // executed INSIDE that transaction: its promise resolved before COMMIT, and a
+  // read dispatched to a reader worker (reads no longer wait for the gate) did
+  // not see it. The completion-marker read-back in `markStoreWriteComplete`
+  // hit exactly this and reported a committed store as a 500.
+  async function contend(db: WorkerFileDatabase) {
+    await db.exec("CREATE TABLE rw_t (id INTEGER PRIMARY KEY, v TEXT)");
+    let releaseA!: () => void;
+    const heldA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    let aStarted!: () => void;
+    const aStartedSignal = new Promise<void>((resolve) => {
+      aStarted = resolve;
+    });
+    const txA = db.transaction(async (conn) => {
+      await conn.prepare("INSERT INTO rw_t (v) VALUES (?)").run("a");
+      aStarted();
+      await heldA;
+    });
+    await aStartedSignal;
+
+    // The write is issued while only A is open...
+    const write = db.prepare("INSERT INTO rw_t (v) VALUES (?)").run("marker");
+    // ...and a second transaction (another client's correction) queues after it.
+    let releaseC!: () => void;
+    const heldC = new Promise<void>((resolve) => {
+      releaseC = resolve;
+    });
+    let cStarted!: () => void;
+    const cStartedSignal = new Promise<void>((resolve) => {
+      cStarted = resolve;
+    });
+    const txC = db.transaction(async (conn) => {
+      await conn.prepare("INSERT INTO rw_t (v) VALUES (?)").run("c");
+      cStarted();
+      await heldC;
+    });
+    return { write, txA, txC, releaseA, releaseC, cStartedSignal };
+  }
+
+  it("never resolves a write that a reader cannot yet see, while a later transaction is open", async () => {
+    const db = makeDb(2);
+    try {
+      const { write, txA, txC, releaseA, releaseC, cStartedSignal } = await contend(db);
+      releaseA();
+      await txA;
+      await cStartedSignal;
+      // C is open and held. The write was issued before C, so it runs ahead of
+      // it in the gate's order. Whatever the order, a write that has resolved
+      // must be visible to a reader: it must not have been absorbed into C.
+      let writeDone = false;
+      void write.then(() => {
+        writeDone = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const visible = (await db
+        .prepare("SELECT COUNT(*) AS n FROM rw_t WHERE v = 'marker'")
+        .get()) as { n: number };
+      expect(writeDone).toBe(true);
+      expect(visible.n).toBe(1);
+      releaseC();
+      await txC;
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("a write that resolved is visible to the next read, even when a transaction was queued behind it", async () => {
+    const db = makeDb(2);
+    try {
+      const { write, txA, txC, releaseA, releaseC } = await contend(db);
+      releaseA();
+      await txA;
+      // The write now waits for C; C commits shortly after.
+      setTimeout(releaseC, 50);
+      await write;
+      const row = (await db.prepare("SELECT v FROM rw_t WHERE v = 'marker'").get()) as
+        | { v: string }
+        | undefined;
+      expect(row?.v).toBe("marker");
+      await txC;
+    } finally {
+      await db.close();
+    }
+  });
+});
+
 describe("WorkerFileDatabase reads do not wait for write transactions", () => {
   it("completes a read outside a transaction while a write transaction is still open", async () => {
     const db = makeDb(2);

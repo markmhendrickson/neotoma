@@ -1413,19 +1413,27 @@ export class WorkerFileDatabase implements DbDatabase {
     sql: string,
     params: unknown[] = []
   ): Promise<unknown> {
-    if (!this.txContext.getStore()) {
-      await this.waitForGate(sql);
-    } else {
+    if (this.txContext.getStore()) {
       this.noteTxSql(sql);
+      return this.writerConnection().request(op, sql, params);
     }
-    return this.writerConnection().request(op, sql, params);
+    return this.onWriterWhenIdle(sql, () => this.writerConnection().request(op, sql, params));
   }
 
-  /** Wait for queued transactions, logging (rate-limited) when the wait is long. */
-  private async waitForGate(sql: string): Promise<void> {
-    const startedAt = Date.now();
-    await this.gate.whenIdle();
-    const waited = Date.now() - startedAt;
+  /**
+   * Run a statement on the writer in the gate's FIFO order, so it never
+   * executes while a transaction is open on that connection. The writer is one connection:
+   * a statement posted while a transaction is open on it joins that transaction,
+   * so its promise resolves before COMMIT and a reader cannot see it. A plain
+   * `await gate.whenIdle()` leaves that window open for any transaction
+   * enqueued after the snapshot (see {@link TransactionGate.runInOrder}).
+   */
+  private onWriterWhenIdle<T>(sql: string, send: () => Promise<T>): Promise<T> {
+    return this.gate.runInOrder(send, (waited) => this.noteGateWait(sql, waited));
+  }
+
+  /** Log (rate-limited) when a write waited long for queued transactions. */
+  private noteGateWait(sql: string, waited: number): void {
     if (waited <= SLOW_GATE_WAIT_MS) return;
     const now = Date.now();
     if (now - this.lastGateWaitLogAt < SATURATION_LOG_INTERVAL_MS) return;
@@ -1486,7 +1494,9 @@ export class WorkerFileDatabase implements DbDatabase {
     // write transaction. The one exception is a pool with no readers, where
     // `readerConnection()` hands back the writer itself: a read dealt there
     // would run inside whichever transaction is open, so it must still wait.
-    if (this.readerCount === 0) await this.gate.whenIdle();
+    if (this.readerCount === 0) {
+      return this.onWriterWhenIdle(sql, () => this.writerConnection().request(op, sql, params));
+    }
     const options: WorkerRequestOptions = {
       timeoutMs: this.statementTimeoutMs,
       signal: abortContext.getStore(),
@@ -1499,8 +1509,7 @@ export class WorkerFileDatabase implements DbDatabase {
         // untimed for the reason above — a half-applied write is worse than a
         // slow one. It is a write, so unlike a plain read it must not run
         // inside a transaction opened since: wait for the gate first.
-        await this.gate.whenIdle();
-        return this.writerConnection().request(op, sql, params);
+        return this.onWriterWhenIdle(sql, () => this.writerConnection().request(op, sql, params));
       }
       throw error;
     }

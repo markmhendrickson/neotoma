@@ -7175,10 +7175,9 @@ export class NeotomaServer {
 
       // Every observation and relationship is written; record it on the source so
       // a replay of this key knows the write finished (#2144).
-      {
-        const { markStoreWriteComplete } = await import("./services/store_write_state.js");
-        await markStoreWriteComplete(storageResult.sourceId, userId);
-      }
+      const { confirmStoreWriteComplete, storeWriteCompletionResponseFields } =
+        await import("./services/store_write_state.js");
+      const storeWriteCompletion = await confirmStoreWriteComplete(storageResult.sourceId, userId);
 
       return this.buildTextResponse({
         source_id: storageResult.sourceId,
@@ -7197,6 +7196,7 @@ export class NeotomaServer {
           : {}),
         ...(result.hint ? { hint: result.hint } : {}),
         relationships_created: interpretationRelationshipsCreated,
+        ...storeWriteCompletionResponseFields(storeWriteCompletion),
         ...(interpretationRelationshipsRefused.length > 0
           ? { relationships_refused: interpretationRelationshipsRefused }
           : {}),
@@ -8413,10 +8413,9 @@ export class NeotomaServer {
 
     // Every observation and relationship is written; record it on the source so
     // a replay of this key knows the write finished (#2144).
-    {
-      const { markStoreWriteComplete } = await import("./services/store_write_state.js");
-      await markStoreWriteComplete(storageResult.sourceId, userId);
-    }
+    const { confirmStoreWriteComplete, storeWriteCompletionResponseFields } =
+      await import("./services/store_write_state.js");
+    const storeWriteCompletion = await confirmStoreWriteComplete(storageResult.sourceId, userId);
 
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
@@ -8456,6 +8455,7 @@ export class NeotomaServer {
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
       relationships_created: relationshipsCreated,
+      ...storeWriteCompletionResponseFields(storeWriteCompletion),
       ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });

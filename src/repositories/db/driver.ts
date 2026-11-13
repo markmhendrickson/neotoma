@@ -99,9 +99,39 @@ export class TransactionGate {
   private lastSlowHoldLogAt = 0;
   private suppressedSlowHoldLogs = 0;
 
-  /** Resolves once every transaction enqueued so far has settled. */
+  /**
+   * Resolves once every transaction enqueued SO FAR has settled. This is a
+   * snapshot: a transaction enqueued after the call is not waited for. Code
+   * that is about to issue a statement on a connection a transaction also uses
+   * must not rely on it alone; see {@link runInOrder}.
+   */
   whenIdle(): Promise<void> {
     return this.tail;
+  }
+
+  /**
+   * Run a non-transaction statement in the gate's FIFO order, behind every
+   * transaction enqueued before it and ahead of every one enqueued after it.
+   *
+   * `whenIdle()` is not enough for a non-transaction statement on a
+   * single-writer backend. A transaction enqueued after the snapshot awaits the
+   * same tail, and its `BEGIN` reaches the writer a few microtasks before the
+   * waiting statement does, so the statement runs INSIDE that transaction: it
+   * resolves before COMMIT (invisible to every other connection, and lost on
+   * ROLLBACK) while the caller believes it committed. Re-checking the tail in a
+   * loop instead would starve the statement for as long as other clients keep
+   * transactions queued. Taking a place in the queue closes both: the statement
+   * owns the gate while it runs, so no transaction can begin around it, and it
+   * cannot be overtaken indefinitely.
+   *
+   * `onWait` receives the time spent queued behind earlier transactions.
+   */
+  runInOrder<T>(fn: () => Promise<T>, onWait?: (waitedMs: number) => void): Promise<T> {
+    const enqueuedAt = Date.now();
+    return this.runExclusive(() => {
+      onWait?.(Date.now() - enqueuedAt);
+      return fn();
+    });
   }
 
   /**

@@ -29,6 +29,7 @@
  */
 
 import { db } from "../db.js";
+import { logger } from "../utils/logger.js";
 import {
   currentDbAbortSignal,
   detachDbAbortSignal,
@@ -130,6 +131,54 @@ export async function markStoreWriteComplete(sourceId: string, userId: string): 
   if (readStoreWriteState(after?.provenance) !== "complete") {
     throw new Error(`Store write completion marker did not persist for source ${sourceId}`);
   }
+}
+
+/**
+ * Outcome of recording completion once the write itself has committed.
+ * `unconfirmed` means every observation and relationship landed but the
+ * bookkeeping marker did not (or could not be shown to): the store is NOT a
+ * failure, and a replay of the same idempotency key finishes the marker
+ * idempotently, because observation ids are deterministic.
+ */
+export type StoreWriteCompletion = { state: "complete" } | { state: "unconfirmed"; reason: string };
+
+/**
+ * Record completion for a store whose writes have all committed, without
+ * turning a bookkeeping failure into a failed request. A 500 here told clients
+ * to retry a write that had already landed (and had left the entity's
+ * snapshot to be recomputed from whatever the next attempt added). The caller
+ * must surface `unconfirmed` in its response so the committed state is
+ * distinguishable from both success-with-marker and failure.
+ */
+export async function confirmStoreWriteComplete(
+  sourceId: string,
+  userId: string
+): Promise<StoreWriteCompletion> {
+  try {
+    await markStoreWriteComplete(sourceId, userId);
+    return { state: "complete" };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn(
+      `Store writes committed but the completion marker is unconfirmed for source ${sourceId}: ${reason}`
+    );
+    return { state: "unconfirmed", reason };
+  }
+}
+
+/** Response fragment for a store whose completion marker was not confirmed. */
+export function storeWriteCompletionResponseFields(
+  completion: StoreWriteCompletion
+): Record<string, unknown> {
+  if (completion.state === "complete") return {};
+  return {
+    write_committed: true,
+    store_write_completion: "unconfirmed",
+    store_write_completion_note:
+      "All observations and relationships were committed. Only the idempotency completion marker " +
+      "could not be confirmed, so do not treat this as a failure; replaying the same idempotency_key " +
+      "completes the marker without duplicating observations.",
+  };
 }
 
 /** What an unfinished keyed store left behind, for the caller's recovery. */
