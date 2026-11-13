@@ -71,7 +71,7 @@ export type SafeTestResult =
   | { status: "timeout" }
   | { status: "budget_exhausted" };
 
-interface Quant {
+export interface Quant {
   min: number;
   max: number; // Infinity when unbounded
   end: number; // index just past the quantifier (including lazy marker)
@@ -88,8 +88,22 @@ function newFrame(): Frame {
   return { hasVariable: false, branchStarts: [], currentStart: null, currentEmpty: true };
 }
 
-/** Parse a quantifier starting at `i`, or return null when none starts there. */
-function readQuantifier(p: string, i: number): Quant | null {
+/** Counts at or above this value are treated as unbounded (engines clamp counts in this range). */
+const COUNT_CAP = 2 ** 31;
+
+/**
+ * A counted quantifier, following the engine's grammar in non-unicode mode: a
+ * brace is a quantifier only as `{n}`, `{n,}` or `{n,m}`, where each count is
+ * one or more decimal digits of any length (leading zeros included). Any other
+ * brace form (`{}`, `{,m}`, `{a}`, an unterminated `{n,m`) is literal text.
+ */
+const COUNTED_QUANTIFIER = /\{(\d+)(?:(,)(\d*))?\}/y;
+
+/**
+ * Parse a quantifier starting at `i`, or return null when none starts there.
+ * Exported so the grammar tests can compare it with the engine's own parsing.
+ */
+export function readQuantifier(p: string, i: number): Quant | null {
   const c = p[i];
   let min: number;
   let max: number;
@@ -107,10 +121,23 @@ function readQuantifier(p: string, i: number): Quant | null {
     max = 1;
     end = i + 1;
   } else if (c === "{") {
-    const m = /^\{(\d{1,5})(?:(,)(\d{0,5}))?\}/.exec(p.slice(i, i + 16));
+    COUNTED_QUANTIFIER.lastIndex = i;
+    const m = COUNTED_QUANTIFIER.exec(p);
     if (!m) return null;
-    min = Number(m[1]);
-    max = m[2] === undefined ? min : m[3] === "" ? Infinity : Number(m[3]);
+    // Compare as integers of unbounded size, then clamp for the numeric fields.
+    const cap = BigInt(COUNT_CAP);
+    const clamp = (v: bigint) => (v >= cap ? COUNT_CAP : Number(v));
+    const lo = BigInt(m[1]);
+    if (m[2] === undefined) {
+      min = max = clamp(lo);
+    } else if (m[3] === "") {
+      min = clamp(lo);
+      max = Infinity;
+    } else {
+      const hi = BigInt(m[3]);
+      min = clamp(lo);
+      max = hi === lo ? min : hi >= cap ? Infinity : Number(hi);
+    }
     end = i + m[0].length;
   } else {
     return null;

@@ -14,6 +14,7 @@ import {
   MAX_SUBJECT_LENGTH,
   REQUEST_PATTERN_BUDGET_MS,
   SchemaPatternRefusalError,
+  readQuantifier,
   withPatternBudget,
   safePatternTest,
   validatePattern,
@@ -540,5 +541,118 @@ describe("per-request evaluation budget", () => {
     expect(v!.message).toContain("cannot be evaluated safely");
     expect(v!.message).toMatch(/Rewrite the pattern in the schema/);
     expect(v!.message).not.toContain(NESTED);
+  });
+});
+
+describe("counted quantifiers of any length", () => {
+  const refusedAsShape = (pattern: string) => {
+    const v = validatePattern(pattern);
+    expect(v.ok).toBe(false);
+    expect(!v.ok && v.code).toBe("shape");
+    const err = validate(schemaWithPattern(pattern));
+    expect(err).toBeInstanceOf(SchemaPatternRefusalError);
+    expect((err as SchemaPatternRefusalError).refusal).toBe("shape");
+  };
+
+  it.each([
+    ["inner, six-digit count", "^(a{1,123456})+$"],
+    ["inner, open-ended long count", "^(a{123456,})+$"],
+    ["inner, zero-padded counts", "^(a{0001,0002})+$"],
+    ["inner, zero-padded open-ended", "^(a{0000001,})*$"],
+    ["outer, six-digit count", "^(a+){123456}$"],
+    ["outer, zero-padded count", "^(a+){000006}$"],
+    ["outer, zero-padded range", "^(a*){0000001,000009}$"],
+    ["outer, count beyond the safe integer range", "^(a+){99999999999999999999}$"],
+    ["inner, count beyond the safe integer range", "^(a{1,99999999999999999999})+$"],
+  ])("refuses a nested variable quantifier written with %s", (_name, pattern) => {
+    refusedAsShape(pattern);
+  });
+
+  it.each([
+    "^[a-z]{1,100000}$",
+    "^a{000100000}$",
+    "^(a{3}){100000}$",
+    "^(a{000003}){000006}$",
+    "^(a{99999999999999999999}){2}$",
+    "^(a+){0002}$",
+  ])("accepts a large bounded count on a part that is not repeated: %s", (pattern) => {
+    expect(() => new RegExp(pattern)).not.toThrow();
+    expect(validatePattern(pattern).ok).toBe(true);
+    expect(validate(schemaWithPattern(pattern))).toBeNull();
+  });
+});
+
+describe("hand-written parser agrees with the engine's grammar", () => {
+  // Spellings of a brace after an atom. The engine decides which are quantifiers.
+  const SPELLINGS = [
+    "{3}", "{3,}", "{2,5}", "{0}", "{0,}", "{0,0}",
+    "{003}", "{0003,}", "{000002,000005}", "{1,00000000000000000002}",
+    "{123456}", "{123456,}", "{1,123456}", "{99999999999999999999}",
+    "{99999999999999999999,}", "{1,99999999999999999999}",
+    "{,5}", "{}", "{,}", "{a}", "{1,a}", "{ 1}", "{1 }", "{1,2,3}", "{-1}", "{+1}",
+    "{3", "{3,", "{3,5", "{",
+  ];
+  const withLazy = SPELLINGS.flatMap((q) => [q, `${q}?`]);
+  const baseOf = (q: string) => (q.endsWith("?") ? q.slice(0, -1) : q);
+
+  /** The engine's answer, observed: is the brace a quantifier on `a` in non-unicode mode? */
+  const engineSaysQuantifier = (q: string): boolean => {
+    const base = baseOf(q);
+    // A literal brace makes the spelling part of the matched text; a quantifier
+    // consumes it and matches only runs of `a`.
+    // Repetition characters inside a literal brace form repeat their neighbour,
+    // so the subject is also tried without them.
+    const re = new RegExp(`^a${base}$`);
+    return !(re.test(`a${base}`) || re.test(`a${base.replace(/[+*?]/g, "")}`));
+  };
+
+  it.each(withLazy)("non-unicode mode: %s", (q) => {
+    const got = readQuantifier(q, 0);
+    expect(got !== null).toBe(q.length > 0 && engineSaysQuantifier(q));
+    if (got) expect(got.end).toBe(q.length);
+  });
+
+  it.each(withLazy)("unicode mode: %s", (q) => {
+    let accepted = true;
+    try {
+      new RegExp(`^a${baseOf(q)}$`, "u");
+    } catch {
+      accepted = false; // a malformed brace is a syntax error in unicode mode
+    }
+    expect(readQuantifier(q, 0) !== null).toBe(accepted);
+  });
+
+  it("agrees with the engine on the lengths a short count matches", () => {
+    for (const q of ["{3}", "{3,}", "{2,5}", "{0,0}", "{003}", "{000002,000005}"]) {
+      const re = new RegExp(`^a${q}$`);
+      const lengths = Array.from({ length: 9 }, (_, k) => k).filter((k) => re.test("a".repeat(k)));
+      const got = readQuantifier(q, 0);
+      expect(got).not.toBeNull();
+      expect(lengths[0]).toBe(got!.min);
+      expect(lengths[lengths.length - 1]).toBe(Number.isFinite(got!.max) ? got!.max : 8);
+    }
+  });
+
+  it("reads zero-padded and oversized counts as numbers", () => {
+    expect(readQuantifier("{000002,000005}", 0)).toMatchObject({ min: 2, max: 5 });
+    expect(readQuantifier("{99999999999999999999}", 0)).toMatchObject({ min: 2 ** 31, max: 2 ** 31 });
+    expect(readQuantifier("{1,99999999999999999999}", 0)).toMatchObject({ min: 1, max: Infinity });
+    expect(readQuantifier("{3,}?", 0)).toMatchObject({ min: 3, max: Infinity, end: 5 });
+  });
+
+  // Character-class extents. A group after a class is live (a capture exists)
+  // unless the engine reads it as class content.
+  const CLASSES = [
+    "[]", "[^]", "[\\]]", "[a-]", "[]a]", "[a]", "[^a]", "[\\\\]", "[(]", "[(a+)+]",
+    "\\[", "\\]", "[\\[]", "[a-z]", "[-a]",
+  ];
+  it.each(CLASSES)("class spelling %s", (cls) => {
+    const pattern = `^${cls}(a+)+x$`;
+    const captures = (new RegExp(`${pattern}|`).exec("") as RegExpExecArray).length - 1;
+    const v = validatePattern(pattern);
+    // A live group with an unbounded inner quantifier is refused; otherwise accepted.
+    expect(v.ok).toBe(captures === 0);
+    if (!v.ok) expect(v.code).toBe("shape");
+    expect(validatePattern(`^${cls}$`).ok).toBe(true);
   });
 });
