@@ -126,19 +126,27 @@ describe("resolveGuestUserId — token-grant userId derivation", () => {
     expect(userId).toBeNull();
   });
 
-  it("falls back to local dev user for local request with unknown token", async () => {
+  it("refuses an unknown token on a local request", async () => {
     const principal = makeGuestPrincipal(randomUUID());
     const req = makeMockRequest({ isLocal: true });
-    const userId = await resolveGuestUserId(req, principal);
-    expect(userId).toBe(LOCAL_DEV_USER_ID);
+    await expect(resolveGuestUserId(req, principal)).rejects.toThrow(/not valid or has expired/);
   });
 
-  it("throws for remote request with unknown token", async () => {
+  it("refuses an unknown token on a remote request", async () => {
     const principal = makeGuestPrincipal(randomUUID());
     const req = makeMockRequest({ isLocal: false, hasBearerToken: true });
-    await expect(resolveGuestUserId(req, principal)).rejects.toThrow(
-      /cannot resolve a user_id/,
-    );
+    await expect(resolveGuestUserId(req, principal)).rejects.toThrow(/not valid or has expired/);
+  });
+
+  it("falls back to the local dev user for a local request with no token", async () => {
+    const req = makeMockRequest({ isLocal: true });
+    const userId = await resolveGuestUserId(req, {
+      kind: "guest",
+      guestId: {},
+      agentIdentity: null,
+      accessToken: undefined,
+    });
+    expect(userId).toBe(LOCAL_DEV_USER_ID);
   });
 });
 

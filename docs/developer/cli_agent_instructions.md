@@ -291,3 +291,7 @@ Use `neotoma schemas update <type> --planning '<json>'` for the existing version
 schema operation, and `neotoma schemas list --summary --limit <budget> --json`
 for its compact catalog. The canonical declaration, preservation and complete-census
 rules are in `neotoma instructions print` under `[PLANNING DECLARATIONS]`.
+
+## Guest links for rendered pages
+
+`publish_rendered_page` returns a guest link (`access_token`) for one `rendered_page`. A link opens only that page and lasts the shorter of its stored lifetime and `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` (default 30 days). A refused link returns `401 GUEST_TOKEN_INVALID` (unknown, expired, revoked, or deleted) or `403 GUEST_TOKEN_SCOPE` (the link is for a different item). On `GUEST_TOKEN_INVALID`, re-publish with `publish_rendered_page` for a fresh link.

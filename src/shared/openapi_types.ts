@@ -512,6 +512,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/entities/{id}/html": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Render a rendered_page entity as HTML
+     * @description Serves a `rendered_page` entity as a standalone HTML page. Authenticated users read their own pages. A guest link (`access_token` query parameter or `Authorization: Bearer`) opens only the page it was minted for, while it is unexpired and unrevoked. A link lasts the shorter of its stored lifetime and `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` (default 30 days); call `publish_rendered_page` again for a fresh link.
+     */
+    get: operations["getEntityHtml"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/entities/{id}/observations": {
     parameters: {
       query?: never;
@@ -5163,7 +5183,32 @@ export interface components {
       connection_id?: string;
     };
   };
-  responses: never;
+  responses: {
+    /** @description A guest link was presented and is not valid: unknown, malformed, expired, revoked, deleted, or sent to a route that does not accept links. The cause is not reported. The holder needs a new link; for a rendered page, call `publish_rendered_page` again. */
+    GuestTokenInvalid: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorEnvelope"] & {
+          /** @enum {string} */
+          error_code?: "GUEST_TOKEN_INVALID";
+        };
+      };
+    };
+    /** @description A valid guest link was presented for an item it does not cover. The holder needs a link for that item. */
+    GuestTokenScope: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorEnvelope"] & {
+          /** @enum {string} */
+          error_code?: "GUEST_TOKEN_SCOPE";
+        };
+      };
+    };
+  };
   parameters: never;
   requestBodies: never;
   headers: never;
@@ -6314,7 +6359,45 @@ export interface operations {
           "application/json": components["schemas"]["EntitySnapshot"];
         };
       };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
       /** @description Entity not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getEntityHtml: {
+    parameters: {
+      query?: {
+        /** @description Guest link token for this page. */
+        access_token?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Rendered page */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/html": string;
+        };
+      };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
+      /** @description Entity not found or not a rendered_page */
       404: {
         headers: {
           [name: string]: unknown;
@@ -6347,6 +6430,8 @@ export interface operations {
           };
         };
       };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
     };
   };
   getEntityRelationships: {
@@ -6388,6 +6473,8 @@ export interface operations {
           };
         };
       };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
     };
   };
   listPotentialDuplicates: {
@@ -8572,11 +8659,13 @@ export interface operations {
           };
         };
       };
+      401: components["responses"]["GuestTokenInvalid"];
       /**
        * @description `capability_denied` — on the owner path, the admitted agent's grant has no
        *     `store` capability for `issue`, `conversation` and `conversation_message`,
        *     or no `create_relationship` capability for `REFERS_TO` from `issue` to a
        *     linked entity's type. Checked before any write; nothing was written.
+       *     Also `GUEST_TOKEN_SCOPE` when a valid guest token does not cover the requested item.
        */
       403: {
         headers: {
@@ -8676,6 +8765,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
+      401: components["responses"]["GuestTokenInvalid"];
       /**
        * @description `capability_denied` — on the owner path, the admitted agent's grant has no
        *     `store` capability for `issue`, `conversation` and `conversation_message`,
@@ -8722,6 +8812,8 @@ export interface operations {
           };
         };
       };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
     };
   };
   issuesSync: {
@@ -10222,19 +10314,12 @@ export interface operations {
           };
         };
       };
-      /** @description Guest credential is missing, invalid, expired, or revoked */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
-        };
-      };
+      401: components["responses"]["GuestTokenInvalid"];
       /**
        * @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
        *     Also `capability_denied` when the admitted agent's grant has no `store`
        *     capability for `subscription`; nothing was written.
+       *     Also `GUEST_TOKEN_SCOPE` when a valid guest token does not cover the requested item.
        */
       403: {
         headers: {
@@ -10272,19 +10357,12 @@ export interface operations {
           };
         };
       };
-      /** @description Guest credential is missing, invalid, expired, or revoked */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
-        };
-      };
+      401: components["responses"]["GuestTokenInvalid"];
       /**
        * @description Subscription is not wholly inside the guest entity grant
        *     Also `capability_denied` when the admitted agent's grant has no `correct`
        *     capability for `subscription`; nothing was written.
+       *     Also `GUEST_TOKEN_SCOPE` when a valid guest token does not cover the requested item.
        */
       403: {
         headers: {
@@ -10320,15 +10398,8 @@ export interface operations {
           };
         };
       };
-      /** @description Guest credential is missing, invalid, expired, or revoked */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
-        };
-      };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
     };
   };
   getSubscriptionStatus: {
@@ -10357,15 +10428,8 @@ export interface operations {
           };
         };
       };
-      /** @description Guest credential is missing, invalid, expired, or revoked */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
-        };
-      };
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
     };
   };
   eventsStream: {
@@ -10388,16 +10452,9 @@ export interface operations {
           "text/event-stream": string;
         };
       };
-      /** @description Guest credential is missing, invalid, expired, or revoked */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
-        };
-      };
-      /** @description Subscription does not exist or is outside the guest entity grant */
+      401: components["responses"]["GuestTokenInvalid"];
+      403: components["responses"]["GuestTokenScope"];
+      /** @description Subscription does not exist */
       404: {
         headers: {
           [name: string]: unknown;

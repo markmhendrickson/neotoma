@@ -34,6 +34,17 @@ vi.mock("../db.js", () => {
             });
           },
           eq: (_col: string, _val: unknown) => ({
+            // Entity lookups: the token entity row, or nothing for other ids.
+            single: async () => ({
+              data: rowsForTable(table).find((o) => o[_col] === _val) ?? null,
+              error: null,
+            }),
+            maybeSingle: async () => ({
+              data: rowsForTable(table).find((o) => o[_col] === _val) ?? null,
+              error: null,
+            }),
+            // Merge and split history: none in this mock.
+            limit: async () => ({ data: [], error: null }),
             order: (_col2: string, _opts: unknown) => {
               return Promise.resolve({
                 data: rowsForTable(table).filter(

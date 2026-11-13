@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **836**
-- Backend and repo Vitest files: **782**
+- Total automated test files: **839**
+- Backend and repo Vitest files: **785**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 235 |
+| Vitest unit tests | 236 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
 | Vitest integration tests | 244 |
 | Vitest CLI tests | 93 |
 | Vitest contract tests | 30 |
-| Vitest security tests | 21 |
+| Vitest security tests | 23 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (235):**
+**Files (236):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -274,6 +274,7 @@ flowchart TD
 - `tests/unit/preference_schema.test.ts`
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
+- `tests/unit/publish_rendered_page_description_parity.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
 - `tests/unit/reader_language_asset.test.ts`
 - `tests/unit/reader_pool_midcall_timeout.test.ts`
@@ -894,11 +895,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (21):**
+**Files (23):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
 - `tests/security/exact_identity_transport.test.ts`
+- `tests/security/guest_token_entity_binding.test.ts`
+- `tests/security/guest_token_signed_identity.test.ts`
 - `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/provenance_read_scoping.test.ts`

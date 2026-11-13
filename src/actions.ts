@@ -72,7 +72,16 @@ import {
   assetEntityTypeForMimeType,
 } from "./services/mutation_capability.js";
 import { AccessPolicyError, type GuestIdentity } from "./services/access_policy.js";
-import { hashGuestAccessToken } from "./services/guest_access_token.js";
+import {
+  GUEST_TOKEN_INVALID_CODE,
+  GUEST_TOKEN_INVALID_MESSAGE,
+  GUEST_TOKEN_SCOPE_CODE,
+  GuestTokenInvalidError,
+  GuestTokenScopeError,
+  checkGuestTokenForEntity,
+  hashGuestAccessToken,
+  validateGuestAccessToken as validateGuestToken,
+} from "./services/guest_access_token.js";
 import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
 import { externalActorFromCallerInput } from "./services/issues/external_actor_builder.js";
@@ -4180,14 +4189,9 @@ async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> 
     return true;
   }
 
-  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
-  if (headerAuth.startsWith("Bearer ") && guestPrincipal.accessToken) {
-    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-    if (!(await validateGuestAccessToken(guestPrincipal.accessToken))) {
-      return false;
-    }
-  }
-
+  // The presented token is validated by the route's guest resolver, which
+  // answers an invalid token with 401 GUEST_TOKEN_INVALID whether it arrived
+  // as `access_token` or as `Authorization: Bearer`.
   stampGuestPrincipal(req, guestPrincipal);
   return true;
 }
@@ -4276,7 +4280,11 @@ export async function resolveGuestUserId(
   if (authenticatedUserId) return authenticatedUserId;
 
   if (principal.guestId.accessToken) {
-    const { hashGuestAccessToken } = await import("./services/guest_access_token.js");
+    // A presented token must pass the shared validity check (known, unexpired,
+    // unrevoked) before it maps to an owner.
+    if (!(await principalGuestGrant(principal))) {
+      throw new GuestTokenInvalidError();
+    }
     const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
     const tokenEntityId = `guest_token_${tokenHash.slice(0, 16)}`;
     const { data: tokenEntity } = await db
@@ -4345,19 +4353,16 @@ async function resolveGuestSubscriptionScope(
   }
 
   if (principal.guestId.accessToken) {
-    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-    const tokenGrant = await validateGuestAccessToken(principal.guestId.accessToken);
+    const tokenGrant = await principalGuestGrant(principal);
     if (!tokenGrant) {
-      throw new Error("Not authenticated - invalid guest access token");
+      throw new GuestTokenInvalidError();
     }
     const userId = await resolveGuestUserId(req, principal);
     if (!userId) {
       throw new Error("Not authenticated - guest access token did not resolve an owner");
     }
     if (!tokenGrant.entity_ids.length) {
-      throw new Error(
-        "Guest access token grants no entity scope; subscription and event routes require a token minted with entity_ids"
-      );
+      throw new GuestTokenScopeError();
     }
     return { userId, entityIds: tokenGrant.entity_ids };
   }
@@ -4376,14 +4381,29 @@ async function resolveGuestSubscriptionScope(
   );
 }
 
-async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
-  const accessToken = principal.guestId.accessToken;
-  if (!accessToken) return;
+/** A principal's token is validated once per request; the result is shared. */
+const principalGrantCache = new WeakMap<
+  GuestPrincipal,
+  Promise<Awaited<ReturnType<typeof validateGuestToken>>>
+>();
 
-  const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-  const tokenGrant = await validateGuestAccessToken(accessToken);
-  if (!tokenGrant) {
-    throw new Error("Not authenticated - invalid guest access token");
+function principalGuestGrant(principal: GuestPrincipal) {
+  const accessToken = principal.guestId.accessToken;
+  if (!accessToken) return Promise.resolve(null);
+  let cached = principalGrantCache.get(principal);
+  if (!cached) {
+    cached = validateGuestToken(accessToken);
+    principalGrantCache.set(principal, cached);
+    // Do not keep a failed read: the next call reads again.
+    cached.catch(() => principalGrantCache.delete(principal));
+  }
+  return cached;
+}
+
+async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
+  if (!principal.guestId.accessToken) return;
+  if (!(await principalGuestGrant(principal))) {
+    throw new GuestTokenInvalidError();
   }
 }
 
@@ -4400,6 +4420,9 @@ async function resolveGuestPolicyGovernedEntityAccess(
 ): Promise<{ userId: string; entityType: string }> {
   await assertValidGuestAccessToken(principal);
 
+  const accessToken = principal.guestId.accessToken;
+  const tokenOnly = Boolean(accessToken && !principal.guestId.thumbprint);
+
   const { data: entity, error: entityError } = await db
     .from("entities")
     .select("id, entity_type, user_id")
@@ -4407,9 +4430,29 @@ async function resolveGuestPolicyGovernedEntityAccess(
     .single();
 
   if (entityError || !entity || (expectedEntityType && entity.entity_type !== expectedEntityType)) {
+    // A token-only caller gets the same answer for an unknown item as for an
+    // item its token does not name.
+    if (tokenOnly) throw new GuestTokenScopeError();
     throw new Error(
       expectedEntityType === "issue" ? "Issue entity not found." : "Entity not found."
     );
+  }
+
+  // A guest token is a grant for the entities it covers and for nothing else,
+  // under every policy mode. A caller holding only a token must present one
+  // that covers this entity; a signed agent identity is judged separately.
+  const tokenCovers =
+    accessToken !== undefined &&
+    (
+      await checkGuestTokenForEntity(
+        accessToken,
+        entityId,
+        entity,
+        await principalGuestGrant(principal)
+      )
+    ).state === "granted";
+  if (tokenOnly && !tokenCovers) {
+    throw new GuestTokenScopeError();
   }
 
   const { resolveGuestReadAccess } = await import("./services/access_policy.js");
@@ -4423,52 +4466,13 @@ async function resolveGuestPolicyGovernedEntityAccess(
     });
   }
 
+  if (tokenOnly) {
+    return { userId: entity.user_id, entityType: entity.entity_type };
+  }
+
   if (decision.scopeFilter === "submitter_only") {
-    if (principal.guestId.accessToken) {
-      const { tokenGrantsAccessTo, hashGuestAccessToken } =
-        await import("./services/guest_access_token.js");
-      if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
-        return { userId: entity.user_id, entityType: entity.entity_type };
-      }
-      if (entity.entity_type === "issue") {
-        const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
-        // Only the entity owner's own rows count as submitter evidence.
-        const { data: issueObservations } = await db
-          .from("observations")
-          .select("fields")
-          .eq("entity_id", entityId)
-          .eq("user_id", entity.user_id);
-        for (const observation of issueObservations ?? []) {
-          const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
-          const fields =
-            typeof rawFields === "string"
-              ? JSON.parse(rawFields)
-              : rawFields && typeof rawFields === "object"
-                ? rawFields
-                : undefined;
-          if (
-            (fields as { guest_access_token_hash?: string } | undefined)
-              ?.guest_access_token_hash === tokenHash
-          ) {
-            return { userId: entity.user_id, entityType: entity.entity_type };
-          }
-        }
-        const { data: issueRelationships } = await db
-          .from("relationship_snapshots")
-          .select("target_entity_id")
-          .eq("source_entity_id", entityId)
-          .eq("relationship_type", "REFERS_TO")
-          .eq("user_id", entity.user_id);
-        for (const relationship of issueRelationships ?? []) {
-          const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
-          if (
-            conversationId &&
-            (await tokenGrantsAccessTo(principal.guestId.accessToken, conversationId))
-          ) {
-            return { userId: entity.user_id, entityType: entity.entity_type };
-          }
-        }
-      }
+    if (tokenCovers) {
+      return { userId: entity.user_id, entityType: entity.entity_type };
     }
 
     const { data: observations } = await db
@@ -4514,8 +4518,15 @@ async function resolveGuestShareLinkEntityAccess(
   await assertValidGuestAccessToken(principal);
   const token = principal.guestId.accessToken;
   if (token) {
-    const { tokenGrantsAccessTo } = await import("./services/guest_access_token.js");
-    if (await tokenGrantsAccessTo(token, entityId)) {
+    // Share links are granted only by a token that NAMES the entity; the
+    // issue-submitter rule applies through the policy-governed resolver only.
+    const check = await checkGuestTokenForEntity(
+      token,
+      entityId,
+      undefined,
+      await principalGuestGrant(principal)
+    );
+    if (check.state === "granted" && check.reason === "named") {
       const { data: entity } = await db
         .from("entities")
         .select("id, entity_type, user_id, merged_to_entity_id")
@@ -4733,6 +4744,10 @@ app.use(async (req, res, next) => {
       return next();
     }
     logWarn("AuthMissingBearer", req);
+    if (explicitGuestAccessTokenFromRequest(req)) {
+      // A guest token was presented on a route that does not accept it.
+      return sendError(res, 401, GUEST_TOKEN_INVALID_CODE, GUEST_TOKEN_INVALID_MESSAGE);
+    }
     // Plan ent_b4958d038bd41e8694fe0aef Phase 5: surface sandbox availability
     // in the 401 envelope so UIs can replace the hard "Missing Bearer token"
     // error with a sandbox-session onboarding affordance when one is live.
@@ -5034,6 +5049,12 @@ function handleApiError(
   errorCode: string = "DB_QUERY_FAILED",
   logContext?: string
 ): express.Response {
+  if (error instanceof GuestTokenInvalidError) {
+    return sendError(res, 401, GUEST_TOKEN_INVALID_CODE, GUEST_TOKEN_INVALID_MESSAGE);
+  }
+  if (error instanceof GuestTokenScopeError) {
+    return sendError(res, 403, GUEST_TOKEN_SCOPE_CODE, error.message);
+  }
   if (error instanceof Error && error.message.includes("Not authenticated")) {
     return res.status(401).json(
       buildErrorEnvelope("AUTH_REQUIRED", "Authentication required.", {
@@ -5655,6 +5676,9 @@ app.get("/entities/:id/html", async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     return res.send(html);
   } catch (error) {
+    if (error instanceof GuestTokenInvalidError || error instanceof GuestTokenScopeError) {
+      return handleApiError(req, res, error, "Failed to render entity HTML");
+    }
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
         hint: "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. Create a grant via Inspector → Agents → Grants.",
@@ -13287,12 +13311,7 @@ app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
       const granted = new Set(guestScope);
       const withinScope = requested.length > 0 && requested.every((id) => granted.has(id));
       if (!withinScope) {
-        return sendError(
-          res,
-          403,
-          "FORBIDDEN",
-          "Guest access token does not grant entity_ids for this subscription"
-        );
+        throw new GuestTokenScopeError();
       }
       // Guest delivery must stay bound to the guest credential's lifetime.
       // Only SSE delivery revalidates the token on every event; webhook and
@@ -13363,12 +13382,7 @@ app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
         subscription_id: parsed.data.subscription_id,
       });
       if (!target || !subscriptionWithinGuestScope(guestScope, target.watch_entity_ids)) {
-        return sendError(
-          res,
-          403,
-          "FORBIDDEN",
-          "Guest access token does not grant access to this subscription"
-        );
+        throw new GuestTokenScopeError();
       }
     }
     // Agent grants: unsubscribing corrects the subscription (active=false).
@@ -13437,9 +13451,13 @@ app.post("/get_subscription_status", async (req, res) => {
       subscription_id: parsed.data.subscription_id,
     });
     if (
-      !row ||
-      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, row.watch_entity_ids))
+      guestScope !== null &&
+      row &&
+      !subscriptionWithinGuestScope(guestScope, row.watch_entity_ids)
     ) {
+      throw new GuestTokenScopeError();
+    }
+    if (!row) {
       return res.json({ subscription: null });
     }
     return res.json({ subscription: redactSubscriptionForClient(row) });
@@ -13591,9 +13609,13 @@ app.get("/events/stream", async (req, res) => {
 
     const sub = await getSubscriptionStatus({ userId, subscription_id });
     if (
-      !sub ||
-      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, sub.watch_entity_ids))
+      guestScope !== null &&
+      sub &&
+      !subscriptionWithinGuestScope(guestScope, sub.watch_entity_ids)
     ) {
+      throw new GuestTokenScopeError();
+    }
+    if (!sub) {
       return sendError(res, 404, "NOT_FOUND", "subscription not found");
     }
     if (!sub.active) {
@@ -13611,8 +13633,12 @@ app.get("/events/stream", async (req, res) => {
     const guestAccessToken = principal.kind === "guest" ? principal.guestId.accessToken : undefined;
     const authorize = guestAccessToken
       ? async (): Promise<boolean> => {
-          const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
-          const grant = await validateGuestAccessToken(guestAccessToken);
+          let grant: Awaited<ReturnType<typeof validateGuestToken>>;
+          try {
+            grant = await validateGuestToken(guestAccessToken);
+          } catch {
+            return false; // records unreadable: stop the stream, never grant
+          }
           return (
             grant !== null &&
             grant.entity_ids.length > 0 &&
