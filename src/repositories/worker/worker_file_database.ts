@@ -129,9 +129,24 @@ const stripMetadata = workerData.stripRowMetadata
     }
   : (row) => row;
 
+// Ids the parent has given up on (timeout / abort), shared so the flag is
+// visible while this thread is busy inside a native call. A statement that is
+// still QUEUED when its id is flagged is skipped instead of run: it can no
+// longer be delivered to anyone, and running it would only keep the worker
+// (and the pool slot behind it) busy for nothing.
+const cancelled = workerData.cancelled ? new Int32Array(workerData.cancelled) : null;
+
 parentPort.on("message", (msg) => {
   try {
     let result;
+    if (
+      cancelled !== null &&
+      msg.op !== "__drained__" &&
+      Atomics.load(cancelled, msg.id % cancelled.length) === msg.id
+    ) {
+      parentPort.postMessage({ id: msg.id, ok: false, error: { message: "cancelled before start" } });
+      return;
+    }
     if (msg.op === "__drained__") {
       // Sent by the parent AFTER it retires this worker (#2324). Because the
       // worker processes messages strictly FIFO and runs each statement to
@@ -283,6 +298,8 @@ class WorkerConnection {
   private exactWorkers = new Set<Worker>();
   private workerGeneration = 0;
   private nextId = 1;
+  /** Slot per id (mod length) holding the id of a statement abandoned by its caller. */
+  private readonly cancelled = new Int32Array(new SharedArrayBuffer(4 * 1024));
   private pending = new Map<number, PendingEntry>();
   private closed = false;
   /** `Date.now()` when this worker last went from idle to busy; 0 while idle. */
@@ -332,6 +349,13 @@ class WorkerConnection {
       /** Called when this connection retires, so its owner drops it. */
       onRetire?: (connection: WorkerConnection) => void;
       onExit?: (connection: WorkerConnection) => void;
+      /**
+       * Asked before a timed-out/aborted statement retires its worker. `false`
+       * means too many orphans are already draining: the caller is still
+       * rejected, but the worker stays in the pool (busy) so later reads queue
+       * behind it instead of spawning yet another thread.
+       */
+      canRetire?: () => boolean;
     } = {}
   ) {}
 
@@ -412,7 +436,10 @@ class WorkerConnection {
    */
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
-    const worker = new Worker(WORKER_SOURCE, { eval: true, workerData: this.options });
+    const worker = new Worker(WORKER_SOURCE, {
+      eval: true,
+      workerData: { ...this.options, cancelled: this.cancelled.buffer },
+    });
     if (this.exactReadCustody) this.exactWorkers.add(worker);
     let exited!: () => void;
     this.liveWorkers.set(
@@ -575,7 +602,12 @@ class WorkerConnection {
    * instance down and blocks its own recovery. Exact-owned work waits for drain
    * and retains admission custody; ordinary work keeps its existing grace policy.
    */
-  private abandon(error: Error): void {
+  /** Flag a statement id so the worker skips it if it has not started yet. */
+  private cancel(id: number): void {
+    Atomics.store(this.cancelled, id % this.cancelled.length, id);
+  }
+
+  private abandon(error: Error, id?: number): void {
     // ALREADY RETIRED: a second abort landing on the same connection. Under
     // pool saturation this is the common case, not the exotic one — several
     // requests share one reader, each installs its own abort listener, and a
@@ -590,6 +622,39 @@ class WorkerConnection {
     }
 
     const worker = this.worker;
+    // Orphan cap reached: do not add another draining thread. Reject only the
+    // caller that gave up and leave a placeholder in `pending` so the worker
+    // still counts as busy; its real reply (or the drain of whatever is queued
+    // behind it) clears the placeholder. Never terminates, so never aborts.
+    if (
+      id !== undefined &&
+      worker &&
+      !this.exactWorkers.has(worker) &&
+      this.local.canRetire?.() === false
+    ) {
+      const entry = this.pending.get(id);
+      if (entry) {
+        this.cancel(id);
+        entry.cleanup();
+        this.pending.set(id, {
+          sql: entry.sql,
+          enqueuedAt: entry.enqueuedAt,
+          resolve: () => {},
+          reject: () => {},
+          cleanup: () => {},
+        });
+        const now = Date.now();
+        if (now - lastCapLogAt >= SATURATION_LOG_INTERVAL_MS) {
+          lastCapLogAt = now;
+          logger.warn(
+            `DB reader retirement cap reached; rejected a timed-out statement but kept its worker in the pool: ${sqlHead(entry.sql)}`
+          );
+        }
+        entry.reject(error);
+      }
+      return;
+    }
+    for (const pendingId of this.pending.keys()) this.cancel(pendingId);
     this.failInFlight(error);
     if (!worker) return;
 
@@ -626,14 +691,11 @@ class WorkerConnection {
       // The worker is already gone; the grace timer below still covers it.
     }
     if (this.exactWorkers.has(worker)) return; // exact-owned native work must drain safely
-    this.orphanTimer = setTimeout(() => {
-      this.orphanFinish = undefined;
-      logger.warn(
-        `DB orphaned worker did not report within ${this.orphanGraceMs}ms; terminating it anyway`
-      );
-      finish();
-    }, this.orphanGraceMs);
-    this.orphanTimer.unref?.();
+    // Deliberately NO grace timer: wait for the drain probe however long the
+    // native call takes. Force-terminating a worker still inside the addon
+    // aborts the whole process (neon PendingException, SIGABRT; production
+    // 2026-11-12, 13 crash loops), which is worse than a lingering thread. The
+    // number of lingering threads is bounded by `canRetire` (see the pool).
   }
 
   request(
@@ -686,7 +748,8 @@ class WorkerConnection {
             new WorkerDbTimeoutError(
               `DB statement exceeded ${timeoutMs}ms and its worker was terminated to reclaim the pool slot`,
               timeoutMs
-            )
+            ),
+            id
           );
         }, timeoutMs);
         // Do not let a pending timeout keep the process alive on its own.
@@ -695,7 +758,7 @@ class WorkerConnection {
 
       if (signal) {
         onAbort = () => {
-          this.abandon(new WorkerDbAbortError("DB request aborted by caller"));
+          this.abandon(new WorkerDbAbortError("DB request aborted by caller"), id);
         };
         signal.addEventListener("abort", onAbort, { once: true });
       }
@@ -929,7 +992,10 @@ const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
  * not leak forever. Sized above the default statement budget so a statement
  * that is merely slow finishes and reports rather than being killed by the
  * backstop, which would reintroduce the very race being fixed.
- * `NEOTOMA_DB_ORPHAN_GRACE_MS` overrides it.
+ * This grace now bounds only the shutdown wait in `close()`. A retired reader
+ * is NEVER force-terminated while it may be inside a native call (that aborts
+ * the process; production 2026-11-12), so it lingers until it drains, and
+ * `NEOTOMA_DB_MAX_RETIRED_WORKERS` bounds how many may linger.
  */
 const DEFAULT_ORPHAN_GRACE_MS = 30_000;
 
@@ -956,6 +1022,8 @@ function sqlHead(sql: string): string {
 
 /** A write that waits this long for the gate before dispatching is logged. */
 const SLOW_GATE_WAIT_MS = 250;
+
+let lastCapLogAt = 0;
 
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
@@ -1048,6 +1116,8 @@ export class WorkerFileDatabase implements DbDatabase {
    */
   private retiredConnections = new Set<WorkerConnection>();
   private readonly orphanGraceMs: number;
+  /** Max abandoned workers draining at once before timeouts stop retiring workers. */
+  private readonly maxRetiredWorkers: number;
   private closed = false;
   private saturatedSince: number | null = null;
   private lastSaturationLogAt = 0;
@@ -1084,6 +1154,10 @@ export class WorkerFileDatabase implements DbDatabase {
     this.orphanGraceMs = Math.max(
       0,
       options.orphanGraceMs ?? readEnvInt("NEOTOMA_DB_ORPHAN_GRACE_MS") ?? DEFAULT_ORPHAN_GRACE_MS
+    );
+    this.maxRetiredWorkers = Math.max(
+      1,
+      readEnvInt("NEOTOMA_DB_MAX_RETIRED_WORKERS") ?? Math.max(4, this.readerCount * 2)
     );
     // Event-loop delay is the symptom a stalled gate or a blocked main thread
     // shows from outside; 20 ms resolution is cheap enough to leave on.
@@ -1149,6 +1223,7 @@ export class WorkerFileDatabase implements DbDatabase {
       },
       {
         orphanGraceMs: this.orphanGraceMs,
+        canRetire: () => this.retiredConnections.size < this.maxRetiredWorkers,
         // Reclaiming the POOL SLOT is the whole of the #2217 requirement, and
         // #2324 is what happens when it is conflated with killing the thread.
         // Dropping the connection here frees the slot at this instant: dispatch
