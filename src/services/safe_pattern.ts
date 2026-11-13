@@ -71,7 +71,7 @@ export type SafeTestResult =
   | { status: "timeout" }
   | { status: "budget_exhausted" };
 
-interface Quant {
+export interface Quant {
   min: number;
   max: number; // Infinity when unbounded
   end: number; // index just past the quantifier (including lazy marker)
@@ -88,8 +88,29 @@ function newFrame(): Frame {
   return { hasVariable: false, branchStarts: [], currentStart: null, currentEmpty: true };
 }
 
-/** Parse a quantifier starting at `i`, or return null when none starts there. */
-function readQuantifier(p: string, i: number): Quant | null {
+/**
+ * The engine's count ceiling, 2^31 − 1. V8 reads any count at or above this
+ * value as exactly this value, and a repeat whose upper count is this value has
+ * no upper limit. So `{2147483647}` and `{2147483647,2147483647}` repeat at
+ * least 2^31 − 1 times with no maximum, while `{2147483646}` is a fixed count.
+ * readQuantifier applies the same rule: a count at or above the ceiling clamps
+ * to it on the lower side and is unbounded on the upper side.
+ */
+const COUNT_CAP = 2 ** 31 - 1;
+
+/**
+ * A counted quantifier, following the engine's grammar in non-unicode mode: a
+ * brace is a quantifier only as `{n}`, `{n,}` or `{n,m}`, where each count is
+ * one or more decimal digits of any length (leading zeros included). Any other
+ * brace form (`{}`, `{,m}`, `{a}`, an unterminated `{n,m`) is literal text.
+ */
+const COUNTED_QUANTIFIER = /\{(\d+)(?:(,)(\d*))?\}/y;
+
+/**
+ * Parse a quantifier starting at `i`, or return null when none starts there.
+ * Exported so the grammar tests can compare it with the engine's own parsing.
+ */
+export function readQuantifier(p: string, i: number): Quant | null {
   const c = p[i];
   let min: number;
   let max: number;
@@ -107,10 +128,24 @@ function readQuantifier(p: string, i: number): Quant | null {
     max = 1;
     end = i + 1;
   } else if (c === "{") {
-    const m = /^\{(\d{1,5})(?:(,)(\d{0,5}))?\}/.exec(p.slice(i, i + 16));
+    COUNTED_QUANTIFIER.lastIndex = i;
+    const m = COUNTED_QUANTIFIER.exec(p);
     if (!m) return null;
-    min = Number(m[1]);
-    max = m[2] === undefined ? min : m[3] === "" ? Infinity : Number(m[3]);
+    // Compare as integers of unbounded size, then map onto the engine's ceiling:
+    // a count at or above COUNT_CAP is COUNT_CAP as a minimum and unbounded as
+    // a maximum, for the fixed `{n}` form as well as the range forms.
+    const cap = BigInt(COUNT_CAP);
+    const lower = (v: bigint) => (v >= cap ? COUNT_CAP : Number(v));
+    const upper = (v: bigint) => (v >= cap ? Infinity : Number(v));
+    const lo = BigInt(m[1]);
+    min = lower(lo);
+    if (m[2] === undefined) {
+      max = upper(lo);
+    } else if (m[3] === "") {
+      max = Infinity;
+    } else {
+      max = upper(BigInt(m[3]));
+    }
     end = i + m[0].length;
   } else {
     return null;
@@ -119,12 +154,19 @@ function readQuantifier(p: string, i: number): Quant | null {
   return { min, max, end };
 }
 
-const MAX_OUTER_REPEAT_WITH_VARIABLE_INNER = 5;
+/**
+ * The most times a group whose inner part has variable length may repeat. A
+ * higher or unbounded outer count on such a group is refused at registration.
+ */
+export const MAX_OUTER_REPEAT_WITH_VARIABLE_INNER = 5;
 const MAX_GROUP_DEPTH = 20;
 
 const REMEDY = {
   backref: "Remove the backreference and match the repeated text with an explicit group instead.",
-  nested: "Use a bounded count such as {1,32} on the inner part, or remove the inner quantifier.",
+  // Every rewrite named here is accepted by the validator; a test feeds each back through it.
+  nested:
+    "Use a fixed count on the inner part (for example {3} instead of + or {1,32}), remove the inner quantifier, " +
+    `or repeat the group at most ${MAX_OUTER_REPEAT_WITH_VARIABLE_INNER} times.`,
   alternation:
     "Make the alternation branches distinct (for example by anchoring each with different leading text), or remove the repetition around them.",
   structure: "Check the pattern for unbalanced parentheses or an unfinished character class.",

@@ -1,7 +1,7 @@
 {
   "name": "neotoma",
   "version": "0.28.0",
-  "description": "MCP server for structured personal data memory with unified source ingestion",
+  "description": "The system of record for AI agents: versioned facts with their sources, over MCP, API and CLI",
   "main": "dist/index.js",
   "type": "module",
   "browser": false,
@@ -230,9 +230,11 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "memory",
-    "storage",
-    "chatgpt"
+    "ai-agents",
+    "system-of-record",
+    "provenance",
+    "structured-data",
+    "storage"
   ],
   "author": "Mark Hendrickson",
   "license": "MIT",

@@ -152,6 +152,68 @@ describe("registration entry points refuse patterns outside the registration rul
     ).rejects.toThrow(/derived_entities\[0\]\.conditions\[0\]\.patterns\[0\] is not accepted/);
   });
 
+  it.each([
+    ["inner, six-digit count", "^(a{1,123456})+$"],
+    ["inner, zero-padded count", "^(a{000001,000002})+$"],
+    ["outer, zero-padded count", "^(a+){000006}$"],
+  ])("MCP register_schema returns the typed shape refusal for %s", async (_name, pattern) => {
+    const result = await new NeotomaServer().executeToolForCli(
+      "register_schema",
+      {
+        entity_type: registerEntityType,
+        schema_version: "1.0",
+        schema_definition: {
+          fields: { code: { type: "string", constraints: { pattern } } },
+          canonical_name_fields: ["code"],
+        },
+        reducer_config: reducer,
+        user_specific: true,
+        activate: false,
+      },
+      owner
+    );
+    const body = JSON.parse(result.content[0].text) as {
+      error: { error_code: string; message: string; hint: string; details: { refusal: string } };
+    };
+    expect(body.error.error_code).toBe("SCHEMA_VALIDATION_FAILED");
+    expect(body.error.details.refusal).toBe("shape");
+    // Same rewrite guidance as the other shape refusals, and the pattern is not echoed.
+    expect(body.error.hint).toMatch(/fixed count on the inner part/);
+    expect(body.error.message).not.toContain(pattern);
+  });
+
+  it("HTTP POST /register_schema returns the typed shape refusal for a six-digit count", async () => {
+    // Uses the shared HTTP server started by vitest.global_setup.ts.
+    const port = process.env.NEOTOMA_SESSION_DEV_PORT ?? "18099";
+    const pattern = "^(a+){000006}$";
+    const res = await fetch(`http://127.0.0.1:${port}/register_schema`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_type: registerEntityType,
+        schema_version: "1.0",
+        schema_definition: {
+          fields: { code: { type: "string", constraints: { pattern } } },
+          canonical_name_fields: ["code"],
+        },
+        reducer_config: reducer,
+        user_id: "00000000-0000-0000-0000-000000000000",
+        user_specific: true,
+        activate: false,
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error_code: string;
+      message: string;
+      details: { refusal: string; hint: string };
+    };
+    expect(body.error_code).toBe("SCHEMA_VALIDATION_FAILED");
+    expect(body.details.refusal).toBe("shape");
+    expect(body.details.hint).toMatch(/fixed count on the inner part/);
+    expect(body.message).not.toContain(pattern);
+  });
+
   it("update_schema_incremental refuses a schema that already holds such a pattern", async () => {
     // The stored schema loads, but an edit re-registers it and meets the same refusal.
     await expect(

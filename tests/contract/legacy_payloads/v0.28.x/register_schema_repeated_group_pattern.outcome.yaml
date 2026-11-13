@@ -1,5 +1,5 @@
 endpoint: POST /register_schema
 outcome: rejected
 error_code: SCHEMA_VALIDATION_FAILED
-hint_match: /bounded count/
-notes: Schema registration now refuses some regular-expression pattern shapes (backreferences, nested variable quantifiers, overlapping repeated alternations) and enforces pattern length and count limits. The error's hint explains the rewrite, for example a bounded count such as {1,32} on the repeated part. Schemas that are already stored keep loading.
+hint_match: /fixed count on the inner part/
+notes: Schema registration now refuses some regular-expression pattern shapes (backreferences, nested variable quantifiers, overlapping repeated alternations) and enforces pattern length and count limits. The error's hint explains the rewrite, for example a fixed count on the inner part of a repeated group. Schemas that are already stored keep loading.
