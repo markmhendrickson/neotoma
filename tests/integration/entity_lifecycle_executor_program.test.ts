@@ -16,8 +16,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
-import { execFileSync, spawnSync, spawn } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { gitSync } from "../helpers/git_env.js";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import { ensureSchema } from "../../src/repositories/sqlite/sqlite_client.js";
 import { withExistingLifecycleDatabase } from "../../src/repositories/db/connection.js";
@@ -52,7 +53,7 @@ function json(path: string, value: unknown): Artifact {
   return artifact(path);
 }
 function git(...args: string[]) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  return gitSync(args, { cwd: root }).trim();
 }
 async function inventory(path: string) {
   const db = new AsyncSqliteDatabase(path, { existing: true, readOnly: true });

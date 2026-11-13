@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 
+import { GIT_REPOSITORY_ENV_VARS, gitSync } from "../helpers/git_env";
+
 /**
  * Contract test over the operator deploy WORKFLOW's flyctl invocation.
  *
@@ -417,33 +419,23 @@ describe("deploy_workflow_config: classify gate", { timeout: 60_000 }, () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "classify-step-"));
     // Git exports GIT_DIR and friends to hooks, and this suite runs in the
     // pre-commit hook. Inherited, they would point git (and the classifier)
-    // at the real checkout instead of this temp repo, so drop them.
-    const REPO_LOCATING_VARS = [
-      "GIT_DIR",
-      "GIT_WORK_TREE",
-      "GIT_INDEX_FILE",
-      "GIT_COMMON_DIR",
-      "GIT_OBJECT_DIRECTORY",
-      "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-      "GIT_NAMESPACE",
-      "GIT_PREFIX",
-    ];
+    // at the real checkout instead of this temp repo, so drop them (the
+    // canonical list lives in tests/helpers/git_env.ts).
+    const repoLocating: readonly string[] = GIT_REPOSITORY_ENV_VARS;
     const cleanEnv = Object.fromEntries(
-      Object.entries(process.env).filter(([k]) => !REPO_LOCATING_VARS.includes(k))
+      Object.entries(process.env).filter(([k]) => !repoLocating.includes(k))
     );
     try {
       const g = (...args: string[]) =>
-        spawnSync("git", args, {
+        gitSync(args, {
           cwd: repo,
-          encoding: "utf8",
-          env: {
-            ...cleanEnv,
+          gitEnv: {
             GIT_AUTHOR_NAME: "t",
             GIT_AUTHOR_EMAIL: "t@example.invalid",
             GIT_COMMITTER_NAME: "t",
             GIT_COMMITTER_EMAIL: "t@example.invalid",
           },
-        }).stdout.trim();
+        }).trim();
       g("init", "-q", "-b", "main");
       // Never write into anything but the temp repo just created.
       expect(g("rev-parse", "--absolute-git-dir")).toBe(path.join(fs.realpathSync(repo), ".git"));
