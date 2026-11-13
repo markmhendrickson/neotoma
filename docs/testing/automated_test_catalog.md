@@ -70,11 +70,11 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 233 |
-| Vitest service tests | 66 |
+| Vitest service tests | 67 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 246 |
+| Vitest integration tests | 244 |
 | Vitest CLI tests | 91 |
-| Vitest contract tests | 28 |
+| Vitest contract tests | 29 |
 | Vitest security tests | 20 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -350,7 +350,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (66):**
+**Files (67):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -408,6 +408,7 @@ flowchart TD
 - `tests/services/store_condition_schema.test.ts`
 - `tests/services/store_conditional_race.test.ts`
 - `tests/services/store_conditional.test.ts`
+- `tests/services/store_worker_backend_gate_contention.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_issues_missing_token.test.ts`
@@ -500,7 +501,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (246):**
+**Files (244):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -712,7 +713,6 @@ flowchart TD
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
-- `tests/integration/store_marker_unconfirmed.test.ts`
 - `tests/integration/store_null_cleared_field_warning.test.ts`
 - `tests/integration/store_partial_write_2144.test.ts`
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
@@ -725,7 +725,6 @@ flowchart TD
 - `tests/integration/store_structured_commit_invariant.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/store_warning_condition_rule.test.ts`
-- `tests/integration/store_worker_backend_gate_contention.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
@@ -851,7 +850,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (28):**
+**Files (29):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -876,6 +875,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/store_marker_unconfirmed.test.ts`
 - `tests/contract/store_plan_mode_response_schema.test.ts`
 - `tests/contract/sync_issues_contract.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
