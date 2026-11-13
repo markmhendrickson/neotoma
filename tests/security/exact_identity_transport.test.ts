@@ -1,6 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { HttpTransport } from "../../packages/client/src/http.js";
 import { LocalTransport } from "../../packages/client/src/local.js";
@@ -12,8 +10,9 @@ import {
   prepareMcpTestEnv,
   toolResultJson,
 } from "../helpers/mcp_http_modern.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
-const run = promisify(execFile);
+const run = execFileLocal;
 
 async function requestCli(
   baseUrl: string,

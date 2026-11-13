@@ -1,6 +1,4 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -25,8 +23,8 @@ import {
   parseMcpTransportChoice,
   scanForMcpConfigs,
 } from "../../src/cli/mcp_config_scan.ts";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
 afterEach(() => {

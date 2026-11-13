@@ -12,12 +12,10 @@
  */
 
 import { afterAll, describe, expect, it } from "vitest";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { cleanupEntityType } from "../helpers/cleanup_helpers.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 const RUN = `obs2241cli-${Date.now()}`;
 const ENTITY_TYPE = "test_obs_source_2241_cli_note";

@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
 describe("CLI stats commands", () => {

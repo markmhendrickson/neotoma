@@ -8,15 +8,14 @@
  * from that server, because a correction that reports success has not
  * necessarily changed the snapshot.
  */
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   startIsolatedNeotomaServer,
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = execFileLocal;
 const type = "cli_array_correction_2341";
 const wide = Array.from({ length: 34 }, (_, i) => `member_${String(i).padStart(2, "0")}`);
 const narrow = wide.slice(0, 10);

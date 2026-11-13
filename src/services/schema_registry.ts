@@ -27,6 +27,12 @@ import { spawn } from "child_process";
 import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import {
+  validatePattern,
+  SchemaPatternRefusalError,
+  MAX_PATTERNS_PER_CONDITION,
+  MAX_PATTERNS_PER_SCHEMA,
+} from "./safe_pattern.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -111,9 +117,12 @@ export interface FieldConstraints {
    */
   enum?: Array<string | number>;
   /**
-   * Regular-expression string (passed to `new RegExp(pattern)`) that the
-   * stored value must match. Only applied to `string` fields; ignored for
-   * other types. The pattern is anchored only if the caller includes `^`/`$`.
+   * Regular-expression string that the stored value must match. Only applied
+   * to `string` fields; ignored for other types. The pattern is anchored only
+   * if the caller includes `^`/`$`. Registration limits it to 256 characters
+   * and refuses backreferences, nested variable quantifiers and repeated
+   * alternations with overlapping branches; evaluation is bounded in time and
+   * subject length (see `safe_pattern.ts`).
    */
   pattern?: string;
   /**
@@ -1247,7 +1256,10 @@ export class SchemaRegistryService {
       throw new Error("The authoritative schema identity is invalid.");
     const definition = object(row.schema_definition) as unknown as SchemaDefinition;
     const reducer = object(row.reducer_config) as unknown as ReducerConfig;
-    this.validateSchemaDefinition(definition);
+    // Load-time integrity check: pattern syntax only. The stricter shape, length
+    // and count rules apply when a schema is registered; a stored schema that
+    // predates them keeps loading and its patterns are bounded at evaluation.
+    this.validateSchemaDefinition(definition, "load");
     this.validateReducerConfig(reducer, definition);
     return {
       ...row,
@@ -2988,7 +3000,12 @@ export class SchemaRegistryService {
   /**
    * Validate schema definition
    */
-  private validateSchemaDefinition(definition: SchemaDefinition): void {
+  private validateSchemaDefinition(
+    definition: SchemaDefinition,
+    mode: "register" | "load" = "register"
+  ): void {
+    const strictPatterns = mode === "register";
+    let patternCount = 0;
     if (Object.prototype.hasOwnProperty.call(definition, "planning")) {
       PlanningDeclarationSchema.parse(definition.planning);
     }
@@ -3272,13 +3289,25 @@ export class SchemaRegistryService {
           if (typeof c.pattern !== "string") {
             throw new Error(`constraints.pattern for ${fieldName} must be a string`);
           }
-          try {
-            // eslint-disable-next-line no-new
-            new RegExp(c.pattern);
-          } catch {
-            throw new Error(
-              `constraints.pattern for ${fieldName} is not a valid regular expression: "${c.pattern}"`
-            );
+          if (strictPatterns) {
+            patternCount += 1;
+            const patternCheck = validatePattern(c.pattern);
+            if (!patternCheck.ok) {
+              throw new SchemaPatternRefusalError(
+                `constraints.pattern for ${fieldName} is not accepted: ${patternCheck.reason}.`,
+                patternCheck.code,
+                patternCheck.remedy
+              );
+            }
+          } else {
+            try {
+              // eslint-disable-next-line no-new
+              new RegExp(c.pattern);
+            } catch {
+              throw new Error(
+                `constraints.pattern for ${fieldName} is not a valid regular expression`
+              );
+            }
           }
           if (fieldDef.type !== "string") {
             throw new Error(
@@ -3351,6 +3380,29 @@ export class SchemaRegistryService {
               `derived_entities[${i}].conditions[${j}] with op "matches_any_pattern" must have a non-empty patterns array`
             );
           }
+          if (strictPatterns && cond.op === "matches_any_pattern") {
+            const patterns = cond.patterns as unknown[];
+            if (patterns.length > MAX_PATTERNS_PER_CONDITION) {
+              throw new SchemaPatternRefusalError(
+                `derived_entities[${i}].conditions[${j}].patterns has ${patterns.length} entries; ` +
+                  `at most ${MAX_PATTERNS_PER_CONDITION} are allowed.`,
+                "count",
+                "Split the condition or merge similar patterns."
+              );
+            }
+            patternCount += patterns.length;
+            for (let k = 0; k < patterns.length; k++) {
+              const pc = validatePattern(patterns[k]);
+              // Syntactically invalid sources keep their substring fallback.
+              if (!pc.ok && pc.code !== "syntax") {
+                throw new SchemaPatternRefusalError(
+                  `derived_entities[${i}].conditions[${j}].patterns[${k}] is not accepted: ${pc.reason}.`,
+                  pc.code,
+                  pc.remedy
+                );
+              }
+            }
+          }
         }
         if (typeof rule.derived_entity_type !== "string" || !rule.derived_entity_type.trim()) {
           throw new Error(`derived_entities[${i}].derived_entity_type must be a non-empty string`);
@@ -3378,6 +3430,15 @@ export class SchemaRegistryService {
           }
         }
       }
+    }
+
+    if (strictPatterns && patternCount > MAX_PATTERNS_PER_SCHEMA) {
+      throw new SchemaPatternRefusalError(
+        `Schema declares ${patternCount} patterns (constraints.pattern plus matches_any_pattern entries); ` +
+          `at most ${MAX_PATTERNS_PER_SCHEMA} are allowed.`,
+        "count",
+        "Remove or merge patterns."
+      );
     }
   }
 

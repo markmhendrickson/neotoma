@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **824**
-- Backend and repo Vitest files: **770**
+- Total automated test files: **829**
+- Backend and repo Vitest files: **775**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -70,12 +70,12 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 231 |
-| Vitest service tests | 67 |
-| Source-adjacent tests | 70 |
+| Vitest service tests | 68 |
+| Source-adjacent tests | 71 |
 | Vitest integration tests | 244 |
-| Vitest CLI tests | 91 |
+| Vitest CLI tests | 93 |
 | Vitest contract tests | 28 |
-| Vitest security tests | 20 |
+| Vitest security tests | 21 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -348,7 +348,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (67):**
+**Files (68):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -400,6 +400,7 @@ flowchart TD
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/schema_seeding_preserves_custom_identity.test.ts`
+- `tests/services/schema_stored_pattern_load.test.ts`
 - `tests/services/session_seed_schema.test.ts`
 - `tests/services/store_condition_identity.test.ts`
 - `tests/services/store_condition_keys.test.ts`
@@ -422,7 +423,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (70):**
+**Files (71):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -479,6 +480,7 @@ flowchart TD
 - `src/services/plans/seed_schema.test.ts`
 - `src/services/rendered_page/conformance.test.ts`
 - `src/services/rendered_page/copy_controls.test.ts`
+- `src/services/rendered_page/publish_conformance_policy.test.ts`
 - `src/services/rendered_page/publish.test.ts`
 - `src/services/route_shadowing.test.ts`
 - `src/services/sync/peer_health.test.ts`
@@ -750,7 +752,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (91):**
+**Files (93):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -779,6 +781,8 @@ flowchart TD
 - `tests/cli/cli_init_flags.test.ts`
 - `tests/cli/cli_init_interactive.test.ts`
 - `tests/cli/cli_issues_commands.test.ts`
+- `tests/cli/cli_local_target_coverage_guard.test.ts`
+- `tests/cli/cli_local_target_guard.test.ts`
 - `tests/cli/cli_mcp_commands.test.ts`
 - `tests/cli/cli_memory_export.test.ts`
 - `tests/cli/cli_mirror.test.ts`
@@ -883,7 +887,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (20):**
+**Files (21):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
@@ -894,6 +898,7 @@ flowchart TD
 - `tests/security/proxy_bind_host.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
+- `tests/security/schema_pattern_bounds.test.ts`
 - `tests/security/schemas_per_type_scope_guard.test.ts`
 - `tests/security/scoped_source_and_relationship_reads.test.ts`
 - `tests/security/sort_by_sql_injection.test.ts`
