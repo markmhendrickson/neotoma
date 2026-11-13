@@ -1,8 +1,8 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { gitSync } from "../helpers/git_env";
 import { assertTrackedReaderLanguageAsset, currentUiSourceBinding, uncoveredUiModules } from "../../scripts/site_ui_source_binding";
 
 const root = join(__dirname, "../..");
@@ -37,9 +37,9 @@ describe("site UI source binding", () => {
       for (const file of ["frontend/index.html", "openapi_actions.yaml", "vite.config.ts", "package.json", "package-lock.json", "scripts/site_ui_source_binding.ts"])
         put(file);
       put("public/assets/reader-language.js", "tracked reader bytes");
-      execFileSync("git", ["init", "-q", dir]);
-      execFileSync("git", ["add", "."], { cwd: dir });
-      execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture"], { cwd: dir });
+      gitSync(["init", "-q", dir]);
+      gitSync(["add", "."], { cwd: dir });
+      gitSync(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture"], { cwd: dir });
       expect(() => currentUiSourceBinding(dir)).not.toThrow();
       const before = currentUiSourceBinding(dir).source;
       put("frontend/public/brand/logo.svg", "changed tracked brand bytes");

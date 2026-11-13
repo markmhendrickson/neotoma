@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
+import { gitSync } from "../../tests/helpers/git_env.js";
 
 import {
   buildCommitMessage,
@@ -22,7 +22,7 @@ import type { MirrorConfig } from "./canonical_mirror.js";
 
 function gitAvailable(): boolean {
   try {
-    execSync("git --version", { stdio: ["ignore", "pipe", "pipe"] });
+    gitSync(["--version"], { stdio: ["ignore", "pipe", "pipe"] });
     return true;
   } catch {
     return false;
@@ -206,12 +206,7 @@ describe("canonical_mirror_git", () => {
         expect(batch.committed).toBe(true);
         expect(batch.file_count).toBeGreaterThanOrEqual(1);
 
-        const log = execSync("git log --oneline", {
-          cwd: tmpRoot,
-          encoding: "utf8",
-        })
-          .trim()
-          .split("\n");
+        const log = gitSync(["log", "--oneline"], { cwd: tmpRoot }).trim().split("\n");
         expect(log.length).toBeGreaterThanOrEqual(2);
       }
     );

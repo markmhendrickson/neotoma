@@ -42,20 +42,41 @@ pick_free_port() {
   node scripts/pick-port.js "$1"
 }
 
+# Git exports repository-locating variables to this hook. In a linked worktree
+# GIT_DIR is the shared clone's <clone>/.git/worktrees/<name> and GIT_INDEX_FILE
+# its index; an inherited GIT_DIR overrides a child git's cwd. Tests that run
+# `git init <tmp>` or `git fetch --depth 1` inside a temp clone then act on the
+# shared clone instead (this flipped core.bare=true and wrote .git/shallow).
+# Unset them for the TEST stages only, inside a subshell: the hook's own git
+# commands below (git diff --cached, hook_log) still need them, because during
+# `git commit -a` or `git commit <paths>` GIT_INDEX_FILE names a temporary
+# index. Keep this list equal to GIT_REPOSITORY_ENV_VARS in
+# tests/helpers/git_env.ts (tests/contract/git_env_isolation.test.ts checks).
+unset_git_repository_env() {
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+}
+
 run_vitest_suite() {
   preferred_port="$1"
   shift
   vitest_port="$(pick_free_port "$preferred_port")" || return 1
-  NEOTOMA_HTTP_PORT="$vitest_port" HTTP_PORT="$vitest_port" "$@"
+  (
+    unset_git_repository_env
+    NEOTOMA_HTTP_PORT="$vitest_port" HTTP_PORT="$vitest_port" "$@"
+  )
 }
 
 run_playwright_suite() {
   vitest_port="$(pick_free_port 18080)" || return 1
   ui_port="$(pick_free_port 5195)" || return 1
-  NEOTOMA_HTTP_PORT="$vitest_port" \
-  HTTP_PORT="$vitest_port" \
-  PLAYWRIGHT_UI_BASE_URL="http://127.0.0.1:$ui_port" \
-  "$@"
+  (
+    unset_git_repository_env
+    NEOTOMA_HTTP_PORT="$vitest_port" \
+    HTTP_PORT="$vitest_port" \
+    PLAYWRIGHT_UI_BASE_URL="http://127.0.0.1:$ui_port" \
+    "$@"
+  )
 }
 
 # Type check (MANDATORY - catches type errors before tests)

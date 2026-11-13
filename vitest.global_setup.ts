@@ -11,6 +11,7 @@ import {
 } from "./tests/helpers/test_prerequisites.js";
 import { SCRUB_WARNING, scrubNonLocalBaseUrl } from "./tests/helpers/cli_local_target.js";
 import { resolveHarnessForceMode } from "./src/shared/harness_force_mode.js";
+import { stripGitRepositoryEnv } from "./tests/helpers/git_env.js";
 
 /**
  * Isolate every test worker's notion of "home" from the operator's real
@@ -100,6 +101,19 @@ function announceMissingPrerequisites(): void {
  * SQLite backend and a test-scoped data directory under `.vitest/`.
  */
 export default async function globalSetup() {
+  // FIRST, before anything can spawn git and before workers fork (they inherit
+  // this process.env): drop the repository-locating variables a git hook
+  // exports. Run from a pre-commit hook in a linked worktree, GIT_DIR points at
+  // the shared clone's worktree gitdir, and a test's `git init <tmp>` or
+  // `git fetch --depth 1` would act on that clone instead of its temp dir (it
+  // flipped core.bare and wrote .git/shallow). See tests/helpers/git_env.ts.
+  const removedGitEnv = stripGitRepositoryEnv(process.env);
+  if (removedGitEnv.length > 0) {
+    process.stderr.write(
+      `[neotoma] removed inherited ${removedGitEnv.join(", ")} from the test environment ` +
+        "so tests that run git act on their own directories, not the enclosing repository.\n"
+    );
+  }
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
   requireBuiltServer(projectRoot);
   announceMissingPrerequisites();
