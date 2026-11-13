@@ -30,9 +30,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { gitSync } from "../helpers/git_env.js";
 import { BUILT_IN_RELATIONSHIP_TYPES } from "../../src/services/relationship_types/seed_registry.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
@@ -88,7 +88,7 @@ const NAMES = ALL_NAMES.filter((n) => !AMBIGUOUS.has(n));
 
 function trackedFiles(): string[] {
   // git ls-files, so untracked scratch files and node_modules never appear.
-  return execFileSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf-8" })
+  return gitSync(["ls-files"], { cwd: REPO_ROOT })
     .split("\n")
     .filter(Boolean);
 }

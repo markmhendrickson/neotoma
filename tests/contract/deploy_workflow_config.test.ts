@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
+
+import { GIT_REPOSITORY_ENV_VARS, gitSync } from "../helpers/git_env";
 
 /**
  * Contract test over the operator deploy WORKFLOW's flyctl invocation.
@@ -329,3 +332,151 @@ exec /bin/sleep 1
     });
   }
 );
+
+/**
+ * The classify gate (scripts/classify_deploy_changes.mjs) skips pushes that
+ * cannot change the image. Three requirements on how it is wired:
+ *   (a) a deploy that does run waits for CI and verifies the served git_sha
+ *       exactly as before: the gate sits in front of those steps and does not
+ *       edit them;
+ *   (b) an unreadable served sha deploys, never skips;
+ *   (c) a skip is explained in the run summary (asserted on the script's own
+ *       output in tests/unit/classify_deploy_changes.test.ts).
+ */
+describe("deploy_workflow_config: classify gate", { timeout: 60_000 }, () => {
+  type Step = {
+    name?: string;
+    id?: string;
+    if?: string;
+    run?: string;
+    uses?: string;
+    env?: Record<string, string>;
+  };
+  type Doc = { on: Record<string, unknown>; jobs: { deploy: { steps: Step[] } } };
+  const doc = () => yaml.load(readWorkflow()) as Doc;
+  const steps = () => doc().jobs.deploy.steps;
+  const byName = (name: string) => {
+    const st = steps().find((s) => s.name === name);
+    if (!st) throw new Error(`no step named '${name}'`);
+    return st;
+  };
+  const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+
+  const GATE = "steps.classify.outputs.deploy != 'false'";
+  const DEPLOY_STEPS = [
+    "Wait for CI to pass on this commit",
+    "Setup flyctl",
+    "Deploy to Fly (operator instance)",
+    "Verify deploy",
+  ];
+
+  it("runs on every push to main, so the classifier (not a paths filter) decides", () => {
+    // A paths filter diffs only the pushed range, which is the base this gate
+    // exists to avoid, and `**/*.md` matched bundle SKILL.md files under src/.
+    const push = (doc().on as Record<string, Record<string, unknown>>).push;
+    expect(push.branches).toEqual(["main"]);
+    expect(push["paths-ignore"]).toBeUndefined();
+    expect(push.paths).toBeUndefined();
+  });
+
+  it("classifies after checkout and before every deploy step", () => {
+    const names = steps().map((s) => s.name);
+    const classify = steps().findIndex((s) => s.id === "classify");
+    expect(classify).toBeGreaterThan(names.indexOf("Checkout"));
+    for (const name of DEPLOY_STEPS) expect(names.indexOf(name), name).toBeGreaterThan(classify);
+    expect(byName("Classify changes").run).toMatch(/node scripts\/classify_deploy_changes\.mjs/);
+  });
+
+  it("(a) gates each deploy step on the classifier while keeping its original condition", () => {
+    expect(byName("Wait for CI to pass on this commit").if).toBe(
+      `steps.gate.outputs.configured == 'true' && !inputs.skip_ci_gate && ${GATE}`
+    );
+    for (const name of ["Setup flyctl", "Deploy to Fly (operator instance)", "Verify deploy"]) {
+      expect(byName(name).if, name).toBe(`steps.gate.outputs.configured == 'true' && ${GATE}`);
+    }
+    // The escalation must still fire on any failure, including the classifier's.
+    expect(byName("Escalate on failure").if).toBe(
+      "failure() && steps.gate.outputs.configured == 'true'"
+    );
+  });
+
+  it("(a) leaves the CI wait and the served git_sha verification byte-for-byte unchanged", () => {
+    // Pinned when the classify gate was added. These two steps are the safety
+    // checks for every deploy that does run; the gate must not alter them. If
+    // you change one DELIBERATELY, update its hash here in the same PR.
+    expect(sha256(byName("Wait for CI to pass on this commit").run ?? "")).toBe(
+      "0fa7a8a04c4299f719897a0f1da4747c3db6c0fa2f658eb809bdefd6552a4da0"
+    );
+    expect(sha256(byName("Verify deploy").run ?? "")).toBe(
+      "e42cf2c80a9648bf3dad01b70a548be3c5a299010ac3bc26eca93beb80cc10cb"
+    );
+    expect(byName("Verify deploy").run).toMatch(/if \(j\.git_sha !== expSha\) fail/);
+  });
+
+  it("(b) the real classify step deploys a docs-only push when the served sha cannot be read", () => {
+    // Build a repo where the push is docs-only, so the ONLY reason to deploy
+    // is that the instance could not be asked what it serves.
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "classify-step-"));
+    // Git exports GIT_DIR and friends to hooks, and this suite runs in the
+    // pre-commit hook. Inherited, they would point git (and the classifier)
+    // at the real checkout instead of this temp repo, so drop them (the
+    // canonical list lives in tests/helpers/git_env.ts).
+    const repoLocating: readonly string[] = GIT_REPOSITORY_ENV_VARS;
+    const cleanEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([k]) => !repoLocating.includes(k))
+    );
+    try {
+      const g = (...args: string[]) =>
+        gitSync(args, {
+          cwd: repo,
+          gitEnv: {
+            GIT_AUTHOR_NAME: "t",
+            GIT_AUTHOR_EMAIL: "t@example.invalid",
+            GIT_COMMITTER_NAME: "t",
+            GIT_COMMITTER_EMAIL: "t@example.invalid",
+          },
+        }).trim();
+      g("init", "-q", "-b", "main");
+      // Never write into anything but the temp repo just created.
+      expect(g("rev-parse", "--absolute-git-dir")).toBe(path.join(fs.realpathSync(repo), ".git"));
+      fs.mkdirSync(path.join(repo, "docs"));
+      fs.writeFileSync(path.join(repo, "docs", "a.md"), "# a\n");
+      g("add", "-A");
+      g("commit", "-q", "-m", "served");
+      fs.writeFileSync(path.join(repo, "docs", "a.md"), "# b\n");
+      g("commit", "-q", "-am", "docs only");
+      const head = g("rev-parse", "HEAD");
+      fs.mkdirSync(path.join(repo, "scripts"));
+      fs.copyFileSync(
+        path.join(repoRoot, "scripts", "classify_deploy_changes.mjs"),
+        path.join(repo, "scripts", "classify_deploy_changes.mjs")
+      );
+
+      // 127.0.0.1:9 (discard) refuses; an empty HOST yields an invalid URL.
+      for (const host of ["127.0.0.1:9", ""]) {
+        const out = path.join(repo, `output-${host ? "refused" : "empty"}`);
+        const summary = `${out}.summary`;
+        const r = spawnSync("bash", ["-e", "-c", byName("Classify changes").run ?? ""], {
+          cwd: repo,
+          encoding: "utf8",
+          env: {
+            ...cleanEnv,
+            EVENT: "push",
+            HEAD_SHA: head,
+            HOST: host,
+            GITHUB_OUTPUT: out,
+            GITHUB_STEP_SUMMARY: summary,
+            CLASSIFY_SERVED_RETRY_DELAY_MS: "1",
+          },
+        });
+        expect(r.status, r.stderr).toBe(0);
+        expect(fs.readFileSync(out, "utf8"), host).toMatch(/^deploy=true$/m);
+        expect(fs.readFileSync(out, "utf8")).toMatch(
+          /^reason=could not read the instance's served git_sha/m
+        );
+      }
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});

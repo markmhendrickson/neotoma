@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { gitSync } from "../helpers/git_env";
 import { CONNECTIONS, CONNECTIONS_SETUP } from "../../src/shared/harness_connections";
 import { PREVIEW_REFERENCE_COMMIT } from "../../scripts/docs_viewer/render";
 import {
@@ -962,24 +963,16 @@ describe("local docs preview source contract", () => {
     }
     const checkout = mkdtempSync(join(tmpdir(), "docs-preview-shallow-"));
     dirs.push(checkout);
-    const gitDir = execFileSync(
-      "git",
-      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-      {
-        cwd: root,
-        encoding: "utf8",
-      }
-    ).trim();
-    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+    const gitDir = gitSync(["rev-parse", "--path-format=absolute", "--git-common-dir"], {
       cwd: root,
-      encoding: "utf8",
     }).trim();
+    const head = gitSync(["rev-parse", "HEAD"], { cwd: root }).trim();
     const source = pathToFileURL(gitDir).href;
-    execFileSync("git", ["clone", "--quiet", "--no-checkout", "--depth", "1", source, checkout]);
-    execFileSync("git", ["fetch", "--quiet", "--depth", "1", source, head], { cwd: checkout });
+    gitSync(["clone", "--quiet", "--no-checkout", "--depth", "1", source, checkout]);
+    gitSync(["fetch", "--quiet", "--depth", "1", source, head], { cwd: checkout });
     const hasReference = () => {
       try {
-        execFileSync("git", ["cat-file", "-e", `${PREVIEW_REFERENCE_COMMIT}^{commit}`], {
+        gitSync(["cat-file", "-e", `${PREVIEW_REFERENCE_COMMIT}^{commit}`], {
           cwd: checkout,
           stdio: "ignore",
         });
@@ -990,7 +983,7 @@ describe("local docs preview source contract", () => {
     };
     expect(hasReference()).toBe(false);
     // The preview reference may be on a separate source line from this checkout's HEAD.
-    execFileSync("git", ["fetch", "--quiet", source, PREVIEW_REFERENCE_COMMIT], { cwd: checkout });
+    gitSync(["fetch", "--quiet", source, PREVIEW_REFERENCE_COMMIT], { cwd: checkout });
     expect(hasReference()).toBe(true);
   }, 20_000);
 
