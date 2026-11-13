@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **828**
-- Backend and repo Vitest files: **774**
+- Total automated test files: **832**
+- Backend and repo Vitest files: **778**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 231 |
-| Vitest service tests | 67 |
+| Vitest unit tests | 233 |
+| Vitest service tests | 68 |
 | Source-adjacent tests | 71 |
 | Vitest integration tests | 244 |
 | Vitest CLI tests | 93 |
-| Vitest contract tests | 28 |
+| Vitest contract tests | 29 |
 | Vitest security tests | 21 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (231):**
+**Files (233):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -175,6 +175,7 @@ flowchart TD
 - `tests/unit/db_idempotency_concurrency.test.ts`
 - `tests/unit/db_libsql_nonblocking.test.ts`
 - `tests/unit/db_libsql_remote_class.test.ts`
+- `tests/unit/db_sqlite_gate_order.test.ts`
 - `tests/unit/db_url_misconfig_guard.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_hygiene.test.ts`
@@ -328,6 +329,7 @@ flowchart TD
 - `tests/unit/store_data_origin.test.ts`
 - `tests/unit/store_strict_and_consistency.test.ts`
 - `tests/unit/store_warning_rule.test.ts`
+- `tests/unit/store_write_completion.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
@@ -348,7 +350,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (67):**
+**Files (68):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -407,6 +409,7 @@ flowchart TD
 - `tests/services/store_condition_schema.test.ts`
 - `tests/services/store_conditional_race.test.ts`
 - `tests/services/store_conditional.test.ts`
+- `tests/services/store_worker_backend_gate_contention.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_issues_missing_token.test.ts`
@@ -851,7 +854,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (28):**
+**Files (29):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -876,6 +879,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/store_marker_unconfirmed.test.ts`
 - `tests/contract/store_plan_mode_response_schema.test.ts`
 - `tests/contract/sync_issues_contract.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`

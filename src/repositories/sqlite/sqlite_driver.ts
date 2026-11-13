@@ -157,9 +157,8 @@ class AsyncSqliteStatement implements DbStatement {
     private readonly sql: string
   ) {}
 
-  private async exec<T>(op: (stmt: SqliteStatementImpl) => T): Promise<T> {
-    await this.db.readyForStatement();
-    return op(this.db.rawDb().prepare(this.sql));
+  private exec<T>(op: (stmt: SqliteStatementImpl) => T): Promise<T> {
+    return this.db.runStatement(() => op(this.db.rawDb().prepare(this.sql)), this.sql);
   }
 
   run(...params: unknown[]): Promise<DbRunResult> {
@@ -205,13 +204,23 @@ export class AsyncSqliteDatabase implements DbDatabase {
   }
 
   /**
-   * @internal Statements wait for any open transaction unless they run inside
-   * its async context (then they join it — the single connection is already
-   * inside BEGIN, matching the old synchronous semantics).
+   * @internal Run one synchronous statement. Inside a transaction's async
+   * context it joins that transaction (the single connection is already inside
+   * BEGIN). Otherwise it takes its place in the gate's FIFO queue.
+   *
+   * A plain `await gate.whenIdle()` is a snapshot: a transaction enqueued after
+   * it starts its BEGIN a microtask before the waiting statement resumes, and
+   * the statement then runs inside that transaction, where it is lost on
+   * ROLLBACK and visible to nothing else until COMMIT. Queuing through
+   * `runInOrder` makes the statement own the gate while it runs.
    */
-  async readyForStatement(): Promise<void> {
-    if (this.txContext.getStore()) return;
-    await this.gate.whenIdle();
+  async runStatement<T>(fn: () => T, sql = ""): Promise<T> {
+    if (this.txContext.getStore()) return fn();
+    return this.gate.runInOrder(
+      async () => fn(),
+      undefined,
+      () => sql.replace(/\s+/g, " ").trim().slice(0, 60)
+    );
   }
 
   prepare(sql: string): DbStatement {
@@ -219,13 +228,11 @@ export class AsyncSqliteDatabase implements DbDatabase {
   }
 
   async exec(sql: string): Promise<void> {
-    await this.readyForStatement();
-    this.db.exec(sql);
+    await this.runStatement(() => this.db.exec(sql), sql);
   }
 
   async pragma(command: string): Promise<unknown[]> {
-    await this.readyForStatement();
-    return this.db.pragma(command);
+    return this.runStatement(() => this.db.pragma(command), `PRAGMA ${command}`);
   }
 
   transaction<T>(fn: (tx: DbConnection) => Promise<T>): Promise<T> {

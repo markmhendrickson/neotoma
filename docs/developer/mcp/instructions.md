@@ -287,6 +287,7 @@ Before `neotoma backup restore`, stop Neotoma and every SQLite client that can a
 [ERRORS & RECOVERY]
 Store retry policy: if **`store`** fails, (1) retry once with the same payload (keyed: same `idempotency_key`); (2) if it fails again, surface the error to the user ("Storage failed: [error message]") before responding with any retrieved data; (3) do not silently skip storage and respond as if it succeeded.
 On `ERR_STORE_WRITE_INCOMPLETE` (request had an `interpretation`; same key cannot finish it): resend only `missing_entity_indexes` under a NEW key (empty: all stored) and recreate relationships (none written) by entity id (ids via `retrieve_entity_by_identifier`).
+`store` reply with `write_committed: true` + `store_write_completion: "unconfirmed"`: writes committed; treat as success, don't retry. Replay the same `idempotency_key` once only if `store_write_completion_note` says so; no key: no action.
 SQLite corruption: if any local Neotoma operation fails with `database disk image is malformed`, `SQLITE_CORRUPT`, `btreeInitPage`, or failed SQLite integrity checks, tell the user the local SQLite file is likely corrupted and suggest `neotoma storage recover-db` first, then `neotoma storage recover-db --recover` after they stop Neotoma. Do not auto-swap the recovered DB without explicit user approval.
 getStats unreachable: if getStats is unreachable when answering entity-type cardinality questions, state that explicitly rather than substituting an expensive per-type count or a schema-width value.
 
