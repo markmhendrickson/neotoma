@@ -189,6 +189,13 @@ parentPort.on("message", (msg) => {
     } else {
       throw new Error("unknown op: " + msg.op);
     }
+    // Abandoned while it ran: nobody can receive this result, and posting a
+    // large one would still make the main thread deserialize it (stalling the
+    // event loop) just to be discarded. Reply with a small marker instead.
+    if (cancelled !== null && Atomics.load(cancelled, msg.id % cancelled.length) === msg.id) {
+      parentPort.postMessage({ id: msg.id, ok: false, error: { message: "cancelled" } });
+      return;
+    }
     parentPort.postMessage({ id: msg.id, ok: true, result });
   } catch (error) {
     parentPort.postMessage({
