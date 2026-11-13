@@ -561,6 +561,15 @@ class WorkerConnection {
   }
 
   /**
+   * Flag a statement id so the worker skips it if it has not started yet. The
+   * skip applies to every connection type, including the writer should it ever
+   * gain a budget or signal (today it has neither, so it is never abandoned).
+   */
+  private cancel(id: number): void {
+    Atomics.store(this.cancelled, id % this.cancelled.length, id);
+  }
+
+  /**
    * Give up on everything this worker is executing and take it out of service,
    * WITHOUT terminating it while a native call is on its stack (#2324).
    *
@@ -620,15 +629,6 @@ class WorkerConnection {
    * instance down and blocks its own recovery. Exact-owned work waits for drain
    * and retains admission custody; ordinary work gets the same wait.
    */
-  /**
-   * Flag a statement id so the worker skips it if it has not started yet. The
-   * skip applies to every connection type, including the writer should it ever
-   * gain a budget or signal (today it has neither, so it is never abandoned).
-   */
-  private cancel(id: number): void {
-    Atomics.store(this.cancelled, id % this.cancelled.length, id);
-  }
-
   private abandon(errorOrFactory: Error | ((workerKept: boolean) => Error), id?: number): void {
     const make = (workerKept: boolean): Error =>
       typeof errorOrFactory === "function" ? errorOrFactory(workerKept) : errorOrFactory;
@@ -722,7 +722,7 @@ class WorkerConnection {
     try {
       worker.postMessage({ id: this.nextId++, op: "__drained__" });
     } catch {
-      // The worker is already gone; the grace timer below still covers it.
+      // The worker is already gone; its exit handler clears the drain watch.
     }
     // Deliberately NO force-terminate: wait for the drain probe however long
     // the native call takes. Force-terminating a worker still inside the addon
@@ -733,12 +733,17 @@ class WorkerConnection {
     const everyMs = Math.max(this.orphanGraceMs, 1000);
     this.orphanTimer = setInterval(() => {
       const now = Date.now();
-      if (now - lastDrainLogAt < SATURATION_LOG_INTERVAL_MS) return;
+      if (now - lastDrainLogAt < SATURATION_LOG_INTERVAL_MS) {
+        drainLogSuppressed += 1;
+        return;
+      }
+      const suppressed = drainLogSuppressed;
+      drainLogSuppressed = 0;
       lastDrainLogAt = now;
       logger.warn(
         `DB retired reader still draining after ${now - retiredAt}ms ` +
           `(${this.local.drainingCount?.() ?? "?"} retired worker(s) draining, cap ${this.local.retirementCap?.() ?? "?"}); ` +
-          `it is not terminated while inside a native call`
+          `it is not terminated while inside a native call; ${suppressed} similar warning(s) suppressed since the last one`
       );
     }, everyMs);
     this.orphanTimer.unref?.();
@@ -830,6 +835,8 @@ class WorkerConnection {
    * chance to finish and report as `abandon` does, then terminate. Exact-owned
    * generations require a drain/exit; ordinary ones keep their existing grace.
    * Every path waits for actual exit, even if a termination request rejects.
+   * Unlike retirement, `close()` still force-terminates a worker that has not
+   * drained once the grace elapses (shutdown only; the process is exiting).
    */
   async terminate(): Promise<void> {
     this.closed = true;
@@ -1076,6 +1083,7 @@ const SLOW_GATE_WAIT_MS = 250;
 let lastCapLogAt = 0;
 let capLogSuppressed = 0;
 let lastDrainLogAt = 0;
+let drainLogSuppressed = 0;
 
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
