@@ -17,6 +17,8 @@ vi.mock("../../src/services/request_context.js", async (importOriginal) => {
 
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
+import { softDeleteEntity } from "../../src/services/deletion.js";
+import { mergeEntities } from "../../src/services/entity_merge.js";
 import {
   generateGuestAccessToken,
   hashGuestAccessToken,
@@ -230,6 +232,91 @@ describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"]
       expect(isExpanded(body, b)).toBe(pageReadable);
       if (!pageReadable) expect(res.body).not.toContain(`SIGN-B-${policy}`);
       await expectExpansionMatchesDetailReads(body);
+    });
+  }
+);
+
+describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"] as const)(
+  "signed identity and a merged entity under policy %s",
+  (policy) => {
+    const pageReadable = policy === "read_only" || policy === "open";
+
+    /**
+     * R is a page this caller can read under the page policy; it is merged into
+     * T, a contact whose policy is closed to the caller. A links to R.
+     */
+    async function mergedFixture(tag: string, token?: string) {
+      process.env[POLICY_ENV] = policy;
+      process.env[CONTACT_POLICY_ENV] = "closed";
+      const a = await createEntity("rendered_page", `${tag}-A-${policy}`);
+      const r = await createEntity("rendered_page", `${tag}-R-${policy}`);
+      const t = await createEntity("contact", `${tag}-T-${policy}`);
+      const before = await get(`/entities/${r}`, token);
+      if (pageReadable) expect(before.status, "readable before the merge").toBe(200);
+      await mergeEntities({ fromEntityId: r, toEntityId: t, userId: OWNER, mergedBy: "test" });
+      await link(a, r);
+      // The merge target's own read route refuses this caller.
+      expect((await get(`/entities/${t}`, token)).status).toBe(403);
+      return { a, r, t };
+    }
+
+    async function expectNoTargetContent(
+      ids: { a: string; r: string; t: string },
+      tag: string,
+      token?: string
+    ): Promise<void> {
+      const marker = `${tag}-T-${policy}`;
+      for (const path of [`/entities/${ids.r}`, `/entities/${ids.r}/html`]) {
+        const res = await get(path, token);
+        expect(res.body, path).not.toContain(marker);
+        expect(res.status, `${policy} ${path}`).toBe(pageReadable ? 404 : 403);
+      }
+      const rel = await get(`/entities/${ids.a}/relationships?expand_entities=true`, token);
+      expect(rel.body).not.toContain(marker);
+      if (!pageReadable) {
+        expect(rel.status).toBe(403);
+        return;
+      }
+      expect(rel.status).toBe(200);
+      const body = JSON.parse(rel.body) as ExpansionBody;
+      expect(isExpanded(body, ids.r)).toBe(false);
+      await expectExpansionMatchesDetailReads(body, token);
+    }
+
+    it("without a token: a merged entity is answered as absent, never as its merge target", async () => {
+      const ids = await mergedFixture("MNT");
+      await expectNoTargetContent(ids, "MNT");
+    });
+
+    it("with a token that does not name it: a merged entity is answered as absent, never as its merge target", async () => {
+      const seed = await createEntity("rendered_page", `MTK-SEED-${policy}`);
+      const token = await generateGuestAccessToken({ entityIds: [seed], userId: OWNER });
+      tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+      const ids = await mergedFixture("MTK", token);
+      await expectNoTargetContent(ids, "MTK", token);
+    });
+
+    it("with a token: a covered related entity that was deleted is not expanded", async () => {
+      process.env[POLICY_ENV] = policy;
+      process.env[CONTACT_POLICY_ENV] = "closed";
+      const a = await createEntity("rendered_page", `DTK-A-${policy}`);
+      const d = await createEntity("rendered_page", `DTK-D-${policy}`);
+      await link(a, d);
+      const token = await generateGuestAccessToken({ entityIds: [a, d], userId: OWNER });
+      tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+      const deleted = await softDeleteEntity(d, "rendered_page", OWNER);
+      expect(deleted.success, JSON.stringify(deleted)).toBe(true);
+
+      const res = await get(`/entities/${a}/relationships?expand_entities=true`, token);
+      expect(res.body).not.toContain(`DTK-D-${policy}`);
+      if (policy === "closed" || policy === "submit_only") {
+        expect(res.status).toBe(403);
+        return;
+      }
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body) as ExpansionBody;
+      expect(isExpanded(body, d)).toBe(false);
+      await expectExpansionMatchesDetailReads(body, token);
     });
   }
 );

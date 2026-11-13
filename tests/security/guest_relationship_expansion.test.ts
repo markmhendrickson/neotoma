@@ -13,7 +13,7 @@ import { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { app } from "../../src/actions.js";
+import { app, GUEST_EXPANSION_MAX_RELATED_ENTITIES } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { softDeleteEntity } from "../../src/services/deletion.js";
 import { mergeEntities } from "../../src/services/entity_merge.js";
@@ -449,3 +449,41 @@ describe.each(POLICIES)(
     });
   }
 );
+
+describe("related-entity expansion bound for a guest", () => {
+  it("evaluates at most the documented number of related entities, in ascending id order", async () => {
+    process.env[PAGE_POLICY_ENV] = "open";
+    const a = await createEntity("rendered_page", "CAP-A");
+    const related: string[] = [];
+    for (let i = 0; i <= GUEST_EXPANSION_MAX_RELATED_ENTITIES; i++) {
+      const id = await createEntity("rendered_page", `CAP-R${i}`);
+      await link(a, id);
+      related.push(id);
+    }
+    const token = await mint([a, ...related]);
+    const res = await guestGet(`/entities/${a}/relationships?expand_entities=true`, token);
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body) as RelationshipsBody;
+    const sorted = [...related].sort();
+    const expanded = sorted.filter((id) => body.related_entities?.[id]?.entity_type !== null);
+    expect(expanded).toEqual(sorted.slice(0, GUEST_EXPANSION_MAX_RELATED_ENTITIES));
+    for (const id of sorted.slice(GUEST_EXPANSION_MAX_RELATED_ENTITIES)) {
+      expectNotExpanded(body, id);
+    }
+    expect(body.outgoing).toHaveLength(related.length);
+  });
+
+  it("the owner's expansion is not bounded", async () => {
+    process.env[PAGE_POLICY_ENV] = "open";
+    const a = await createEntity("rendered_page", "OCAP-A");
+    for (let i = 0; i <= GUEST_EXPANSION_MAX_RELATED_ENTITIES; i++) {
+      await link(a, await createEntity("rendered_page", `OCAP-R${i}`));
+    }
+    const res = await ownerGet(`/entities/${a}/relationships?expand_entities=true`);
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body) as RelationshipsBody;
+    const entries = Object.values(body.related_entities ?? {});
+    expect(entries).toHaveLength(GUEST_EXPANSION_MAX_RELATED_ENTITIES + 1);
+    expect(entries.every((entry) => entry.entity_type === "rendered_page")).toBe(true);
+  });
+});

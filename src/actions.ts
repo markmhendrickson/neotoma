@@ -4613,6 +4613,9 @@ async function resolveGuestEntityReadAccess(
   return { kind: "found", ...access };
 }
 
+/** Upper bound on related entities evaluated for one guest expansion request. */
+export const GUEST_EXPANSION_MAX_RELATED_ENTITIES = 50;
+
 type GuestEntityDetailRead =
   | { kind: "readable"; entity: EntityWithProvenance }
   | { kind: "not_found" }
@@ -4623,9 +4626,10 @@ type GuestEntityDetailRead =
  * GET /entities/:id, GET /entities/:id/html and related-entity expansion, so
  * they cannot differ. Access is resolved by `resolveGuestShareLinkEntityAccess`
  * (a token that names the entity, otherwise the type policy with the
- * submitter-scoped rules); a deleted entity, or an entity a token reaches only
- * through a merge, is `not_found`. A refusal is returned with the error the
- * route answers with, never thrown, so a caller can decide per entity.
+ * submitter-scoped rules); a deleted or merged entity is `not_found` for every
+ * caller. Whatever it returns as `readable` has `entity_id` equal to the
+ * requested id. A refusal is returned with the error the route answers with,
+ * never thrown, so a caller can decide per entity.
  */
 async function decideGuestEntityDetailRead(
   principal: GuestPrincipal,
@@ -4645,13 +4649,24 @@ async function decideGuestEntityDetailRead(
     throw error;
   }
   if (access.kind === "not_found") return { kind: "not_found" };
-  const tokenScopedOwner = access.viaToken ? access.userId : undefined;
+  // A merged entity is answered as absent for every guest caller: the decision
+  // is about the requested entity only, so a merge redirect is never followed.
+  const { data: row, error: rowError } = await db
+    .from("entities")
+    .select("id, merged_to_entity_id")
+    .eq("id", entityId)
+    .eq("user_id", access.userId)
+    .maybeSingle();
+  if (rowError) throw rowError;
+  if (!row || (row as { merged_to_entity_id?: string | null }).merged_to_entity_id) {
+    return { kind: "not_found" };
+  }
   const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-  const entity = await getEntityWithProvenance(entityId, false, tokenScopedOwner);
+  const entity = await getEntityWithProvenance(entityId, false, access.userId);
   if (!entity) return { kind: "not_found" };
-  // A token grants exactly the entity it names: never another entity's content
-  // (for example through a merge redirect).
-  if (tokenScopedOwner && entity.entity_id !== entityId) return { kind: "not_found" };
+  // Invariant: whatever this decision returns as readable is the requested
+  // entity, never another one.
+  if (entity.entity_id !== entityId) return { kind: "not_found" };
   return { kind: "readable", entity };
 }
 
@@ -4661,6 +4676,9 @@ async function decideGuestEntityDetailRead(
  * by the owner whose graph is being read. Applies to every guest caller (token
  * only, token with a signed identity, signed identity only). Every other
  * related entity keeps its relationship row but is not expanded.
+ *
+ * At most `GUEST_EXPANSION_MAX_RELATED_ENTITIES` related entities are evaluated
+ * per request, in ascending id order; any beyond that bound are not expanded.
  */
 async function relatedEntitiesReadableByGuest(
   principal: GuestPrincipal,
@@ -4676,11 +4694,14 @@ async function relatedEntitiesReadableByGuest(
     .in("id", relatedIds)
     .eq("user_id", ownerId);
   if (error) throw error;
-  for (const row of (rows ?? []) as Array<{ id: string }>) {
-    const decision = await decideGuestEntityDetailRead(principal, row.id);
-    // An entity read through a merge redirect is a different entity.
-    if (decision.kind === "readable" && decision.entity.entity_id === row.id) {
-      readable.add(row.id);
+  const candidates = ((rows ?? []) as Array<{ id: string }>)
+    .map((row) => row.id)
+    .sort()
+    .slice(0, GUEST_EXPANSION_MAX_RELATED_ENTITIES);
+  for (const id of candidates) {
+    const decision = await decideGuestEntityDetailRead(principal, id);
+    if (decision.kind === "readable" && decision.entity.entity_id === id) {
+      readable.add(id);
     }
   }
   return readable;

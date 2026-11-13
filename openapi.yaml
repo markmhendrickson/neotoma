@@ -5045,7 +5045,10 @@ paths:
             `canonical_name` and `entity_type` are null and that has no
             snapshot, and its convenience fields on each row are null. A null
             `canonical_name` and `entity_type` therefore means the entity is
-            not available to this caller, or has no snapshot yet.
+            not available to this caller, or has no snapshot yet. A merged
+            entity is never expanded for such a caller. For such a caller at
+            most 50 related entities are evaluated per request, in ascending
+            entity_id order; any beyond that bound keep unexpanded entries.
             Relationship properties (`snapshot` on each row) are edge data
             and must never hold entity content.
           schema: { type: boolean }
