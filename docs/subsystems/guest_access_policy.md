@@ -14,6 +14,17 @@ From most restrictive to most open:
 | `submitter_scoped` | Yes | Yes | Own entities only |
 | `open` | Yes | Yes | All |
 
+## Guest tokens
+
+A guest token (the `access_token` query parameter or `Authorization: Bearer`, minted for example by `publish_rendered_page`) is checked in one place on every guest-readable route, alongside the mode above:
+
+- On `GET /entities/:id` and `GET /entities/:id/html`, a valid token that names the requested entity grants read access to that entity whatever its type's mode, including `closed`. A merged entity is not served through a token, and a deleted entity answers `404`.
+- On the other guest-readable routes (`/entities/:id/observations`, `/entities/:id/relationships`, the issue, subscription and event-stream routes), a caller that holds only a token must present one that covers the requested item (it names the item, or, for an issue, it is the submitter's token), and the type's mode must also allow the operation.
+- Writes follow the mode; a token never takes precedence over it on a write route.
+- `GET /entities/:id/relationships?expand_entities=true` expands a related entity for a non-owner caller only when that caller could read it through `GET /entities/:id`.
+- A token that is unknown, malformed, expired, revoked or deleted, or presented as `access_token` on a route that does not accept tokens, returns `401 GUEST_TOKEN_INVALID`. A valid token for an item it does not cover returns `403 GUEST_TOKEN_SCOPE`. Lifetime and renewal are described in [`docs/rendered_page.md`](../rendered_page.md).
+- An AAuth agent admitted through a matching `agent_grant` that presents no guest token reads `GET /entities/:id` and its `/observations`, `/relationships` and `/html` sub-routes as its grant owner, so the mode does not apply to it there.
+
 ## Configuration
 
 ### SchemaMetadata (recommended)
