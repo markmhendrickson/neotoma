@@ -35,11 +35,17 @@ const tokenEntityIds: string[] = [];
 const relationshipKeys: string[] = [];
 
 const CONTACT_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_CONTACT";
+const ISSUE_POLICY_ENV = "NEOTOMA_ACCESS_POLICY_ISSUE";
 
-async function createEntity(
-  entityType: "rendered_page" | "contact",
-  marker: string
-): Promise<string> {
+type EntityType = "rendered_page" | "contact" | "issue";
+
+const TYPE_POLICY_ENV: Record<EntityType, string> = {
+  rendered_page: POLICY_ENV,
+  contact: CONTACT_POLICY_ENV,
+  issue: ISSUE_POLICY_ENV,
+};
+
+async function createEntity(entityType: EntityType, marker: string): Promise<string> {
   const id = `ent_sx_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
   const now = new Date().toISOString();
   await db.from("entities").insert({
@@ -54,7 +60,7 @@ async function createEntity(
     entity_id: id,
     entity_type: entityType,
     user_id: OWNER,
-    fields: { title: marker, name: marker, html_body: `<p>${marker}</p>` },
+    fields: { title: marker, name: marker, html_body: `<p>${marker}</p>`, body: marker },
     observed_at: now,
     source_priority: 0,
   });
@@ -117,6 +123,7 @@ beforeAll(() => {
 afterAll(async () => {
   delete process.env[POLICY_ENV];
   delete process.env[CONTACT_POLICY_ENV];
+  delete process.env[ISSUE_POLICY_ENV];
   for (const key of relationshipKeys) {
     await db.from("relationship_snapshots").delete().eq("relationship_key", key);
   }
@@ -236,27 +243,62 @@ describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"]
   }
 );
 
+/**
+ * Merge fixtures: R (of type `from`) is merged into T (of type `to`). R's type
+ * policy is the policy under test; T's policy is `targetPolicy`, or the policy
+ * under test when T is a page. Some fixtures admit the caller to T, so a merge
+ * redirect would serve T's content.
+ */
+const MERGE_FIXTURES: ReadonlyArray<{
+  name: string;
+  from: EntityType;
+  to: EntityType;
+  targetPolicy?: "closed" | "open";
+}> = [
+  {
+    name: "a page into a closed contact",
+    from: "rendered_page",
+    to: "contact",
+    targetPolicy: "closed",
+  },
+  {
+    name: "a page into an open contact",
+    from: "rendered_page",
+    to: "contact",
+    targetPolicy: "open",
+  },
+  { name: "an issue into a page", from: "issue", to: "rendered_page" },
+  { name: "an issue into an open contact", from: "issue", to: "contact", targetPolicy: "open" },
+];
+
 describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"] as const)(
   "signed identity and a merged entity under policy %s",
   (policy) => {
     const pageReadable = policy === "read_only" || policy === "open";
 
-    /**
-     * R is a page this caller can read under the page policy; it is merged into
-     * T, a contact whose policy is closed to the caller. A links to R.
-     */
-    async function mergedFixture(tag: string, token?: string) {
+    /** A links to R; R is merged into T. */
+    async function mergedFixture(
+      fixture: (typeof MERGE_FIXTURES)[number],
+      tag: string,
+      token?: string
+    ) {
       process.env[POLICY_ENV] = policy;
-      process.env[CONTACT_POLICY_ENV] = "closed";
+      process.env[TYPE_POLICY_ENV[fixture.from]] = policy;
+      if (fixture.to !== "rendered_page") {
+        process.env[TYPE_POLICY_ENV[fixture.to]] = fixture.targetPolicy ?? "closed";
+      }
       const a = await createEntity("rendered_page", `${tag}-A-${policy}`);
-      const r = await createEntity("rendered_page", `${tag}-R-${policy}`);
-      const t = await createEntity("contact", `${tag}-T-${policy}`);
+      const r = await createEntity(fixture.from, `${tag}-R-${policy}`);
+      const t = await createEntity(fixture.to, `${tag}-T-${policy}`);
       const before = await get(`/entities/${r}`, token);
-      if (pageReadable) expect(before.status, "readable before the merge").toBe(200);
+      expect(before.status, "source read before the merge").toBe(pageReadable ? 200 : 403);
       await mergeEntities({ fromEntityId: r, toEntityId: t, userId: OWNER, mergedBy: "test" });
       await link(a, r);
-      // The merge target's own read route refuses this caller.
-      expect((await get(`/entities/${t}`, token)).status).toBe(403);
+      const targetReadable =
+        fixture.to === "rendered_page" ? pageReadable : fixture.targetPolicy === "open";
+      expect((await get(`/entities/${t}`, token)).status, "merge target read").toBe(
+        targetReadable ? 200 : 403
+      );
       return { a, r, t };
     }
 
@@ -266,9 +308,16 @@ describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"]
       token?: string
     ): Promise<void> {
       const marker = `${tag}-T-${policy}`;
-      for (const path of [`/entities/${ids.r}`, `/entities/${ids.r}/html`]) {
+      for (const path of [
+        `/entities/${ids.r}`,
+        `/entities/${ids.r}/html`,
+        `/entities/${ids.r}/observations`,
+        `/entities/${ids.r}/relationships`,
+        `/entities/${ids.r}/relationships?expand_entities=true`,
+      ]) {
         const res = await get(path, token);
         expect(res.body, path).not.toContain(marker);
+        expect(res.body, path).not.toContain(`${tag}-R-${policy}`);
         expect(res.status, `${policy} ${path}`).toBe(pageReadable ? 404 : 403);
       }
       const rel = await get(`/entities/${ids.a}/relationships?expand_entities=true`, token);
@@ -283,17 +332,23 @@ describe.each(["closed", "read_only", "submit_only", "submitter_scoped", "open"]
       await expectExpansionMatchesDetailReads(body, token);
     }
 
-    it("without a token: a merged entity is answered as absent, never as its merge target", async () => {
-      const ids = await mergedFixture("MNT");
-      await expectNoTargetContent(ids, "MNT");
-    });
+    describe.each(MERGE_FIXTURES)("$name", (fixture) => {
+      const slug = `${fixture.from}-${fixture.to}-${fixture.targetPolicy ?? "same"}`;
 
-    it("with a token that does not name it: a merged entity is answered as absent, never as its merge target", async () => {
-      const seed = await createEntity("rendered_page", `MTK-SEED-${policy}`);
-      const token = await generateGuestAccessToken({ entityIds: [seed], userId: OWNER });
-      tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
-      const ids = await mergedFixture("MTK", token);
-      await expectNoTargetContent(ids, "MTK", token);
+      it("without a token: a merged entity is answered as absent on every route, never as its merge target", async () => {
+        const tag = `MNT-${slug}`;
+        const ids = await mergedFixture(fixture, tag);
+        await expectNoTargetContent(ids, tag);
+      });
+
+      it("with a token that does not name it: a merged entity is answered as absent on every route, never as its merge target", async () => {
+        const tag = `MTK-${slug}`;
+        const seed = await createEntity("rendered_page", `${tag}-SEED-${policy}`);
+        const token = await generateGuestAccessToken({ entityIds: [seed], userId: OWNER });
+        tokenEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+        const ids = await mergedFixture(fixture, tag, token);
+        await expectNoTargetContent(ids, tag, token);
+      });
     });
 
     it("with a token: a covered related entity that was deleted is not expanded", async () => {
