@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **843**
-- Backend and repo Vitest files: **789**
+- Total automated test files: **851**
+- Backend and repo Vitest files: **797**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 237 |
+| Vitest unit tests | 240 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
 | Vitest integration tests | 246 |
-| Vitest CLI tests | 93 |
+| Vitest CLI tests | 96 |
 | Vitest contract tests | 30 |
 | Vitest security tests | 26 |
 | Vitest subscription tests | 7 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (237):**
+**Files (240):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -135,10 +135,12 @@ flowchart TD
 - `tests/unit/agent_identity.test.ts`
 - `tests/unit/agent_memory.test.ts`
 - `tests/unit/agents_grants_import.test.ts`
+- `tests/unit/api_client_aauth_bearer.test.ts`
 - `tests/unit/array_item_patch_atomic.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/authenticated_principal_provenance.test.ts`
+- `tests/unit/auto_enhancement_processor_single_timer.test.ts`
 - `tests/unit/backfill_canonical_names_field_guard.test.ts`
 - `tests/unit/bearer_slots.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
@@ -300,6 +302,7 @@ flowchart TD
 - `tests/unit/schema_inference.test.ts`
 - `tests/unit/schema_mode.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
+- `tests/unit/schema_registry_cache.test.ts`
 - `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
@@ -761,9 +764,12 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (93):**
+**Files (96):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
+- `tests/cli/cli_aauth_bearer.test.ts`
+- `tests/cli/cli_aauth_local_transport.test.ts`
+- `tests/cli/cli_aauth_raw_fetch.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
 - `tests/cli/cli_admin_commands.test.ts`
 - `tests/cli/cli_api_commands.test.ts`
