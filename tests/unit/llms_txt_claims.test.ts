@@ -128,7 +128,7 @@ function openApiPathCount(yaml: string): number {
 }
 
 const SURFACE_COUNT_CLAIM =
-  /^Neotoma v(\d+\.\d+\.\d+) exposes (\d+) MCP tools and (\d+) REST paths in its OpenAPI spec\./m;
+  /^Neotoma v(\d+\.\d+\.\d+) provides (\d+) MCP tools and (\d+) REST paths in its OpenAPI spec\./m;
 
 function surfaceOverclaims(text: string): string[] {
   return SURFACE_AND_ATTRIBUTION_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
