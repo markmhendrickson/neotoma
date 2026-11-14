@@ -11,9 +11,11 @@ estimated_effort: "Medium to large: admin-set admission settings with data class
 
 Design only. No implementation in this change. Design issue: #2589.
 
-**Revision 6 answers the round-five review findings, and cuts scope.** The decision 7
-ruling is unchanged: on an instance with data-class settings, `register_schema` and the
-mutating `manage_bundles` actions are admin-only. This revision keeps the ruling, the
+**Revision 7 finishes the scope cut after the round-six review.** Revision 6 answered the round-five findings and moved the decision 7
+guard mechanism out of this document. The ruling is unchanged: on an instance with
+data-class settings, `register_schema` and the mutating `manage_bundles` actions are
+admin-only, delivered by slice 1b. Slice 1a (layer 0) is satisfiable on its own and
+claims none of that control. This revision keeps the ruling, the
 gate states, the hosted interim and the agent-facing text, and **removes the guard
 mechanism from this document**. Where the guard sits, and how every existing schema
 registration caller is classified, is left to a follow-up design that the decision 7
@@ -47,10 +49,11 @@ changes these points:
   conjunction, rules break-glass never suspends layer 0, governance types are always
   admitted by layer 0, refusals use the one `ERR_STORE_POLICY_DENIED` family, and admin
   gating reuses the #2565 governance guard and operator channel.
-- **Agent-callable tools no longer move the class boundary.** On an instance with
-  data-class settings, only the admin can register new record types or change bundles.
-  `register_schema` and the mutating `manage_bundles` actions are refused to agents
-  there. The operator decided this on 2026-11-14 (decision 7, formerly open question 1).
+- **Explicit registration no longer moves the class boundary (slice 1b).** On an
+  instance with data-class settings, only the admin can register new record types or
+  change bundles. `register_schema` and the mutating `manage_bundles` actions are
+  refused to agents there once slice 1b ships. Until then they stay open (see "Interim
+  between slice 1a and 1b"). The operator decided this on 2026-11-14 (decision 7, formerly open question 1).
 - **A data-class refusal leads to a stripped retry.** The agent removes the refused
   entities and their relationships and stores the rest on the same connection, so the
   turn's own conversation records are not lost. Only an unchanged resend is forbidden.
@@ -146,9 +149,10 @@ This needs no client cooperation, no registry, and no hooks.
   one reason confidential instances should use accept-lists. Instances with refuse-lists
   should run `NEOTOMA_SCHEMA_MODE=guided`, where only bundle-provided types auto-create.
   `guided` gates auto-creation only. Explicit registration with `register_schema`, and
-  bundle changes that widen what `guided` auto-creates, are admin-only on instances with
-  data-class settings (see "Schema and bundle changes"), so an agent cannot add a type
-  there by either route.
+  bundle changes that widen what `guided` auto-creates, stay open to agents until slice
+  1b makes them admin-only on instances with data-class settings (see "Schema and bundle
+  changes", "Interim between slice 1a and 1b"). Accept-lists hold without that: they
+  classify by the resolved type and refuse a type no selector names.
 - **The per-turn message and raw attachments.** Neotoma's agent instructions store every
   user message word for word, every turn, and keep attachments as raw files. Neither has
   a type that layer 0 can judge. In a team with a confidential instance, a general
@@ -191,11 +195,12 @@ default has no lists, and a refuse-list under `evolving` misses new types.
     classified.
   - A routing rule for message turns that carry finance content, where #2565 rules are
     available.
-  - Cost: a refuse-list makes `register_schema` and the mutating `manage_bundles`
-    actions operator-only on that instance (decision 7), so agents there can no longer
-    add record types or change bundles. On hosted instances, apply class settings only
-    once the hosted admin route exists (see "Hosted instances before the hosted admin
-    route").
+  - Until slice 1b ships, use accept-lists only. A refuse-list does not stop an agent
+    registering a type that no selector names. Once slice 1b ships, a refuse-list also
+    makes `register_schema` and the mutating `manage_bundles` actions operator-only on
+    that instance, so agents there can no longer add record types or change bundles. On
+    hosted instances, apply class settings only once the hosted admin route exists (see
+    "Hosted instances before the hosted admin route").
 - **Pin both with the tighten-only environment variables.** These survive a database
   restore to an older state.
 
@@ -633,8 +638,10 @@ agent registration), are unchanged.
 - `register_relationship_type` registers a relationship type. Layer 0 classifies entity
   types, and admits a relationship only when both endpoint types are admitted, so a
   relationship type is not a class dimension. It stays open.
-- Test 5a pins both. If a later release lets either one create an entity type, the sweep
-  in test 5a fails and the operation joins the gated list.
+- Test 5a pins both: `update_schema_incremental` for a type with no schema creates no
+  schema row, and `register_relationship_type` creates no entity-type schema row. If a
+  later release lets either one create an entity type, that assertion fails and the
+  operation joins the gated list.
 - Residual: an agent on a class-gated instance can still change field or identity-rule
   definitions of existing types. That changes data shape, not which classes the instance
   holds.
@@ -723,8 +730,9 @@ human-only surface, or that reads the database directly, is outside this guard (
 
 **Operator commands.** The existing `neotoma schemas register` and
 `neotoma bundles install|enable|disable` commands, run with the operator grant.
-`neotoma instance classes set` says, when it first applies a class setting, that schema
-registration and bundle changes are now admin-only on this instance.
+Once slice 1b ships, `neotoma instance classes set` says, when it first applies a class
+setting, that schema registration and bundle changes are now admin-only on this
+instance. Slice 1a prints no such message.
 
 **Gate states.** The guard fails closed. It treats these as class-gated, so both
 operations stay admin-only:
@@ -781,9 +789,15 @@ operator-only; if refused with `ERR_CLASS_SETTINGS_ADMIN_ONLY`, tell the user an
 Test 12 covers every surface in both states.
 
 **Effect on layer 0.** Selectors already resolve from manifests plus the set-time
-snapshot, so bundle state never changed what layer 0 refuses or accepts. This rule
-closes the remaining route: on a refuse-list instance, an agent can no longer add a type
+snapshot, so bundle state never changed what layer 0 refuses or accepts. Once slice
+1b ships, this rule closes the remaining route: on a refuse-list instance, an agent can no longer add a type
 that no selector names by registering it.
+
+**Interim between slice 1a and 1b.** Slice 1a ships layer 0 alone. Until slice 1b ships,
+on a class-gated instance `register_schema` and the mutating `manage_bundles` actions
+stay open to agents, exactly as today. The recommended configuration is accept-lists
+only in that window, since an accept-list refuses a type no selector names even if an
+agent registers it. No 1a message, hint or doc claims the admin-only control.
 
 **Hosted instances before the hosted admin route.** The hosted admin route is a named
 later increment of N1. Until it lands:
@@ -1150,9 +1164,10 @@ evals says which harness extension each needs and which slice delivers it.
    - A `note` carrying finance text is admitted on P. This pins the documented gap.
    - A new auto-created type is admitted on a refuse-list instance under `evolving`,
      refused under `guided`, and refused by an accept-list.
-   - On a class-gated instance, the `guided` and `locked` refusal hints name the operator
-     and do not mention `register_schema`. On an instance that is not class-gated they
-     still tell the agent to register the type.
+   - Slice 1b only: on a class-gated instance, the `guided` and `locked` refusal hints
+     name the operator and do not mention `register_schema`. On an instance that is not
+     class-gated they still tell the agent to register the type. Slice 1a leaves these
+     hints unchanged.
 4. **Bundle resolution.**
    - A type added to a refused bundle's `provides_entity_types` is refused without
      editing the settings.
@@ -1221,8 +1236,11 @@ evals says which harness extension each needs and which slice delivers it.
      pseudo-terminal with scripted input. A grant bound to a different setting, value or
      instance is refused, as is an expired or reused one. A loosening confirm with the
      grant that authorized the `set` is refused. The same operations with a matching
-     grant succeed. **Planted red:** with the grant check removed, an ordinary CLI token
-     changes a class setting and confirms a loosening.
+     grant succeed. **One planted red per command:** with the grant check removed from
+     that command only, an ordinary CLI token succeeds at that command and no other.
+     The commands are `instance classes set`, `instance classes confirm`,
+     `instance classes cancel`, and each mode change (`target_assertion`,
+     `read_assertion`).
    - Decision 7 (schema and bundle authority) is proved by test 5a, which belongs to the
      decision 7 increment.
    - Setting a refused class over existing data reports the count of affected entities.
@@ -1274,8 +1292,8 @@ evals says which harness extension each needs and which slice delivers it.
      returns `MISMATCH`, not `ERR_CLASS_SETTINGS_ADMIN_ONLY`.
    - **Out of scope, pinned.** On a class-gated instance, `update_schema_incremental` for
      a type with no schema returns `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` and creates no schema
-     row, and `register_relationship_type` is admitted. Neither changes the layer-0
-     outcome for any type.
+     row, and `register_relationship_type` is admitted and creates no entity-type schema
+     row. Neither changes the layer-0 outcome for any type.
 
 **Layers 1 and 2**
 
@@ -1311,9 +1329,9 @@ evals says which harness extension each needs and which slice delivers it.
     - No hint contains the served id or an agent-runnable command. This covers
       `REQUIRED`, `MISMATCH`, the `data_class_refused` denial, `UNAVAILABLE`,
       `IDENTITY_MISSING`, `ADMISSION_SETTINGS_MISSING`, `ADMISSION_CLASSES_UNRESOLVED`,
-      `CLASS_SETTINGS_ADMIN_ONLY`, `MOVE_UNCONFIRMED`, and the `guided` and `locked`
-      auto-create refusals.
-    - **Agent-facing text, both states.** For each surface listed under "Agent-facing
+      `MOVE_UNCONFIRMED`, and, from slice 1b, `CLASS_SETTINGS_ADMIN_ONLY` and the
+      revised `guided` and `locked` auto-create refusals.
+    - **Agent-facing text, both states (slice 1b).** For each surface listed under "Agent-facing
       text" (store unknown-fields and missing-schema hints, `guided` and `locked`
       hints, schema no-schema hints, `docs/developer/mcp/instructions.md`,
       `tool_descriptions.yaml`, the CLI instruction mirror), on a class-gated instance
@@ -1336,9 +1354,9 @@ evals says which harness extension each needs and which slice delivers it.
     - `target_instance` passes `.strict()` schemas and is never stored.
 14. **Envelope parity.** REST and MCP envelopes, status codes, `retryable`, and JSON-RPC
     codes match, and the CLI's exit code and JSON output carry the same code and
-    `details`. This includes `ERR_CLASS_SETTINGS_ADMIN_ONLY` with its `gate_reason`,
-    and the `data_class_refused` entries against the existing `StorePolicyDenial`
-    schema.
+    `details`. This includes the `data_class_refused` entries against the existing
+    `StorePolicyDenial` schema. From slice 1b it also includes
+    `ERR_CLASS_SETTINGS_ADMIN_ONLY` with its `gate_reason`.
 
 **Identity and settings states**
 
@@ -1351,7 +1369,7 @@ evals says which harness extension each needs and which slice delivers it.
     - Missing after the ledger entry, and missing on a database minted after the feature:
       `ADMISSION_SETTINGS_MISSING`.
     - A pre-feature upgrade gets `optional`, and unasserted writes keep working.
-    - **Decision 7 guard in each state.** Unreadable, malformed, missing, unresolved
+    - **Decision 7 guard in each state (slice 1b).** Unreadable, malformed, missing, unresolved
       (stored or environment) and failed-catalog-load states keep `register_schema` and
       mutating `manage_bundles` actions refused (test 5a, "Gate states"). A failed
       migration does the same.
@@ -1368,8 +1386,9 @@ evals says which harness extension each needs and which slice delivers it.
     - **Operator grant.** Every identity command is also refused with an ordinary CLI
       token, an admin-scoped session token without a grant, an in-process call, and a
       pseudo-terminal with scripted input, and succeeds with a grant bound to that
-      identity operation. **Planted red:** with the grant check removed, an ordinary CLI
-      token runs `reidentify`.
+      identity operation. **One planted red per command:** with the grant check removed
+      from `restore-identity`, `reidentify` or `confirm-move` only, an ordinary CLI token
+      succeeds at that command and no other.
     - `confirm-move` is refused while the old location answers, **and while the old
       database file is present but not served**.
     - The serving location ignores `Host` and forwarded headers.
@@ -1522,7 +1541,7 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    `ERR_STORE_POLICY_DENIED` (specified against the real `StorePolicyDenial` schema),
    `ERR_ADMISSION_CLASSES_UNRESOLVED`, `class:bookkeeping`, `neotoma instance classes`,
    the startup line and Inspector banner for stale selectors, tests 1 to 5, 12 (data-class
-   hints), 14 and 16, and the F fixtures for the data-class cases of eval 30a with
+   hints only), 14 (data-class entries only) and 16 (entity-write states only), and the F fixtures for the data-class cases of eval 30a with
    harness extensions E1 to E3. Errors and headers are declared in `openapi.yaml` and
    `errors.md` first.
 1b. **Decision 7 increment.** Does not start until the follow-up design under "Schema and
@@ -1559,6 +1578,10 @@ until a slice or the follow-up design takes it.
 - **Guard placement design (blocks slice 1b).** Name the choke point, classify every
   existing registration caller, define the sweep over unannotated routes and its pinned
   exemption list, and make the system-caller test check that list against the code.
+- **Unclassified startup seeds.** How a per-domain seed that the placement design has
+  not classified is handled: it is refused at startup with a named error, never admitted
+  by default, and the instance does not serve until it is classified or the seed is
+  removed.
 - **If N1 is late.** What ships without N1's operator channel (for example
   environment-only layer 0, with the decision 7 operations refused to everyone as on
   hosted).
@@ -1613,8 +1636,10 @@ until a slice or the follow-up design takes it.
 7. **Schema and bundle authority on instances with data-class settings.** Raised in
    revision 5 as open question 1, because it changes the permission semantics of
    existing agent-callable tools. Decided by the operator on 2026-11-14 as option A:
-   on an instance with data-class settings, `register_schema` and the mutating
-   `manage_bundles` actions are admin-only, enforced by the #2565 N1 governance guard.
+   on an instance with data-class settings, explicit registration (`register_schema`)
+   and the mutating `manage_bundles` actions are admin-only, enforced by the #2565 N1
+   governance guard. Store auto-create under `evolving` still adds types (subject to
+   layer 0) and is not explicit registration.
    The options not taken were leaving the tools open while layer 0 holds new types
    until the admin classifies them, and keeping the gap as a stated residual.
    `update_schema_incremental` and `register_relationship_type` are outside the ruling,
