@@ -75,7 +75,7 @@ Neotoma v0.29.1 is a patch release. It runs one background timer per server proc
 
 ## Security hardening
 
-This range changes guest read and guest submit behavior on the REST routes and the credentials the CLI sends. The release-prep review ran the classifier, static rules, protected-routes manifest check and auth topology matrix on the release code head; see the [security review](https://github.com/markmhendrickson/neotoma/blob/release/v0.29.1/docs/releases/in_progress/v0.29.1/security_review.md).
+This range changes guest read and guest submit behavior on the REST routes and the credentials the CLI sends. The release-prep review ran the classifier, static rules, protected-routes manifest check and auth topology matrix on the release code head; see the [security review](https://github.com/markmhendrickson/neotoma/blob/1de6b439855fe3949cbc55825cf9199741faaefc/docs/releases/in_progress/v0.29.1/security_review.md).
 
 - With an AAuth key configured, the CLI authenticates by signature only; `--with-bearer` adds the token (#2840).
 - Guest issue submit refuses an issue identifier that is already in use (#2841).
@@ -95,7 +95,7 @@ This range changes guest read and guest submit behavior on the REST routes and t
 ## Tests and validation
 
 - New and extended tests: `tests/unit/auto_enhancement_processor_single_timer.test.ts`; `tests/unit/schema_registry_cache.test.ts`, `tests/unit/db_sqlite_gate_order.test.ts`, `tests/cli/cli_infra_commands.test.ts`; `tests/unit/snapshot_incremental_correction.test.ts`, `tests/integration/correction_incremental_snapshot_lifecycle_cutover.test.ts`; `tests/unit/api_client_aauth_bearer.test.ts`, `tests/cli/cli_aauth_bearer.test.ts`, `tests/cli/cli_aauth_local_transport.test.ts`, `tests/cli/cli_aauth_raw_fetch.test.ts`; `tests/security/guest_issue_submit_token_scope.test.ts`, `tests/security/guest_issue_submit_attribution.test.ts`; `tests/security/guest_relationship_expansion.test.ts`, `tests/security/guest_token_signed_identity.test.ts`.
-- Release prep ran type-check, lint, the test catalog check, the security lane, the contract tests and the tests above locally; results and gaps are in the [test coverage review](https://github.com/markmhendrickson/neotoma/blob/release/v0.29.1/docs/releases/in_progress/v0.29.1/test_coverage_review.md). CI on the release-candidate head is reported by the PR's own checks.
+- Release prep ran type-check, lint, the test catalog check, the security lane, the contract tests and the tests above locally; results and gaps are in the [test coverage review](https://github.com/markmhendrickson/neotoma/blob/1de6b439855fe3949cbc55825cf9199741faaefc/docs/releases/in_progress/v0.29.1/test_coverage_review.md). CI on the release-candidate head is reported by the PR's own checks.
 
 ## Breaking changes
 
