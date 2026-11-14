@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **841**
-- Backend and repo Vitest files: **787**
+- Total automated test files: **843**
+- Backend and repo Vitest files: **789**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 236 |
+| Vitest unit tests | 237 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 245 |
+| Vitest integration tests | 246 |
 | Vitest CLI tests | 93 |
 | Vitest contract tests | 30 |
 | Vitest security tests | 24 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (236):**
+**Files (237):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -322,6 +322,7 @@ flowchart TD
 - `tests/unit/site_served_claims.test.ts`
 - `tests/unit/site_ui_source_binding.test.ts`
 - `tests/unit/skill_deprecation.test.ts`
+- `tests/unit/snapshot_incremental_correction.test.ts`
 - `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/sqlite_connection_pragmas.test.ts`
@@ -507,7 +508,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (245):**
+**Files (246):**
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
@@ -546,6 +547,7 @@ flowchart TD
 - `tests/integration/correct_http_mcp_parity.test.ts`
 - `tests/integration/correct_unknown_field_append.test.ts`
 - `tests/integration/correction_identity_rest_observations_create.test.ts`
+- `tests/integration/correction_incremental_snapshot_lifecycle_cutover.test.ts`
 - `tests/integration/correction_scalar_tiebreak_surfaces.test.ts`
 - `tests/integration/correction_transaction_mcp_transport.test.ts`
 - `tests/integration/correction_wins_every_field.test.ts`

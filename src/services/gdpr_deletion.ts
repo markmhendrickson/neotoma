@@ -8,6 +8,7 @@
 import { db } from "../db.js";
 import { softDeleteEntity, softDeleteRelationship } from "./deletion.js";
 import { createCipheriv, randomBytes } from "node:crypto";
+import { forgetSnapshotCertificates } from "./snapshot_incremental.js";
 
 export interface DeletionRequest {
   id: string;
@@ -273,6 +274,11 @@ export async function cryptographicErasure(userId: string, entityId?: string): P
       .update({ fields: { _encrypted: encrypted, _iv: iv.toString("base64") } })
       .eq("id", obs.id);
   }
+
+  // The rows changed in place, which keeps their count and times, so the
+  // incremental correction path (snapshot_incremental.ts) could not tell its
+  // stored snapshots are stale. Make the user's next corrections rebuild in full.
+  forgetSnapshotCertificates({ userId });
 
   // Delete encryption key (makes data irretrievable)
   // In production, this would be stored in a secure key management system

@@ -177,6 +177,14 @@ export function findExistingObservation(
  * the cross-owner guard before calling it; a call placed ahead of those gates
  * bypasses them. Structural tests pin that ordering at the three current sites.
  */
-export function insertObservationRow(row: ObservationInsertRow): ObservationsQuery {
-  return db.from("observations").insert(row);
+export function insertObservationRow(
+  row: ObservationInsertRow,
+  options: { materializeSnapshot?: boolean } = {}
+): ObservationsQuery {
+  const query = db.from("observations").insert(row);
+  // The insert normally rebuilds the entity's snapshot from every stored
+  // observation. A caller that persists the snapshot itself in the same
+  // transaction opts out, so the write gate is not held for a redundant
+  // full reduction.
+  return options.materializeSnapshot === false ? query.withoutSnapshotMaterialization() : query;
 }

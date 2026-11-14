@@ -200,6 +200,25 @@ type MergeStrategy =
   | "merge_array"
   | "merge_array_by_key";
 
+/**
+ * The code-defined schema entry {@link ObservationReducer.computeSnapshot}
+ * falls back to when the registry has no active schema for the type, or null.
+ * `created_at` is left empty; the reducer never reads it.
+ */
+export function codeDefinedSchemaEntry(entityType: string): SchemaRegistryEntry | null {
+  const codeSchema = getSchemaDefinition(entityType);
+  if (!codeSchema) return null;
+  return {
+    id: "",
+    entity_type: codeSchema.entity_type,
+    schema_version: codeSchema.schema_version || "1.0",
+    schema_definition: codeSchema.schema_definition,
+    reducer_config: codeSchema.reducer_config,
+    active: true,
+    created_at: "",
+  };
+}
+
 export class ObservationReducer {
   /**
    * Compute snapshot from observations
@@ -347,6 +366,41 @@ export class ObservationReducer {
       provenance,
       user_id: userId,
     };
+  }
+
+  /**
+   * Reduce one field from a single observation through exactly the strategy,
+   * correction narrowing and converters {@link computeSnapshot} applies, with
+   * the same rule for whether the field appears in a persisted snapshot.
+   *
+   * This equals the full reduction of the field only when that observation is
+   * the field's winner over the whole history. The caller must establish that
+   * (see snapshot_incremental.ts); this method does not.
+   *
+   * Returns `undefined` when the field is not declared by the schema (the
+   * snapshot ignores it), `null` when the field drops out of the snapshot, and
+   * the value and provenance entry otherwise.
+   */
+  reduceFieldFromSoleObservation(
+    field: string,
+    observation: Observation,
+    schemaEntry: SchemaRegistryEntry
+  ): { value: unknown; source_observation_id: string } | null | undefined {
+    const schemaDef = schemaEntry.schema_definition;
+    if (!Object.prototype.hasOwnProperty.call(schemaDef.fields, field)) return undefined;
+    const reducerConfig = schemaEntry.reducer_config;
+    const policy = reducerConfig.merge_policies[field];
+    const result = this.applyMergeStrategy(
+      field,
+      [observation],
+      policy?.strategy || "last_write",
+      policy?.tie_breaker || "observed_at",
+      schemaDef.fields[field],
+      buildObservationSourceRank(reducerConfig),
+      policy?.key_field
+    );
+    if (result && result.value !== undefined && result.value !== null) return result;
+    return null;
   }
 
   /**
