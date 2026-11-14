@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../shared/api_client.js", () => ({
+  // The real rule for which variables turn signing off.
+  cliAAuthDisabledByEnv: () =>
+    process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1"
+      ? "NEOTOMA_CLI_AAUTH_DISABLE=1"
+      : process.env.NEOTOMA_CLI_AAUTH_ENABLE === "0"
+        ? "NEOTOMA_CLI_AAUTH_ENABLE=0"
+        : null,
   createApiClient: vi.fn(() => ({
     POST: vi.fn().mockResolvedValue({
       data: {
