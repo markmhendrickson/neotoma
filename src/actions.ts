@@ -4048,13 +4048,63 @@ export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" |
   }
   if (req.method === "GET") {
     if (path === "/events/stream") return true;
-    const match = /^\/entities\/([^/]+)(?:\/(?:observations|relationships|html))?$/.exec(path);
-    if (!match) return false;
-    // Fail closed: a reserved static segment is a route, not an entity id, so it
-    // is not guest-eligible unless it is explicitly listed as such above.
-    return !RESERVED_ENTITY_PATH_SEGMENTS.has(match[1]);
+    return routeIsEntityDetailRead(req);
   }
   return false;
+}
+
+/**
+ * GET /entities/:id and its /observations, /relationships and /html reads: the
+ * guest-capable routes that read one entity.
+ */
+function routeIsEntityDetailRead(req: Pick<express.Request, "method" | "path">): boolean {
+  if (req.method !== "GET") return false;
+  const match = /^\/entities\/([^/]+)(?:\/(?:observations|relationships|html))?$/.exec(req.path);
+  if (!match) return false;
+  // Fail closed: a reserved static segment is a route, not an entity id, so it
+  // is not guest-eligible unless it is explicitly listed as such above.
+  return !RESERVED_ENTITY_PATH_SEGMENTS.has(match[1]);
+}
+
+/**
+ * Stronger AAuth Admission: when the request carries a verified AAuth identity
+ * that the admission middleware resolved to an active `agent_grant`, stamp the
+ * grant owner as the user principal. The admission middleware has already set
+ * `req.authenticatedUserId`; it must still match, so a later auth step that
+ * replaced it is never overridden here.
+ */
+function stampAdmittedAAuthPrincipal(req: express.Request): boolean {
+  const admission = getAAuthAdmissionFromRequest(req);
+  if (
+    !admission?.admitted ||
+    !admission.user_id ||
+    (req as any).authenticatedUserId !== admission.user_id
+  ) {
+    return false;
+  }
+  stampUserPrincipal(req, admission.user_id);
+  logger.info(
+    `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admission.user_id} grant_id=${admission.grant_id ?? "?"}`
+  );
+  return true;
+}
+
+/**
+ * An admitted agent reading an entity with no guest token reads as its grant
+ * owner, the same as on POST /entities/query, and not as a guest. Without this
+ * the no-Bearer branches stamp it as a guest first (it is signed, so it has a
+ * thumbprint), and the entity type's guest access policy then refuses it.
+ *
+ * A request that presents a guest token (as `access_token` or as a Bearer) is
+ * left to the guest path and judged by that token. Issue, subscription and
+ * event-stream routes are not entity reads and keep their guest handling.
+ * Sandbox mode keeps its own per-thumbprint attribution.
+ */
+function maybeStampAdmittedEntityReader(req: express.Request): boolean {
+  if (!routeIsEntityDetailRead(req)) return false;
+  if (isSandboxMode()) return false;
+  if (guestAccessTokenFromRequest(req)) return false;
+  return stampAdmittedAAuthPrincipal(req);
 }
 
 /**
@@ -4747,6 +4797,7 @@ app.use(async (req, res, next) => {
     isLocalRequest(req) &&
     !headerAuth.startsWith("Bearer ")
   ) {
+    if (maybeStampAdmittedEntityReader(req)) return next();
     if (await maybeStampGuestPrincipal(req)) {
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
@@ -4833,6 +4884,7 @@ app.use(async (req, res, next) => {
     // Encryption on: no further no-Bearer paths — all non-key auth is rejected below.
   } else {
     if (!headerAuth.startsWith("Bearer ")) {
+      if (maybeStampAdmittedEntityReader(req)) return next();
       if (await maybeStampGuestPrincipal(req)) {
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
@@ -4886,18 +4938,7 @@ app.use(async (req, res, next) => {
   // Bearer is present so agents holding an active grant can reach
   // direct write routes (`/store`, `/observations/create`,
   // `/create_relationship`, `/correct`) without OAuth/Bearer.
-  const admissionForRequest = getAAuthAdmissionFromRequest(req);
-  if (
-    admissionForRequest?.admitted &&
-    admissionForRequest.user_id &&
-    (req as any).authenticatedUserId === admissionForRequest.user_id
-  ) {
-    stampUserPrincipal(req, admissionForRequest.user_id);
-    logger.info(
-      `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admissionForRequest.user_id} grant_id=${admissionForRequest.grant_id ?? "?"}`
-    );
-    return next();
-  }
+  if (stampAdmittedAAuthPrincipal(req)) return next();
 
   // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
