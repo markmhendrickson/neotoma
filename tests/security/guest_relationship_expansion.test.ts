@@ -5,7 +5,8 @@
  * related entity its token does not cover gets no name, type or snapshot.
  *
  * Also: the observations and relationships routes answer 404 for a deleted
- * entity the token covers, as the entity detail and HTML routes do.
+ * entity the token covers, and for a merged entity, as the entity detail and
+ * HTML routes do.
  *
  * Drives the real request path over a live server.
  */
@@ -43,11 +44,28 @@ const entityIds: string[] = [];
 const tokenEntityIds: string[] = [];
 const relationshipKeys: string[] = [];
 
-async function createEntity(
-  entityType: "rendered_page" | "contact",
-  marker: string
-): Promise<string> {
-  const prefix = entityType === "rendered_page" ? "ent_rp" : "ent_ct";
+type EntityType = "rendered_page" | "contact" | "issue";
+
+const ID_PREFIX: Record<EntityType, string> = {
+  rendered_page: "ent_rp",
+  contact: "ent_ct",
+  issue: "ent_is",
+};
+
+const ENTITY_FIELDS: Record<EntityType, (marker: string) => Record<string, unknown>> = {
+  rendered_page: (marker) => ({ title: `${marker}-TITLE`, html_body: `<p>${marker}-BODY</p>` }),
+  contact: (marker) => ({ name: `${marker}-TITLE`, notes: `${marker}-BODY` }),
+  issue: (marker) => ({ title: `${marker}-TITLE`, body: `${marker}-BODY` }),
+};
+
+const POLICY_ENV: Record<EntityType, string> = {
+  rendered_page: "NEOTOMA_ACCESS_POLICY_RENDERED_PAGE",
+  contact: "NEOTOMA_ACCESS_POLICY_CONTACT",
+  issue: "NEOTOMA_ACCESS_POLICY_ISSUE",
+};
+
+async function createEntity(entityType: EntityType, marker: string): Promise<string> {
+  const prefix = ID_PREFIX[entityType];
   const id = `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
   const now = new Date().toISOString();
   await db.from("entities").insert({
@@ -62,10 +80,7 @@ async function createEntity(
     entity_id: id,
     entity_type: entityType,
     user_id: OWNER,
-    fields:
-      entityType === "rendered_page"
-        ? { title: `${marker}-TITLE`, html_body: `<p>${marker}-BODY</p>` }
-        : { name: `${marker}-TITLE`, notes: `${marker}-BODY` },
+    fields: ENTITY_FIELDS[entityType](marker),
     observed_at: now,
     source_priority: 0,
   });
@@ -158,9 +173,7 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
-  delete process.env[PAGE_POLICY_ENV];
-  delete process.env[CONTACT_POLICY_ENV];
-  delete process.env[ISSUE_POLICY_ENV];
+  for (const env of Object.values(POLICY_ENV)) delete process.env[env];
   for (const key of relationshipKeys) {
     await db.from("relationship_snapshots").delete().eq("relationship_key", key);
   }
@@ -487,3 +500,136 @@ describe("related-entity expansion bound for a guest", () => {
     expect(entries.every((entry) => entry.entity_type === "rendered_page")).toBe(true);
   });
 });
+
+/** Every guest-readable route for one entity. */
+function entityRoutes(id: string): string[] {
+  return [
+    `/entities/${id}`,
+    `/entities/${id}/html`,
+    `/entities/${id}/observations`,
+    `/entities/${id}/relationships`,
+    `/entities/${id}/relationships?expand_entities=true`,
+  ];
+}
+
+const MERGE_FIXTURES: ReadonlyArray<{ name: string; from: EntityType; to: EntityType }> = [
+  { name: "a page merged into a page", from: "rendered_page", to: "rendered_page" },
+  { name: "an issue merged into a page", from: "issue", to: "rendered_page" },
+  { name: "a page merged into a contact", from: "rendered_page", to: "contact" },
+  { name: "an issue merged into a contact", from: "issue", to: "contact" },
+];
+
+describe.each(POLICIES)("a merged entity on every guest route under policy %s", (policy) => {
+  /**
+   * A page A links to M; M is merged into T. A token-only caller holds a token
+   * naming A and M, and also T when `targetAdmitted`, so the merge target is
+   * itself readable to the caller: following the merge would serve content.
+   */
+  async function mergedFixture(
+    fixture: { from: EntityType; to: EntityType },
+    tag: string,
+    targetAdmitted: boolean
+  ) {
+    process.env[POLICY_ENV.rendered_page] = policy;
+    process.env[POLICY_ENV[fixture.from]] = policy;
+    if (fixture.to !== "rendered_page") {
+      process.env[POLICY_ENV[fixture.to]] = targetAdmitted ? "open" : "closed";
+    }
+    const a = await createEntity("rendered_page", `${tag}-A-${policy}`);
+    const m = await createEntity(fixture.from, `${tag}-M-${policy}`);
+    const t = await createEntity(fixture.to, `${tag}-T-${policy}`);
+    const token = await mint(targetAdmitted ? [a, m, t] : [a, m]);
+    expect((await guestGet(`/entities/${m}`, token)).status, "readable before the merge").toBe(200);
+    await mergeEntities({ fromEntityId: m, toEntityId: t, userId: OWNER, mergedBy: "test" });
+    await link(a, m);
+    expect((await guestGet(`/entities/${t}`, token)).status, "merge target read").toBe(
+      targetAdmitted ? 200 : 403
+    );
+    return { a, m, t, token };
+  }
+
+  describe.each(MERGE_FIXTURES)("$name", (fixture) => {
+    it.each([false, true])(
+      "a merged entity the token names answers 404 on every route (merge target admitted: %s)",
+      async (targetAdmitted) => {
+        const tag = `MRG${targetAdmitted ? "Y" : "N"}-${fixture.from}-${fixture.to}`;
+        const { a, m, token } = await mergedFixture(fixture, tag, targetAdmitted);
+        for (const path of entityRoutes(m)) {
+          const res = await guestGet(path, token);
+          expect(res.status, `${policy} ${path}`).toBe(404);
+          expect(JSON.parse(res.body)).toMatchObject({ error_code: "RESOURCE_NOT_FOUND" });
+          expect(res.body).not.toContain(`${tag}-M-${policy}`);
+          expect(res.body).not.toContain(`${tag}-T-${policy}`);
+        }
+
+        const rel = await guestGet(`/entities/${a}/relationships?expand_entities=true`, token);
+        expect(rel.body).not.toContain(`${tag}-M-${policy}`);
+        expect(rel.body).not.toContain(`${tag}-T-${policy}`);
+        if (!READ_POLICIES.has(policy)) {
+          expect(rel.status).toBe(403);
+          return;
+        }
+        expect(rel.status).toBe(200);
+        const body = JSON.parse(rel.body) as RelationshipsBody;
+        expectNotExpanded(body, m);
+        await expectExpansionMatchesDetailReads(body, token);
+      }
+    );
+
+    it("a merged entity the token does not name gets the same 403 as a live one on every route", async () => {
+      const tag = `MRGU-${fixture.from}-${fixture.to}`;
+      const { m } = await mergedFixture(fixture, tag, false);
+      const seed = await createEntity("rendered_page", `${tag}-SEED-${policy}`);
+      const other = await mint([seed]);
+      for (const path of entityRoutes(m)) {
+        const res = await guestGet(path, other);
+        expect(res.status, `${policy} ${path}`).toBe(403);
+        expect(JSON.parse(res.body)).toMatchObject({ error_code: GUEST_TOKEN_SCOPE_CODE });
+        expect(res.body).not.toContain(`${tag}-M-${policy}`);
+        expect(res.body).not.toContain(`${tag}-T-${policy}`);
+      }
+    });
+  });
+});
+
+describe.each(["read_only", "submitter_scoped"] as const)(
+  "related-entity expansion bound for a guest under policy %s, with related entities the token does not cover",
+  (policy) => {
+    it("the bound counts uncovered candidates; only covered ones inside it are expanded", async () => {
+      process.env[PAGE_POLICY_ENV] = policy;
+      const a = await createEntity("rendered_page", `UCAP-A-${policy}`);
+      const markerOf = new Map<string, string>();
+      const related: string[] = [];
+      for (let i = 0; i < GUEST_EXPANSION_MAX_RELATED_ENTITIES + 10; i++) {
+        const marker = `UCAP-${policy}-R${i}`;
+        const id = await createEntity("rendered_page", marker);
+        await link(a, id);
+        related.push(id);
+        markerOf.set(id, marker);
+      }
+      const sorted = [...related].sort();
+      // Every other entity in id order is covered, so covered entities fall
+      // both inside and beyond the bound, and so do uncovered ones.
+      const covered = new Set(sorted.filter((_, i) => i % 2 === 0));
+      const token = await mint([a, ...covered]);
+
+      const res = await guestGet(`/entities/${a}/relationships?expand_entities=true`, token);
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body) as RelationshipsBody;
+      expect(body.outgoing).toHaveLength(related.length);
+
+      const inside = sorted.slice(0, GUEST_EXPANSION_MAX_RELATED_ENTITIES);
+      const beyond = sorted.slice(GUEST_EXPANSION_MAX_RELATED_ENTITIES);
+      expect(beyond.some((id) => covered.has(id))).toBe(true);
+      expect(beyond.some((id) => !covered.has(id))).toBe(true);
+
+      const expanded = sorted.filter((id) => body.related_entities?.[id]?.entity_type !== null);
+      expect(expanded).toEqual(inside.filter((id) => covered.has(id)));
+      for (const id of sorted) {
+        if (expanded.includes(id)) continue;
+        expectNotExpanded(body, id);
+        expect(res.body).not.toContain(`${markerOf.get(id)}-`);
+      }
+    });
+  }
+);

@@ -4616,14 +4616,29 @@ type GuestEntityReadAccess =
   | { kind: "not_found" }
   | { kind: "found"; userId: string; entityType: string };
 
+/** Whether the owner's entity row records a merge into another entity. */
+async function entityIsMergedAway(entityId: string, userId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from("entities")
+    .select("id, merged_to_entity_id")
+    .eq("id", entityId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean((data as { merged_to_entity_id?: string | null } | null)?.merged_to_entity_id);
+}
+
 /**
  * Guest READ access for GET /entities/:id/observations and
  * GET /entities/:id/relationships. Access is decided by the policy-governed
- * resolver; a deleted entity then answers `not_found`, as the entity detail and
- * HTML routes do. When the caller's token covers the entity, deletion is
- * reported before the type policy, matching the share-link routes; otherwise it
- * is reported only after access is granted, so an entity the caller may not
- * read never answers differently for being deleted.
+ * resolver; a deleted or merged entity then answers `not_found`, as the entity
+ * detail and HTML routes do. When the caller's token covers the entity,
+ * deletion is reported before the type policy, matching the share-link routes;
+ * a merge is reported before the type policy when the token names the entity,
+ * exactly as `decideGuestEntityDetailRead` does. Otherwise both are reported
+ * only after access is granted, so an entity the caller may not read never
+ * answers differently for being deleted or merged. A merge redirect is never
+ * followed: the decision is about the requested entity only.
  */
 async function resolveGuestEntityReadAccess(
   principal: GuestPrincipal,
@@ -4634,10 +4649,15 @@ async function resolveGuestEntityReadAccess(
   if (token) {
     const { data: entity } = await db
       .from("entities")
-      .select("id, entity_type, user_id")
+      .select("id, entity_type, user_id, merged_to_entity_id")
       .eq("id", entityId)
       .maybeSingle();
-    const row = entity as { id: string; entity_type: string; user_id: string } | null;
+    const row = entity as {
+      id: string;
+      entity_type: string;
+      user_id: string;
+      merged_to_entity_id?: string | null;
+    } | null;
     if (row) {
       const check = await checkGuestTokenForEntity(
         token,
@@ -4645,12 +4665,18 @@ async function resolveGuestEntityReadAccess(
         row,
         await principalGuestGrant(principal)
       );
+      if (check.state === "granted" && check.reason === "named" && row.merged_to_entity_id) {
+        return { kind: "not_found" };
+      }
       if (check.state === "granted" && (await entityIsHiddenNow(row))) {
         return { kind: "not_found" };
       }
     }
   }
   const access = await resolveGuestPolicyGovernedEntityAccess(principal, entityId);
+  if (await entityIsMergedAway(entityId, access.userId)) {
+    return { kind: "not_found" };
+  }
   if (
     await entityIsHiddenNow({
       id: entityId,
