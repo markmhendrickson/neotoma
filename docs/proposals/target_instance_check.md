@@ -1138,9 +1138,16 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
 
 Slices 1 to 3 need no client cooperation and land first. Every slice takes the arch gate.
 
-1. Admin-gating of instance-policy writes, the admission-settings record and its states
-   and migration, and **data-class admission (layer 0)**. Errors and headers are declared
-   in `openapi.yaml` and `errors.md` first.
+1. Admin-gating of the admission-settings record through the #2565 slice N1 governance
+   guard and operator channel (this slice depends on N1 and builds no second guard), the
+   record and its states and migration, and **data-class admission (layer 0)**: manifest
+   resolution with set-time snapshots, the fail-closed rules, canonical and
+   alias-resolved classification, the derived sink list and its new call sites, the
+   `data_class_refused` reason code on `ERR_STORE_POLICY_DENIED`,
+   `ERR_ADMISSION_CLASSES_UNRESOLVED`, `class:bookkeeping`, `neotoma instance classes`,
+   the revised `guided` and `locked` hints, and the F fixture for eval 30. Errors and
+   headers are declared in `openapi.yaml` and `errors.md` first. On hosted instances the
+   admin operations need the hosted admin route, a named later increment of N1.
 2. The identity record, commitment, identity states, identity commands, and export; the
    `instance` object and title; result `_meta`, the content line, headers, the capability
    flag, the acknowledgement, and the server card.
@@ -1148,8 +1155,10 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    classification via `x-neotoma-effect`, and the structural tests.
 4. Request-phase per-write targets, the modes, and admin-gated mode changes.
 5. The local registry: format, human-only enrollment surfaces, the stale state, the hook
-   denies, the self-target check, and config-scan naming; the operator and CLI agent
-   docs. The registry ships only together with its enrollment guard.
+   denies, the self-target check with its structured-choice and permission-prompt paths,
+   and config-scan naming; the operator and CLI agent docs; the Inspector enrollment page
+   and the connector URL copy action. The registry ships only together with its
+   enrollment guard.
 6. The turn-summary header, the instructions line, and the agent evals.
 7. Peer sync.
 
@@ -1162,7 +1171,7 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    residual.
 2. **Reads under `required`.** A separate `read_assertion` axis, default `optional`,
    satisfied only by an id-form per-request target. Recommended `required` for
-   confidential instances.
+   confidential instances whose clients all have routing rules or the registry.
 3. **Loosening.** The lenses disagreed:
    - arch wanted no second actor in the first version;
    - security wanted a second actor or a cooling delay.
@@ -1177,6 +1186,32 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
 6. **Envelope-level or #2565 rule.** Envelope-level, evaluated before the rules resolver.
    Data classes and modes live in the admin-set settings record. Rules may tighten,
    never loosen. Routing is an approved #2565 rule that produces the per-write target.
+   Revision 5 states the full boundary in "Boundary with the rules design".
+
+## Open questions (revision 5)
+
+These ask for a decision that changes authority or permission semantics beyond what
+this design already proposes, so the design does not settle them.
+
+1. **Do `register_schema` and the mutating `manage_bundles` actions need the admin
+   authority on an instance with any class setting?** Today both are agent-callable
+   through MCP. Selector resolution in revision 5 already stops bundle state from moving
+   layer 0. What remains is that, on a refuse-list instance, an agent can register a new
+   type that no selector names, and its writes are admitted. The options:
+   - **(A) Gate both** behind the operator channel on any instance with a class setting,
+     and add their refusal through MCP and agent tokens to test 5. This closes the
+     residual. It changes who can create schemas and manage bundles on those instances,
+     and agents that register types as part of normal work there would need an operator
+     step. The security lens asked for this option.
+   - **(B) Leave the tools ungated, and have layer 0 hold new types.** On an instance
+     with a class setting, writes of a type registered after the class settings were
+     last confirmed are refused until the admin classifies the type. This changes
+     admission rather than tool authority, but adds a new admin act to every new type.
+   - **(C) Keep the interim rule as the design.** The residual stays stated, audited and
+     visible in `describe_instance_policy`, and test 3 pins it.
+
+   Until this is ruled, the design ships (C), as described in "Schema and bundle
+   changes".
 
 ## References
 
