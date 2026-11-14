@@ -11,27 +11,25 @@ estimated_effort: "Medium to large: admin-set admission settings with data class
 
 Design only. No implementation in this change. Design issue: #2589.
 
-**Revision 6 answers the round-five review findings on decision 7.** The ruling is
-unchanged: on an instance with data-class settings, `register_schema` and the mutating
-`manage_bundles` actions are admin-only. This revision specifies how it binds:
+**Revision 6 answers the round-five review findings, and cuts scope.** The decision 7
+ruling is unchanged: on an instance with data-class settings, `register_schema` and the
+mutating `manage_bundles` actions are admin-only. This revision keeps the ruling, the
+gate states, the hosted interim and the agent-facing text, and **removes the guard
+mechanism from this document**. Where the guard sits, and how every existing schema
+registration caller is classified, is left to a follow-up design that the decision 7
+increment depends on ("Schema and bundle changes", "Implementation slices"). It also:
 
-- **One guard, every route** ("Schema and bundle changes", test 5a): a single guard
-  called from the shared registration and bundle-activation functions, a gated-operation
-  list derived from annotations plus an effect-based sweep, and a refusal and an
-  operator-success case per surface.
-- **The operator channel is defined by the properties it needs** ("The operator
-  channel"): a per-operation grant that an ordinary CLI token, an agent shell and an
-  in-process CLI call do not hold. The remaining shell-agent exposure is a stated
-  residual.
-- **Unreadable, missing, unresolved and pre-migration states are gated** ("Gate
-  states").
-- **Environment selectors get the snapshot and unresolved-selector rules**
+- **Defines the operator grant for the commands that hold the floor** ("The operator
+  channel", tests 5 and 18).
+- **Gates unreadable, missing, unresolved and pre-migration states** ("Gate states").
+- **Gives environment selectors the snapshot and unresolved-selector rules**
   ("Environment selectors").
-- **Hosted interim behaviour is stated** ("Hosted instances before the hosted admin
+- **States the hosted interim behaviour** ("Hosted instances before the hosted admin
   route").
-- **Agent-facing text is listed and made conditional** ("Agent-facing text"), and
-  `update_schema_incremental` and `register_relationship_type` are declared out of scope.
-- **Evals state the harness extension and slice each needs** ("Eval feasibility").
+- **Lists agent-facing text and makes it conditional** ("Agent-facing text"), and
+  declares `update_schema_incremental` and `register_relationship_type` out of scope.
+- **States the harness extension and slice each eval needs** ("Eval feasibility").
+- **Records what is deferred** ("Follow-up slices").
 
 **Revision 5 answers the round-four review findings.** It keeps the revision 4 shape and
 changes these points:
@@ -404,8 +402,9 @@ split, or a failed catalog load.
   differs from the snapshot in a direction that would loosen (a type moved out of a
   refused bundle, a type added to an accepted bundle), the server records a pending
   loosening for that selector and shows it in `/session` and `describe_instance_policy`.
-  It takes effect only by the admin's explicit confirm, after the cooling delay, like any
-  other loosening. Until then the tighter set applies.
+  The order is the same as any other loosening: the admin confirms, the cooling delay
+  then runs, and the loosening takes effect when it ends. Until then the tighter set
+  applies, and `show` prints the pending step and its effective time.
 - **A selector that no longer resolves refuses every write.** If a stored or environment
   `bundle:` selector names a bundle that is not in the loaded catalog (renamed, split or dropped in
   a release), or resolves to zero types, the instance refuses every write except to
@@ -584,7 +583,8 @@ The same admin authority as modes, through the operator channel:
   loosening, pending, and when they take effect.
 - Tightening is immediate: adding a refused class, removing an accepted class, or setting
   `raw_storage: refuse`.
-- Loosening needs an explicit confirm and a cancellable cooling delay (default 24 hours).
+- Loosening needs an explicit confirm, then a cancellable cooling delay (default 24
+  hours) that starts at the confirm and ends with the loosening taking effect.
   It is audited and shown as pending.
 - **Environment.** `NEOTOMA_REFUSED_CLASSES` and `NEOTOMA_ACCEPTED_CLASSES` take a
   comma-separated list of selectors, for example
@@ -639,23 +639,31 @@ agent registration), are unchanged.
   definitions of existing types. That changes data shape, not which classes the instance
   holds.
 
-**One guard, called from the shared functions.** There is one guard function. It is
-called from the shared service functions that perform the change, not from individual
-handlers:
+**Guard placement is a requirement here, not a design.** This document does not choose
+where the guard sits. It states what any placement must satisfy:
 
-- the schema registration function that every schema-creating entry point reaches: the
-  MCP `register_schema` handler, the REST `/register_schema` route, and the CLI
-  `neotoma schemas register` (which reaches the REST route);
-- the bundle `install`, `enable` and `disable` functions in
-  `src/services/bundles/activation.ts`, where `assertAdminGateHook` is a no-op today,
-  reached by the MCP `manage_bundles` tool and by the in-process `neotoma bundles`
-  commands.
+- It refuses the agent entry points: MCP `register_schema`, REST `/register_schema`,
+  CLI `neotoma schemas register`, and the MCP `manage_bundles` mutating actions and the
+  in-process `neotoma bundles` commands.
+- It **admits every existing caller of schema registration, by explicit classification**,
+  and none by default. The callers to classify include store auto-create, extraction
+  auto-create, `updateSchemaIncremental`, the plural-type repair, and the per-domain
+  seeds, and any other caller the follow-up design finds. Each is classified as an agent
+  entry (gated), or as a system action with a stated reason, who can reach it, and what
+  stops an agent-reachable request from obtaining the exemption. No exemption is accepted
+  from a request body or a credential.
+- It does not refuse what this document declares open: auto-creation under `guided` of
+  types from bundles the admin enabled, auto-creation under `evolving` (still subject to
+  layer 0), and `update_schema_incremental`.
+- A call whose caller is unclassified is refused.
 
-The guard takes a caller context (channel and presented credential). **A call with no
-caller context is treated as an agent call.** The only context that bypasses the guard
-is a system context for startup seeding of code-defined schemas, which no request path
-can construct; test 5a lists its callers. The guard runs in the request phase after the
-per-write target check and before the mode check, in the slot layer 0 uses for entities.
+**Hard dependency.** The decision 7 increment (slice 1b) does not start until a follow-up
+design names the choke point and classifies every caller. That design is not written
+here. Layer 0 does not depend on it.
+
+For ordering, where an operation has a request phase the guard runs after the per-write
+target check and before the mode check, in the slot layer 0 uses for entities. The
+in-process `neotoma bundles` path has no request phase, so the guard runs first there.
 These operations carry no entities, so no request meets both the guard and
 `ERR_STORE_POLICY_DENIED`.
 
@@ -668,30 +676,46 @@ sinks are:
   undeclared action fails the build;
 - the same annotation on the CLI command registry.
 
-Test 5a enumerates all three and also runs an effect-based sweep that does not depend on
-annotations.
+Test 5a enumerates all three. A sweep that also catches unannotated routes is specified
+by the follow-up design, together with its pinned list of classified callers.
 
 **The operator channel.** #2565 slice N1 owns the mechanism. This design needs these
-properties from it, and slice 1 does not merge until N1's channel has them:
+properties from it for two sets of commands: the commands that hold the floor (layer-0
+increment), and schema and bundle changes (decision 7 increment). Neither increment
+merges until N1's channel has them:
 
 1. **A distinct credential.** An ordinary CLI token, an agent-scoped token, a member
    credential and an admin-scoped session token do not pass. Only an operator grant
    passes.
 2. **Per operation.** The grant is bound to the instance, the operation, the action and
-   the requested type name. It is single use and short-lived.
+   the target of the operation (the requested type name, the setting and value, or the
+   identity operation). It is single use and short-lived.
 3. **Obtained on a human-only surface.** It is issued through the same kind of
    confirmation surface as registry enrollment (the Inspector page with a signed-in
-   admin session and a typed short id, or the hosted admin route). It is never read from
+   admin session and a typed short id, or the hosted admin route) that shows the
+   operation, action, target and instance being approved. It is never read from
    terminal input, never stored in the CLI's ordinary token location or the process
    environment, and never printed for an agent to copy.
-4. **No trust by locality.** The in-process `neotoma bundles` commands and the CLI's
-   offline paths present the grant too. A call being local does not make it the
+4. **No trust by locality.** The in-process `neotoma bundles` commands, the CLI's
+   offline paths and every in-process call to the floor-holding commands present the
+   grant too. A call being local does not make it the
    operator's.
 5. **Hook denies as a second layer.** The Claude Code hooks deny agent invocation of
    `neotoma schemas register`, `neotoma bundles install|enable|disable`,
    `neotoma instance classes set|confirm|cancel`, and the identity commands, directly
    and through the wrappers test 24 lists. Hooks exist only in some clients, so the
    grant is the control and the hooks are a layer on top.
+
+**Floor-holding commands.** These require a per-operation grant bound to the setting or
+identity operation they perform:
+
+- `neotoma instance classes set`, `confirm` and `cancel`, including loosening confirms;
+- mode changes (`target_assertion`, `read_assertion`);
+- the identity commands (`restore-identity`, `reidentify`, `confirm-move`).
+
+An ordinary CLI token, an admin-scoped session token, an in-process call and a
+pseudo-terminal with scripted input do not pass. A loosening confirm needs its own grant,
+so a token that can run `set` cannot also confirm. Tests 5 and 18 cover them.
 
 What an agent with a local shell lacks, then, is the grant. An agent that can answer the
 human-only surface, or that reads the database directly, is outside this guard (see
@@ -711,13 +735,13 @@ operations stay admin-only:
 | Readable, with none | No |
 | Unreadable or malformed | Yes |
 | Missing after its ledgered creation, or missing on a database whose identity was minted after this feature | Yes |
-| Not yet migrated (the slice 1 migration has not completed) | Yes. The server does not serve requests before the migration completes, so this holds only if the migration fails. |
+| Not yet migrated (the slice 1a migration has not completed) | Yes. The server does not serve requests before the migration completes, so this holds only if the migration fails. |
 | Stored `bundle:` selector unresolved | Yes |
 | Either class environment variable set, whatever the stored record's state | Yes. The variables are read from the process environment, not the database. |
 | Environment `bundle:` selector unresolved | Yes |
 | Bundle catalog failed to load, on an instance with any `bundle:` selector (stored or environment) | Yes |
 
-None of these states reads as "no class settings". The loader change in slice 1 exposes a
+None of these states reads as "no class settings". The loader change in slice 1a exposes a
 distinct load-failed state, because today a manifest error is swallowed and the process
 caches an empty registry, which cannot be told apart from "no bundles".
 
@@ -734,7 +758,7 @@ The agent tells the user, for example: "Finance graph only lets its operator add
 record types, so I could not add `<type>` there."
 
 **Agent-facing text.** Every text surface that sends an agent to `register_schema` or
-`manage_bundles` changes in slice 1, not slice 5:
+`manage_bundles` changes in the decision 7 increment, not slice 5:
 
 - the store responses' unknown-fields hint and missing-schema hint, the `guided` and
   `locked` auto-create refusal hints, and the schema responses' no-schema hints;
@@ -788,7 +812,7 @@ later increment of N1. Until it lands:
 The per-write `_meta` key is `io.neotoma/target_instance`. "Target" always means
 per-write, and "expected" always means binding. No proxy, SDK, or hook package fills the
 per-write key from its own connection configuration. Doing so would be a binding in
-disguise (test 4).
+disguise (test 9 (iv)).
 
 **Valid sources for a per-write target:**
 
@@ -992,7 +1016,7 @@ state:
 | Unreadable or malformed | **All refused**, asserted or not, because data classes cannot be evaluated | Refused | Allowed | `ERR_TARGET_INSTANCE_UNAVAILABLE`, retryable |
 | Missing after its ledgered creation, or missing on a database whose identity was minted after this feature | All refused | Refused | Allowed | `ERR_ADMISSION_SETTINGS_MISSING`, not retryable, operator hint |
 | Readable, but a stored or environment `bundle:` selector does not resolve, or the bundle catalog failed to load | All refused except to governance types | Per settings | Allowed | `ERR_ADMISSION_CLASSES_UNRESOLVED`, not retryable, operator hint naming the stale selector |
-| Absent on a pre-feature database (no ledger entry) | The slice 1 migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
+| Absent on a pre-feature database (no ledger entry) | The slice 1a migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
 
 Every non-readable or unresolved state above also keeps `register_schema` and the
 mutating `manage_bundles` actions admin-only (see "Gate states" under "Schema and bundle
@@ -1191,21 +1215,27 @@ evals says which harness extension each needs and which slice delivers it.
    - **Migration:** an upgraded instance with instance-policy type lists gets #2565
      predicate rules for them and no layer-0 class lists.
    - Setting an accept-list without `class:bookkeeping` warns and asks for a confirm.
-   - Decision 7 (schema and bundle authority) is proved by test 5a.
+   - **Floor-holding commands, operator grant.** `instance classes set`, `confirm` and
+     `cancel`, and the mode changes, are each refused with: an ordinary CLI token, an
+     admin-scoped session token without a grant, an in-process call, and a
+     pseudo-terminal with scripted input. A grant bound to a different setting, value or
+     instance is refused, as is an expired or reused one. A loosening confirm with the
+     grant that authorized the `set` is refused. The same operations with a matching
+     grant succeed. **Planted red:** with the grant check removed, an ordinary CLI token
+     changes a class setting and confirms a loosening.
+   - Decision 7 (schema and bundle authority) is proved by test 5a, which belongs to the
+     decision 7 increment.
    - Setting a refused class over existing data reports the count of affected entities.
 
-5a. **Schema and bundle authority (decision 7), every route.**
+5a. **Schema and bundle authority (decision 7), every agent entry point.** Belongs to the
+   decision 7 increment. Items that depend on the guard's placement (the sweep over
+   unannotated routes, and the per-caller classification of every existing registration
+   caller) are specified by the follow-up design, not here.
    - **Derived list and structural test.** The gated operations are enumerated from
      (i) OpenAPI operations annotated `x-neotoma-admin-gated`, (ii) the `manage_bundles`
      action enum, where every action must declare `mutating` and an undeclared action
      fails, and (iii) the CLI command registry annotation. The test fails when an
      annotated operation does not reach the guard.
-   - **Effect-based sweep, independent of annotations.** On a class-gated instance, run
-     every `x-neotoma-effect: write` operation (test 2's enumeration), every CLI command
-     and every `manage_bundles` action with a minimal valid call, with a content checksum
-     of the schema registry and bundle state before and after. Any operation that changes
-     either without reaching the guard fails the test, so a new route cannot skip the
-     guard by being unannotated.
    - **Per-surface matrix.** Each row has a refusal case and an operator-success case:
 
      | Row | Refusal case | Operator-success case |
@@ -1219,13 +1249,11 @@ evals says which harness extension each needs and which slice delivers it.
 
      Every refusal is `ERR_CLASS_SETTINGS_ADMIN_ONLY` with the same status, `retryable`
      and `details` shape, zero schema or bundle change, and an audit event. Read-only
-     `manage_bundles` actions and schema reads still work for agents. A call with no
-     caller context is refused.
+     `manage_bundles` actions and schema reads still work for agents.
    - **Planted red per row.** For each row, remove the guard at that row's call site, or
      give it an operator-looking context. The test asserts the set of rows that turn red
      equals the expected set for that revert, so a test that pins only one surface is
-     caught. Removing the guard from the shared registration function turns every schema
-     row red, and from the bundle activation functions every bundle row red.
+     caught.
    - **Operator channel.** A grant bound to a different operation, action, type name or
      instance is refused. An expired grant and a reused grant are refused. A grant
      produced through terminal input under a pseudo-terminal with scripted input does not
@@ -1248,8 +1276,6 @@ evals says which harness extension each needs and which slice delivers it.
      a type with no schema returns `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` and creates no schema
      row, and `register_relationship_type` is admitted. Neither changes the layer-0
      outcome for any type.
-   - **System context.** The callers that use the system context are enumerated, and a
-     request-path caller cannot construct it.
 
 **Layers 1 and 2**
 
@@ -1339,6 +1365,11 @@ evals says which harness extension each needs and which slice delivers it.
       another database's export, and **with the original's export against a
       tooling-made clone** (commitment mismatch).
     - `reidentify` accepts no id.
+    - **Operator grant.** Every identity command is also refused with an ordinary CLI
+      token, an admin-scoped session token without a grant, an in-process call, and a
+      pseudo-terminal with scripted input, and succeeds with a grant bound to that
+      identity operation. **Planted red:** with the grant check removed, an ordinary CLI
+      token runs `reidentify`.
     - `confirm-move` is refused while the old location answers, **and while the old
       database file is present but not served**.
     - The serving location ignores `Host` and forwarded headers.
@@ -1442,7 +1473,8 @@ evals says which harness extension each needs and which slice delivers it.
     - **30b, S (two instances).** After a data-class refusal, the refused records land on
       the other instance with its own conversation and message records, and the reply
       says which records went where. This is eval 33's flow, delivered with it.
-    - Slice 1 ships the 30a fixtures for the data-class and admin-only cases. 30b is not
+    - Slice 1a ships the 30a fixtures for the data-class cases and slice 1b those for the
+      admin-only cases. 30b is not
       claimed until slice 6.
 31. **F, stop on a missing acknowledgement.** No further write, and the write is flagged
     as unverified.
@@ -1463,9 +1495,9 @@ slice that does not deliver its extension:
 
 | Extension | Needed by | Delivered in |
 |---|---|---|
-| E1. Per-connection `request_count`, and a predicate that a later request omits named entities and relationships | 30a | Slice 1 |
-| E2. Fault injection in the fixture server: reply with a given error code and envelope | 30a, 31 | Slice 1 |
-| E3. A reply-text predicate: the final reply names the refusing instance and the reason | 30a | Slice 1 |
+| E1. Per-connection `request_count`, and a predicate that a later request omits named entities and relationships | 30a | Slice 1a |
+| E2. Fault injection in the fixture server: reply with a given error code and envelope | 30a, 31 | Slice 1a |
+| E3. A reply-text predicate: the final reply names the refusing instance and the reason | 30a | Slice 1a |
 | E4. Multi-server scenarios in the eval harness, with a per-instance landing predicate | 27, 28 (i), (iii), (iv), (v), 29, 30b, 32, 33 | Slice 6 |
 | E5. Permission-prompt and structured-question predicates, observed by a hook | 28 (ii) | Slice 5, used by slice 6 |
 
@@ -1479,25 +1511,29 @@ acceptance criteria of slices 1 to 5.
 
 Slices 1 to 3 need no client cooperation and land first. Every slice takes the arch gate.
 
-1. Admin-gating of the admission-settings record through the #2565 slice N1 governance
-   guard and operator channel (this slice depends on N1 and builds no second guard, and
-   does not merge until N1's channel has the properties under "The operator channel"),
-   the record and its states and migration, and **data-class admission (layer 0)**:
-   manifest resolution with set-time snapshots for stored and environment selectors, the
-   fail-closed rules, the loader's distinct load-failed state, canonical and
-   alias-resolved classification, the derived sink list and its new call sites, the
-   `data_class_refused` reason code on `ERR_STORE_POLICY_DENIED` (specified against the
-   real `StorePolicyDenial` schema), `ERR_ADMISSION_CLASSES_UNRESOLVED`,
-   `class:bookkeeping`, `neotoma instance classes`, the startup line and Inspector
-   banner for stale selectors, and the revised hints. It also delivers decision 7: the
-   shared guard in the registration and bundle activation functions, the
-   `x-neotoma-admin-gated` and `mutating` annotations, `ERR_CLASS_SETTINGS_ADMIN_ONLY`,
-   the operator path for the existing `neotoma schemas register` and
-   `neotoma bundles install|enable|disable` commands, the agent-facing text changes
-   listed under "Agent-facing text", tests 5a and 12, and the F fixtures for eval 30a
-   with harness extensions E1 to E3. Errors and headers are declared in `openapi.yaml` and
-   `errors.md` first. On hosted instances the decision 7 operations are refused to
-   everyone until the hosted admin route, a named later increment of N1, lands (see
+1a. **Layer-0 increment.** Admin-gating of the admission-settings record and the
+   floor-holding commands through the #2565 slice N1 governance guard and operator channel
+   (this slice depends on N1 and builds no second guard, and does not merge until N1's
+   channel has the properties under "The operator channel"), the record and its states
+   and migration, and **data-class admission (layer 0)**: manifest resolution with
+   set-time snapshots for stored and environment selectors, the fail-closed rules, the
+   loader's distinct load-failed state, canonical and alias-resolved classification, the
+   derived sink list and its new call sites, the `data_class_refused` reason code on
+   `ERR_STORE_POLICY_DENIED` (specified against the real `StorePolicyDenial` schema),
+   `ERR_ADMISSION_CLASSES_UNRESOLVED`, `class:bookkeeping`, `neotoma instance classes`,
+   the startup line and Inspector banner for stale selectors, tests 1 to 5, 12 (data-class
+   hints), 14 and 16, and the F fixtures for the data-class cases of eval 30a with
+   harness extensions E1 to E3. Errors and headers are declared in `openapi.yaml` and
+   `errors.md` first.
+1b. **Decision 7 increment.** Does not start until the follow-up design under "Schema and
+   bundle changes" names the choke point and classifies every caller. Delivers the guard
+   under that design, the `x-neotoma-admin-gated` and `mutating` annotations,
+   `ERR_CLASS_SETTINGS_ADMIN_ONLY`, the operator path for the existing
+   `neotoma schemas register` and `neotoma bundles install|enable|disable` commands, the
+   agent-facing text changes under "Agent-facing text" including the revised `guided` and
+   `locked` hints, test 5a, the agent-text part of test 12, and the F fixtures for the
+   admin-only cases of eval 30a. On hosted instances the decision 7 operations are refused
+   to everyone until the hosted admin route, a named later increment of N1, lands (see
    "Hosted instances before the hosted admin route"). That route also delivers test 5a's
    hosted operator-success case.
 2. The identity record, commitment, identity states, identity commands, and export; the
@@ -1514,6 +1550,40 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
 6. The turn-summary header, the instructions line, and the agent evals, with harness
    extension E4 (multi-server scenarios). Evals 27 to 29, 30b and 31 to 33 land here.
 7. Peer sync.
+
+## Follow-up slices
+
+Recorded so they are not lost. None changes what slice 1a ships, and each stays open
+until a slice or the follow-up design takes it.
+
+- **Guard placement design (blocks slice 1b).** Name the choke point, classify every
+  existing registration caller, define the sweep over unannotated routes and its pinned
+  exemption list, and make the system-caller test check that list against the code.
+- **If N1 is late.** What ships without N1's operator channel (for example
+  environment-only layer 0, with the decision 7 operations refused to everyone as on
+  hosted).
+- **Name the hosted signal.** The configuration the server reads to decide "hosted", so
+  the hosted row of test 5a is testable.
+- **Inspector schema form.** Whether it obtains a grant or is deliberately closed on a
+  class-gated instance, and its row in test 5a.
+- **Grant delivery to the CLI.** How a grant issued on the human-only surface reaches the
+  CLI process, as a named N1 deliverable.
+- **More text surfaces.** The `openapi.yaml` descriptions and the OpenClaw plugin
+  manifest that recommend `register_schema`, and a test 12 scan over every shipped text
+  surface.
+- **Envelope `details` bound.** Canonicalized form, length and character set for echoed
+  type names.
+- **Governance-type list pin.** A snapshot test, or additions treated as a pending
+  loosening.
+- **Hosted maintenance window and restore.** An audit line and release-note line for the
+  window, and a note that decision 7 inherits the restore exposure of unpinned class
+  settings.
+- **UX details.** Remaining UX advisories: accessibility of the
+  enrollment dialog and Inspector page, non-interactive harness modes for the
+  self-target prompt, stripped-retry edge cases, and a user-facing docs link on the
+  admin-only refusal.
+- **QA details.** Admitted counterparts for tests 1, 2 and 24, and an enumeration source
+  for test 13's argument branches.
 
 ## Decisions on open questions
 
@@ -1548,9 +1618,9 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    The options not taken were leaving the tools open while layer 0 holds new types
    until the admin classifies them, and keeping the gap as a stated residual.
    `update_schema_incremental` and `register_relationship_type` are outside the ruling,
-   for the reasons under "Schema and bundle changes". Revision 6 specifies the guard, the
-   operator channel, the gate states and the hosted interim. See "Schema and bundle
-   changes".
+   for the reasons under "Schema and bundle changes". Revision 6 states requirements for the
+   guard (it does not choose its placement), the operator channel, the gate states and
+   the hosted interim. See "Schema and bundle changes".
 
 ## References
 
