@@ -570,6 +570,56 @@ export async function loadIssueStatusFromGraph(
   };
 }
 
+/** Error code a guest submit returns when its identifier is already in use. */
+export const ERR_ISSUE_IDENTITY_IN_USE = "ERR_ISSUE_IDENTITY_IN_USE";
+
+/**
+ * Client note carried as `details.hint` on ERR_ISSUE_IDENTITY_IN_USE. The same
+ * wording appears in openapi.yaml, docs/subsystems/issues.md, the issue
+ * reporting site page and the release notes; keep them in step.
+ */
+export const ISSUE_IDENTITY_IN_USE_HINT =
+  "Nothing was written. If you are retrying a submit whose response was lost, the first submit " +
+  "may already have created the issue: check it with get_issue_status and that issue's guest " +
+  "access token, or, without the token, submit again with a new local_issue_id (or with neither " +
+  "local_issue_id nor submission_timestamp, so the server assigns one) and accept that this may " +
+  "create a second issue. github_number takes " +
+  "precedence over local_issue_id, so when you pass github_number for an issue synced from " +
+  "GitHub a new local_issue_id does not change the identity: post to that issue with " +
+  "add_issue_message and its guest access token instead.";
+
+/**
+ * Refuse a guest issue submit whose issue or thread identity already resolves
+ * to a stored entity. Uses the store's own resolution with `commit: false`, so
+ * it writes nothing and agrees with where the store would land.
+ */
+async function assertGuestIssueIdentityIsNew(
+  userId: string,
+  identityField: "github_number" | "local_issue_id",
+  entities: StoreEntityInput[]
+): Promise<void> {
+  const { resolveEntityWithTrace } = await import("../entity_resolution.js");
+  for (const entity of entities) {
+    const { entity_type: entityType, ...fields } = entity as Record<string, unknown>;
+    const { trace } = await resolveEntityWithTrace({
+      entityType: String(entityType),
+      fields,
+      userId,
+      commit: false,
+    });
+    if (trace.action !== "would_create") {
+      throw new IssueValidationError({
+        code: ERR_ISSUE_IDENTITY_IN_USE,
+        message:
+          `${identityField} already identifies a stored issue or issue thread on this instance. ` +
+          "A guest submit can only create a new issue.",
+        hint: ISSUE_IDENTITY_IN_USE_HINT,
+        extra: { identity_field: identityField, entity_type: String(entityType) },
+      });
+    }
+  }
+}
+
 export async function submitGuestIssue(
   ops: Operations,
   params: GuestIssueSubmitParams
@@ -669,6 +719,17 @@ export async function submitGuestIssue(
     { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
     { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
   ];
+
+  // The caller chooses github_number / local_issue_id, and those decide which
+  // issue and thread this store lands on. The guest token minted below names
+  // whatever it lands on, so a guest may only create a new issue thread here:
+  // an identity that already resolves to an issue or conversation is refused
+  // before anything is written.
+  await assertGuestIssueIdentityIsNew(
+    params.userId,
+    ghNum > 0 ? "github_number" : "local_issue_id",
+    [entities[0]!, entities[1]!]
+  );
 
   const currentContext = getRequestContext();
   const storeResult = await storeRootWithThread(
