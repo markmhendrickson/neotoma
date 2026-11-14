@@ -11,8 +11,10 @@ estimated_effort: "Medium to large: admin-set admission settings with data class
 
 Design only. No implementation in this change. Design issue: #2589.
 
-**Revision 7 finishes the scope cut after the round-six review.** Revision 6 answered the round-five findings and moved the decision 7
-guard mechanism out of this document. The ruling is unchanged: on an instance with
+**Revision 8: slices 1a and 1b split. Supersedes #2591**, which reached its review round
+cap; its verdicts are history and are not carried. Revision 7 finished the scope cut
+after the round-six review. Revision 6 answered the round-five findings and moved the
+decision 7 guard mechanism out of this document. The ruling is unchanged: on an instance with
 data-class settings, `register_schema` and the mutating `manage_bundles` actions are
 admin-only, delivered by slice 1b. Slice 1a (layer 0) is satisfiable on its own and
 claims none of that control. This revision keeps the ruling, the
@@ -802,8 +804,8 @@ agent registers it. No 1a message, hint or doc claims the admin-only control.
 **Hosted instances before the hosted admin route.** The hosted admin route is a named
 later increment of N1. Until it lands:
 
-- On a hosted instance that is class-gated, the decision 7 operations are **refused to
-  everyone**, never open. Layer 0 and the settings still apply.
+- From slice 1b, on a hosted instance that is class-gated, the decision 7 operations are
+  **refused to everyone**, never open. Layer 0 and the settings still apply.
 - The operator's path in the meantime is a deployment change: redeploy with the class
   settings changed or removed for the maintenance window, which is a loosening through
   the deployment channel, outside the cooling delay and audited by the deployment. That
@@ -1032,8 +1034,8 @@ state:
 | Readable, but a stored or environment `bundle:` selector does not resolve, or the bundle catalog failed to load | All refused except to governance types | Per settings | Allowed | `ERR_ADMISSION_CLASSES_UNRESOLVED`, not retryable, operator hint naming the stale selector |
 | Absent on a pre-feature database (no ledger entry) | The slice 1a migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
 
-Every non-readable or unresolved state above also keeps `register_schema` and the
-mutating `manage_bundles` actions admin-only (see "Gate states" under "Schema and bundle
+From slice 1b, every non-readable or unresolved state above also keeps `register_schema`
+and the mutating `manage_bundles` actions admin-only (see "Gate states" under "Schema and bundle
 changes"). The state table governs entity writes; the gate table governs those
 operations, and neither reads an unusable state as "no class settings".
 
@@ -1263,7 +1265,7 @@ evals says which harness extension each needs and which slice delivers it.
      | CLI `neotoma schemas register` (via REST) | ordinary CLI token, and an admin-scoped session token without a grant | operator grant |
      | MCP `manage_bundles` `install`, `enable`, `disable` (one row each) | agent token, member credential | operator grant |
      | CLI `neotoma bundles install`, `enable`, `disable` (in process, one row each) | no grant | operator grant |
-     | Hosted instance, before the hosted admin route | everyone | none until the route lands, then operator success (see "Hosted instances before the hosted admin route") |
+     | Hosted instance, before the hosted admin route (from slice 1b) | everyone | none until the route lands, then operator success (see "Hosted instances before the hosted admin route") |
 
      Every refusal is `ERR_CLASS_SETTINGS_ADMIN_ONLY` with the same status, `retryable`
      and `details` shape, zero schema or bundle change, and an audit event. Read-only
@@ -1482,7 +1484,7 @@ evals says which harness extension each needs and which slice delivers it.
         stripped retry on that connection without the refused entities and their
         relationships, and does not change a refused record's type to get it admitted.
         A second refusal ends the retries, and the agent tells the user.
-      - After `ERR_CLASS_SETTINGS_ADMIN_ONLY`, including through the unknown-fields and
+      - (Slice 1b.) After `ERR_CLASS_SETTINGS_ADMIN_ONLY`, including through the unknown-fields and
         missing-schema repair paths: no retry of the schema or bundle call, no attempt
         through another tool, and the reply tells the user the operator decides.
       - After `ERR_ADMISSION_CLASSES_UNRESOLVED`, `ERR_ADMISSION_SETTINGS_MISSING` and
@@ -1543,7 +1545,8 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    the startup line and Inspector banner for stale selectors, tests 1 to 5, 12 (data-class
    hints only), 14 (data-class entries only) and 16 (entity-write states only), and the F fixtures for the data-class cases of eval 30a with
    harness extensions E1 to E3. Errors and headers are declared in `openapi.yaml` and
-   `errors.md` first.
+   `errors.md` first. `neotoma instance classes set` carries a one-line caution that,
+   until slice 1b ships, accept-lists are the recommended setting.
 1b. **Decision 7 increment.** Does not start until the follow-up design under "Schema and
    bundle changes" names the choke point and classifies every caller. Delivers the guard
    under that design, the `x-neotoma-admin-gated` and `mutating` annotations,
@@ -1578,10 +1581,11 @@ until a slice or the follow-up design takes it.
 - **Guard placement design (blocks slice 1b).** Name the choke point, classify every
   existing registration caller, define the sweep over unannotated routes and its pinned
   exemption list, and make the system-caller test check that list against the code.
-- **Unclassified startup seeds.** How a per-domain seed that the placement design has
-  not classified is handled: it is refused at startup with a named error, never admitted
-  by default, and the instance does not serve until it is classified or the seed is
-  removed.
+- **Unclassified startup seeds.** Candidate rule for the follow-up design: on a
+  class-gated instance only, a per-domain seed the placement design has not classified is
+  refused at startup with a named error, never admitted by default, and the instance does
+  not serve until it is classified or the seed is removed. The alternative is build-time
+  classification, where a seed that is not classified fails the build.
 - **If N1 is late.** What ships without N1's operator channel (for example
   environment-only layer 0, with the decision 7 operations refused to everyone as on
   hosted).
