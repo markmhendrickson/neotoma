@@ -11,7 +11,16 @@ import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
 import { CORRECTION_SOURCE_PRIORITY, CORRECTION_SPECIFICITY_SCORE } from "./correction_identity.js";
 import { buildObservationRow, insertObservationRow } from "./observation_insert.js";
-import { recomputeSnapshot } from "./snapshot_computation.js";
+import {
+  persistComputedSnapshot,
+  recomputeSnapshot,
+  type SnapshotRecord,
+} from "./snapshot_computation.js";
+import {
+  buildIncrementalSnapshot,
+  certifySnapshot,
+  planIncrementalCorrection,
+} from "./snapshot_incremental.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { getDb } from "../repositories/db/connection.js";
 import {
@@ -403,7 +412,20 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
   });
   row.canonical_hash = params.canonical_hash ?? correctionRequestHash(params);
 
-  const { error: obsError } = await insertObservationRow(row);
+  // Decide before the insert whether the snapshot can be updated from this
+  // row alone instead of re-reducing the entity's whole history while the
+  // write gate is held (snapshot_incremental.ts). Either way the insert skips
+  // its own snapshot materialization: this transaction persists the snapshot
+  // itself right after, and the materialized one would only be overwritten.
+  const incremental = await planIncrementalCorrection({
+    entityId: entity_id,
+    entityType: entity_type,
+    userId: user_id,
+    field,
+    row,
+  });
+
+  const { error: obsError } = await insertObservationRow(row, { materializeSnapshot: false });
 
   if (obsError) {
     if (obsError.code === "23505" && !groupedReceipt) {
@@ -413,7 +435,20 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     throw new Error(`Failed to create correction: ${obsError.message}`);
   }
 
-  const snapshot = await recomputeSnapshot(entity_id, user_id);
+  let snapshot: SnapshotRecord | null;
+  if (incremental) {
+    const computed = buildIncrementalSnapshot(incremental, row);
+    await persistComputedSnapshot(computed, {
+      entityId: entity_id,
+      userId: user_id,
+      sourceId: "",
+      schema: incremental.registered?.schema_definition ?? null,
+    });
+    certifySnapshot(computed, incremental.schema);
+    snapshot = computed as SnapshotRecord;
+  } else {
+    snapshot = await recomputeSnapshot(entity_id, user_id);
+  }
   const snap = (snapshot?.snapshot as Record<string, unknown> | null | undefined) ?? null;
   const emitTs = row.observed_at;
   const deferredEvent: DeferredCorrectionEvent = {
