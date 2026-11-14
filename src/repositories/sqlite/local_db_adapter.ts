@@ -8,6 +8,7 @@ import fs from "fs/promises";
 import path from "path";
 import { clearDbCache, getDb } from "../db/connection.js";
 import type { DbDatabase } from "../db/driver.js";
+import { beginSchemaRegistryWrite } from "../db/schema_registry_cache.js";
 import { config } from "../../config.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
@@ -894,6 +895,21 @@ class LocalQueryBuilder {
   }
 
   async execute(): Promise<QueryResult<any>> {
+    // Every adapter write to schema_registry brackets the in-memory schema
+    // lookup cache, so no lookup can serve or store a row this write changes
+    // until the write has committed or rolled back (schema_registry_cache.ts).
+    if (this.operation !== "select" && this.table === "schema_registry") {
+      const endWrite = beginSchemaRegistryWrite();
+      try {
+        return await this.executeStatement();
+      } finally {
+        endWrite();
+      }
+    }
+    return this.executeStatement();
+  }
+
+  private async executeStatement(): Promise<QueryResult<any>> {
     const whereClauses: string[] = [];
     const values: unknown[] = [];
 

@@ -123,6 +123,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
   };
 
   beforeEach(() => {
+    // The query adapter is mocked here, so no write reaches the real database
+    // and nothing could invalidate the schema lookup cache between tests.
+    // Each test scripts its own registry rows; read them, not a cached copy.
+    vi.stubEnv("NEOTOMA_SCHEMA_REGISTRY_CACHE", "off");
     service = new SchemaRegistryService();
     mockFrom = vi.fn();
     (db.from as any) = mockFrom;
@@ -141,6 +145,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe("loadActiveSchema with user_id", () => {

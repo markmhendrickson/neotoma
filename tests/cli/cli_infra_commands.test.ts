@@ -10,7 +10,8 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import Database from "../../src/repositories/sqlite/sqlite_driver.js";
+import Database, { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
+import { ensureSchema } from "../../src/repositories/sqlite/sqlite_client.js";
 import { execAsync } from "../helpers/cli_local_target.js";
 
 const CLI_PATH = "node dist/cli/index.js";
@@ -31,6 +32,49 @@ function readTestDbRows(path: string): Array<{ id: string; value: string }> {
   }>;
   db.close();
   return rows;
+}
+
+/**
+ * A database initialised the way a real Neotoma file is (`ensureSchema`), with
+ * `writes` schema_registry rows inserted by raw SQL. Each insert fires the
+ * change-counter trigger, so two files built with different `writes` end up
+ * with different `schema_registry_change_counter` values.
+ */
+async function createNeotomaDb(path: string, idPrefix: string, writes: number): Promise<void> {
+  const db = new AsyncSqliteDatabase(path);
+  try {
+    await ensureSchema(db);
+    for (let i = 0; i < writes; i += 1) {
+      await db
+        .prepare(
+          "INSERT INTO schema_registry (id, entity_type, schema_version, schema_definition, reducer_config, active, scope) VALUES (?, ?, '1.0', '{}', '{}', 1, 'global')"
+        )
+        .run(`${idPrefix}-${i}`, `merge_db_test_${idPrefix}_${i}`);
+    }
+  } finally {
+    await db.close();
+  }
+}
+
+function readCounterAndRegistryIds(path: string): { counter: number; ids: string[] } {
+  const db = new Database(path);
+  try {
+    const counter = (
+      db.prepare("SELECT version FROM schema_registry_change_counter WHERE id = 1").get() as {
+        version: number;
+      }
+    ).version;
+    const ids = (
+      db
+        .prepare(
+          "SELECT id FROM schema_registry WHERE id LIKE 'src-%' OR id LIKE 'tgt-%' ORDER BY id"
+        )
+        .all() as Array<{ id: string }>
+    ).map((row) => row.id);
+    return { counter, ids };
+  } finally {
+    db.close();
+  }
 }
 
 async function setupTempNeotomaRepo(root: string): Promise<void> {
@@ -691,6 +735,51 @@ describe("CLI infrastructure command smoke tests", () => {
         { id: "target_only", value: "target_only_value" },
       ]);
     });
+  });
+
+  describe("storage merge-db on ensureSchema-initialised files", () => {
+    // Every real Neotoma file has the schema_registry change counter (one row,
+    // id = 1), and two files' counters almost always differ. merge-db must
+    // leave the target's counter to the target's own triggers.
+    it("safe mode merges, and the target's change counter moves forward", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-merge-db-counter-safe-"));
+      const sourceDb = join(root, "source.db");
+      const targetDb = join(root, "target.db");
+      await createNeotomaDb(sourceDb, "src", 1);
+      await createNeotomaDb(targetDb, "tgt", 3);
+      const before = readCounterAndRegistryIds(targetDb);
+      expect(before.counter).not.toBe(readCounterAndRegistryIds(sourceDb).counter);
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} storage merge-db --source "${sourceDb}" --target "${targetDb}" --mode safe --no-recompute-snapshots --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result.status).toBe("merged");
+      expect(
+        (result.merge_stats.conflict_samples as Array<{ table: string }>).map((c) => c.table)
+      ).not.toContain("schema_registry_change_counter");
+
+      const after = readCounterAndRegistryIds(targetDb);
+      expect(after.ids).toEqual(["src-0", "tgt-0", "tgt-1", "tgt-2"]);
+      // The merged source row fired the target's insert trigger once.
+      expect(after.counter).toBe(before.counter + 1);
+    }, 60_000);
+
+    it("keep-source never moves the target's change counter backwards", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-merge-db-counter-keep-source-"));
+      const sourceDb = join(root, "source.db");
+      const targetDb = join(root, "target.db");
+      await createNeotomaDb(sourceDb, "src", 1);
+      await createNeotomaDb(targetDb, "tgt", 4);
+      const before = readCounterAndRegistryIds(targetDb);
+      expect(readCounterAndRegistryIds(sourceDb).counter).toBeLessThan(before.counter);
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} storage merge-db --source "${sourceDb}" --target "${targetDb}" --mode keep-source --no-recompute-snapshots --json`
+      );
+      expect(JSON.parse(stdout).status).toBe("merged");
+      expect(readCounterAndRegistryIds(targetDb).counter).toBeGreaterThan(before.counter);
+    }, 60_000);
   });
 
   describe("global options", () => {

@@ -13,6 +13,7 @@ import {
 import { getDb } from "../repositories/db/connection.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { DbConnection } from "../repositories/db/driver.js";
+import { readThroughSchemaRegistryCache } from "../repositories/db/schema_registry_cache.js";
 import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
   checkPluralEntityType,
@@ -1092,6 +1093,24 @@ interface SchemaMutation {
 // Shared across service instances so internal registry calls join their owner.
 const schemaMutation = new AsyncLocalStorage<SchemaMutation>();
 
+/**
+ * Read committed active-schema rows through the in-memory lookup cache
+ * (src/repositories/db/schema_registry_cache.ts). Inside a schema mutation the
+ * read must see that mutation's own uncommitted rows, so it goes to the
+ * database directly and stores nothing.
+ */
+function cachedRegistryRead<T>(key: string, load: () => Promise<T>): Promise<T> {
+  if (schemaMutation.getStore()?.active) return load();
+  return readThroughSchemaRegistryCache(key, load);
+}
+
+/** Cache keys always name the scope, and the user for a user-scoped read. */
+const registryCacheKey = {
+  user: (entityType: string, userId: string) => `user\u0000${entityType}\u0000${userId}`,
+  global: (entityType: string) => `global\u0000${entityType}`,
+  list: (userId: string | undefined) => (userId ? `list-user\u0000${userId}` : "list-global"),
+};
+
 export class SchemaRegistryService {
   private async withSchemaMutation<T>(operation: () => Promise<T>): Promise<T> {
     const current = schemaMutation.getStore();
@@ -1418,6 +1437,14 @@ export class SchemaRegistryService {
    * a dynamic set of types (e.g. field-based type refinement).
    */
   async listActiveSchemas(userId?: string): Promise<SchemaRegistryEntry[]> {
+    const rows = await cachedRegistryRead(registryCacheKey.list(userId), () =>
+      this.queryActiveSchemaRows(userId)
+    );
+    const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
+    return applied.filter((e): e is SchemaRegistryEntry => e != null);
+  }
+
+  private async queryActiveSchemaRows(userId?: string): Promise<SchemaRegistryEntry[]> {
     const base = db
       .from("schema_registry")
       .select(
@@ -1435,12 +1462,10 @@ export class SchemaRegistryService {
     if (error) {
       throw new Error(`Failed to list active schemas: ${error.message}`);
     }
-    const rows = ((data ?? []) as SchemaRegistryEntry[]).filter(
+    return ((data ?? []) as SchemaRegistryEntry[]).filter(
       (row) =>
         row.scope === "global" || (row.scope === "user" && !!userId && row.user_id === userId)
     );
-    const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
-    return applied.filter((e): e is SchemaRegistryEntry => e != null);
   }
 
   /**
@@ -1526,6 +1551,15 @@ export class SchemaRegistryService {
     entityType: string,
     userId: string
   ): Promise<SchemaRegistryEntry | null> {
+    return cachedRegistryRead(registryCacheKey.user(entityType, userId), () =>
+      this.queryUserSpecificSchema(entityType, userId)
+    );
+  }
+
+  private async queryUserSpecificSchema(
+    entityType: string,
+    userId: string
+  ): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await db
       .from("schema_registry")
       .select("*")
@@ -1550,6 +1584,13 @@ export class SchemaRegistryService {
    * Load global schema for entity type
    */
   async loadGlobalSchema(entityType: string): Promise<SchemaRegistryEntry | null> {
+    const row = await cachedRegistryRead(registryCacheKey.global(entityType), () =>
+      this.queryGlobalSchema(entityType)
+    );
+    return applyBuiltInSchemaIdentityDefaults(row);
+  }
+
+  private async queryGlobalSchema(entityType: string): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await db
       .from("schema_registry")
       .select("*")
@@ -1566,7 +1607,7 @@ export class SchemaRegistryService {
       throw new Error(`Failed to load global schema: ${error.message}`);
     }
 
-    return applyBuiltInSchemaIdentityDefaults(data as SchemaRegistryEntry);
+    return data as SchemaRegistryEntry;
   }
 
   /**
