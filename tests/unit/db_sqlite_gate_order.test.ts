@@ -14,8 +14,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { logger } from "../../src/utils/logger.js";
-import { TransactionGate } from "../../src/repositories/db/driver.js";
-import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
+import {
+  TransactionGate,
+  deferUntilCurrentTransactionSettles,
+} from "../../src/repositories/db/driver.js";
+import Database, { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import type { DbDatabase } from "../../src/repositories/db/driver.js";
 
 const dir = mkdtempSync(path.join(tmpdir(), "neotoma-gate-order-"));
@@ -77,4 +80,113 @@ describe("slow-hold log wording", () => {
       warn.mockRestore();
     }
   }, 10_000);
+});
+
+/**
+ * deferUntilCurrentTransactionSettles: in-memory caches of committed rows use
+ * it to wait until a write inside a transaction is committed or rolled back
+ * (src/repositories/db/schema_registry_cache.ts).
+ */
+describe("transaction settle effects", () => {
+  it("returns false outside a transaction, and inside a single gated statement", async () => {
+    let ran = false;
+    expect(deferUntilCurrentTransactionSettles(() => (ran = true))).toBe(false);
+    const gate = new TransactionGate();
+    const inStatement = await gate.runInOrder(async () =>
+      deferUntilCurrentTransactionSettles(() => (ran = true))
+    );
+    expect(inStatement).toBe(false);
+    expect(ran).toBe(false);
+  });
+
+  it("returns false once the transaction has settled, for a late registration", async () => {
+    const gate = new TransactionGate();
+    let late!: Promise<boolean>;
+    await gate.runExclusive(async () => {
+      // Fire-and-forget work that outlives the transaction's callback.
+      late = new Promise((resolve) =>
+        setTimeout(() => resolve(deferUntilCurrentTransactionSettles(() => undefined)), 20)
+      );
+    });
+    expect(await late).toBe(false);
+  });
+
+  it("runs after the transaction body and before the next queued transaction starts", async () => {
+    const gate = new TransactionGate();
+    const log: string[] = [];
+    let releaseFirst!: () => void;
+    const heldFirst = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const first = gate.runExclusive(async () => {
+      expect(deferUntilCurrentTransactionSettles(() => log.push("first:effect"))).toBe(true);
+      await heldFirst;
+      log.push("first:end");
+    });
+    const second = gate.runExclusive(async () => {
+      log.push("second:start");
+    });
+    const statement = gate.runInOrder(async () => {
+      log.push("statement");
+    });
+    releaseFirst();
+    await Promise.all([first, second, statement]);
+    expect(log).toEqual(["first:end", "first:effect", "second:start", "statement"]);
+  });
+
+  it("runs after COMMIT and after ROLLBACK on a real sqlite transaction", async () => {
+    const file = path.join(dir, "settle.db");
+    const db = new AsyncSqliteDatabase(file);
+    // A second connection sees only committed rows.
+    let observer: Database | null = null;
+    try {
+      await db.exec("CREATE TABLE s (v TEXT)");
+      observer = new Database(file);
+      const committedRows = () =>
+        (observer!.prepare("SELECT v FROM s ORDER BY v").all() as Array<{ v: string }>).map(
+          (r) => r.v
+        );
+
+      const seen: Record<string, string[]> = {};
+      await db.transaction(async (tx) => {
+        await tx.prepare("INSERT INTO s (v) VALUES (?)").run("committed");
+        deferUntilCurrentTransactionSettles(() => (seen.commit = committedRows()));
+        // Not yet visible to another connection while the body runs.
+        expect(committedRows()).toEqual([]);
+      });
+      expect(seen.commit).toEqual(["committed"]);
+
+      await expect(
+        db.transaction(async (tx) => {
+          await tx.prepare("INSERT INTO s (v) VALUES (?)").run("rolled_back");
+          deferUntilCurrentTransactionSettles(() => (seen.rollback = committedRows()));
+          throw new Error("roll back");
+        })
+      ).rejects.toThrow("roll back");
+      expect(seen.rollback).toEqual(["committed"]);
+    } finally {
+      observer?.close();
+      await db.close();
+    }
+  });
+
+  it("keeps running effects, and releases the gate, when an effect throws", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      const gate = new TransactionGate();
+      const log: string[] = [];
+      await gate.runExclusive(async () => {
+        deferUntilCurrentTransactionSettles(() => {
+          throw new Error("effect failed");
+        });
+        deferUntilCurrentTransactionSettles(() => log.push("second effect"));
+      });
+      // The gate was released: a queued transaction runs, and does not hang.
+      await gate.runExclusive(async () => {
+        log.push("next transaction");
+      });
+      expect(log).toEqual(["second effect", "next transaction"]);
+      expect(warn.mock.calls.map((c) => String(c[0])).join("\n")).toContain("effect failed");
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

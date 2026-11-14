@@ -57,7 +57,7 @@ async function createNeotomaDb(path: string, idPrefix: string, writes: number): 
 }
 
 function readCounterAndRegistryIds(path: string): { counter: number; ids: string[] } {
-  const db = new Database(path, { readonly: true });
+  const db = new Database(path);
   try {
     const counter = (
       db.prepare("SELECT version FROM schema_registry_change_counter WHERE id = 1").get() as {

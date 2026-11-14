@@ -8,6 +8,13 @@
  * user-scoped schema never answers another user's lookup; returned rows are
  * copies; a database without the change counter is never served from cache;
  * and the resolve index exists and is the one SQLite chooses.
+ *
+ * It also pins each guard in schema_registry_cache.ts on its own: the counter
+ * re-read after a non-zero interval, the generation checks before use and
+ * before a fill, the stamp check before a fill, the unsettled-write bypass,
+ * the per-handle buckets, and the schema-mutation bypass in
+ * schema_registry.ts. Each of those tests says which guard it pins; with that
+ * guard removed, it fails.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -15,10 +22,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db.js";
-import { getDb } from "../../src/repositories/db/connection.js";
+import {
+  clearDbCache,
+  getDb,
+  withExistingLifecycleDatabase,
+} from "../../src/repositories/db/connection.js";
 import { ensureSchema } from "../../src/repositories/sqlite/sqlite_client.js";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import {
+  readThroughSchemaRegistryCache,
   resetSchemaRegistryCacheForTests,
   schemaRegistryCacheStatsForTests,
 } from "../../src/repositories/db/schema_registry_cache.js";
@@ -97,6 +109,34 @@ async function countRegistryStatements<T>(
   } finally {
     spy.mockRestore();
   }
+}
+
+/** The committed-or-in-transaction metadata policy of one row, read directly. */
+async function readPolicy(id: string): Promise<string | undefined> {
+  const database = await getDb();
+  const row = (await database
+    .prepare("SELECT metadata FROM schema_registry WHERE id = ?")
+    .get(id)) as { metadata: string | null } | undefined;
+  const parsed = row?.metadata ? JSON.parse(row.metadata) : null;
+  return parsed?.guest_access_policy;
+}
+
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+/** Control Date.now, which the cache uses to decide when the counter is due. */
+function fakeClock(start = 1_000_000) {
+  let now = start;
+  const spy = vi.spyOn(Date, "now").mockImplementation(() => now);
+  return {
+    advance: (ms: number) => {
+      now += ms;
+    },
+    restore: () => spy.mockRestore(),
+  };
 }
 
 async function cleanup() {
@@ -217,6 +257,9 @@ describe("schema lookup cache", () => {
     expect(fieldNames(anonymous.result)).toEqual(["title"]);
     expect(a.n + b.n + anonymous.n).toBe(0);
 
+    // Warm A's list first, so a list key without the user id would hand it to B.
+    const listA = await registry.listActiveSchemas(USER_A);
+    expect(listA.filter((s) => s.entity_type === TYPE).map((s) => s.scope)).toContain("user");
     const listB = await registry.listActiveSchemas(USER_B);
     expect(listB.filter((s) => s.entity_type === TYPE).map((s) => s.scope)).toEqual(["global"]);
     const listGlobal = await registry.listActiveSchemas();
@@ -292,23 +335,224 @@ describe("schema lookup cache", () => {
     expect(repeat.n).toBe(0);
   });
 
-  it("notices a raw SQL write that bypasses the adapter at the next counter check", async () => {
+  it("re-reads the change counter once a non-zero interval has elapsed (counter-stamp validation)", async () => {
+    resetSchemaRegistryCacheForTests({ checkIntervalMs: 250 });
+    const clock = fakeClock();
+    try {
+      const row = await registerGlobal("1.0", "title");
+      await registry.loadGlobalSchema(TYPE);
+      const database = await getDb();
+      // A write the adapter never sees, like the CLI writing the same file.
+      await database
+        .prepare("UPDATE schema_registry SET metadata = ? WHERE id = ?")
+        .run(JSON.stringify({ ...metadata, guest_access_policy: "closed" }), row.id);
+
+      // Inside the interval the cache still answers, without reading the counter.
+      clock.advance(200);
+      const inside = await countRegistryStatements(() => registry.loadGlobalSchema(TYPE));
+      expect(inside.result?.metadata?.guest_access_policy).toBeUndefined();
+      expect(inside.n).toBe(0);
+      expect(inside.counterReads).toBe(0);
+
+      // Past it, the next lookup re-reads the counter, sees it moved, and reloads.
+      clock.advance(100);
+      const after = await countRegistryStatements(() => registry.loadGlobalSchema(TYPE));
+      expect(after.result?.metadata?.guest_access_policy).toBe("closed");
+      expect(after.counterReads).toBe(1);
+      expect(after.n).toBe(1);
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it("does not store what a lookup read before an adapter write that finished while it ran (generation guard at fill)", async () => {
+    const row = await registerGlobal("1.0", "title");
+    const key = "test:fill-generation";
+    await readThroughSchemaRegistryCache("test:warm", async () => "warm"); // counter read once
+    const read = deferred();
+    const release = deferred();
+    const stale = readThroughSchemaRegistryCache(key, async () => {
+      const value = await readPolicy(row.id);
+      read.resolve();
+      await release.promise;
+      return value;
+    });
+    await read.promise;
+    // The adapter write starts and settles while the lookup above is in flight.
+    const { error } = await db
+      .from("schema_registry")
+      .update({ metadata: { ...metadata, guest_access_policy: "closed" } })
+      .eq("id", row.id);
+    expect(error).toBeNull();
+    release.resolve();
+    expect(await stale).toBeUndefined(); // what it read, pre-write
+
+    expect(await readThroughSchemaRegistryCache(key, () => readPolicy(row.id))).toBe("closed");
+  });
+
+  it("does not serve an entry when an adapter write lands during its counter check (generation guard before use)", async () => {
+    resetSchemaRegistryCacheForTests({ checkIntervalMs: 0 });
+    const row = await registerGlobal("1.0", "title");
+    const key = "test:use-generation";
+    expect(await readThroughSchemaRegistryCache(key, () => readPolicy(row.id))).toBeUndefined();
+
+    const database = await getDb();
+    const original = database.prepare.bind(database);
+    let armed = true;
+    const spy = vi.spyOn(database, "prepare").mockImplementation((sql: string) => {
+      const statement = original(sql);
+      if (!armed || !/schema_registry_change_counter/.test(sql)) return statement;
+      armed = false;
+      // The counter is read before the write, then the write runs to
+      // completion before the lookup gets to use what it read.
+      const get = statement.get.bind(statement);
+      statement.get = (async (...params: unknown[]) => {
+        const stamp = await get(...params);
+        const { error } = await db
+          .from("schema_registry")
+          .update({ metadata: { ...metadata, guest_access_policy: "closed" } })
+          .eq("id", row.id);
+        expect(error).toBeNull();
+        return stamp;
+      }) as typeof statement.get;
+      return statement;
+    });
+    try {
+      expect(await readThroughSchemaRegistryCache(key, () => readPolicy(row.id))).toBe("closed");
+      expect(armed).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not store a value read under a counter value a later check replaced (stamp guard at fill)", async () => {
+    resetSchemaRegistryCacheForTests({ checkIntervalMs: 250 });
+    const clock = fakeClock();
+    try {
+      const row = await registerGlobal("1.0", "title");
+      const key = "test:fill-stamp";
+      await readThroughSchemaRegistryCache("test:warm", async () => "warm"); // stamp s0
+      const read = deferred();
+      const release = deferred();
+      const stale = readThroughSchemaRegistryCache(key, async () => {
+        const value = await readPolicy(row.id);
+        read.resolve();
+        await release.promise;
+        return value;
+      });
+      await read.promise;
+      // A raw write moves the counter without touching the generation, and a
+      // second lookup, once the interval is up, notices it (stamp s1).
+      const database = await getDb();
+      await database
+        .prepare("UPDATE schema_registry SET metadata = ? WHERE id = ?")
+        .run(JSON.stringify({ ...metadata, guest_access_policy: "closed" }), row.id);
+      clock.advance(300);
+      await readThroughSchemaRegistryCache("test:other", async () => "other");
+      release.resolve();
+      expect(await stale).toBeUndefined();
+
+      // Still inside the interval of the s1 check, so only the stamp guard
+      // stopped the pre-write value being stored under s1.
+      expect(await readThroughSchemaRegistryCache(key, () => readPolicy(row.id))).toBe("closed");
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it("reads the database inside a transaction once an adapter write there is unsettled (unsettled-write bypass)", async () => {
     const row = await registerGlobal("1.0", "title");
     await registry.loadGlobalSchema(TYPE);
     const database = await getDb();
-    await database
-      .prepare("UPDATE schema_registry SET metadata = ? WHERE id = ?")
-      .run(JSON.stringify({ ...metadata, guest_access_policy: "closed" }), row.id);
-
-    // Within the check interval the cache still answers (this is the bounded
-    // staleness for writes from outside the adapter, such as another process).
+    const inside: Array<string | undefined> = [];
+    await expect(
+      database.transaction(async (tx) => {
+        const { error } = await db
+          .from("schema_registry")
+          .update({ metadata: { ...metadata, guest_access_policy: "closed" } })
+          .eq("id", row.id);
+        expect(error).toBeNull();
+        inside.push((await registry.loadGlobalSchema(TYPE))?.metadata?.guest_access_policy);
+        // A second, raw write in the same transaction. Generation and counter
+        // check are no help here: only the bypass keeps the read current.
+        await tx
+          .prepare("UPDATE schema_registry SET metadata = ? WHERE id = ?")
+          .run(JSON.stringify({ ...metadata, guest_access_policy: "open" }), row.id);
+        inside.push((await registry.loadGlobalSchema(TYPE))?.metadata?.guest_access_policy);
+        throw new Error("roll back");
+      })
+    ).rejects.toThrow("roll back");
+    expect(inside).toEqual(["closed", "open"]);
     expect((await registry.loadGlobalSchema(TYPE))?.metadata?.guest_access_policy).toBeUndefined();
+  });
 
-    // Once the interval has passed, the counter has moved and the entry is dropped.
-    resetSchemaRegistryCacheForTests({ checkIntervalMs: 0 });
-    await registry.loadGlobalSchema(TYPE); // fills under the new counter value
-    const changedRow = await registry.loadGlobalSchema(TYPE);
-    expect(changedRow?.metadata?.guest_access_policy).toBe("closed");
+  it("reads the database inside a schema mutation, so it sees the mutation's own write (mutation bypass)", async () => {
+    const row = await registerGlobal("1.0", "title");
+    await registry.loadGlobalSchema(TYPE);
+    let inside: string | undefined;
+    // Stand in for a mutation body that writes schema_registry without the
+    // adapter, so no unsettled adapter write is in play: only the mutation
+    // bypass in cachedRegistryRead decides what the read returns.
+    const body = vi
+      .spyOn(
+        SchemaRegistryService.prototype as unknown as {
+          registerInTransaction: (...args: unknown[]) => Promise<unknown>;
+        },
+        "registerInTransaction"
+      )
+      .mockImplementationOnce(async () => {
+        const database = await getDb();
+        await database
+          .prepare("UPDATE schema_registry SET metadata = ? WHERE id = ?")
+          .run(JSON.stringify({ ...metadata, guest_access_policy: "closed" }), row.id);
+        inside = (await registry.loadGlobalSchema(TYPE))?.metadata?.guest_access_policy;
+        throw new Error("roll back");
+      });
+    try {
+      await expect(registerGlobal("9.9", "title")).rejects.toThrow("roll back");
+    } finally {
+      body.mockRestore();
+    }
+    expect(inside).toBe("closed");
+    expect((await registry.loadGlobalSchema(TYPE))?.metadata?.guest_access_policy).toBeUndefined();
+  });
+
+  it("starts a different database handle with an empty cache (per-handle buckets)", async () => {
+    const key = "test:per-handle";
+    expect(await readThroughSchemaRegistryCache(key, async () => "shared handle")).toBe(
+      "shared handle"
+    );
+    expect(await readThroughSchemaRegistryCache(key, async () => "not called")).toBe(
+      "shared handle"
+    );
+
+    const dir = mkdtempSync(join(tmpdir(), "schema-registry-cache-handle-"));
+    const other = new AsyncSqliteDatabase(join(dir, "other.db"));
+    try {
+      await ensureSchema(other);
+      // Bind getDb() to a different file for one lookup, the way a
+      // lifecycle-bound process does.
+      clearDbCache();
+      const seen = await withExistingLifecycleDatabase(other, () =>
+        readThroughSchemaRegistryCache(key, async () => "other handle")
+      );
+      expect(seen).toBe("other handle");
+    } finally {
+      await other.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+    // The next getDb() reopens the shared file as a new handle, also empty.
+    expect(await readThroughSchemaRegistryCache(key, async () => "reopened")).toBe("reopened");
+  });
+
+  it("is used again after an adapter write that fails", async () => {
+    await registerGlobal("1.0", "title");
+    // Missing required columns: the statement fails, and its bracket must still close.
+    const { error } = await db.from("schema_registry").insert({ entity_type: TYPE });
+    expect(error).not.toBeNull();
+    await registry.loadGlobalSchema(TYPE);
+    const repeat = await countRegistryStatements(() => registry.loadGlobalSchema(TYPE));
+    expect(repeat.n).toBe(0);
   });
 
   it("drops entries when the change counter moves between checks", async () => {
@@ -348,9 +592,9 @@ describe("schema lookup cache", () => {
     }
   });
 
-  it("can be turned off", async () => {
+  it.each(["off", "0", "false", " OFF "])("can be turned off with %j", async (value) => {
     await registerGlobal("1.0", "title");
-    vi.stubEnv("NEOTOMA_SCHEMA_REGISTRY_CACHE", "off");
+    vi.stubEnv("NEOTOMA_SCHEMA_REGISTRY_CACHE", value);
     try {
       await registry.loadGlobalSchema(TYPE);
       const repeat = await countRegistryStatements(() => registry.loadGlobalSchema(TYPE));
