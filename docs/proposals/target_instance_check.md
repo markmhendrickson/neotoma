@@ -115,7 +115,7 @@ Two failure classes:
 1. **Misroute.** The configuration names instance A, but the transport reaches instance
    B. Every call returns `success: true`. This is #2462.
 2. **Misselection.** The client is connected to A and B correctly, but the agent picks
-   the wrong connector for a write. #2381 anticipates this.
+   the wrong connector for a write. #2381 (instance titles) is related prior art.
 
 Motivating case, stated generically: a team runs several Neotoma instances, one holding
 confidential finance data. That data must never land on another instance, and writes
@@ -251,7 +251,8 @@ general instance's accept-list names the classes that instance holds, including
 
 ## Prior art
 
-- **#2381**: `NEOTOMA_INSTANCE_TITLE` surfaced as `serverInfo.title`. A label is never
+- **#2381**: proposes `NEOTOMA_INSTANCE_TITLE` surfaced as `serverInfo.title`. Treat the
+  title as slice 2 work, not as something already in the tree. A label is never
   authorization.
 - **#2462**: the `instance` object on `/session` and `get_session_identity`. This design
   extends it and does not replace it.
@@ -386,8 +387,9 @@ the modes. They are never in an entity, and no agent can write them.
   per-turn store recipe in `docs/developer/mcp/instructions.md` writes:
   `conversation` and `conversation_message`, with its `agent_message` alias. It is
   defined in code next to that recipe, and a test holds the two equal. Setting an
-  accept-list that omits it shows a warning that every per-turn store on this instance
-  will be refused, and asks the admin to confirm.
+  accept-list that omits it prints a warning in `set`'s output, and the server logs a
+  startup line, that every per-turn store on this instance will be refused. It asks for
+  no confirmation and reads no input, so it never collides with `classes confirm`.
 
 #### Resolution and fail-closed rules
 
@@ -432,8 +434,8 @@ split, or a failed catalog load.
 - **An accept-list that resolves to zero types refuses every write** except to governance
   types. Layer 0 does not reuse the instance-policy evaluator's rule that an empty
   allow-list is no allow-list.
-- **Upgrade preflight.** `neotoma instance classes check`, run through the operator
-  channel before an upgrade, reports which stored selectors the new catalog would leave
+- **Upgrade preflight.** `neotoma instance classes check`, read-only and needing no
+  grant, run before an upgrade, reports which stored selectors the new catalog would leave
   unresolved or would change, so the admin can re-set them first. The release notes for
   any catalog rename or split name the affected selectors.
 - **At set time,** a selector naming an unknown bundle, a bundle with no types, or a
@@ -485,14 +487,20 @@ server keeps one in the settings record:
 
 #### What is classified
 
-The sink list is pinned in slice 1a and derived from slice 3 on. Slice 1a enumerates a
-pinned, explicit list of sinks (below), and its structural test fails when a pinned sink
-does not reach layer 0. Slice 3 delivers `x-neotoma-effect` (see "Effect
-classification") and replaces the pinned list with a derived one: every operation
-declared `x-neotoma-effect: write` that persists an observation or relationship, or
-alters an entity's type, is a layer-0 sink, and the structural test enumerates them from
-the OpenAPI document and fails when one does not reach layer 0, so a later write path
-cannot skip it. The pinned list in slice 1a is:
+The sink list is pinned in slice 1a and derived from slice 3 on. The slice 1a list is
+built from a sweep of every call site that inserts an observation or an entity or
+relationship row, plus every OpenAPI write operation. Each persisting route is classified
+as a layer-0 sink or as exempt with a stated reason, and the list records both. The slice
+1a structural test is a source-scan structural test over every write route, built by
+sweeping those call sites and the OpenAPI write operations. It is the same source-scan
+test that covers write-route coverage of the instance policy, so there is one test and
+not two in parallel. It fails when a write route is on neither the sink list nor the
+exempt list, so a new write route cannot skip layer 0. Slice 3 delivers `x-neotoma-effect` (see "Effect
+classification") and replaces the scan with a derived list: every operation declared
+`x-neotoma-effect: write` that persists an observation or relationship, or alters an
+entity's type, is a layer-0 sink. The asset entities that raw storage creates (their type
+comes from the MIME type) are governed by `raw_storage` only, not by accept-lists or
+refuse-lists. The sinks the sweep confirms today include:
 
 - the structured `store` paths (REST and MCP) and `correct`, which call the evaluator
   today;
@@ -552,34 +560,55 @@ rules that can be suspended by break-glass and do not cover raw storage. The bou
   still pass the governance guard, so admitting them at layer 0 grants nothing.
 - **One denial code family.** A layer-0 refusal returns `ERR_STORE_POLICY_DENIED`, the
   code #2565 predicates and today's instance policy already use, with its existing HTTP
-  status. Each denied entry carries `reason_code: data_class_refused` and
-  `source: admission_settings` in place of a `rule_key`. Agents and clients branch on the
-  reason code.
+  status and envelope (`error.code`, `error.denied[]`). The exact additions slice 1a makes
+  to `StorePolicyDenial` are listed under "Refusal and recovery". Agents and clients
+  branch on `reason_code`.
 - **One guard.** Admin gating of the admission-settings record uses the #2565 slice N1
   governance guard and operator channel. This design builds no second guard.
 
 #### Refusal and recovery
 
-**Error.** `ERR_STORE_POLICY_DENIED`, not retryable. `details` lists:
+**Error.** `ERR_STORE_POLICY_DENIED` (400, not retryable), in the existing envelope:
+`error.code` and `error.denied[]`, where each entry is the real `StorePolicyDenial`
+(`entity_index`, `entity_type`, `reason_code`, `hint`, `policy_id`). Slice 1a adds
+exactly this, and test 14 asserts it:
 
-- each refused entity: index, canonical `entity_type`, resolved type, and the reason,
-  either `not_in_accept_list` or `matched_refuse_selector` with the selector (for
-  example `bundle:finance`);
-- each relationship refused because an endpoint was refused, by index and the refused
-  endpoint's index.
+- **Enum value.** `reason_code: data_class_refused`. The enum is extensible by design,
+  and clients already treat an unknown value as a hard denial.
+- **Optional fields on `StorePolicyDenial`:**
+  - `resolved_entity_type` (string): the alias-resolved type;
+  - `class_reason` (enum): `not_in_accept_list`, `matched_refuse_selector` or
+    `raw_storage_refused`;
+  - `selector` (string): the matching selector, present for `matched_refuse_selector`;
+  - `relationship_index` (integer): present when the entry reports a relationship refused
+    because an endpoint was refused;
+  - `sink` (enum): the sink that refused, for sinks with no entity array.
+- **`policy_id`** carries the opaque revision of the admission-settings record.
+- **No `source` or `rule_key` field** is added. `reason_code` says where the refusal came
+  from.
+- **Relationships in a request with entities.** A relationship refused because an
+  endpoint was refused is an entry with `entity_index` set to the refused endpoint's
+  index, `relationship_index` set, and the same `reason_code`.
+- **Sinks with no entity index** (raw storage, `create_relationship`, `split_entity`,
+  `merge_entities`, `restore_entity`, `correct`, interpretation extraction): `sink` names
+  the operation, `entity_index` is the zero-based index in the submitted or extracted
+  list, or `0` for a single subject, and `entity_type` is the refused type (absent for
+  raw storage, which has no type). A relationship-only sink sets `relationship_index`
+  too.
+- **Echo bound.** `entity_type`, `resolved_entity_type` and `selector` carry canonical
+  names only, never a raw request string: at most 64 characters from the canonical type
+  character set, otherwise `<invalid>`. At most 50 entries are listed, with a count of
+  the remainder. The same bound applies to any type name echoed by another refusal in
+  this design.
 
-**Echo bound.** `details` carries canonical and resolved type names only, never a raw
-request string. Each name is at most 64 characters from the canonical type character
-set, and anything else is shown as `<invalid>`. At most 50 entries are listed, with a
-count of the remainder. The same bound applies to a type name echoed by any other
-refusal in this design.
-
-**Hint.** "This Neotoma does not accept `<entity_type>` records; 0 persisted. Do not
-resend this request unchanged. Remove the refused entities and every relationship listed
-in details, then store the rest here. Store the refused entities on the Neotoma your
-routing rule names for them, or ask the user, together with that Neotoma's own
-conversation and message records." The hint carries no served id and no payload
-fragment.
+**Hint.** Every entry carries this `hint`: "This Neotoma does not accept `<entity_type>`
+records; 0 persisted. Do not resend this request unchanged. Do not change a refused
+record's type to get it admitted. Remove the refused entities and every relationship
+listed, then store the rest here. If this request is refused again, stop and tell the
+user. If every entity was refused, send nothing here and tell the user. Store the refused
+entities on the Neotoma your routing rule names for them, or ask the user, together with
+that Neotoma's own conversation and message records." The hint carries no served id and
+no payload fragment. It is the 1a agent text that eval 30a's data-class bullets rest on.
 
 **Why a stripped retry.** The standard per-turn store holds the `conversation`, the
 user's `conversation_message`, extracted entities and REFERS_TO links in one request. On
@@ -590,8 +619,11 @@ that accepts them, with that instance's own conversation and message records, so
 provenance chain holds on both. A stripped retry applies only to a data-class refusal. A
 target mismatch means the whole request was aimed at the wrong instance, and it is never
 retried on that connection. If every entity in the request is refused, the stripped
-request is empty: the agent sends nothing here, tells the user which instance refused and
-why, and names where the records belong.
+request is empty: the agent sends nothing here and tells the user which connector
+refused and why (from slice 2, the instance title as well). The retained verbatim
+message on the refusing instance may itself carry refused content. That is the stated
+unclassified-text gap, and where a routing rule names another instance the agent keeps
+refused detail out of the retained text.
 
 **What the user is told.** Which records went where, for example: "I saved this turn
 here in Personal graph. The payment was refused here, so I stored it in Finance graph
@@ -710,25 +742,32 @@ by the follow-up design, together with its pinned list of classified callers.
 
 **The operator channel.** #2565 slice N1 owns the mechanism. This design needs these
 properties from it for two sets of commands: the commands that hold the floor (layer-0
-increment), and schema and bundle changes (decision 7 increment). Neither increment
-merges until N1's channel has them:
+increment), and schema and bundle changes (decision 7 increment). **The merge
+precondition for both increments is properties 1 to 5**, including delivery of the grant
+to the CLI. Property 6, the hook denies, is a slice 5 deliverable and not a merge
+precondition:
 
 1. **A distinct credential.** An ordinary CLI token, an agent-scoped token, a member
    credential and an admin-scoped session token do not pass. Only an operator grant
    passes.
-2. **Per operation.** The grant is bound to the instance, the operation, the action and
-   the target of the operation (the requested type name, the setting and value, or the
-   identity operation). It is single use and short-lived.
+2. **Per operation.** The grant is bound to the operation, the action and the target of
+   the operation (the requested type name, the setting and value, or the identity
+   operation), and to the instance once slice 2 delivers an instance id (a grant bound
+   to a different instance is refused from slice 2). It is single use and short-lived.
 3. **Obtained on a human-only surface.** It is issued through the same kind of
    confirmation surface as registry enrollment (the Inspector page with a signed-in
-   admin session and a typed short id, or the hosted admin route) that shows the
+   admin session, with a typed short id from slice 2 and until then the typed setting
+   name, or the hosted admin route) that shows the
    operation, action, target and instance being approved. It is never read from
    terminal input, never stored in the CLI's ordinary token location or the process
    environment, and never printed for an agent to copy.
 4. **No trust by locality.** In-process calls to `neotoma instance classes` (slice 1a),
    the in-process `neotoma bundles` commands (slice 1b), and the CLI's offline paths
    present the grant too. A call being local does not make it the operator's.
-5. **Hook denies as a second layer (slice 5 owns them).** The Claude Code hooks deny agent invocation of
+5. **Grant delivery to the CLI.** A grant issued on the human-only surface reaches the CLI
+   process that needs it, without terminal input, the ordinary token location, the
+   process environment or any value an agent can read. Slice 1a's success case needs it.
+6. **Hook denies as a second layer (slice 5 owns them, not a merge precondition).** The Claude Code hooks deny agent invocation of
    `neotoma schemas register`, `neotoma bundles install|enable|disable`,
    `neotoma instance classes set|confirm|cancel`, and the identity commands, directly
    and through the wrappers test 24 lists. Hooks exist only in some clients, so the
@@ -742,8 +781,9 @@ identity operation they perform. Slice 1a gates only the commands it delivers:
 - the identity commands `restore-identity`, `reidentify`, `confirm-move` (slice 2);
 - mode changes, `target_assertion` and `read_assertion` (slice 4).
 
-An ordinary CLI token, an admin-scoped session token, an in-process call and a
-pseudo-terminal with scripted input do not pass. A loosening confirm needs its own grant,
+`neotoma instance classes show` and `check` are read-only and need no grant. An ordinary
+CLI token, an admin-scoped session token, an in-process call and a pseudo-terminal with
+scripted input do not pass the commands above. A loosening confirm needs its own grant,
 so a token that can run `set` cannot also confirm. Tests 5 (slice 1a), 18 (slice 2) and
 the mode-change rows of test 5 (slice 4) cover them.
 
@@ -765,8 +805,8 @@ operations stay admin-only:
 | Readable, with class settings | Yes |
 | Readable, with none | No |
 | Unreadable or malformed | Yes |
-| Missing after its ledgered creation (slice 1a); from slice 2, also missing on a database whose identity was minted after this feature | Yes |
-| Not yet migrated (the slice 1a migration has not completed) | Yes. The server does not serve requests before the migration completes, so this holds only if the migration fails. |
+| Missing after its ledger marker was written (slice 1a); from slice 2, also missing on a database whose identity was minted after this feature | Yes |
+| Migration not completed (failed or skipped; no ledger marker) | Yes. Entity writes are also refused (see "The ledger"). |
 | Stored `bundle:` selector unresolved | Yes |
 | Either class environment variable set, whatever the stored record's state | Yes. The variables are read from the process environment, not the database. |
 | Environment `bundle:` selector unresolved | Yes |
@@ -775,6 +815,13 @@ operations stay admin-only:
 None of these states reads as "no class settings". The loader change in slice 1a exposes a
 distinct load-failed state, because today a manifest error is swallowed and the process
 caches an empty registry, which cannot be told apart from "no bundles".
+
+**Per-reason hints.** The hint above is for `gate_reason: class_settings`. For the fault
+reasons it is: "This Neotoma could not read its class settings or bundle catalog, so only
+its operator can add record types or change bundles right now. Nothing was changed. Do not
+retry. Tell the user." This covers `settings_unreadable`, `settings_missing`,
+`selector_unresolved` and `catalog_load_failed`. The refusal is not retryable for any
+reason; the agent stops and tells the user.
 
 **How a refusal reads to the agent.** `ERR_CLASS_SETTINGS_ADMIN_ONLY`, HTTP 403, not
 retryable (the same request unchanged). `details` names the operation and action (for
@@ -818,12 +865,20 @@ that no selector names by registering it.
 
 **Interim between slice 1a and 1b.** Slice 1a ships layer 0 alone. Until slice 1b ships,
 on a class-gated instance `register_schema` and the mutating `manage_bundles` actions
-stay open to agents, exactly as today. The recommended configuration is accept-lists
-only in that window, since an accept-list refuses a type no selector names even if an
-agent registers it. Residual in that window: `register_schema` can set `aliases` on an existing accepted type,
-and store-time alias collapse then redirects a newly submitted type onto it. The data
-lands under an accepted type, so no class boundary moves, but it is a stated residual and
-not a surprise. No 1a message, hint or doc claims the admin-only control.
+stay open to agents, exactly as today. The recommended configuration is an accept-list in
+that window, since an accept-list refuses a type no selector names even if an agent
+registers it. Residuals in that window:
+
+- `register_schema` can set `aliases` on an existing accepted type, and store-time alias
+  collapse then redirects a newly submitted type onto it. An accept-list admits on the
+  resolved type, so a record submitted under a refused-class name can land under an
+  accepted type. An accept-list alone does not close this. A refuse-list naming the same
+  classes does, because refuse matches the submitted type too, so the 1a-window guidance
+  is an accept-list plus a refuse-list for the classes the instance must never hold.
+- Inbound peer sync is evaluated only at the evaluator in slice 1a, and the peer path
+  through layer 0 is slice 7. Between them, peer sync into a class-gated instance is a
+  residual.
+- Routes the sweep classifies as exempt (see "What is classified") are not covered. No 1a message, hint or doc claims the admin-only control.
 
 **Hosted instances before the hosted admin route.** The hosted admin route is a named
 later increment of N1. Until it lands:
@@ -1055,14 +1110,22 @@ state:
 | State | Writes | Ordinary reads | Discovery | Code |
 |---|---|---|---|---|
 | Readable | Per settings | Per settings | Allowed | (none) |
-| Unreadable or malformed | **All refused**, asserted or not, because data classes cannot be evaluated | Refused | Allowed | `ERR_TARGET_INSTANCE_UNAVAILABLE`, retryable |
-| Missing after its ledgered creation (slice 1a, keyed on the migration's ledger entry); from slice 2, also missing on a database whose identity was minted after this feature | All refused | Refused | Allowed | `ERR_ADMISSION_SETTINGS_MISSING`, not retryable, operator hint |
+| Unreadable or malformed | **All refused**, asserted or not, because data classes cannot be evaluated | Refused | Allowed | `ERR_STORE_POLICY_UNAVAILABLE` (existing, 503), retryable: retry unchanged later, then tell the user |
+| Missing after its ledger marker was written (slice 1a); from slice 2, also missing on a database whose identity was minted after this feature | All refused | Refused | Allowed | `ERR_ADMISSION_SETTINGS_MISSING`, not retryable, operator hint |
 | Readable, but a stored or environment `bundle:` selector does not resolve, or the bundle catalog failed to load | All refused except to governance types | Per settings | Allowed | `ERR_ADMISSION_CLASSES_UNRESOLVED`, not retryable, operator hint naming the stale selector |
-| Absent on a pre-feature database (no ledger entry) | The slice 1a migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
+| Absent on a pre-feature database (no ledger marker) | The slice 1a migration creates it once with no class lists and no mode fields, and writes the ledger marker in the same transaction. Until it completes, all writes are refused. | (after migration) | Allowed | `ERR_ADMISSION_SETTINGS_MISSING`, `details` discriminator `migration_incomplete`, until it completes |
 
-**Slice ownership.** Slice 1a delivers the writes column, the ledger-keyed missing state,
-the unresolved state and the migration. The ordinary-reads and discovery columns and the
-`optional` default belong to slices 2 and 4, which add reads, identity and modes.
+**The ledger.** No migration ledger exists in the repo, so slice 1a defines one: a
+one-row marker, `admission_settings_created`, in a table the migration creates in the same
+database, outside the settings record and written in the same transaction as the record.
+Slice 1a also changes startup: the migration runs in every run mode that serves writes,
+and if it failed or was skipped (no marker) all entity writes are refused until it
+completes, rather than serving as today.
+
+**Slice ownership.** Slice 1a delivers the writes column, the marker-keyed missing state,
+the unresolved state and the migration. The record holds no mode fields in slice 1a.
+Slice 4 adds them, with its own migration, and treats an absent mode as `optional`. The
+ordinary-reads and discovery columns belong to slices 2 and 4.
 
 From slice 1b, every non-readable or unresolved state above also keeps `register_schema`
 and the mutating `manage_bundles` actions admin-only (see "Gate states" under "Schema and bundle
@@ -1087,11 +1150,21 @@ named when registered.
 | `ERR_STORE_POLICY_DENIED` with `reason_code: data_class_refused` (layer 0; existing code and status) | 400 | No |
 | `ERR_ADMISSION_CLASSES_UNRESOLVED` | 503 | No |
 | `ERR_CLASS_SETTINGS_ADMIN_ONLY` | 403 | No |
-| `ERR_TARGET_INSTANCE_UNAVAILABLE` (declared in slice 1a for an unreadable settings record; identity uses from slice 2) | 503 | Yes |
+| `ERR_TARGET_INSTANCE_UNAVAILABLE` (identity record unreadable, slice 2) | 503 | Yes |
+| `ERR_STORE_POLICY_UNAVAILABLE` (existing; slice 1a uses it for an unreadable settings record) | 503 | Yes |
 | `ERR_TARGET_INSTANCE_IDENTITY_MISSING` | 503 | No |
 | `ERR_ADMISSION_SETTINGS_MISSING` | 503 | No |
 | `ERR_TARGET_INSTANCE_MOVE_UNCONFIRMED` | 409 | No |
 | `ERR_TARGET_INSTANCE_UNVERIFIED` | client-raised | No |
+
+**Why the existing code fits the settings fault.** `ERR_STORE_POLICY_UNAVAILABLE` already
+means the policy could not be read, permission is unknown, nothing was persisted, and the
+fault is transient server-side (503, retryable, retry unchanged). An unreadable settings
+record is exactly that, so slice 1a reuses it and declares no new code. The hint says: "This
+Neotoma could not read its settings, so nothing was stored. Retry the same request
+unchanged once, later. If it fails again, stop and tell the user." The same semantics hold
+in the errors table, the hints and eval 30a. A slice 2 identity fault uses
+`ERR_TARGET_INSTANCE_UNAVAILABLE` or a `details` discriminator, defined in slice 2.
 
 **Hint rules.**
 
@@ -1101,6 +1174,9 @@ named when registered.
 - The mismatch hint points to the registry and the user, never to the served identity.
 - No payload fragment is echoed.
 - No hint offers an agent-runnable command.
+- The hints for `ERR_ADMISSION_SETTINGS_MISSING` and `ERR_ADMISSION_CLASSES_UNRESOLVED`
+  say: "Nothing was stored. Do not retry, and do not move this data to another Neotoma on
+  your own. Tell the user; this Neotoma's operator must fix its settings."
 
 Required hint: "Set `target_instance` to the id your routing rule names for this data, or
 look up the Neotoma the user names in your registry. Never use this connection's own id,
@@ -1183,8 +1259,9 @@ evals says which harness extension each needs and which slice delivers it.
      a refused new type, `merge_entities`, `restore_entity` of a now-refused type, and raw
      storage under `raw_storage: refuse`. Each runs through REST, MCP and the CLI,
      including the CLI `--offline` write path against local records.
-   - **Slice 1a:** the structural test enumerates the pinned sink list and fails when a
-     pinned sink does not reach layer 0. **From slice 3:** it enumerates every
+   - **Slice 1a:** the structural test is the source-scan structural test over every write
+     route described under "What is classified" (one shared test), and fails when a route
+     is on neither the sink list nor the exempt list, or when a sink does not reach layer 0. **From slice 3:** it enumerates every
      `x-neotoma-effect: write` operation that persists an observation or relationship, or
      alters an entity's type, and fails when one does not reach layer 0. Inbound sync of
      a refused class is tested at the evaluator in slice 1a and through the peer path in
@@ -1210,10 +1287,11 @@ evals says which harness extension each needs and which slice delivers it.
      editing the settings.
    - A type added to an accepted bundle is refused until the admin confirms the pending
      loosening, and is admitted only after the cooling delay.
-   - **Planted red, enable state:** disabling the refused finance bundle through the
-     operator channel, and running with that bundle never installed or enabled, both
-     leave the refusal in place. With resolution switched to the enabled-bundles index, the test
-     goes red.
+   - **Planted red, enable state:** running with the refused finance bundle never
+     installed or enabled leaves the refusal in place, and with resolution switched to
+     the enabled-bundles index the test goes red. The variant that disables the bundle
+     through the operator channel is slice 1b, because the operator path for
+     `neotoma bundles disable` is delivered there.
    - **Planted red, catalog shrink:** a type moved out of a refused bundle in a new
      catalog stays refused (snapshot), and a pending loosening is recorded.
    - **Planted red, selector stops resolving:** remove the bundle from the loaded catalog
@@ -1258,15 +1336,18 @@ evals says which harness extension each needs and which slice delivers it.
      no overlap refuses every non-governance write. A malformed value stops the server.
    - `describe_instance_policy` marks each effective entry as stored, environment, or
      snapshot.
-   - **Governance types:** on an accept-list instance whose list names no governance
+   - **Governance types (N1's governance-type function):** on an accept-list instance whose list names no governance
      type, `rule` and `policy` writes are admitted by layer 0 and still pass the
      governance guard, and an operator-channel repair succeeds.
-   - **Conjunction:** a write admitted by layer 0 and denied by a mandatory
+   - **Conjunction (the #2565 slice that delivers predicate rules and break-glass, not
+     slice 1a):** a write admitted by layer 0 and denied by a mandatory
      `entity_type_deny` predicate is refused, and a write denied by layer 0 is refused
      while rules break-glass is set.
-   - **Migration:** an upgraded instance with instance-policy type lists gets #2565
-     predicate rules for them and no layer-0 class lists.
-   - Setting an accept-list without `class:bookkeeping` warns and asks for a confirm.
+   - **Migration (the #2565 slice that delivers the policy-list migration, not slice 1a):**
+     an upgraded instance with instance-policy type lists gets #2565 predicate rules for
+     them and no layer-0 class lists.
+   - Setting an accept-list without `class:bookkeeping` prints the warning in `set`'s
+     output and logs the startup line. It asks for no confirmation.
    - **Floor-holding commands, operator grant (slice 1a: `instance classes`).**
      `instance classes set`, `confirm` and `cancel` are each refused with: an ordinary
      CLI token, an admin-scoped session token without a grant, an in-process call, and a
@@ -1276,12 +1357,18 @@ evals says which harness extension each needs and which slice delivers it.
      grant succeed. **One planted red per command:** with the grant check removed from
      that command only, an ordinary CLI token succeeds at that command and no other.
      The commands are `instance classes set`, `instance classes confirm` and
-     `instance classes cancel`.
+     `instance classes cancel`. The "different instance" case is slice 2.
+   - **Slice 1a owns these test 5 bullets:** class authority, tightening, loosening with
+     the injectable clock, the environment variables, `describe_instance_policy` marking,
+     the governance-types case, the caution, the accept-list warning, the existing-data
+     count, and the `instance classes` grant matrix.
    - **Mode changes (slice 4).** The same refusal matrix and one planted red per mode
      change, `target_assertion` and `read_assertion`.
-   - **Caution.** `instance classes set` of a refuse-list, and starting with
-     `NEOTOMA_REFUSED_CLASSES` set, print the accept-list caution (slice 1a).
-     From slice 1b they do not.
+   - **Caution.** `instance classes set` of a refuse-list on an instance with no accept-list,
+     and starting with `NEOTOMA_REFUSED_CLASSES` set and no accept-list, print the
+     caution (slice 1a). From slice 1b a shorter caution remains for refuse-list
+     instances not on `guided`, since auto-create under `evolving` still adds a type no
+     list names.
    - Decision 7 (schema and bundle authority) is proved by test 5a, which belongs to the
      decision 7 increment.
    - Setting a refused class over existing data reports the count of affected entities.
@@ -1368,7 +1455,9 @@ evals says which harness extension each needs and which slice delivers it.
     - Title targets behave per mode.
 12. **Hints and sinks.**
     - Each code's hint is tested by the slice that introduces it. Slice 1a covers
-      `data_class_refused`, `UNAVAILABLE`, `ADMISSION_SETTINGS_MISSING` and
+      `data_class_refused` (including the three added sentences: do not change the type,
+      stop after a second refusal, send nothing when all are refused),
+      `ERR_STORE_POLICY_UNAVAILABLE`, `ADMISSION_SETTINGS_MISSING` and
       `ADMISSION_CLASSES_UNRESOLVED`.
     - No hint contains the served id or an agent-runnable command. This covers
       `REQUIRED`, `MISMATCH`, the `data_class_refused` denial, `UNAVAILABLE`,
@@ -1382,10 +1471,12 @@ evals says which harness extension each needs and which slice delivers it.
       no text tells the agent to call `register_schema` or `manage_bundles`, and the
       static text carries the operator-only note. On an instance that is not
       class-gated, the hints still say to register the type. The test fails when a new
-      text surface names `register_schema` without the note.
-    - A sentinel string planted in a rejected payload appears in no request log, error
+      text surface among those listed names `register_schema` without the note; a scan
+      over every shipped text surface is a follow-up.
+    - (Slice 1a, for the `data_class_refused` refusal; other refusals by their slices.) A
+      sentinel string planted in a rejected payload appears in no request log, error
       report, or audit event.
-    - A pre-auth rejection writes no audit event.
+    - (Slice 3.) A pre-auth rejection writes no audit event.
 13. **Effect classification.**
     - Every operation declares `x-neotoma-effect`, and each mapped tool equals its
       operation.
@@ -1398,8 +1489,9 @@ evals says which harness extension each needs and which slice delivers it.
     - `target_instance` passes `.strict()` schemas and is never stored.
 14. **Envelope parity.** REST and MCP envelopes, status codes, `retryable`, and JSON-RPC
     codes match, and the CLI's exit code and JSON output carry the same code and
-    `details`. This includes the `data_class_refused` entries against the existing
-    `StorePolicyDenial` schema. From slice 1b it also includes
+    `details`. Slice 1a asserts the exact additions listed under "Refusal and recovery"
+    on `StorePolicyDenial`: the `data_class_refused` enum value, the optional fields,
+    `policy_id`, the relationship entry, and the `sink` and index rules. From slice 1b it also includes
     `ERR_CLASS_SETTINGS_ADMIN_ONLY` with its `gate_reason`.
 
 **Identity and settings states**
@@ -1408,12 +1500,16 @@ evals says which harness extension each needs and which slice delivers it.
     unasserted write under `required`, and an asserted read are all refused. Unasserted
     reads follow `read_assertion`, with `instance_id: null`.
 16. **Settings record states.**
-    - **Slice 1a:** unreadable or malformed: all entity writes are refused with
-      `ERR_TARGET_INSTANCE_UNAVAILABLE`, retryable. Missing after its ledger entry:
-      all entity writes are refused with `ERR_ADMISSION_SETTINGS_MISSING`. Unresolved
+     - **Slice 1a:** unreadable or malformed: all entity writes are refused with
+      `ERR_STORE_POLICY_UNAVAILABLE`, retryable. Missing after its ledger marker was
+      written: all entity writes are refused with `ERR_ADMISSION_SETTINGS_MISSING`.
+      Migration failed or skipped (no marker): all entity writes are refused with the
+      same code and a `details` discriminator `migration_incomplete`, until the migration
+      completes; planted red, with the refusal removed those writes land. Unresolved
       selector or failed catalog load: `ERR_ADMISSION_CLASSES_UNRESOLVED`.
     - **Slice 2:** missing on a database whose identity was minted after the feature gets
-      `ERR_ADMISSION_SETTINGS_MISSING`.
+      `ERR_ADMISSION_SETTINGS_MISSING` (tested when slice 2 lands, whichever of slices 1b
+      and 2 is later, for the gate-states row too).
     - **Slices 2 and 4:** ordinary reads refused and discovery still working in the
       unreadable state, and a pre-feature upgrade getting `optional` with unasserted
       writes working.
@@ -1535,9 +1631,11 @@ evals says which harness extension each needs and which slice delivers it.
       - (Slice 1b.) After `ERR_CLASS_SETTINGS_ADMIN_ONLY`, including through the unknown-fields and
         missing-schema repair paths: no retry of the schema or bundle call, no attempt
         through another tool, and the reply tells the user the operator decides.
-      - (Slice 1a.) After `ERR_ADMISSION_CLASSES_UNRESOLVED`,
-        `ERR_ADMISSION_SETTINGS_MISSING` and `UNAVAILABLE`: the agent stops, names the refusing instance and why, and does
-        not retry or reroute the data.
+      - (Slice 1a.) After `ERR_ADMISSION_CLASSES_UNRESOLVED` and
+        `ERR_ADMISSION_SETTINGS_MISSING`: the agent stops, names the connector it used and
+        why, and does not retry or reroute the data. After `ERR_STORE_POLICY_UNAVAILABLE`:
+        one unchanged retry later, then it tells the user. Naming the instance title is
+        slice 2.
       - (Slice 6, needs routing rules and the registry.) When nothing names a target: the
         agent asks the user.
     - **30b, S (two instances).** After a data-class refusal, the refused records land on
@@ -1585,24 +1683,28 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    `neotoma instance classes set|confirm|cancel` through the #2565 slice N1 governance
    guard and operator channel (this slice depends on N1 and builds no second guard, and
    does not merge until N1's channel has the properties under "The operator channel"),
-   the record and its states and migration (ledger-keyed missing state, writes column),
+   the record and its states (writes column), the ledger marker and the migration with
+   its fail-closed startup (no class default, no mode fields),
    and **data-class admission (layer 0)**: manifest resolution with set-time snapshots
    for stored and environment selectors, the fail-closed rules, the loader's distinct
-   load-failed state, canonical and alias-resolved classification, the pinned sink list
+   load-failed state, canonical and alias-resolved classification, the swept sink list
    and its new call sites, the `data_class_refused` reason code on
-   `ERR_STORE_POLICY_DENIED` (specified against the real `StorePolicyDenial` schema),
-   the `details` echo bound, `ERR_ADMISSION_CLASSES_UNRESOLVED`,
-   `ERR_ADMISSION_SETTINGS_MISSING`, `ERR_TARGET_INSTANCE_UNAVAILABLE` for an unreadable
-   record, `class:bookkeeping`, `neotoma instance classes`, the startup line and
+   `ERR_STORE_POLICY_DENIED`,
+   the exact `StorePolicyDenial` additions and echo bound listed under "Refusal and
+   recovery", `ERR_ADMISSION_CLASSES_UNRESOLVED`, `ERR_ADMISSION_SETTINGS_MISSING`, and the
+   existing `ERR_STORE_POLICY_UNAVAILABLE` for an unreadable record, `class:bookkeeping`, `neotoma instance classes`, the startup line and
    Inspector banner for stale selectors, the accept-list caution, `describe_instance_policy`
-   visibility, tests 1 (without the check-order bullet), 2 (pinned list), 3 (without the
-   hint bullet), 4, 5 (`instance classes` rows only), and the 1a parts of tests 12, 14 and
+   visibility, tests 1 (without the check-order bullet), 2 (source scan), 3 (without the
+   hint bullet), 4 (without the operator-channel variant), 5 (the bullets listed in test 5
+   as slice 1a's, without Conjunction and Migration), and the 1a parts of tests 12, 14 and
    16, and the F fixtures for the 1a cases of eval 30a with harness extensions E1 to E3.
-   Errors and headers are declared in `openapi.yaml` and `errors.md` first. `neotoma instance classes set` prints a caution when it applies a refuse-list: "Accept-lists
-   are recommended on this Neotoma. A refuse-list does not stop an agent adding a type no
-   list names." Starting with `NEOTOMA_REFUSED_CLASSES` set logs the same line. Retirement:
-   the slice 1b increment removes the caution, because the admin-only control then closes
-   that route. Slice 1a's test 5 asserts the caution prints for `set` and for the
+   Errors are declared in `openapi.yaml` and `errors.md` first. `neotoma instance classes set` prints a caution when it applies a refuse-list to an
+   instance with no accept-list: "Accept-lists are recommended on this Neotoma. A
+   refuse-list does not stop an agent adding a type no list names." Starting with
+   `NEOTOMA_REFUSED_CLASSES` set and no accept-list logs the same line. Retirement: the
+   slice 1b increment replaces it with a shorter caution for refuse-list instances not on
+   `guided`, because the admin-only control closes the registration route but not
+   auto-create under `evolving`. Slice 1a's test 5 asserts the caution prints for `set` and for the
    environment variable, and slice 1b's tests assert it is gone.
 1b. **Decision 7 increment.** Does not start until the follow-up design under "Schema and
    bundle changes" names the choke point and classifies every caller. Delivers the guard
@@ -1617,17 +1719,46 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    "Hosted instances before the hosted admin route"). That route also delivers test 5a's
    hosted operator-success case.
 **Slice 1a stands alone.** With only slice 1a code, these are proved: a write of a
-refused class, or outside an accept-list, is refused with zero rows (tests 1 and 2 over
-the pinned sinks, including raw storage and the evaluator's inbound-sync case); canonical
+refused class, or outside an accept-list, is refused with zero rows over the swept sinks
+(tests 1 and 2, including raw storage and the evaluator's inbound-sync case); canonical
 and alias-resolved classification, auto-create ordering and bundle resolution (tests 2
 to 4, including environment selectors); class changes need the operator grant, for
-`instance classes` only (test 5); the unreadable, ledger-missing and unresolved states
-refuse entity writes (test 16, slice 1a part); the `details` echo bound; the caution
-prints; and the data-class and refuse-everything evals (30a, slice 1a bullets). It does
-not prove, and does not claim: the target check or its order against the class check
-(slice 4), the derived sink list (slice 3), identity-keyed missing state, `/session`
-visibility and the read columns (slices 2 and 4), mode and identity grants (slices 4 and
-2), hook denies (slice 5), the peer path (slice 7), or any decision 7 control (slice 1b).
+`instance classes set|confirm|cancel` only, and the other test 5 bullets listed as 1a's;
+the unreadable, marker-missing, migration-incomplete and unresolved states refuse entity
+writes (test 16, slice 1a part); the exact `StorePolicyDenial` additions and the echo
+bound (test 14); the three recovery sentences in the `data_class_refused` hint (test 12);
+the caution; and the data-class and refuse-everything evals (30a, slice 1a bullets). It
+does not prove, and does not claim: the #2565 Conjunction and Migration bullets (the
+#2565 slices that deliver predicate rules and the policy-list migration), the target check
+or its order against the class check (slice 4), the derived sink list (slice 3),
+identity-keyed missing state, `/session` visibility and the read columns (slices 2 and
+4), mode and identity grants (slices 4 and 2), pre-auth behaviour (slice 3), hook denies
+(slice 5), the peer path (slice 7), or any decision 7 control (slice 1b).
+
+**Test-to-slice map.**
+
+| Test | Owning slice |
+|---|---|
+| 1 | 1a (check-order bullet: 4) |
+| 2 | 1a (source scan); 3 (derived list); 7 (peer path) |
+| 3 | 1a (hint bullet: 1b) |
+| 4 | 1a (operator-channel variant: 1b) |
+| 5 | 1a (listed bullets); #2565 slices (Conjunction, Migration); 4 (mode changes) |
+| 5a | 1b (hook-deny: 5; order: 4) |
+| 6, 9 (i to iii) | 3 |
+| 7 | 2 |
+| 8, 10, 11 | 4 (9 (iv) and 13: 3) |
+| 12 | 1a (data-class hints, sentinel); 1b (agent text); 3 (pre-auth); other codes by their slices |
+| 13 | 3 |
+| 14 | 1a (data-class entries); 1b (`ERR_CLASS_SETTINGS_ADMIN_ONLY`); others by their slices |
+| 15, 17, 18, 19, 21 | 2 |
+| 16 | 1a, 1b, 2 and 4 as tagged in the test |
+| 20 | 7 (evaluator case: 1a) |
+| 22, 23 | 3 |
+| 24, 25 | 5 |
+| 26 | 5 (naming); 6 (header) |
+| 27 to 29, 31 to 33 | 6 (28 (ii) also needs 5) |
+| 30 | 1a, 1b and 6 as tagged in the eval |
 
 2. The identity record, commitment, identity states, identity commands and their operator
    grant (test 18), the identity-minted half of the missing settings state (test 16),
@@ -1636,7 +1767,7 @@ visibility and the read columns (slices 2 and 4), mode and identity grants (slic
    flag, the acknowledgement, and the server card.
 3. Connection-phase bindings, proxy and CLI preflight and the echo rule, effect
    classification via `x-neotoma-effect`, and the structural tests, including the derived
-   layer-0 sink list that replaces slice 1a's pinned list.
+   layer-0 sink list that replaces slice 1a's swept list.
 4. Request-phase per-write targets, the modes, and admin-gated mode changes with their
    grant tests (the mode rows of test 5), the check-order assertions against the class
    check (test 1, test 5a order), and the `optional` default for pre-feature upgrades.
@@ -1668,12 +1799,12 @@ until a slice or the follow-up design takes it.
 - **If N1 is late.** What ships without N1's operator channel (for example
   environment-only layer 0, with the decision 7 operations refused to everyone as on
   hosted).
-- **Name the hosted signal.** The configuration the server reads to decide "hosted", so
-  the hosted row of test 5a is testable.
-- **Inspector schema form.** Whether it obtains a grant or is deliberately closed on a
-  class-gated instance, and its row in test 5a.
-- **Grant delivery to the CLI.** How a grant issued on the human-only surface reaches the
-  CLI process, as a named N1 deliverable.
+- **Name the hosted signal.** The repo already has a hosted-mode switch. The
+  guard-placement design, which gates slice 1b, decides whether it is the signal the
+  hosted row of test 5a reads.
+- **Inspector schema form.** Decided by the guard-placement design (slice 1b needs it):
+  whether it obtains a grant or is deliberately closed on a class-gated instance, and its
+  row in test 5a.
 - **More text surfaces.** The `openapi.yaml` descriptions and the OpenClaw plugin
   manifest that recommend `register_schema`, and a test 12 scan over every shipped text
   surface.
@@ -1718,8 +1849,8 @@ until a slice or the follow-up design takes it.
    revision 5 as open question 1, because it changes the permission semantics of
    existing agent-callable tools. Decided by the operator on 2026-11-14 as option A:
    on an instance with data-class settings, explicit registration (`register_schema`)
-   and the mutating `manage_bundles` actions are admin-only, enforced by the #2565 N1
-   governance guard. Store auto-create under `evolving` still adds types (subject to
+   and the mutating `manage_bundles` actions are admin-only. The operator channel is #2565 N1's, and the
+   guard that enforces the ruling is placed by the follow-up design. Store auto-create under `evolving` still adds types (subject to
    layer 0) and is not explicit registration.
    The options not taken were leaving the tools open while layer 0 holds new types
    until the admin classifies them, and keeping the gap as a stated residual.
