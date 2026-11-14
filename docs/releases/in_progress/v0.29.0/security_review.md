@@ -6,7 +6,7 @@ Manual review lane for `/release` Step 3.5, completed by the release-prep agent 
 
 - Base ref: `v0.28.0`
 - Code head: `origin/main` at `1f95f4d8566383d00034f98a501fe32cc30736d7` (20 non-merge commits plus the merge of the v0.28.0 release branch; 132 files).
-- Release-branch commits on top of that head change only the version (`package.json`, `package-lock.json`), release docs under `docs/releases/in_progress/v0.29.0/`, the version line in `README.md` and `docs/known_limitations.md` with the matching README claim pattern in `tests/unit/llms_txt_claims.test.ts`, the `SECURITY.md` supported-versions table, `docs/operations/configuration.md`, `docs/subsystems/guest_access_policy.md` and the version headings in `tests/contract/legacy_payloads/CHANGES.md`. No product code, route, workflow or dependency changes on the release branch.
+- Release-branch commits on top of that head change only the version (`package.json`, `package-lock.json`), release docs under `docs/releases/in_progress/v0.29.0/`, the version line in `README.md` and `docs/known_limitations.md` with the matching README claim pattern in `tests/unit/llms_txt_claims.test.ts`, the `SECURITY.md` supported-versions table, `docs/operations/configuration.md`, `docs/subsystems/guest_access_policy.md` and the version headings in `tests/contract/legacy_payloads/CHANGES.md`. No product code, route, workflow or dependency changes on the release branch; `classify_diff.js --base 1f95f4d85 --head HEAD` reports `sensitive=false` for those commits.
 
 ## Lane results
 
