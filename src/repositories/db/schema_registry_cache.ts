@@ -41,8 +41,9 @@
 import { getDb } from "./connection.js";
 import type { DbDatabase } from "./driver.js";
 import { deferUntilCurrentTransactionSettles } from "./driver.js";
+import { SCHEMA_REGISTRY_CHANGE_COUNTER_TABLE } from "../sqlite/internal_tables.js";
 
-export const SCHEMA_REGISTRY_CHANGE_COUNTER_TABLE = "schema_registry_change_counter";
+export { SCHEMA_REGISTRY_CHANGE_COUNTER_TABLE };
 
 /**
  * Default for how often a cached handle re-reads the change counter, and so

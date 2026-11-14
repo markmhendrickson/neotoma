@@ -883,6 +883,10 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await db
       .prepare("INSERT OR IGNORE INTO schema_registry_change_counter (id, version) VALUES (1, 0)")
       .run();
+    // IF NOT EXISTS never rewrites an existing trigger. A change to the body
+    // below needs a DROP TRIGGER IF EXISTS first, or a new trigger name.
+    // `neotoma storage merge-db` never copies the counter table
+    // (MERGE_DB_SKIPPED_INTERNAL_TABLES); these triggers keep the target's own.
     for (const [name, event] of [
       ["schema_registry_change_after_insert", "INSERT"],
       ["schema_registry_change_after_update", "UPDATE"],

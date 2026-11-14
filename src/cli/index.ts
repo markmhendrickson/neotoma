@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import * as readline from "node:readline";
 import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import { MERGE_DB_SKIPPED_INTERNAL_TABLES } from "../repositories/sqlite/internal_tables.js";
 
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
@@ -3243,6 +3244,9 @@ async function mergeSqliteDatabase(
     for (const table of targetTables) {
       const tableName = table.name;
       if (!sourceTableSet.has(tableName)) continue;
+      // Per-database bookkeeping: the target keeps its own (its triggers bump
+      // the schema_registry change counter as merged rows land).
+      if (MERGE_DB_SKIPPED_INTERNAL_TABLES.has(tableName)) continue;
 
       const targetCols = (await targetDb
         .prepare(`PRAGMA table_info(${quoteSqlIdent(tableName)})`)
