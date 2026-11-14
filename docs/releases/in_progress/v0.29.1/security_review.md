@@ -42,7 +42,7 @@ Change-by-change notes against the classifier concerns:
 
 - `src/actions.ts` (#2842): one helper, `entityIsMergedAway`, filtered by entity id and the policy-resolved owner, and one merge check in `resolveGuestEntityReadAccess`. No new route registration, no new `remoteAddress`, `X-Forwarded-For`, `Forwarded` or `Host` read, no new `LOCAL_DEV_USER_ID` reference, and no change to token validation or AAuth admission.
 - `openapi.yaml` (#2841): description text on `POST /issues/submit` and its `400` response. No `security:` block changed; the manifest is unchanged.
-- #2840 changes only which credentials the CLI attaches to its own outbound requests; server-side auth is unchanged. Each CLI request is decided by one function, `decideCliCredentials`, covered by a decision-table test over every input.
+- #2840 changes which credentials the CLI attaches to its own outbound requests. It also sets the local API child the CLI starts to listen on 127.0.0.1 (`NEOTOMA_HTTP_HOST`) and to check signatures against `127.0.0.1:<port>` (`NEOTOMA_AAUTH_AUTHORITY`); `tests/cli/cli_aauth_local_transport.test.ts` covers it. The classifier returned `sensitive=false` for #2840 because its files (`src/shared/api_client.ts`, `src/shared/local_transport.ts`, `src/cli/index.ts`, `src/services/issues/neotoma_client.ts`) are outside every path rule, so #2840 was reviewed by hand. Each CLI request is decided by one function, `decideCliCredentials`, covered by a decision-table test over every input.
 - #2838 keys every cached schema lookup by scope and, for a user-scoped lookup, by user id; a database without the change counter is read without the cache.
 - #2839 keeps its snapshot records in process memory, keyed by user and entity; any check that fails takes the full rebuild.
 
