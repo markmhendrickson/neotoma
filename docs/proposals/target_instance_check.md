@@ -11,6 +11,28 @@ estimated_effort: "Medium to large: admin-set admission settings with data class
 
 Design only. No implementation in this change. Design issue: #2589.
 
+**Revision 6 answers the round-five review findings on decision 7.** The ruling is
+unchanged: on an instance with data-class settings, `register_schema` and the mutating
+`manage_bundles` actions are admin-only. This revision specifies how it binds:
+
+- **One guard, every route** ("Schema and bundle changes", test 5a): a single guard
+  called from the shared registration and bundle-activation functions, a gated-operation
+  list derived from annotations plus an effect-based sweep, and a refusal and an
+  operator-success case per surface.
+- **The operator channel is defined by the properties it needs** ("The operator
+  channel"): a per-operation grant that an ordinary CLI token, an agent shell and an
+  in-process CLI call do not hold. The remaining shell-agent exposure is a stated
+  residual.
+- **Unreadable, missing, unresolved and pre-migration states are gated** ("Gate
+  states").
+- **Environment selectors get the snapshot and unresolved-selector rules**
+  ("Environment selectors").
+- **Hosted interim behaviour is stated** ("Hosted instances before the hosted admin
+  route").
+- **Agent-facing text is listed and made conditional** ("Agent-facing text"), and
+  `update_schema_incremental` and `register_relationship_type` are declared out of scope.
+- **Evals state the harness extension and slice each needs** ("Eval feasibility").
+
 **Revision 5 answers the round-four review findings.** It keeps the revision 4 shape and
 changes these points:
 
@@ -171,6 +193,11 @@ default has no lists, and a refuse-list under `evolving` misses new types.
     classified.
   - A routing rule for message turns that carry finance content, where #2565 rules are
     available.
+  - Cost: a refuse-list makes `register_schema` and the mutating `manage_bundles`
+    actions operator-only on that instance (decision 7), so agents there can no longer
+    add record types or change bundles. On hosted instances, apply class settings only
+    once the hosted admin route exists (see "Hosted instances before the hosted admin
+    route").
 - **Pin both with the tighten-only environment variables.** These survive a database
   restore to an older state.
 
@@ -192,8 +219,13 @@ remaining exposure is:
 - An agent that does not recognise data as confidential.
 - An agent that copies the served id into a per-write target, against the rules.
 - A user who confirms the wrong Neotoma at enrollment.
+- An agent with a local shell on the instance host that can also read the instance's
+  database or configuration files, or run the server process with its own environment.
+  On a self-hosted instance the OS user owns those; decision 7 governs agent tools and
+  the operator channel, not host access. What an agent shell lacks is the per-operation
+  operator grant described under "The operator channel", not filesystem access.
 - An agent with computer-use or browser control, or with UI scripting reached through a
-  shell, that answers an enrollment confirmation surface. Requiring the typed short id
+  shell, that answers an enrollment confirmation surface or the operator grant surface. Requiring the typed short id
   or alias raises the bar but does not close it. That is outside this accident guard.
 
 **Non-goals:**
@@ -374,8 +406,8 @@ split, or a failed catalog load.
   loosening for that selector and shows it in `/session` and `describe_instance_policy`.
   It takes effect only by the admin's explicit confirm, after the cooling delay, like any
   other loosening. Until then the tighter set applies.
-- **A selector that no longer resolves refuses every write.** If a stored `bundle:`
-  selector names a bundle that is not in the loaded catalog (renamed, split or dropped in
+- **A selector that no longer resolves refuses every write.** If a stored or environment
+  `bundle:` selector names a bundle that is not in the loaded catalog (renamed, split or dropped in
   a release), or resolves to zero types, the instance refuses every write except to
   governance types, with `ERR_ADMISSION_CLASSES_UNRESOLVED`. This is the same outcome as
   an unreadable settings record. Discovery calls still work, and `describe_instance_policy`
@@ -383,7 +415,7 @@ split, or a failed catalog load.
   tightening or a loosening under the usual rules.
 - **A catalog that failed to load refuses every write.** The loader returns an empty
   catalog when a manifest or `requires_bundles` error occurs. Layer 0 treats a failed load
-  on an instance with any `bundle:` selector as unresolved, with the same code, and never
+  on an instance with any `bundle:` selector, stored or environment, as unresolved, with the same code, and never
   as an empty catalog.
 - **An accept-list that resolves to zero types refuses every write** except to governance
   types. Layer 0 does not reuse the instance-policy evaluator's rule that an empty
@@ -394,6 +426,38 @@ split, or a failed catalog load.
   any catalog rename or split name the affected selectors.
 - **At set time,** a selector naming an unknown bundle, a bundle with no types, or a
   governance type is refused.
+
+#### Environment selectors
+
+`bundle:` selectors in `NEOTOMA_REFUSED_CLASSES` and `NEOTOMA_ACCEPTED_CLASSES` get the
+same rules as stored ones. The environment has no stored snapshot of its own, so the
+server keeps one in the settings record:
+
+- **Snapshot.** At startup, each environment `bundle:` selector's resolved type set and
+  the catalog version are recorded in the settings record, keyed by variable and
+  selector. A new selector is recorded the first time it is seen. The record is written
+  by the server itself, never through a tool.
+- **Same set arithmetic.** The effective refuse set from the refused variable is the
+  snapshot **union** the current manifest resolution. The accepted variable's set is the
+  snapshot **intersected with** the current resolution. An older snapshot restored from a
+  backup can only be equal or tighter than the current resolution, by the same rule as
+  stored selectors.
+- **A shrink is a pending loosening.** A type moved out of a bundle named in the refused
+  variable stays refused by the snapshot, and the loosening waits for admin confirm and
+  the cooling delay, like a stored one. `describe_instance_policy` shows it.
+- **Unresolved refuses.** An environment `bundle:` selector that names a bundle missing
+  from the loaded catalog (renamed, split or dropped), that resolves to zero types, or
+  that meets a failed catalog load, refuses every non-governance write with
+  `ERR_ADMISSION_CLASSES_UNRESOLVED`, for either variable. A refused variable that no
+  longer resolves therefore cannot silently empty the refuse set.
+- **Removing a selector from the environment** is a deployment-configuration change by
+  the operator. Its snapshot is dropped, the drop is audited, and
+  `describe_instance_policy` shows it.
+- **Visibility.** The server logs a startup line naming each stale or pending
+  environment selector, and the Inspector shows a banner for it, so a release that
+  renames a bundle is seen before writes start failing.
+- **Preflight.** `neotoma instance classes check` reports environment selectors as well
+  as stored ones.
 
 #### Which type is classified
 
@@ -410,8 +474,8 @@ split, or a failed catalog load.
 #### What is classified
 
 The sink list is derived, not named by hand: every operation declared
-`x-neotoma-effect: write` (see "Effect classification") that creates an entity, re-types
-an existing one, or writes a relationship, is a layer-0 sink. The structural coverage
+`x-neotoma-effect: write` (see "Effect classification") that persists an observation or
+relationship, or alters an entity's type, is a layer-0 sink. The structural coverage
 test enumerates these operations from the OpenAPI document and fails when one does not
 reach layer 0, so a later write path cannot skip it. Today that list includes:
 
@@ -445,7 +509,10 @@ on those entities will then be refused. Existing rows are never deleted.
   behind.
 - It is a whole-request reject with zero rows in every table, schema rows included.
   Every refused entity and every refused relationship is listed.
-- The check is in the instance-policy evaluator path and covers every sink above.
+- The check is in the instance-policy evaluator path and covers every sink above. It
+  ignores the evaluator's `advisory` and `enforced` posture and always enforces, and its
+  unavailable states use the codes in the settings-state table, not the evaluator's own
+  unavailable split.
 - If the settings record cannot be read, the check fails closed (see "Settings record
   states").
 
@@ -540,42 +607,174 @@ Decided by the operator on 2026-11-14 (decision 7): **on an instance with data-c
 settings, only the admin can register new record types or change bundles through
 tools.**
 
-- **Which instances.** Any instance whose effective settings include an
-  `accepted_classes` list, a non-empty `refused_classes` list, or either class
-  environment variable. Instances without data-class settings are unchanged by this
-  rule.
-- **Which operations.** `register_schema`, and any other tool or route that creates a
-  new entity type schema; and the mutating `manage_bundles` actions: `install`,
-  `enable`, `disable`, and any mutating action added later. Read-only `manage_bundles`
-  actions and schema reads stay open to agents. Writes of existing types, and
-  auto-creation under `guided` of types from bundles the admin enabled, are unchanged.
-- **Who enforces it.** The #2565 slice N1 governance guard, the same guard that gates
-  the admission-settings record. It is called at the entry of the `register_schema`
-  handler, and from the bundle activation admin hook (`assertAdminGateHook` in
-  `src/services/bundles/activation.ts`, a no-op today), before anything changes. Only
-  the operator channel passes: the local CLI on the instance host, or the hosted admin
-  route. MCP calls, agent-scoped tokens and member credentials are refused, whoever the
-  member is. The guard reads the effective class settings at call time, so applying a
-  class setting gates these operations at once, and a gated call is audited.
-- **Operator commands.** The existing `neotoma schemas register` and
-  `neotoma bundles install|enable|disable` commands, run through the operator channel.
-  `neotoma instance classes set` says, when it first applies a class setting, that schema registration and bundle
-  changes are now admin-only on this instance.
-- **How a refusal reads to the agent.** `ERR_CLASS_SETTINGS_ADMIN_ONLY`, HTTP 403, not
-  retryable. `details` names the operation and action (for example `register_schema` or
-  `manage_bundles` `enable`) and, for a schema, the requested type name. Nothing
-  changes. Hint: "This Neotoma has data-class settings, so only its operator can add
-  record types or change bundles. Nothing was changed. Do not retry. Tell the user; its
-  operator decides which types this Neotoma holds." The hint carries no served id and
-  offers no command. The agent tells the user, for example: "Finance graph only lets its
-  operator add new record types, so I could not add `<type>` there."
-- **Auto-create hints.** The `guided` and `locked` refusal hints no longer tell the agent
-  to register the type, and name the operator as the actor: "This Neotoma does not
-  auto-create `<type>`. Tell the user; its operator decides which types it holds."
-- **Effect on layer 0.** Selectors already resolve from manifests plus the set-time
-  snapshot, so bundle state never changed what layer 0 refuses or accepts. This rule
-  closes the remaining route: on a refuse-list instance, an agent can no longer add a
-  type that no selector names by registering it.
+**Which instances (defined once).** An instance is *class-gated* when any of these holds:
+
+- its stored settings include an `accepted_classes` list, a non-empty `refused_classes`
+  list, or `raw_storage: refuse`;
+- either class environment variable is set and non-empty;
+- the settings state is anything other than "readable with none of the above" (see
+  "Gate states").
+
+Instances that are not class-gated are unchanged by this rule. "Data-class settings"
+everywhere in this document means this predicate.
+
+**Which operations.** `register_schema`, and any other tool or route that creates a new
+entity type schema; and the mutating `manage_bundles` actions: `install`, `enable`,
+`disable`, and any mutating action added later. Read-only `manage_bundles` actions and
+schema reads stay open to agents. Writes of existing types, and auto-creation under
+`guided` of types from bundles the admin enabled (a system action after admission, not an
+agent registration), are unchanged.
+
+**Out of scope, on purpose.**
+
+- `update_schema_incremental` edits fields and identity rules of an existing type, and
+  rejects a type that has no schema. It creates no type, and layer 0 classifies by type
+  name and bundle membership, which it does not change. It stays open.
+- `register_relationship_type` registers a relationship type. Layer 0 classifies entity
+  types, and admits a relationship only when both endpoint types are admitted, so a
+  relationship type is not a class dimension. It stays open.
+- Test 5a pins both. If a later release lets either one create an entity type, the sweep
+  in test 5a fails and the operation joins the gated list.
+- Residual: an agent on a class-gated instance can still change field or identity-rule
+  definitions of existing types. That changes data shape, not which classes the instance
+  holds.
+
+**One guard, called from the shared functions.** There is one guard function. It is
+called from the shared service functions that perform the change, not from individual
+handlers:
+
+- the schema registration function that every schema-creating entry point reaches: the
+  MCP `register_schema` handler, the REST `/register_schema` route, and the CLI
+  `neotoma schemas register` (which reaches the REST route);
+- the bundle `install`, `enable` and `disable` functions in
+  `src/services/bundles/activation.ts`, where `assertAdminGateHook` is a no-op today,
+  reached by the MCP `manage_bundles` tool and by the in-process `neotoma bundles`
+  commands.
+
+The guard takes a caller context (channel and presented credential). **A call with no
+caller context is treated as an agent call.** The only context that bypasses the guard
+is a system context for startup seeding of code-defined schemas, which no request path
+can construct; test 5a lists its callers. The guard runs in the request phase after the
+per-write target check and before the mode check, in the slot layer 0 uses for entities.
+These operations carry no entities, so no request meets both the guard and
+`ERR_STORE_POLICY_DENIED`.
+
+**Derived list, not a hand-named one.** The gated operations are derived the way layer 0
+sinks are:
+
+- an `x-neotoma-admin-gated: schema_create | bundle_mutation` extension on OpenAPI
+  operations, next to `x-neotoma-effect`;
+- a per-action `mutating` declaration on each `manage_bundles` action, where an
+  undeclared action fails the build;
+- the same annotation on the CLI command registry.
+
+Test 5a enumerates all three and also runs an effect-based sweep that does not depend on
+annotations.
+
+**The operator channel.** #2565 slice N1 owns the mechanism. This design needs these
+properties from it, and slice 1 does not merge until N1's channel has them:
+
+1. **A distinct credential.** An ordinary CLI token, an agent-scoped token, a member
+   credential and an admin-scoped session token do not pass. Only an operator grant
+   passes.
+2. **Per operation.** The grant is bound to the instance, the operation, the action and
+   the requested type name. It is single use and short-lived.
+3. **Obtained on a human-only surface.** It is issued through the same kind of
+   confirmation surface as registry enrollment (the Inspector page with a signed-in
+   admin session and a typed short id, or the hosted admin route). It is never read from
+   terminal input, never stored in the CLI's ordinary token location or the process
+   environment, and never printed for an agent to copy.
+4. **No trust by locality.** The in-process `neotoma bundles` commands and the CLI's
+   offline paths present the grant too. A call being local does not make it the
+   operator's.
+5. **Hook denies as a second layer.** The Claude Code hooks deny agent invocation of
+   `neotoma schemas register`, `neotoma bundles install|enable|disable`,
+   `neotoma instance classes set|confirm|cancel`, and the identity commands, directly
+   and through the wrappers test 24 lists. Hooks exist only in some clients, so the
+   grant is the control and the hooks are a layer on top.
+
+What an agent with a local shell lacks, then, is the grant. An agent that can answer the
+human-only surface, or that reads the database directly, is outside this guard (see
+"Residual risks and non-goals").
+
+**Operator commands.** The existing `neotoma schemas register` and
+`neotoma bundles install|enable|disable` commands, run with the operator grant.
+`neotoma instance classes set` says, when it first applies a class setting, that schema
+registration and bundle changes are now admin-only on this instance.
+
+**Gate states.** The guard fails closed. It treats these as class-gated, so both
+operations stay admin-only:
+
+| State | Class-gated |
+|---|---|
+| Readable, with class settings | Yes |
+| Readable, with none | No |
+| Unreadable or malformed | Yes |
+| Missing after its ledgered creation, or missing on a database whose identity was minted after this feature | Yes |
+| Not yet migrated (the slice 1 migration has not completed) | Yes. The server does not serve requests before the migration completes, so this holds only if the migration fails. |
+| Stored `bundle:` selector unresolved | Yes |
+| Either class environment variable set, whatever the stored record's state | Yes. The variables are read from the process environment, not the database. |
+| Environment `bundle:` selector unresolved | Yes |
+| Bundle catalog failed to load, on an instance with any `bundle:` selector (stored or environment) | Yes |
+
+None of these states reads as "no class settings". The loader change in slice 1 exposes a
+distinct load-failed state, because today a manifest error is swallowed and the process
+caches an empty registry, which cannot be told apart from "no bundles".
+
+**How a refusal reads to the agent.** `ERR_CLASS_SETTINGS_ADMIN_ONLY`, HTTP 403, not
+retryable (the same request unchanged). `details` names the operation and action (for
+example `register_schema` or `manage_bundles` `enable`), the requested type name for a
+schema, and a `gate_reason` from `class_settings`, `settings_unreadable`,
+`settings_missing`, `selector_unresolved` or `catalog_load_failed`. Nothing changes, and
+the call is audited. The shape is identical on REST, MCP and the CLI (test 14). Hint:
+"This Neotoma has data-class settings, so only its operator can add record types or
+change bundles. Nothing was changed. Do not retry. Tell the user; its operator decides
+which types this Neotoma holds." The hint carries no served id and offers no command.
+The agent tells the user, for example: "Finance graph only lets its operator add new
+record types, so I could not add `<type>` there."
+
+**Agent-facing text.** Every text surface that sends an agent to `register_schema` or
+`manage_bundles` changes in slice 1, not slice 5:
+
+- the store responses' unknown-fields hint and missing-schema hint, the `guided` and
+  `locked` auto-create refusal hints, and the schema responses' no-schema hints;
+- the repair-ordering and schema-evolution paragraphs of
+  `docs/developer/mcp/instructions.md`;
+- the `register_schema` and `manage_bundles` entries in `tool_descriptions.yaml`;
+- the CLI instruction mirror, `docs/developer/cli_agent_instructions.md`.
+
+The hints come from one function that knows whether the instance is class-gated:
+
+- **Class-gated:** "This Neotoma does not auto-create `<type>`. Tell the user; its
+  operator decides which types it holds." The unknown-fields and missing-schema hints
+  say the same and never tell the agent to call `register_schema`. They also tell the
+  agent not to change a refused record's type to get it admitted.
+- **Not class-gated:** the hints keep telling the agent to register the type, as today.
+
+The static text (tool descriptions, instruction docs, CLI mirror) says: on an instance
+with data-class settings, `register_schema` and mutating `manage_bundles` are
+operator-only; if refused with `ERR_CLASS_SETTINGS_ADMIN_ONLY`, tell the user and stop.
+Test 12 covers every surface in both states.
+
+**Effect on layer 0.** Selectors already resolve from manifests plus the set-time
+snapshot, so bundle state never changed what layer 0 refuses or accepts. This rule
+closes the remaining route: on a refuse-list instance, an agent can no longer add a type
+that no selector names by registering it.
+
+**Hosted instances before the hosted admin route.** The hosted admin route is a named
+later increment of N1. Until it lands:
+
+- On a hosted instance that is class-gated, the decision 7 operations are **refused to
+  everyone**, never open. Layer 0 and the settings still apply.
+- The operator's path in the meantime is a deployment change: redeploy with the class
+  settings changed or removed for the maintenance window, which is a loosening through
+  the deployment channel, outside the cooling delay and audited by the deployment. That
+  is a real cost, stated here and not hidden.
+- The recommended configuration (above) is not recommended on hosted instances until the
+  route exists.
+- Test 5a's hosted row covers this interim: refused with `ERR_CLASS_SETTINGS_ADMIN_ONLY`
+  and no change. The operator-success case for hosted runs when the hosted admin route
+  lands, in the same slice as the route.
 
 ### (c) Declaring the intended instance (layers 1 and 2)
 
@@ -792,8 +991,13 @@ state:
 | Readable | Per settings | Per settings | Allowed | (none) |
 | Unreadable or malformed | **All refused**, asserted or not, because data classes cannot be evaluated | Refused | Allowed | `ERR_TARGET_INSTANCE_UNAVAILABLE`, retryable |
 | Missing after its ledgered creation, or missing on a database whose identity was minted after this feature | All refused | Refused | Allowed | `ERR_ADMISSION_SETTINGS_MISSING`, not retryable, operator hint |
-| Readable, but a stored `bundle:` selector does not resolve, or the bundle catalog failed to load | All refused except to governance types | Per settings | Allowed | `ERR_ADMISSION_CLASSES_UNRESOLVED`, not retryable, operator hint naming the stale selector |
-| Absent on a pre-feature database (no ledger entry) | Slice-4 migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
+| Readable, but a stored or environment `bundle:` selector does not resolve, or the bundle catalog failed to load | All refused except to governance types | Per settings | Allowed | `ERR_ADMISSION_CLASSES_UNRESOLVED`, not retryable, operator hint naming the stale selector |
+| Absent on a pre-feature database (no ledger entry) | The slice 1 migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
+
+Every non-readable or unresolved state above also keeps `register_schema` and the
+mutating `manage_bundles` actions admin-only (see "Gate states" under "Schema and bundle
+changes"). The state table governs entity writes; the gate table governs those
+operations, and neither reads an unusable state as "no class settings".
 
 **Mode and data-class changes** use the admin authority described in layer 0. The
 tighten-only environment variables `NEOTOMA_TARGET_ASSERTION`, `NEOTOMA_READ_ASSERTION`,
@@ -883,7 +1087,8 @@ user."
 
 Every proof test is shown red in its implementing PR, with the plumbing kept and only the
 check reverted. Each eval names its form: **S** is an eval-harness scenario, which
-two-instance flows need; **F** is an `agentic_eval` fixture.
+two-instance flows need; **F** is an `agentic_eval` fixture. "Eval feasibility" after the
+evals says which harness extension each needs and which slice delivers it.
 
 **Layer 0: data-class admission**
 
@@ -905,7 +1110,8 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
    - Covers `store` (REST and MCP), `correct`, interpretation-extracted entities from an
      uploaded file, relationship writes with a refused endpoint type, `split_entity` with
      a refused new type, `merge_entities`, `restore_entity` of a now-refused type, and raw
-     storage under `raw_storage: refuse`.
+     storage under `raw_storage: refuse`. Each runs through REST, MCP and the CLI,
+     including the CLI `--offline` write path against local records.
    - The structural test enumerates every `x-neotoma-effect: write` operation that
      creates, re-types or relates an entity, and fails when one does not reach layer 0.
    - **Canonical type:** mixed-case, padded and punctuation variants of a refused type,
@@ -920,8 +1126,9 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
    - A `note` carrying finance text is admitted on P. This pins the documented gap.
    - A new auto-created type is admitted on a refuse-list instance under `evolving`,
      refused under `guided`, and refused by an accept-list.
-   - The `guided` and `locked` refusal hints name the operator and do not mention
-     `register_schema`.
+   - On a class-gated instance, the `guided` and `locked` refusal hints name the operator
+     and do not mention `register_schema`. On an instance that is not class-gated they
+     still tell the agent to register the type.
 4. **Bundle resolution.**
    - A type added to a refused bundle's `provides_entity_types` is refused without
      editing the settings.
@@ -942,6 +1149,22 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
      return an empty catalog refuses every non-governance write with the same code.
    - **Planted red, empty accept set:** an accept-list whose selectors resolve to zero
      types refuses every non-governance write.
+   - **Environment selectors, both variables.** For `NEOTOMA_REFUSED_CLASSES` and
+     `NEOTOMA_ACCEPTED_CLASSES` each, with a `bundle:` selector:
+     - **Planted red, rename or drop:** the named bundle is absent from the new catalog.
+       Every non-governance write is refused with `ERR_ADMISSION_CLASSES_UNRESOLVED`.
+       With the rule reverted, the refused variable's set is empty and a formerly refused
+       type is admitted.
+     - **Planted red, shrink:** a type moved out of the named bundle stays refused (or
+       accepted) by the snapshot, and a pending loosening is recorded.
+     - **Planted red, load failure:** a manifest error refuses every non-governance
+       write with the same code.
+     - A selector resolving to zero types is unresolved. Removing a selector from the
+       environment drops its snapshot with an audit event. An older snapshot restored
+       from a backup is never looser than the current resolution.
+     - `neotoma instance classes check` and the startup log line name the stale
+       environment selector.
+   - The cooling delay uses an injectable clock, so no test waits 24 hours.
    - **Aliases:** a `bug_report` write that alias-resolves to `product_feedback` is
      refused if either type matches the refuse set, and admitted to an accept-list only
      if `product_feedback` is in the accept set.
@@ -968,17 +1191,65 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
    - **Migration:** an upgraded instance with instance-policy type lists gets #2565
      predicate rules for them and no layer-0 class lists.
    - Setting an accept-list without `class:bookkeeping` warns and asks for a confirm.
-   - **Planted red, schema and bundle authority (decision 7):** on instances with an
-     accept-list, a refuse-list, or only a class environment variable, `register_schema`
-     and `manage_bundles` `install`, `enable` and `disable` through MCP, an agent token,
-     and a member credential are refused with `ERR_CLASS_SETTINGS_ADMIN_ONLY`, with no
-     schema row, no bundle state change, and an audit event. The same operations through
-     the operator channel succeed. Read-only `manage_bundles` actions still work for
-     agents. On an instance without class settings, behaviour is unchanged. Applying a
-     first class setting gates the next call with no restart. With the guard call
-     removed, an agent-registered type on a refuse-list instance is admitted, and the
-     test goes red.
+   - Decision 7 (schema and bundle authority) is proved by test 5a.
    - Setting a refused class over existing data reports the count of affected entities.
+
+5a. **Schema and bundle authority (decision 7), every route.**
+   - **Derived list and structural test.** The gated operations are enumerated from
+     (i) OpenAPI operations annotated `x-neotoma-admin-gated`, (ii) the `manage_bundles`
+     action enum, where every action must declare `mutating` and an undeclared action
+     fails, and (iii) the CLI command registry annotation. The test fails when an
+     annotated operation does not reach the guard.
+   - **Effect-based sweep, independent of annotations.** On a class-gated instance, run
+     every `x-neotoma-effect: write` operation (test 2's enumeration), every CLI command
+     and every `manage_bundles` action with a minimal valid call, with a content checksum
+     of the schema registry and bundle state before and after. Any operation that changes
+     either without reaching the guard fails the test, so a new route cannot skip the
+     guard by being unannotated.
+   - **Per-surface matrix.** Each row has a refusal case and an operator-success case:
+
+     | Row | Refusal case | Operator-success case |
+     |---|---|---|
+     | MCP `register_schema` | agent token, member credential | operator grant |
+     | REST `/register_schema` | agent token, member credential | operator grant |
+     | CLI `neotoma schemas register` (via REST) | ordinary CLI token, and an admin-scoped session token without a grant | operator grant |
+     | MCP `manage_bundles` `install`, `enable`, `disable` (one row each) | agent token, member credential | operator grant |
+     | CLI `neotoma bundles install`, `enable`, `disable` (in process, one row each) | no grant | operator grant |
+     | Hosted instance, before the hosted admin route | everyone | none until the route lands, then operator success (see "Hosted instances before the hosted admin route") |
+
+     Every refusal is `ERR_CLASS_SETTINGS_ADMIN_ONLY` with the same status, `retryable`
+     and `details` shape, zero schema or bundle change, and an audit event. Read-only
+     `manage_bundles` actions and schema reads still work for agents. A call with no
+     caller context is refused.
+   - **Planted red per row.** For each row, remove the guard at that row's call site, or
+     give it an operator-looking context. The test asserts the set of rows that turn red
+     equals the expected set for that revert, so a test that pins only one surface is
+     caught. Removing the guard from the shared registration function turns every schema
+     row red, and from the bundle activation functions every bundle row red.
+   - **Operator channel.** A grant bound to a different operation, action, type name or
+     instance is refused. An expired grant and a reused grant are refused. A grant
+     produced through terminal input under a pseudo-terminal with scripted input does not
+     exist, so `neotoma schemas register` under it is refused. The hooks deny agent
+     invocation of the commands listed under "The operator channel", directly and through
+     the wrappers in test 24. With the grant check removed, an ordinary CLI token
+     registers a type and the test goes red.
+   - **Gate states.** For each row of the "Gate states" table, `register_schema` through
+     MCP and one bundle action are refused with `gate_reason` set. This includes an
+     unreadable record with a class environment variable set, an unresolved stored
+     selector, an unresolved environment selector, and a failed catalog load on an
+     instance with a `bundle:` selector. A guard that reads an unusable state as "no
+     class settings" turns each of these red. Positive control: a readable record with
+     no class settings leaves both operations open.
+   - **First setting.** Applying a first class setting gates the next call with no
+     restart. Removing the last one ungates it after the loosening rules.
+   - **Order.** `register_schema` with a mismatched target on a class-gated instance
+     returns `MISMATCH`, not `ERR_CLASS_SETTINGS_ADMIN_ONLY`.
+   - **Out of scope, pinned.** On a class-gated instance, `update_schema_incremental` for
+     a type with no schema returns `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` and creates no schema
+     row, and `register_relationship_type` is admitted. Neither changes the layer-0
+     outcome for any type.
+   - **System context.** The callers that use the system context are enumerated, and a
+     request-path caller cannot construct it.
 
 **Layers 1 and 2**
 
@@ -1016,6 +1287,14 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
       `IDENTITY_MISSING`, `ADMISSION_SETTINGS_MISSING`, `ADMISSION_CLASSES_UNRESOLVED`,
       `CLASS_SETTINGS_ADMIN_ONLY`, `MOVE_UNCONFIRMED`, and the `guided` and `locked`
       auto-create refusals.
+    - **Agent-facing text, both states.** For each surface listed under "Agent-facing
+      text" (store unknown-fields and missing-schema hints, `guided` and `locked`
+      hints, schema no-schema hints, `docs/developer/mcp/instructions.md`,
+      `tool_descriptions.yaml`, the CLI instruction mirror), on a class-gated instance
+      no text tells the agent to call `register_schema` or `manage_bundles`, and the
+      static text carries the operator-only note. On an instance that is not
+      class-gated, the hints still say to register the type. The test fails when a new
+      text surface names `register_schema` without the note.
     - A sentinel string planted in a rejected payload appears in no request log, error
       report, or audit event.
     - A pre-auth rejection writes no audit event.
@@ -1030,7 +1309,10 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
     - Every entry point reaches its phase.
     - `target_instance` passes `.strict()` schemas and is never stored.
 14. **Envelope parity.** REST and MCP envelopes, status codes, `retryable`, and JSON-RPC
-    codes match.
+    codes match, and the CLI's exit code and JSON output carry the same code and
+    `details`. This includes `ERR_CLASS_SETTINGS_ADMIN_ONLY` with its `gate_reason`,
+    and the `data_class_refused` entries against the existing `StorePolicyDenial`
+    schema.
 
 **Identity and settings states**
 
@@ -1043,6 +1325,10 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
     - Missing after the ledger entry, and missing on a database minted after the feature:
       `ADMISSION_SETTINGS_MISSING`.
     - A pre-feature upgrade gets `optional`, and unasserted writes keep working.
+    - **Decision 7 guard in each state.** Unreadable, malformed, missing, unresolved
+      (stored or environment) and failed-catalog-load states keep `register_schema` and
+      mutating `manage_bundles` actions refused (test 5a, "Gate states"). A failed
+      migration does the same.
 17. **No re-mint, and a backup round-trip.**
     - A deleted identity row is not re-minted.
     - Back up, delete the row, restore, run `restore-identity`: the original id is served
@@ -1138,17 +1424,26 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
 29. **S, no echo after `REQUIRED`.** An ordinary write is sent through the confidential
     connector by mistake and gets `REQUIRED`. The agent does not retry with the registry
     entry for the served title or for the connector in use.
-30. **F, recovery after a refusal.**
-    - After a mismatch: no second write on that connection (`request_count`).
-    - After a data-class refusal: the same request is never resent. The agent sends one
-      stripped retry on that connection without the refused entities and their
-      relationships.
-    - The reply names the refusing instance and the reason, and says which records went
-      where.
-    - After `ERR_CLASS_SETTINGS_ADMIN_ONLY`: no retry of the schema or bundle call, no
-      attempt through another tool, and the reply tells the user the operator decides.
-    - Slice 1 ships its own F fixtures for the data-class and admin-only cases; they are
-      not deferred to slice 6.
+30. **Recovery after a refusal.** Split by what the harness can observe.
+    - **30a, F (single connection).**
+      - After a mismatch: no second write on that connection (per-connection request
+        count).
+      - After a data-class refusal: the same request is never resent. The agent sends one
+        stripped retry on that connection without the refused entities and their
+        relationships, and does not change a refused record's type to get it admitted.
+        A second refusal ends the retries, and the agent tells the user.
+      - After `ERR_CLASS_SETTINGS_ADMIN_ONLY`, including through the unknown-fields and
+        missing-schema repair paths: no retry of the schema or bundle call, no attempt
+        through another tool, and the reply tells the user the operator decides.
+      - After `ERR_ADMISSION_CLASSES_UNRESOLVED`, `ERR_ADMISSION_SETTINGS_MISSING` and
+        `UNAVAILABLE`: the agent stops, names the refusing instance and why, and does
+        not retry or reroute the data.
+      - When nothing names a target: the agent asks the user.
+    - **30b, S (two instances).** After a data-class refusal, the refused records land on
+      the other instance with its own conversation and message records, and the reply
+      says which records went where. This is eval 33's flow, delivered with it.
+    - Slice 1 ships the 30a fixtures for the data-class and admin-only cases. 30b is not
+      claimed until slice 6.
 31. **F, stop on a missing acknowledgement.** No further write, and the write is flagged
     as unverified.
 32. **S, header.** The title, or the short id, names the instance that answered.
@@ -1159,24 +1454,52 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
     non-bookkeeping record other than the transaction lands on F. The agent tells the
     user which records went where.
 
+**Eval feasibility.** Today's eval harness runs one isolated server per scenario and
+cannot run several in one process. The `agentic_eval` fixture predicates are
+`request_count` per endpoint, `entity_stored`, `relationship_stored`, `request_field_eq`,
+`no_writes`, `turn_compliance`, `turn_diagnosis`, and stop-hook output on one harness.
+The evals need these extensions, each owned by one slice. An eval is not claimed by a
+slice that does not deliver its extension:
+
+| Extension | Needed by | Delivered in |
+|---|---|---|
+| E1. Per-connection `request_count`, and a predicate that a later request omits named entities and relationships | 30a | Slice 1 |
+| E2. Fault injection in the fixture server: reply with a given error code and envelope | 30a, 31 | Slice 1 |
+| E3. A reply-text predicate: the final reply names the refusing instance and the reason | 30a | Slice 1 |
+| E4. Multi-server scenarios in the eval harness, with a per-instance landing predicate | 27, 28 (i), (iii), (iv), (v), 29, 30b, 32, 33 | Slice 6 |
+| E5. Permission-prompt and structured-question predicates, observed by a hook | 28 (ii) | Slice 5, used by slice 6 |
+
+Test 25's hook behaviour (alias in the prompt, a list choice, a permission prompt rather
+than a deny) is a hook-level test that feeds the hook payloads directly, so it does not
+wait on E5. Eval 31 needs E2 and the acknowledgement from slice 2, so it lands in
+slice 6. Until E4 lands, evals 27 to 29, 30b and 32 to 33 are design targets, not
+acceptance criteria of slices 1 to 5.
+
 ## Implementation slices
 
 Slices 1 to 3 need no client cooperation and land first. Every slice takes the arch gate.
 
 1. Admin-gating of the admission-settings record through the #2565 slice N1 governance
-   guard and operator channel (this slice depends on N1 and builds no second guard), the
-   record and its states and migration, and **data-class admission (layer 0)**: manifest
-   resolution with set-time snapshots, the fail-closed rules, canonical and
+   guard and operator channel (this slice depends on N1 and builds no second guard, and
+   does not merge until N1's channel has the properties under "The operator channel"),
+   the record and its states and migration, and **data-class admission (layer 0)**:
+   manifest resolution with set-time snapshots for stored and environment selectors, the
+   fail-closed rules, the loader's distinct load-failed state, canonical and
    alias-resolved classification, the derived sink list and its new call sites, the
-   `data_class_refused` reason code on `ERR_STORE_POLICY_DENIED`,
-   `ERR_ADMISSION_CLASSES_UNRESOLVED`, `class:bookkeeping`, `neotoma instance classes`,
-   the revised `guided` and `locked` hints, and the F fixtures for eval 30. It also
-   delivers decision 7: the N1 guard call at the `register_schema` handler and in the
-   bundle activation admin hook, `ERR_CLASS_SETTINGS_ADMIN_ONLY`, and the operator
-   path for the existing `neotoma schemas register` and
-   `neotoma bundles install|enable|disable` commands. Errors and
-   headers are declared in `openapi.yaml` and `errors.md` first. On hosted instances the
-   admin operations need the hosted admin route, a named later increment of N1.
+   `data_class_refused` reason code on `ERR_STORE_POLICY_DENIED` (specified against the
+   real `StorePolicyDenial` schema), `ERR_ADMISSION_CLASSES_UNRESOLVED`,
+   `class:bookkeeping`, `neotoma instance classes`, the startup line and Inspector
+   banner for stale selectors, and the revised hints. It also delivers decision 7: the
+   shared guard in the registration and bundle activation functions, the
+   `x-neotoma-admin-gated` and `mutating` annotations, `ERR_CLASS_SETTINGS_ADMIN_ONLY`,
+   the operator path for the existing `neotoma schemas register` and
+   `neotoma bundles install|enable|disable` commands, the agent-facing text changes
+   listed under "Agent-facing text", tests 5a and 12, and the F fixtures for eval 30a
+   with harness extensions E1 to E3. Errors and headers are declared in `openapi.yaml` and
+   `errors.md` first. On hosted instances the decision 7 operations are refused to
+   everyone until the hosted admin route, a named later increment of N1, lands (see
+   "Hosted instances before the hosted admin route"). That route also delivers test 5a's
+   hosted operator-success case.
 2. The identity record, commitment, identity states, identity commands, and export; the
    `instance` object and title; result `_meta`, the content line, headers, the capability
    flag, the acknowledgement, and the server card.
@@ -1186,9 +1509,10 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
 5. The local registry: format, human-only enrollment surfaces, the stale state, the hook
    denies, the self-target check with its structured-choice and permission-prompt paths,
    and config-scan naming; the operator and CLI agent docs; the Inspector enrollment page
-   and the connector URL copy action. The registry ships only together with its
+   and the connector URL copy action; harness extension E5. The registry ships only together with its
    enrollment guard.
-6. The turn-summary header, the instructions line, and the agent evals.
+6. The turn-summary header, the instructions line, and the agent evals, with harness
+   extension E4 (multi-server scenarios). Evals 27 to 29, 30b and 31 to 33 land here.
 7. Peer sync.
 
 ## Decisions on open questions
@@ -1222,8 +1546,11 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    on an instance with data-class settings, `register_schema` and the mutating
    `manage_bundles` actions are admin-only, enforced by the #2565 N1 governance guard.
    The options not taken were leaving the tools open while layer 0 holds new types
-   until the admin classifies them, and keeping the gap as a stated residual. See
-   "Schema and bundle changes".
+   until the admin classifies them, and keeping the gap as a stated residual.
+   `update_schema_incremental` and `register_relationship_type` are outside the ruling,
+   for the reasons under "Schema and bundle changes". Revision 6 specifies the guard, the
+   operator channel, the gate states and the hosted interim. See "Schema and bundle
+   changes".
 
 ## References
 
