@@ -66,7 +66,9 @@ function readCounterAndRegistryIds(path: string): { counter: number; ids: string
     ).version;
     const ids = (
       db
-        .prepare("SELECT id FROM schema_registry WHERE id LIKE 'src-%' OR id LIKE 'tgt-%' ORDER BY id")
+        .prepare(
+          "SELECT id FROM schema_registry WHERE id LIKE 'src-%' OR id LIKE 'tgt-%' ORDER BY id"
+        )
         .all() as Array<{ id: string }>
     ).map((row) => row.id);
     return { counter, ids };

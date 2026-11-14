@@ -118,6 +118,10 @@ const transactionSettleScope = new AsyncLocalStorage<TransactionSettleScope>();
  * Used by in-memory caches of committed rows: a write inside a transaction is
  * not visible to other connections until COMMIT, so a cache cleared at write
  * time could be refilled with the old committed value before then.
+ *
+ * Effects run synchronously, in registration order, while the gate is still
+ * held, so they must be cheap and must not issue statements. One that throws
+ * is logged and the rest still run.
  */
 export function deferUntilCurrentTransactionSettles(effect: () => void): boolean {
   const scope = transactionSettleScope.getStore();

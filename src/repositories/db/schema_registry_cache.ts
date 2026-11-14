@@ -188,6 +188,10 @@ export async function readThroughSchemaRegistryCache<T>(
   counters.misses += 1;
   const stampBefore = bucket.stamp;
   const value = await load();
+  // Store only if nothing changed while `load` ran. A write that began in the
+  // meantime moved `generation`; bucketFor also drops a bucket from an older
+  // generation, so the generation check here and that one each stop a stale
+  // fill on their own. A counter re-read by another lookup moved the stamp.
   if (
     generation === startGeneration &&
     unsettledWrites === 0 &&

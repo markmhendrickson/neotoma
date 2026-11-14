@@ -146,8 +146,10 @@ export default async function globalSetup() {
   // write one SQLite file, so each process's in-memory schema lookup cache must
   // see the others' schema_registry writes at once rather than within the
   // production check interval. 0 re-reads the cache's change counter on every
-  // lookup. Set before the server starts and before workers fork. The cache's
-  // own tests set the interval explicitly (tests/unit/schema_registry_cache.test.ts).
+  // lookup. Set before the server starts and before workers fork. The
+  // production default (250 ms) is exercised only by the cache's own tests,
+  // which set the interval explicitly and drive the clock
+  // (tests/unit/schema_registry_cache.test.ts).
   if (process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS === undefined) {
     process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS = "0";
   }
