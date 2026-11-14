@@ -26,7 +26,11 @@ import { MERGE_DB_SKIPPED_INTERNAL_TABLES } from "../repositories/sqlite/interna
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
-import { createApiClient } from "../shared/api_client.js";
+import {
+  createApiClient,
+  resolveCliRequestAuth,
+  setExplicitBearerRequested,
+} from "../shared/api_client.js";
 import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { parseSchemaFields } from "./parse_schema_fields.js";
@@ -1770,6 +1774,8 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {
+    // Deliberately outside the CLI credential rule: this reads back the
+    // access token the login flow above just obtained, to show who it names.
     const res = await fetch(`${baseUrl}/me`, {
       headers: { Authorization: `Bearer ${token.access_token}` },
       signal: AbortSignal.timeout(10000),
@@ -1806,14 +1812,13 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
   } catch {
     token = undefined;
   }
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const auth = await resolveCliRequestAuth({ token });
   const maxAttempts = 3;
   const retryDelayMs = 1200;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(`${baseUrl}/me`, {
-        headers,
+      const res = await auth.fetch(`${baseUrl}/me`, {
+        headers: auth.headers,
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) return;
@@ -1837,6 +1842,14 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
  * Resolve CLI auth token using same patterns as MCP.
  * Encryption off: NEOTOMA_BEARER_TOKEN env, then stored OAuth token from config, or no token (API treats no Bearer as dev-local).
  * Encryption on: key-derived token (requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC).
+ *
+ * Never attach this token to a request by hand. Pass it to `createApiClient`,
+ * or, for a raw `fetch`, to `resolveCliRequestAuth` and send with the headers
+ * and `fetch` it returns. Both apply one rule (`decideCliCredentials` in
+ * `src/shared/api_client.ts`): with an AAuth keypair configured the token is
+ * withheld unless `--with-bearer` is passed, and a request is refused when
+ * NEOTOMA_CLI_AAUTH_DISABLE=1 / NEOTOMA_CLI_AAUTH_ENABLE=0 would drop the
+ * signature.
  */
 async function getCliToken(): Promise<string | undefined> {
   if (appConfig.encryption.enabled) {
@@ -2344,7 +2357,11 @@ program
     "Append CLI stdout and stderr to this file (development default: <neotoma>/data/logs/cli.<pid>.log when a Neotoma path is configured, else ~/.config/neotoma/cli.<pid>.log)"
   )
   .option("--no-log-file", "Do not append CLI output to the log file (no-op in prod)")
-  .option("--no-update-check", "Disable update availability check");
+  .option("--no-update-check", "Disable update availability check")
+  .option(
+    "--with-bearer",
+    "With an AAuth key configured, also send the bearer token (NEOTOMA_BEARER_TOKEN or the stored login) beside the request signature. Without this flag the signature is the only credential sent."
+  );
 
 function isDebug(): boolean {
   return Boolean((program.opts() as { debug?: boolean }).debug);
@@ -2463,7 +2480,12 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   const opts = (actionCommand as Command).optsWithGlobals() as {
     offline?: boolean;
     apiOnly?: boolean;
+    withBearer?: boolean;
   };
+  // Only the explicit flag may add a bearer beside an AAuth signature. Set on
+  // every command (true or false) so an interactive session does not carry one
+  // command's flag into the next.
+  setExplicitBearerRequested(opts.withBearer === true);
   const isTestEnv = process.env.NODE_ENV === "test";
 
   // Precedence: flag > env > default. NEOTOMA_API_ONLY / NEOTOMA_OFFLINE /
@@ -4117,9 +4139,9 @@ async function startSessionWatch(
     process.env[preferredEnv === "dev" ? "NEOTOMA_SESSION_DEV_PORT" : "NEOTOMA_SESSION_PROD_PORT"];
   if (sessionPort) {
     try {
-      const token = await getCliToken();
-      const res = await fetch(`http://127.0.0.1:${sessionPort}/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const auth = await resolveCliRequestAuth({ token: await getCliToken() });
+      const res = await auth.fetch(`http://127.0.0.1:${sessionPort}/me`, {
+        headers: auth.headers,
       });
       if (res.ok) {
         const me = (await res.json()) as { user_id?: string };
@@ -6239,8 +6261,9 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               try {
                 const token = await getCliToken();
                 if (token) {
-                  const res = await fetch(`${baseUrl}/me`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                  const auth = await resolveCliRequestAuth({ token });
+                  const res = await auth.fetch(`${baseUrl}/me`, {
+                    headers: auth.headers,
                     signal: AbortSignal.timeout(10000),
                   });
                   if (res.ok) {
@@ -7686,9 +7709,14 @@ const authLoginCommand = authCommand
       token = undefined;
     }
     if (token) {
-      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      // Outside the try below: a refusal (disable variable with a key
+      // configured) is reported, not taken as "not signed in".
+      const auth = await resolveCliRequestAuth({ token });
       try {
-        const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
+        const res = await auth.fetch(`${baseUrl}/me`, {
+          headers: auth.headers,
+          signal: AbortSignal.timeout(10000),
+        });
         if (res.ok) {
           // #2228: `email` is who is signed in; `user_id` is the graph being
           // operated on. Under shared-graph mode they describe different
@@ -7737,10 +7765,9 @@ authCommand
     };
     if (config.expires_at) status.expires_at = config.expires_at;
     if (config.access_token) status.token_expired = isTokenExpired(config);
+    const auth = await resolveCliRequestAuth({ token });
     try {
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`${baseUrl}/me`, { headers });
+      const res = await auth.fetch(`${baseUrl}/me`, { headers: auth.headers });
       if (res.ok) {
         const me = (await res.json()) as { user_id?: string; email?: string };
         if (me.user_id) status.user_id = me.user_id;
@@ -9166,11 +9193,10 @@ program
           process.exit(1);
         }
         const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
+        const auth = await resolveCliRequestAuth({ token });
         let userId: string | null = null;
         try {
-          const res = await fetch(`${baseUrl}/me`, { headers });
+          const res = await auth.fetch(`${baseUrl}/me`, { headers: auth.headers });
           if (res.ok) {
             const me = (await res.json()) as { user_id?: string };
             if (me.user_id) userId = me.user_id;
@@ -9257,11 +9283,10 @@ program
         process.exit(1);
       }
       const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
+      const auth = await resolveCliRequestAuth({ token });
       let userId: string;
       try {
-        const res = await fetch(`${baseUrl}/me`, { headers });
+        const res = await auth.fetch(`${baseUrl}/me`, { headers: auth.headers });
         if (!res.ok) {
           process.stderr.write(
             "neotoma watch: could not resolve user. Run `neotoma auth login` and ensure the API is running.\n"
@@ -17144,15 +17169,14 @@ program
           // call it via raw fetch. It returns a structured JSON body whose
           // `status` discriminates `applied` / `conflict` / `validation_error`.
           const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-          const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-          };
-          if (token) headers["Authorization"] = `Bearer ${token}`;
-          const rawResponse = await fetch(
+          // Same credential rule as the read above (`resolveCliRequestAuth`),
+          // so the read and the write authenticate as the same principal.
+          const auth = await resolveCliRequestAuth({ token });
+          const rawResponse = await auth.fetch(
             `${baseUrl}/entities/${encodeURIComponent(entityId)}/batch_correct`,
             {
               method: "POST",
-              headers,
+              headers: { "Content-Type": "application/json", ...auth.headers },
               body: JSON.stringify({
                 changes,
                 expected_last_observation_at: current.last_observation_at,
@@ -17698,6 +17722,9 @@ program
       ...(opts.aauth
         ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
         : {}),
+      // --guest-access-token replaces the configured credential for this
+      // request, so it goes out as the only credential, unsigned.
+      ...(opts.guestAccessToken ? { signWithCliAAuth: false } : {}),
     });
 
     const params = parseOptionalJson(opts.params);
@@ -17738,11 +17765,12 @@ program
           url.searchParams.set(key, String(value));
         }
       }
-      const response = await fetch(url, {
-        headers: {
-          Accept: "text/event-stream",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+      const auth = await resolveCliRequestAuth({
+        token,
+        ...(opts.guestAccessToken ? { signWithCliAAuth: false } : {}),
+      });
+      const response = await auth.fetch(url, {
+        headers: { Accept: "text/event-stream", ...auth.headers },
       });
       if (!response.ok) {
         const contentType = response.headers.get("content-type") ?? "";
@@ -19967,12 +19995,10 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           }
           try {
             debugLog("Resolving CLI token for /me…");
-            const token = await getCliToken();
-            const meHeaders: Record<string, string> = {};
-            if (token) meHeaders.Authorization = `Bearer ${token}`;
+            const auth = await resolveCliRequestAuth({ token: await getCliToken() });
             debugLog(`Fetching http://127.0.0.1:${actualPort}/me`);
-            const meRes = await fetch(`http://127.0.0.1:${actualPort}/me`, {
-              headers: meHeaders,
+            const meRes = await auth.fetch(`http://127.0.0.1:${actualPort}/me`, {
+              headers: auth.headers,
             });
             if (meRes.ok) {
               const me = (await meRes.json()) as { user_id?: string };
@@ -20331,9 +20357,9 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         const actualPort = preferredPort;
         await fetchIntroStats(String(actualPort));
         try {
-          const token = await getCliToken();
-          const meRes = await fetch(`http://127.0.0.1:${actualPort}/me`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          const auth = await resolveCliRequestAuth({ token: await getCliToken() });
+          const meRes = await auth.fetch(`http://127.0.0.1:${actualPort}/me`, {
+            headers: auth.headers,
           });
           if (meRes.ok) {
             const me = (await meRes.json()) as { user_id?: string };

@@ -30,64 +30,312 @@ export interface ApiClientOptions {
    * likewise bypass signing). Pairs with `signWithCliAAuth`.
    */
   forceHttpTransport?: boolean;
+  /**
+   * When an AAuth keypair is configured, the request signature is the only
+   * credential sent: an environment or stored bearer passed as `token` is
+   * withheld from HTTP requests. Set this to send the bearer as well. The CLI
+   * sets it only from the explicit `--with-bearer` flag (never from an
+   * environment variable); defaults to {@link isExplicitBearerRequested}.
+   */
+  allowBearerWithSignature?: boolean;
 }
 
 /**
- * Build a `fetch` wrapper that attempts to sign outbound requests with the
- * CLI-side AAuth keypair. When signing is disabled or no keypair is
- * configured the returned function is the global `fetch` unchanged. This
- * indirection keeps Node-only `fs`/`jose` imports out of the browser
- * bundle via a dynamic import.
+ * Set by the CLI from the explicit `--with-bearer` flag on each command.
+ * Module state rather than an environment variable on purpose: an inherited
+ * variable is ambient, and the point of the rule is that only an explicit,
+ * per-invocation request may add a bearer beside an AAuth signature.
+ *
+ * Read when a client is built ({@link createApiClient}) or a request is
+ * resolved ({@link resolveCliRequestAuth}), so both must happen inside a
+ * command's action, after the CLI's `preAction` hook has set it.
  */
-function buildMaybeSignedFetch(enabled: boolean, requireCliAAuth = false): typeof fetch {
-  if (!enabled) return fetch;
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = input instanceof Request ? input : null;
-    const url = request ? request.url : typeof input === "string" ? input : input.toString();
-    const { cliSignedFetch, loadCliSignerConfig } = await import("../cli/aauth_signer.js");
-    const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
-    const headers: Record<string, string> = {};
-    const sourceHeaders = new Headers(request?.headers);
-    if (init?.headers) {
-      const overrides = new Headers(init.headers);
-      overrides.forEach((value, key) => {
-        sourceHeaders.set(key, value);
-      });
+let explicitBearerRequested = false;
+
+export function setExplicitBearerRequested(requested: boolean): void {
+  explicitBearerRequested = requested;
+}
+
+export function isExplicitBearerRequested(): boolean {
+  return explicitBearerRequested;
+}
+
+/**
+ * Environment variables that turn CLI request signing off. Returns the
+ * variable (as `NAME=value`) that does so, or null.
+ */
+export function cliAAuthDisabledByEnv(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NEOTOMA_CLI_AAUTH_DISABLE === "1") return "NEOTOMA_CLI_AAUTH_DISABLE=1";
+  if (env.NEOTOMA_CLI_AAUTH_ENABLE === "0") return "NEOTOMA_CLI_AAUTH_ENABLE=0";
+  return null;
+}
+
+export class CliAAuthDisabledWithKeyError extends Error {
+  constructor(variable: string) {
+    super(
+      `${variable} turns AAuth request signing off, but an AAuth keypair is configured ` +
+        "(NEOTOMA_AAUTH_PRIVATE_JWK_PATH or ~/.neotoma/aauth/private.jwk). Refusing to send this " +
+        `request without its signature. Unset ${variable} to sign with the configured key, or pass ` +
+        "--with-bearer to authenticate this command with the bearer token instead."
+    );
+    this.name = "CliAAuthDisabledWithKeyError";
+  }
+}
+
+function withoutAuthorization(headers: Record<string, string>): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === "authorization") continue;
+    next[key] = value;
+  }
+  return next;
+}
+
+/**
+ * Inputs to the CLI credential rule. Every CLI HTTP request — through
+ * {@link createApiClient} or through {@link resolveCliRequestAuth} for a raw
+ * `fetch` — is decided by {@link decideCliCredentials}, so no command can send
+ * a different credential from the others.
+ */
+/**
+ * Which CLI AAuth private key file is present: none, only the default
+ * `~/.neotoma/aauth/private.jwk`, or the file `NEOTOMA_AAUTH_PRIVATE_JWK_PATH`
+ * names.
+ */
+export type CliKeypairSource = "none" | "default_path" | "explicit_path";
+
+export interface CliCredentialInput {
+  /** The key file present ({@link CliKeypairSource}). */
+  keypair: CliKeypairSource;
+  /** `signWithCliAAuth` as the caller passed it: true / false, or undefined for automatic. */
+  signWithCliAAuth: boolean | undefined;
+  /** The variable that turns signing off ({@link cliAAuthDisabledByEnv}), or null. */
+  disabledBy: string | null;
+  /**
+   * NODE_ENV=test. With automatic signing, only an explicitly named key
+   * counts as configured, so a developer's key at the default path never
+   * changes what a test sends; an explicitly named key gets the full rule.
+   */
+  testEnv: boolean;
+  /** The explicit `--with-bearer` request, or the caller's `allowBearerWithSignature`. */
+  allowBearerWithSignature: boolean;
+}
+
+export interface CliCredentialDecision {
+  /** Sign the request with the CLI keypair (unsigned when no usable key is found). */
+  sign: boolean;
+  /** Attach `Authorization: Bearer <token>` when the caller has a token. */
+  bearer: boolean;
+}
+
+/**
+ * The CLI credential rule.
+ *
+ * A key is configured when a key file is present, except that with automatic
+ * signing under NODE_ENV=test only an explicitly named key counts.
+ *
+ * - `signWithCliAAuth: false` (caller decided): unsigned, bearer as passed.
+ * - Automatic, with a disable variable set: refuses with
+ *   {@link CliAAuthDisabledWithKeyError} when a key is configured and no bearer
+ *   was explicitly requested; otherwise unsigned, bearer as passed.
+ * - Automatic under NODE_ENV=test with no key configured: unsigned, bearer as
+ *   passed.
+ * - Otherwise signed. With a key configured the signature is the only
+ *   credential unless a bearer was explicitly requested; with no key the
+ *   bearer is sent as before.
+ */
+export function decideCliCredentials(input: CliCredentialInput): CliCredentialDecision {
+  if (input.signWithCliAAuth === false) return { sign: false, bearer: true };
+  const automatic = input.signWithCliAAuth === undefined;
+  const keyConfigured =
+    input.keypair === "explicit_path" ||
+    (input.keypair === "default_path" && !(automatic && input.testEnv));
+  if (automatic && input.disabledBy !== null) {
+    if (keyConfigured && !input.allowBearerWithSignature) {
+      throw new CliAAuthDisabledWithKeyError(input.disabledBy);
     }
-    if (sourceHeaders) {
-      const h = new Headers(sourceHeaders);
-      h.forEach((value, key) => {
-        headers[key] = value;
-      });
-    }
-    let body = typeof init?.body === "string" ? init.body : undefined;
-    if (body === undefined && request && method !== "GET" && method !== "HEAD") {
-      body = await request.clone().text();
-    }
+    return { sign: false, bearer: true };
+  }
+  if (automatic && input.testEnv && !keyConfigured) return { sign: false, bearer: true };
+  return { sign: true, bearer: !keyConfigured || input.allowBearerWithSignature };
+}
+
+function sameDecision(a: CliCredentialInput, b: CliCredentialInput): boolean {
+  const decide = (input: CliCredentialInput) => {
     try {
-      if (requireCliAAuth) {
-        const signerConfig = await loadCliSignerConfig();
-        if (!signerConfig) {
-          throw new Error(
-            "AAuth signing is required but no usable CLI keypair was found. " +
-              "Set NEOTOMA_AAUTH_PRIVATE_JWK_PATH to a valid private JWK, or run `neotoma auth keygen`."
-          );
-        }
-      }
-      return await cliSignedFetch(url, {
-        method,
-        headers,
-        body,
-        signal: init?.signal ?? undefined,
-      });
+      return JSON.stringify(decideCliCredentials(input));
     } catch (err) {
-      if (requireCliAAuth) throw err;
-      // Never surface signing misconfiguration as a hard failure from the
-      // API client — the caller should still reach the server and land
-      // as `unverified_client` / `anonymous` tier.
-      return fetch(input, init);
+      return err instanceof CliAAuthDisabledWithKeyError ? "refuse" : "error";
     }
+  };
+  return decide(a) === decide(b);
+}
+
+/**
+ * Whether the decision for this policy depends on which key file is present.
+ * Derived from {@link decideCliCredentials} itself, so the two cannot disagree:
+ * when every key source gives the same decision the key check is skipped.
+ */
+export function keypairMatters(policy: Omit<CliCredentialInput, "keypair">): boolean {
+  const none: CliCredentialInput = { ...policy, keypair: "none" };
+  return (
+    !sameDecision(none, { ...policy, keypair: "default_path" }) ||
+    !sameDecision(none, { ...policy, keypair: "explicit_path" })
+  );
+}
+
+interface CliCredentialPolicy {
+  signWithCliAAuth: boolean | undefined;
+  disabledBy: string | null;
+  testEnv: boolean;
+  allowBearerWithSignature: boolean;
+  requireCliAAuth: boolean;
+}
+
+function cliCredentialPolicy(options: {
+  signWithCliAAuth?: boolean;
+  requireCliAAuth?: boolean;
+  allowBearerWithSignature?: boolean;
+}): CliCredentialPolicy {
+  return {
+    signWithCliAAuth: options.signWithCliAAuth,
+    disabledBy: cliAAuthDisabledByEnv(),
+    testEnv: process.env.NODE_ENV === "test",
+    allowBearerWithSignature: options.allowBearerWithSignature ?? isExplicitBearerRequested(),
+    requireCliAAuth: Boolean(options.requireCliAAuth),
+  };
+}
+
+async function checkCliKeypair(): Promise<CliKeypairSource> {
+  const { hasCliAAuthKeypair } = await import("../cli/aauth_signer.js");
+  if (!(await hasCliAAuthKeypair())) return "none";
+  return process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH ? "explicit_path" : "default_path";
+}
+
+/**
+ * Send a request signed with the CLI-side AAuth keypair. When signing fails
+ * (no usable key) and signing is not required, the request goes out unsigned;
+ * `stripBearer` removes any `Authorization` header on both paths. The
+ * indirection keeps Node-only `fs`/`jose` imports out of the browser bundle
+ * via a dynamic import.
+ */
+async function sendSigned(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  opts: { requireCliAAuth: boolean; stripBearer: boolean }
+): Promise<Response> {
+  const request = input instanceof Request ? input : null;
+  const url = request ? request.url : typeof input === "string" ? input : input.toString();
+  const { cliSignedFetch, loadCliSignerConfig } = await import("../cli/aauth_signer.js");
+  const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
+  const headers: Record<string, string> = {};
+  const sourceHeaders = new Headers(request?.headers);
+  if (init?.headers) {
+    const overrides = new Headers(init.headers);
+    overrides.forEach((value, key) => {
+      sourceHeaders.set(key, value);
+    });
+  }
+  sourceHeaders.forEach((value, key) => {
+    headers[key] = value;
+  });
+  let body = typeof init?.body === "string" ? init.body : undefined;
+  if (body === undefined && request && method !== "GET" && method !== "HEAD") {
+    body = await request.clone().text();
+  }
+  try {
+    if (opts.requireCliAAuth) {
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          "AAuth signing is required but no usable CLI keypair was found. " +
+            "Set NEOTOMA_AAUTH_PRIVATE_JWK_PATH to a valid private JWK, or run `neotoma auth keygen`."
+        );
+      }
+    }
+    return await cliSignedFetch(url, {
+      method,
+      headers: opts.stripBearer ? withoutAuthorization(headers) : headers,
+      body,
+      signal: init?.signal ?? undefined,
+    });
+  } catch (err) {
+    if (opts.requireCliAAuth) throw err;
+    // Never surface signing misconfiguration as a hard failure from the
+    // API client — the caller should still reach the server and land
+    // as `unverified_client` / `anonymous` tier.
+    if (opts.stripBearer) {
+      const unsigned = new Request(input, init);
+      unsigned.headers.delete("authorization");
+      return fetch(unsigned);
+    }
+    return fetch(input, init);
+  }
+}
+
+/**
+ * Build the `fetch` the API client uses. Each request is decided by
+ * {@link decideCliCredentials}: refused, sent unsigned, or signed with the
+ * `Authorization` header kept or removed. When the decision does not depend on
+ * which key is present, no key check runs, and an unsigned decision returns the
+ * global `fetch` unchanged. Otherwise the key check runs once per client.
+ */
+function buildCliFetch(policy: CliCredentialPolicy): typeof fetch {
+  const keyMatters = keypairMatters(policy);
+  if (!keyMatters && !decideCliCredentials({ ...policy, keypair: "none" }).sign) return fetch;
+  let keypair: Promise<CliKeypairSource> | undefined;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    keypair ??= keyMatters ? checkCliKeypair() : Promise.resolve("none");
+    const decision = decideCliCredentials({ ...policy, keypair: await keypair });
+    if (!decision.sign) return fetch(input, init);
+    return sendSigned(input, init, {
+      requireCliAAuth: policy.requireCliAAuth,
+      stripBearer: !decision.bearer,
+    });
   }) as typeof fetch;
+}
+
+export interface CliRequestAuthOptions {
+  /** The bearer the CLI resolved (`getCliToken`), if any. */
+  token?: string;
+  signWithCliAAuth?: boolean;
+  requireCliAAuth?: boolean;
+  allowBearerWithSignature?: boolean;
+}
+
+export interface CliRequestAuth {
+  /** Headers to add to the request: `Authorization: Bearer <token>`, or none. */
+  headers: Record<string, string>;
+  /** The `fetch` to send it with: signed when the request is signed, else the global `fetch`. */
+  fetch: typeof fetch;
+  /** The decision these were built from. */
+  decision: CliCredentialDecision;
+}
+
+/**
+ * Credentials for a CLI request that does not go through
+ * {@link createApiClient} (a raw path, a stream, a probe of `/me`). Applies the
+ * same rule as the API client: with a key configured the bearer is attached
+ * only on an explicit `--with-bearer`, and a disable variable with a key
+ * configured throws {@link CliAAuthDisabledWithKeyError} before anything is
+ * sent. Send with `auth.fetch(url, { ...init, headers: { ...h, ...auth.headers } })`.
+ */
+export async function resolveCliRequestAuth(
+  options: CliRequestAuthOptions = {}
+): Promise<CliRequestAuth> {
+  const policy = cliCredentialPolicy(options);
+  const keypair: CliKeypairSource = keypairMatters(policy) ? await checkCliKeypair() : "none";
+  const decision = decideCliCredentials({ ...policy, keypair });
+  const headers: Record<string, string> =
+    options.token && decision.bearer ? { Authorization: `Bearer ${options.token}` } : {};
+  const fetchImpl: typeof fetch = decision.sign
+    ? ((async (input: RequestInfo | URL, init?: RequestInit) =>
+        sendSigned(input, init, {
+          requireCliAAuth: policy.requireCliAAuth,
+          stripBearer: !decision.bearer,
+        })) as typeof fetch)
+    : fetch;
+  return { headers, fetch: fetchImpl, decision };
 }
 
 export type NeotomaApiClient = ReturnType<typeof createApiClient>;
@@ -98,12 +346,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const signingEnabled =
-    options.signWithCliAAuth ??
-    (process.env.NODE_ENV !== "test" &&
-      process.env.NEOTOMA_CLI_AAUTH_DISABLE !== "1" &&
-      process.env.NEOTOMA_CLI_AAUTH_ENABLE !== "0");
-  const fetchImpl = buildMaybeSignedFetch(signingEnabled, Boolean(options.requireCliAAuth));
+  const fetchImpl = buildCliFetch(cliCredentialPolicy(options));
 
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
@@ -148,6 +391,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         const localClient = await getLocalTransportClient({
           token: options.token,
           baseUrl: options.baseUrl,
+          fetch: fetchImpl,
         });
         const localMethod = localClient[method].bind(localClient) as (
           path: string,
@@ -164,6 +408,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         const localClient = await getLocalTransportClient({
           token: options.token,
           baseUrl: options.baseUrl,
+          fetch: fetchImpl,
         });
         const localMethod = localClient[method].bind(localClient) as (
           path: string,

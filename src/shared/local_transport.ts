@@ -13,7 +13,8 @@ type LocalTransportClient = ReturnType<typeof createClient<paths>>;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-let localClientPromise: Promise<LocalTransportClient> | null = null;
+/** Base URL of the started local API child (`http://127.0.0.1:<port>`). */
+let localClientPromise: Promise<string> | null = null;
 let localApiChild: ChildProcess | null = null;
 let localTransportKillHandler: (() => void) | null = null;
 
@@ -124,10 +125,33 @@ function warnOnEnvBaseUrlMismatch(
   );
 }
 
+/**
+ * Client for the local API child the CLI starts on 127.0.0.1. The child is the
+ * same API server as `neotoma api start`, so it verifies AAuth signatures on
+ * every route. `fetch` is the caller's: `createApiClient` passes the fetch that
+ * applies the CLI credential rule (`decideCliCredentials`), so a request to
+ * the child is signed, carries the bearer, or is refused exactly as a request
+ * to a remote API would be. The child is started once per process; the client
+ * (token and fetch) is built per call, so one command's credentials never
+ * carry into the next.
+ */
 export async function getLocalTransportClient(options: {
   token?: string;
   baseUrl?: string;
+  fetch?: typeof fetch;
 }): Promise<LocalTransportClient> {
+  const localBaseUrl = await startLocalTransport(options.baseUrl);
+  const headers: Record<string, string> = {};
+  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+  return createClient<paths>({
+    baseUrl: localBaseUrl,
+    headers,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+}
+
+async function startLocalTransport(baseUrl: string | undefined): Promise<string> {
+  const options = { baseUrl };
   if (!localClientPromise) {
     localClientPromise = (async () => {
       const env = resolveLocalTransportEnv(options.baseUrl);
@@ -173,6 +197,11 @@ export async function getLocalTransportClient(options: {
           NEOTOMA_ENV: env,
           HTTP_PORT: String(port),
           NEOTOMA_HTTP_PORT: String(port),
+          // The child is reached only at 127.0.0.1:<port>: bind there, and
+          // verify AAuth signatures against that authority rather than a
+          // public URL inherited from the environment.
+          NEOTOMA_HTTP_HOST: "127.0.0.1",
+          NEOTOMA_AAUTH_AUTHORITY: `127.0.0.1:${port}`,
         },
         stdio: ["ignore", logStream, logStream],
       });
@@ -208,13 +237,7 @@ export async function getLocalTransportClient(options: {
         throw new Error("Local transport API failed to start");
       }
 
-      const headers: Record<string, string> = {};
-      if (options.token) headers.Authorization = `Bearer ${options.token}`;
-
-      return createClient<paths>({
-        baseUrl: `http://127.0.0.1:${port}`,
-        headers,
-      });
+      return `http://127.0.0.1:${port}`;
     })();
   }
 
