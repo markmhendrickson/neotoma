@@ -11,7 +11,39 @@ estimated_effort: "Medium to large: admin-set admission settings with data class
 
 Design only. No implementation in this change. Design issue: #2589.
 
-**Revision 4 changes the shape.** Each earlier revision closed one client-side gap and
+**Revision 5 answers the round-four review findings.** It keeps the revision 4 shape and
+changes these points:
+
+- **Selectors cannot lose coverage silently.** Bundle selectors resolve from bundle
+  manifests, never from the enabled-bundles index. Each selector's resolved type set is
+  snapshotted when it is set. A catalog change can tighten at once, but any loosening it
+  would cause waits for admin confirmation under the cooling delay. A selector that no
+  longer resolves, a bundle catalog that failed to load, and an accept-list that resolves
+  to no types all refuse every write.
+- **Each entity is classified on its canonical submitted type and its alias-resolved
+  type.**
+- **The boundary with the rules design (#2565) is stated.** The existing instance-policy
+  type lists migrate into #2565 predicate rules, not into layer 0. The two compose by
+  conjunction, rules break-glass never suspends layer 0, governance types are always
+  admitted by layer 0, refusals use the one `ERR_STORE_POLICY_DENIED` family, and admin
+  gating reuses the #2565 governance guard and operator channel.
+- **Agent-callable tools no longer move the class boundary through bundle state.** Whether
+  `register_schema` and the mutating `manage_bundles` actions need admin authority on
+  instances with class settings changes the permission semantics of existing tools. It is
+  left as open question 1, with an interim rule and a stated residual.
+- **A data-class refusal leads to a stripped retry.** The agent removes the refused
+  entities and their relationships and stores the rest on the same connection, so the
+  turn's own conversation records are not lost. Only an unchanged resend is forbidden.
+- **The self-target hook no longer dead-ends a user's choice.** A choice from a registry
+  list the agent showed satisfies it, the hook asks through a harness permission prompt
+  instead of a final deny, and its scope and matching rule are defined.
+- **Human-only enrollment is tested against pseudo-terminals,** and the confirmation
+  surfaces never read terminal input.
+
+The open questions this revision cannot settle are listed in "Open questions (revision 5)"
+at the end.
+
+**Revision 4 changed the shape.** Each earlier revision closed one client-side gap and
 opened another. The cause is that every defence against misselection depended on the
 client: per-write targets, the local registry, and hooks. Revision 4 adds a
 **server-side data-class admission layer** that works on every client. Each Neotoma
@@ -21,7 +53,7 @@ cooperation. Per-write targets, connection bindings, and the registry stay, as
 additional layers for clients that support them. A per-client table states what each
 client gets.
 
-Other changes in revision 4:
+Changes made in revision 4:
 
 - **Registry enrollment is human-only.** It goes through an interactive confirmation an
   agent cannot answer. There is no stdin or assume-yes path, and agents are never handed
@@ -93,40 +125,65 @@ This needs no client cooperation, no registry, and no hooks.
   auto-create a new type. A refuse-list does not cover it. An accept-list does, which is
   one reason confidential instances should use accept-lists. Instances with refuse-lists
   should run `NEOTOMA_SCHEMA_MODE=guided`, where only bundle-provided types auto-create.
+  `guided` gates auto-creation only. An agent can still register a new type explicitly
+  with `register_schema`, and on a refuse-list instance a write of that type is then
+  admitted. Whether that tool needs admin authority on instances with class settings is
+  open question 1. Until it is ruled, this is a stated residual, made visible as described
+  in "Schema and bundle changes" below.
+- **The per-turn message and raw attachments.** Neotoma's agent instructions store every
+  user message word for word, every turn, and keep attachments as raw files. Neither has
+  a type that layer 0 can judge. In a team with a confidential instance, a general
+  instance that stores message turns and accepts raw files will receive confidential chat
+  text and attachments, unless a routing rule sends those turns elsewhere. This is the
+  most likely leak path, and it is the unclassified free text gap in its commonest form.
 
 Layers 1 to 3 exist for these gaps, on clients that can carry them.
 
 ### What each client gets
 
-"Admitted" means the wrong write lands; "refused" means it does not.
+"Admitted" means the wrong write lands; "refused" means it does not. The classified-data
+column holds only when the receiving instance's class lists cover the type. The upgrade
+default has no lists, and a refuse-list under `evolving` misses new types.
 
-| Client | Misroute | Wrong connector, classified data | Wrong connector, unclassified data | User names the target on a `required` instance |
+| Client | Misroute | Wrong connector, classified data (under the recommended configuration) | Wrong connector, unclassified data | User names the target on a `required` instance |
 |---|---|---|---|---|
-| **Claude Code with the Neotoma plugin** (hooks plus proxy) | Refused (binding, preflight, acknowledgement check) | Refused (layer 0) | Refused when a routing rule or registry lookup supplies a per-write target. Otherwise admitted under `optional` or `warn`, refused under `required`. | Works: registry lookup at write time, with exact match or the user's choice |
+| **Claude Code with the Neotoma plugin** (hooks plus proxy) | Refused (binding, preflight, acknowledgement check) | Refused (layer 0) | Refused when a routing rule or registry lookup supplies a per-write target. Otherwise admitted under `optional` or `warn`, refused under `required`. | Works: registry lookup at write time, with exact match or the user's choice from a list (see "Self-target check") |
 | **CLI** (human or agent shell) | Refused (`--expect-instance` or env binding, preflight, acknowledgement check) | Refused (layer 0) | As above, with `--target-instance` | Works: `neotoma instance registry list` read at lookup time |
-| **Proxy only** (any stdio client without hooks) | Refused (binding, preflight, acknowledgement check) | Refused (layer 0) | Refused only when the agent sets `target_instance` from a delivered routing rule | Not available unless the client exposes the registry. Otherwise the agent says the registry is unavailable in this client. |
-| **Claude Desktop chat, claude.ai, Cowork** (remote connector by URL, no local hooks or registry) | Refused when the connector URL carries `?expected_instance=` and the server runs the check. No client acknowledgement check, so a server without the check is not detected (the agent rule only). | Refused (layer 0) | Refused only when the agent sets `target_instance` from a routing rule delivered in instructions. Otherwise admitted under `optional` or `warn`, refused under `required`. | **Not available.** The agent says this client cannot resolve Neotoma names. A `required` instance used from these clients needs a routing rule, or its writes cannot proceed. |
+| **Proxy only** (any stdio client without hooks) | Refused (binding, preflight, acknowledgement check) | Refused (layer 0) | Refused when the agent sets `target_instance` from a delivered routing rule. Otherwise admitted under `optional` or `warn`, refused under `required`. | Not available unless the client exposes the registry. Otherwise the agent says the registry is unavailable in this client. |
+| **Claude Desktop chat, claude.ai, Cowork** (remote connector by URL, no local hooks or registry) | Refused when the connector URL carries `?expected_instance=` and the server runs the check. The user gets that URL from a copy action on the Inspector's instance page, and the setup docs say to use it. No client acknowledgement check, so a server without the check is not detected (the agent rule only). | Refused (layer 0) | Refused only when the agent sets `target_instance` from an approved routing rule delivered in instructions. Otherwise admitted under `optional` or `warn`, refused under `required`. | **Not available.** The agent says this client cannot resolve Neotoma names. A `required` instance used from these clients needs a routing rule, or its writes cannot proceed. The same holds for ordinary reads of an instance with `read_assertion: required`. |
 
 ### Recommended configuration for the motivating case
 
 - **Finance Neotoma.**
-  - An **accept-list** of the finance classes, plus the bookkeeping types it needs
-    (`conversation`, `conversation_message`, and so on).
+  - An **accept-list** of the finance classes. Governance types are always admitted by
+    layer 0, and the chat bookkeeping types are named by the built-in
+    `class:bookkeeping` selector (see "Selectors"), so the list is complete without
+    enumerating them. Until a finance bundle exists in the catalog, the finance classes
+    are named with `type:` selectors.
   - `raw_storage: refuse`, unless it holds source documents.
-  - `read_assertion: required`.
-  - `target_assertion: required` if every client used with it has routing rules or the
-    registry. Otherwise `warn`, accepting the per-client limits above.
+  - `read_assertion: required` if every client used with it has routing rules or the
+    registry. Otherwise `optional`, accepting that the per-client limits above apply to
+    reads too.
+  - `target_assertion: required` under the same condition. Otherwise `warn`.
 - **Every other Neotoma in the team.**
   - A **refuse-list** naming the finance classes.
   - `NEOTOMA_SCHEMA_MODE=guided`.
-  - `raw_storage` set as its purpose requires.
+  - `raw_storage` set as its purpose requires, knowing that raw attachments are not
+    classified.
+  - A routing rule for message turns that carry finance content, where #2565 rules are
+    available.
 - **Pin both with the tighten-only environment variables.** These survive a database
   restore to an older state.
 
 Under this configuration, classified finance data cannot land outside the finance
 Neotoma, and non-finance classified data cannot land inside it, from any client. The
-remaining exposure is unclassified free text, and on Chat-type clients, writes with no
-routing rule.
+remaining exposure is:
+
+- unclassified free text, most often the verbatim per-turn message and raw attachments
+  on a general instance;
+- on Chat-type clients, writes with no routing rule;
+- on a refuse-list instance, a type an agent registers explicitly with `register_schema`
+  (open question 1).
 
 ### Residual risks and non-goals
 
@@ -161,14 +218,21 @@ routing rule.
     the precedent for layer 0;
   - so are whole-request reject, the denied versus unavailable split, and a structural
     write-path test.
-  - Layer 0 is their admin-set, bundle-aware, always-enforced successor. It reuses the
-    instance-policy evaluator path, with its lists sourced from the admin-set settings
-    record.
+  - Layer 0 is **not** their successor. Under #2565 those two lists migrate into
+    mandatory `entity_type_allow` and `entity_type_deny` predicate rules, and layer 0 does
+    not consume them. Layer 0 is a separate admin-set floor: it survives rules
+    break-glass and covers raw storage, which #2565 predicates do not. See "Boundary with
+    the rules design".
+  - Layer 0 runs in the same evaluator path as instance policy, but does not inherit
+    that evaluator's rule that an empty allow-list means no allow-list (see "Resolution
+    and fail-closed rules").
 - **Bundles** (`docs/foundation/bundles.md`, `src/services/bundles/`, and the bundles
   PR #2595): bundles are named by `name`, and each declares `provides_entity_types`.
   Layer 0 uses that vocabulary for its selectors.
 - **Rules design** (#2565): routing rules, approval by a member other than the author,
-  and hook packages.
+  hook packages, the governance types and their no-lockout exemption, the governance
+  guard and operator channel delivered in its slice N1, and the `ERR_STORE_POLICY_DENIED`
+  envelope with per-entity reason codes.
 
 ## Design
 
@@ -263,7 +327,7 @@ the modes. They are never in an entity, and no agent can write them.
 
 | Setting | Values | Meaning |
 |---|---|---|
-| `accepted_classes` | List of selectors, or unset | If set, every entity in a write must match a selector, or the write is refused. |
+| `accepted_classes` | List of selectors, or unset | If set, every entity in a write must match a selector, or the write is refused. "Unset" and "set" are distinct stored states. A set list that resolves to no types refuses every write. |
 | `refused_classes` | List of selectors | Any entity that matches is refused. Refuse wins over accept. |
 | `raw_storage` | `accept`, `refuse` | Whether raw and reference file storage, which has no entity type, is admitted. |
 
@@ -272,45 +336,229 @@ the modes. They are never in an entity, and no agent can write them.
 - `bundle:<name>` matches every type in that bundle's `provides_entity_types`, using the
   bundle vocabulary of `docs/foundation/bundles.md` and #2595. For example,
   `bundle:crm`, `bundle:engineering`, `bundle:communications`, or a finance bundle once
-  one exists in the catalog.
-- `type:<entity_type>` matches a single type.
+  one exists in the catalog. Until then, finance classes are named with `type:`
+  selectors.
+- `type:<entity_type>` matches a single type, after the canonicalization described under
+  "Which type is classified".
+- `class:bookkeeping` is a built-in selector for the chat bookkeeping types that the
+  per-turn store recipe in `docs/developer/mcp/instructions.md` writes:
+  `conversation` and `conversation_message`, with its `agent_message` alias. It is
+  defined in code next to that recipe, and a test holds the two equal. Setting an
+  accept-list that omits it shows a warning that every per-turn store on this instance
+  will be refused, and asks the admin to confirm.
 
-A bundle selector resolves through the bundle loader's own `provides_entity_types` at
-evaluation time. A type added to a bundle is therefore covered without editing settings.
-A selector naming an unknown bundle is a configuration error, refused at set time.
+#### Resolution and fail-closed rules
 
-**What is classified.** Each entity in `store`, `correct`, and interpretation-extracted
-entities, including those extracted from uploaded files. A relationship write is
-admitted only if both endpoint types are admitted. Raw and reference file storage
-follows `raw_storage`.
+These rules exist because a selector's coverage can otherwise shrink with no admin
+action: through bundle enable state, a catalog change in a release, a bundle rename or
+split, or a failed catalog load.
 
-**Evaluation.**
+- **Resolve from manifests, never from enable state.** A `bundle:` selector resolves from
+  the bundle's manifest in the loaded catalog (the manifest the loader returns for that
+  bundle name), whether or not the bundle is installed or enabled on this instance. It
+  never resolves from the enabled-bundles index (`getProvidedEntityTypes`,
+  `bundleProviding`), which is what the `guided` gate reads. Enabling, disabling,
+  installing or removing a bundle therefore never changes what layer 0 admits.
+- **Snapshot at set time.** When a selector is set, its resolved type set and the catalog
+  version are stored with it in the settings record. At evaluation:
+  - the effective refuse set is the snapshot **union** the current manifest resolution;
+  - the effective accept set is the snapshot **intersected with** the current manifest
+    resolution.
 
-- Admission runs in the request phase, after each entity's type is resolved and before
-  any write.
-- It is a whole-request reject with zero rows in every table, and every refused entity
-  is listed.
-- The check is in the instance-policy evaluator path, so it covers the same three entity
-  write paths and the structural coverage test extends to it.
+  So a catalog change can only tighten at once. A type added to a refused bundle is
+  refused without editing settings. A type added to an accepted bundle is refused until
+  the admin confirms it.
+- **Loosening from a catalog change is a pending loosening.** When the current resolution
+  differs from the snapshot in a direction that would loosen (a type moved out of a
+  refused bundle, a type added to an accepted bundle), the server records a pending
+  loosening for that selector and shows it in `/session` and `describe_instance_policy`.
+  It takes effect only by the admin's explicit confirm, after the cooling delay, like any
+  other loosening. Until then the tighter set applies.
+- **A selector that no longer resolves refuses every write.** If a stored `bundle:`
+  selector names a bundle that is not in the loaded catalog (renamed, split or dropped in
+  a release), or resolves to zero types, the instance refuses every write except to
+  governance types, with `ERR_ADMISSION_CLASSES_UNRESOLVED`. This is the same outcome as
+  an unreadable settings record. Discovery calls still work, and `describe_instance_policy`
+  names the stale selector. The admin repairs it by re-setting the selector, which is a
+  tightening or a loosening under the usual rules.
+- **A catalog that failed to load refuses every write.** The loader returns an empty
+  catalog when a manifest or `requires_bundles` error occurs. Layer 0 treats a failed load
+  on an instance with any `bundle:` selector as unresolved, with the same code, and never
+  as an empty catalog.
+- **An accept-list that resolves to zero types refuses every write** except to governance
+  types. Layer 0 does not reuse the instance-policy evaluator's rule that an empty
+  allow-list is no allow-list.
+- **Upgrade preflight.** `neotoma instance classes check`, run through the operator
+  channel before an upgrade, reports which stored selectors the new catalog would leave
+  unresolved or would change, so the admin can re-set them first. The release notes for
+  any catalog rename or split name the affected selectors.
+- **At set time,** a selector naming an unknown bundle, a bundle with no types, or a
+  governance type is refused.
+
+#### Which type is classified
+
+- **Canonical type.** Layer 0 compares the canonical type that storage persists, after
+  the same normalization schema lookup applies: case, whitespace and punctuation, the
+  `type` key fallback when `entity_type` is absent, and the `generic` default. It never
+  compares the raw request string.
+- **Submitted and alias-resolved types.** Each entity is classified on both its canonical
+  submitted type and its alias-resolved type (for example `bug_report` resolving to the
+  built-in `product_feedback` until a bundle registers its own schema). The entity is
+  refused if **either** matches the refuse set. It is admitted to an accept-list only if
+  its **resolved** type is in the accept set.
+
+#### What is classified
+
+The sink list is derived, not named by hand: every operation declared
+`x-neotoma-effect: write` (see "Effect classification") that creates an entity, re-types
+an existing one, or writes a relationship, is a layer-0 sink. The structural coverage
+test enumerates these operations from the OpenAPI document and fails when one does not
+reach layer 0, so a later write path cannot skip it. Today that list includes:
+
+- the structured `store` paths (REST and MCP) and `correct`, which call the evaluator
+  today;
+- interpretation extraction (`src/services/interpretation.ts`), which writes observations
+  directly and does not call the evaluator today; a new call site;
+- raw and reference file storage (`storeUnstructuredForApi`), which follows `raw_storage`
+  and does not call the evaluator today; a new call site;
+- relationship writes (`create_relationship` and relationships inside `store`), admitted
+  only if both endpoint types are admitted; a new call site;
+- `split_entity`, whose new entity's type is caller-supplied, and `merge_entities`;
+- `restore_entity`: restoring an entity whose type is now refused is refused;
+- inbound peer sync.
+
+**Raw storage with extraction.** In one request, raw storage and extraction are one
+admission decision: if any extracted entity is refused, the source row and the file do
+not persist either. When extraction is a later call, the source has already landed under
+`raw_storage: accept`. That refusal's message says the source was stored earlier and that
+no entities were persisted from this call.
+
+**Existing data.** Setting a refused class, or narrowing an accept-list, over data that
+already exists shows the admin how many existing entities it affects, because `correct`
+on those entities will then be refused. Existing rows are never deleted.
+
+#### Evaluation
+
+- Admission runs in the request phase, after each entity's type is canonicalized and
+  alias-resolved, and before any write. On every path, including extraction, it runs
+  **before schema auto-creation**, so a refused write leaves no newly registered schema
+  behind.
+- It is a whole-request reject with zero rows in every table, schema rows included.
+  Every refused entity and every refused relationship is listed.
+- The check is in the instance-policy evaluator path and covers every sink above.
 - If the settings record cannot be read, the check fails closed (see "Settings record
   states").
 
-**Error.** `ERR_DATA_CLASS_REFUSED`, HTTP 403, not retryable. Details list each entity's
-index, `entity_type`, and the matched or unmatched selector. Hint: "This Neotoma does not
-accept `<class>` data; 0 persisted. Do not retry here. Store it on the Neotoma your
-routing rule names for this data, or ask the user." The hint carries no served id and no
-payload fragment.
+#### Boundary with the rules design (#2565)
 
-**Who sets it.** The same admin authority as modes:
+Layer 0 and #2565's `entity_type_allow` and `entity_type_deny` predicates both decide
+admission by entity type. Keeping both is deliberate: layer 0 is an admin-set floor that
+survives rules break-glass and covers raw storage, and #2565 predicates are member-proposed
+rules that can be suspended by break-glass and do not cover raw storage. The boundary:
 
+- **Migration home.** The existing instance-policy `in_scope_entity_types` and
+  `out_of_scope_entity_types` migrate into #2565 predicate rules, as #2565 specifies.
+  Layer 0 does not consume them. An upgraded instance gets layer 0 with no class lists.
+- **Composition.** A write must pass layer 0 **and** every applicable mandatory #2565
+  predicate. Layer 0 runs first, at the envelope, before the rules resolver. Rules
+  break-glass never suspends layer 0.
+- **Governance types.** Layer 0 always admits writes to the #2565 governance types
+  (`rule`, `policy`, `member`, `agent_grant`, and the legacy rule-bearing types during
+  the transition window), and relationship writes among them, so the rule set can always
+  be repaired. The list is read from the one function #2565 slice N1 introduces, not
+  copied. A selector that names a governance type is refused at set time. These writes
+  still pass the governance guard, so admitting them at layer 0 grants nothing.
+- **One denial code family.** A layer-0 refusal returns `ERR_STORE_POLICY_DENIED`, the
+  code #2565 predicates and today's instance policy already use, with its existing HTTP
+  status. Each denied entry carries `reason_code: data_class_refused` and
+  `source: admission_settings` in place of a `rule_key`. Agents and clients branch on the
+  reason code.
+- **One guard.** Admin gating of the admission-settings record uses the #2565 slice N1
+  governance guard and operator channel. This design builds no second guard.
+
+#### Refusal and recovery
+
+**Error.** `ERR_STORE_POLICY_DENIED`, not retryable. `details` lists:
+
+- each refused entity: index, canonical `entity_type`, resolved type, and the reason,
+  either `not_in_accept_list` or `matched_refuse_selector` with the selector (for
+  example `bundle:finance`);
+- each relationship refused because an endpoint was refused, by index and the refused
+  endpoint's index.
+
+**Hint.** "This Neotoma does not accept `<entity_type>` records; 0 persisted. Do not
+resend this request unchanged. Remove the refused entities and every relationship listed
+in details, then store the rest here. Store the refused entities on the Neotoma your
+routing rule names for them, or ask the user, together with that Neotoma's own
+conversation and message records." The hint carries no served id and no payload
+fragment.
+
+**Why a stripped retry.** The standard per-turn store holds the `conversation`, the
+user's `conversation_message`, extracted entities and REFERS_TO links in one request. On
+a general instance that refuses finance classes, a turn that mentions a payment is a
+mixed write, not a wrong-instance write. The conversation and message belong on the
+instance in use, so the agent stores them there. The refused records go to the instance
+that accepts them, with that instance's own conversation and message records, so the
+provenance chain holds on both. A stripped retry applies only to a data-class refusal. A
+target mismatch means the whole request was aimed at the wrong instance, and it is never
+retried on that connection.
+
+**What the user is told.** Which records went where, for example: "I saved this turn
+here in Personal graph. The payment was refused here, so I stored it in Finance graph
+with its own record of this turn."
+
+#### Who sets it
+
+The same admin authority as modes, through the operator channel:
+
+- **Command.** `neotoma instance classes show|set|confirm|cancel` on the instance host,
+  and the same operations on the hosted admin route. `set` prints the effective lists
+  after the change, which entries are tightening and take effect now, and which are
+  loosening, pending, and when they take effect.
 - Tightening is immediate: adding a refused class, removing an accepted class, or setting
   `raw_storage: refuse`.
 - Loosening needs an explicit confirm and a cancellable cooling delay (default 24 hours).
   It is audited and shown as pending.
-- `NEOTOMA_REFUSED_CLASSES` adds to the stored refuse-list, and
-  `NEOTOMA_ACCEPTED_CLASSES` intersects with the stored accept-list. Both only tighten.
+- **Environment.** `NEOTOMA_REFUSED_CLASSES` and `NEOTOMA_ACCEPTED_CLASSES` take a
+  comma-separated list of selectors, for example
+  `NEOTOMA_REFUSED_CLASSES=bundle:finance,type:invoice`. A malformed value stops the
+  server from starting, with a named error. Both are applied on resolved types:
+  - the refused variable adds to the stored refuse set;
+  - the accepted variable intersects with the stored accept set. When the stored
+    accept-list is unset, the variable's list becomes the effective accept-list. An
+    intersection with no overlap is an empty accept set and refuses every write except
+    to governance types.
+- **Visibility.** `describe_instance_policy` and `/session` show the effective lists,
+  marking each entry as stored, from the environment, or held by a snapshot, and show
+  stale selectors and pending loosenings with their effective time. An admin who removes
+  a stored entry that the environment still enforces can see why it still refuses.
 - #2565 rules may tighten, never loosen.
-- This depends on admin-gating of instance-policy writes, which slice 1 establishes.
+
+#### Schema and bundle changes
+
+Two agent-callable tools can change which types exist on an instance:
+
+- **`manage_bundles` `install`, `enable` and `disable`.** Because selectors resolve from
+  manifests plus the set-time snapshot, none of these changes what layer 0 refuses or
+  accepts. Under `guided`, installing or enabling a bundle still widens which types can
+  auto-create, but a refuse-list keeps refusing what it covered, and an accept-list still
+  refuses anything not in its accept set.
+- **`register_schema`,** and any other schema-creating path. On an accept-list instance a
+  new type is not in the accept set and is refused. On a refuse-list instance a new type
+  that no selector names is admitted.
+
+Whether these tools need the admin authority on an instance with any class setting is
+open question 1, because it changes the permission semantics of existing agent-callable
+tools. Until it is ruled:
+
+- the `guided` and `locked` refusal hints stop telling the agent to register the type,
+  and name the operator as the actor: "This Neotoma does not auto-create `<type>`. Tell
+  the user; its operator decides which types it holds.";
+- on an instance with any class setting, every schema registered or bundle installed
+  after the class settings were last confirmed is audited and listed in
+  `describe_instance_policy` as "types added since class settings were confirmed", so
+  the admin sees it;
+- test 3 pins the residual as stated, so it cannot change silently.
 
 ### (c) Declaring the intended instance (layers 1 and 2)
 
