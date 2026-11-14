@@ -27,10 +27,10 @@ changes these points:
   conjunction, rules break-glass never suspends layer 0, governance types are always
   admitted by layer 0, refusals use the one `ERR_STORE_POLICY_DENIED` family, and admin
   gating reuses the #2565 governance guard and operator channel.
-- **Agent-callable tools no longer move the class boundary through bundle state.** Whether
-  `register_schema` and the mutating `manage_bundles` actions need admin authority on
-  instances with class settings changes the permission semantics of existing tools. It is
-  left as open question 1, with an interim rule and a stated residual.
+- **Agent-callable tools no longer move the class boundary.** On an instance with
+  data-class settings, only the admin can register new record types or change bundles.
+  `register_schema` and the mutating `manage_bundles` actions are refused to agents
+  there. The operator decided this on 2026-11-14 (decision 7, formerly open question 1).
 - **A data-class refusal leads to a stripped retry.** The agent removes the refused
   entities and their relationships and stores the rest on the same connection, so the
   turn's own conversation records are not lost. Only an unchanged resend is forbidden.
@@ -40,8 +40,8 @@ changes these points:
 - **Human-only enrollment is tested against pseudo-terminals,** and the confirmation
   surfaces never read terminal input.
 
-The open questions this revision cannot settle are listed in "Open questions (revision 5)"
-at the end.
+No open questions remain. The question this revision could not settle was decided by
+the operator, and is recorded as decision 7 at the end.
 
 **Revision 4 changed the shape.** Each earlier revision closed one client-side gap and
 opened another. The cause is that every defence against misselection depended on the
@@ -125,11 +125,10 @@ This needs no client cooperation, no registry, and no hooks.
   auto-create a new type. A refuse-list does not cover it. An accept-list does, which is
   one reason confidential instances should use accept-lists. Instances with refuse-lists
   should run `NEOTOMA_SCHEMA_MODE=guided`, where only bundle-provided types auto-create.
-  `guided` gates auto-creation only. An agent can still register a new type explicitly
-  with `register_schema`, and on a refuse-list instance a write of that type is then
-  admitted. Whether that tool needs admin authority on instances with class settings is
-  open question 1. Until it is ruled, this is a stated residual, made visible as described
-  in "Schema and bundle changes" below.
+  `guided` gates auto-creation only. Explicit registration with `register_schema`, and
+  bundle changes that widen what `guided` auto-creates, are admin-only on instances with
+  data-class settings (see "Schema and bundle changes"), so an agent cannot add a type
+  there by either route.
 - **The per-turn message and raw attachments.** Neotoma's agent instructions store every
   user message word for word, every turn, and keep attachments as raw files. Neither has
   a type that layer 0 can judge. In a team with a confidential instance, a general
@@ -182,8 +181,8 @@ remaining exposure is:
 - unclassified free text, most often the verbatim per-turn message and raw attachments
   on a general instance;
 - on Chat-type clients, writes with no routing rule;
-- on a refuse-list instance, a type an agent registers explicitly with `register_schema`
-  (open question 1).
+- on a refuse-list instance left in `evolving` mode, a type an agent auto-creates by
+  writing it, which is why the recommended configuration uses `guided`.
 
 ### Residual risks and non-goals
 
@@ -537,29 +536,46 @@ The same admin authority as modes, through the operator channel:
 
 #### Schema and bundle changes
 
-Two agent-callable tools can change which types exist on an instance:
+Decided by the operator on 2026-11-14 (decision 7): **on an instance with data-class
+settings, only the admin can register new record types or change bundles through
+tools.**
 
-- **`manage_bundles` `install`, `enable` and `disable`.** Because selectors resolve from
-  manifests plus the set-time snapshot, none of these changes what layer 0 refuses or
-  accepts. Under `guided`, installing or enabling a bundle still widens which types can
-  auto-create, but a refuse-list keeps refusing what it covered, and an accept-list still
-  refuses anything not in its accept set.
-- **`register_schema`,** and any other schema-creating path. On an accept-list instance a
-  new type is not in the accept set and is refused. On a refuse-list instance a new type
-  that no selector names is admitted.
-
-Whether these tools need the admin authority on an instance with any class setting is
-open question 1, because it changes the permission semantics of existing agent-callable
-tools. Until it is ruled:
-
-- the `guided` and `locked` refusal hints stop telling the agent to register the type,
-  and name the operator as the actor: "This Neotoma does not auto-create `<type>`. Tell
-  the user; its operator decides which types it holds.";
-- on an instance with any class setting, every schema registered or bundle installed
-  after the class settings were last confirmed is audited and listed in
-  `describe_instance_policy` as "types added since class settings were confirmed", so
-  the admin sees it;
-- test 3 pins the residual as stated, so it cannot change silently.
+- **Which instances.** Any instance whose effective settings include an
+  `accepted_classes` list, a non-empty `refused_classes` list, or either class
+  environment variable. Instances without data-class settings are unchanged by this
+  rule.
+- **Which operations.** `register_schema`, and any other tool or route that creates a
+  new entity type schema; and the mutating `manage_bundles` actions: `install`,
+  `enable`, `disable`, and any mutating action added later. Read-only `manage_bundles`
+  actions and schema reads stay open to agents. Writes of existing types, and
+  auto-creation under `guided` of types from bundles the admin enabled, are unchanged.
+- **Who enforces it.** The #2565 slice N1 governance guard, the same guard that gates
+  the admission-settings record. It is called at the entry of the `register_schema`
+  handler, and from the bundle activation admin hook (`assertAdminGateHook` in
+  `src/services/bundles/activation.ts`, a no-op today), before anything changes. Only
+  the operator channel passes: the local CLI on the instance host, or the hosted admin
+  route. MCP calls, agent-scoped tokens and member credentials are refused, whoever the
+  member is. The guard reads the effective class settings at call time, so applying a
+  class setting gates these operations at once, and a gated call is audited.
+- **Operator commands.** The existing `neotoma schemas register` and
+  `neotoma bundles install|enable|disable` commands, run through the operator channel.
+  `neotoma instance classes set` says, when it first applies a class setting, that schema registration and bundle
+  changes are now admin-only on this instance.
+- **How a refusal reads to the agent.** `ERR_CLASS_SETTINGS_ADMIN_ONLY`, HTTP 403, not
+  retryable. `details` names the operation and action (for example `register_schema` or
+  `manage_bundles` `enable`) and, for a schema, the requested type name. Nothing
+  changes. Hint: "This Neotoma has data-class settings, so only its operator can add
+  record types or change bundles. Nothing was changed. Do not retry. Tell the user; its
+  operator decides which types this Neotoma holds." The hint carries no served id and
+  offers no command. The agent tells the user, for example: "Finance graph only lets its
+  operator add new record types, so I could not add `<type>` there."
+- **Auto-create hints.** The `guided` and `locked` refusal hints no longer tell the agent
+  to register the type, and name the operator as the actor: "This Neotoma does not
+  auto-create `<type>`. Tell the user; its operator decides which types it holds."
+- **Effect on layer 0.** Selectors already resolve from manifests plus the set-time
+  snapshot, so bundle state never changed what layer 0 refuses or accepts. This rule
+  closes the remaining route: on a refuse-list instance, an agent can no longer add a
+  type that no selector names by registering it.
 
 ### (c) Declaring the intended instance (layers 1 and 2)
 
@@ -796,6 +812,7 @@ named when registered.
 | `ERR_TARGET_INSTANCE_MALFORMED` | 400 | No |
 | `ERR_STORE_POLICY_DENIED` with `reason_code: data_class_refused` (layer 0; existing code and status) | 400 | No |
 | `ERR_ADMISSION_CLASSES_UNRESOLVED` | 503 | No |
+| `ERR_CLASS_SETTINGS_ADMIN_ONLY` | 403 | No |
 | `ERR_TARGET_INSTANCE_UNAVAILABLE` | 503 | Yes |
 | `ERR_TARGET_INSTANCE_IDENTITY_MISSING` | 503 | No |
 | `ERR_ADMISSION_SETTINGS_MISSING` | 503 | No |
@@ -903,11 +920,6 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
    - A `note` carrying finance text is admitted on P. This pins the documented gap.
    - A new auto-created type is admitted on a refuse-list instance under `evolving`,
      refused under `guided`, and refused by an accept-list.
-   - Until open question 1 is ruled: a type registered with `register_schema` through
-     MCP on a refuse-list instance is admitted, appears in `describe_instance_policy`
-     under "types added since class settings were confirmed", and writes an audit event.
-     On an accept-list instance it is refused. When the question is ruled, this case
-     flips to the ruled behaviour.
    - The `guided` and `locked` refusal hints name the operator and do not mention
      `register_schema`.
 4. **Bundle resolution.**
@@ -915,9 +927,9 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
      editing the settings.
    - A type added to an accepted bundle is refused until the admin confirms the pending
      loosening, and is admitted only after the cooling delay.
-   - **Planted red, enable state:** `manage_bundles disable` of the refused finance
-     bundle, and running with that bundle never installed or enabled, both leave the
-     refusal in place. With resolution switched to the enabled-bundles index, the test
+   - **Planted red, enable state:** disabling the refused finance bundle through the
+     operator channel, and running with that bundle never installed or enabled, both
+     leave the refusal in place. With resolution switched to the enabled-bundles index, the test
      goes red.
    - **Planted red, catalog shrink:** a type moved out of a refused bundle in a new
      catalog stays refused (snapshot), and a pending loosening is recorded.
@@ -956,6 +968,16 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
    - **Migration:** an upgraded instance with instance-policy type lists gets #2565
      predicate rules for them and no layer-0 class lists.
    - Setting an accept-list without `class:bookkeeping` warns and asks for a confirm.
+   - **Planted red, schema and bundle authority (decision 7):** on instances with an
+     accept-list, a refuse-list, or only a class environment variable, `register_schema`
+     and `manage_bundles` `install`, `enable` and `disable` through MCP, an agent token,
+     and a member credential are refused with `ERR_CLASS_SETTINGS_ADMIN_ONLY`, with no
+     schema row, no bundle state change, and an audit event. The same operations through
+     the operator channel succeed. Read-only `manage_bundles` actions still work for
+     agents. On an instance without class settings, behaviour is unchanged. Applying a
+     first class setting gates the next call with no restart. With the guard call
+     removed, an agent-registered type on a refuse-list instance is admitted, and the
+     test goes red.
    - Setting a refused class over existing data reports the count of affected entities.
 
 **Layers 1 and 2**
@@ -992,7 +1014,8 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
     - No hint contains the served id or an agent-runnable command. This covers
       `REQUIRED`, `MISMATCH`, the `data_class_refused` denial, `UNAVAILABLE`,
       `IDENTITY_MISSING`, `ADMISSION_SETTINGS_MISSING`, `ADMISSION_CLASSES_UNRESOLVED`,
-      `MOVE_UNCONFIRMED`, and the `guided` and `locked` auto-create refusals.
+      `CLASS_SETTINGS_ADMIN_ONLY`, `MOVE_UNCONFIRMED`, and the `guided` and `locked`
+      auto-create refusals.
     - A sentinel string planted in a rejected payload appears in no request log, error
       report, or audit event.
     - A pre-auth rejection writes no audit event.
@@ -1122,8 +1145,10 @@ two-instance flows need; **F** is an `agentic_eval` fixture.
       relationships.
     - The reply names the refusing instance and the reason, and says which records went
       where.
-    - Slice 1 ships its own F fixture for the data-class case; it is not deferred to
-      slice 6.
+    - After `ERR_CLASS_SETTINGS_ADMIN_ONLY`: no retry of the schema or bundle call, no
+      attempt through another tool, and the reply tells the user the operator decides.
+    - Slice 1 ships its own F fixtures for the data-class and admin-only cases; they are
+      not deferred to slice 6.
 31. **F, stop on a missing acknowledgement.** No further write, and the write is flagged
     as unverified.
 32. **S, header.** The title, or the short id, names the instance that answered.
@@ -1145,7 +1170,11 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    alias-resolved classification, the derived sink list and its new call sites, the
    `data_class_refused` reason code on `ERR_STORE_POLICY_DENIED`,
    `ERR_ADMISSION_CLASSES_UNRESOLVED`, `class:bookkeeping`, `neotoma instance classes`,
-   the revised `guided` and `locked` hints, and the F fixture for eval 30. Errors and
+   the revised `guided` and `locked` hints, and the F fixtures for eval 30. It also
+   delivers decision 7: the N1 guard call at the `register_schema` handler and in the
+   bundle activation admin hook, `ERR_CLASS_SETTINGS_ADMIN_ONLY`, and the operator
+   path for the existing `neotoma schemas register` and
+   `neotoma bundles install|enable|disable` commands. Errors and
    headers are declared in `openapi.yaml` and `errors.md` first. On hosted instances the
    admin operations need the hosted admin route, a named later increment of N1.
 2. The identity record, commitment, identity states, identity commands, and export; the
@@ -1162,7 +1191,7 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
 6. The turn-summary header, the instructions line, and the agent evals.
 7. Peer sync.
 
-## Decisions on the six open questions
+## Decisions on open questions
 
 1. **Cloned databases.** Tooling distinguishes clone from restore, and a clone gets a new
    id and commitment. The serving location is recorded from configuration, and a change
@@ -1187,31 +1216,14 @@ Slices 1 to 3 need no client cooperation and land first. Every slice takes the a
    Data classes and modes live in the admin-set settings record. Rules may tighten,
    never loosen. Routing is an approved #2565 rule that produces the per-write target.
    Revision 5 states the full boundary in "Boundary with the rules design".
-
-## Open questions (revision 5)
-
-These ask for a decision that changes authority or permission semantics beyond what
-this design already proposes, so the design does not settle them.
-
-1. **Do `register_schema` and the mutating `manage_bundles` actions need the admin
-   authority on an instance with any class setting?** Today both are agent-callable
-   through MCP. Selector resolution in revision 5 already stops bundle state from moving
-   layer 0. What remains is that, on a refuse-list instance, an agent can register a new
-   type that no selector names, and its writes are admitted. The options:
-   - **(A) Gate both** behind the operator channel on any instance with a class setting,
-     and add their refusal through MCP and agent tokens to test 5. This closes the
-     residual. It changes who can create schemas and manage bundles on those instances,
-     and agents that register types as part of normal work there would need an operator
-     step. The security lens asked for this option.
-   - **(B) Leave the tools ungated, and have layer 0 hold new types.** On an instance
-     with a class setting, writes of a type registered after the class settings were
-     last confirmed are refused until the admin classifies the type. This changes
-     admission rather than tool authority, but adds a new admin act to every new type.
-   - **(C) Keep the interim rule as the design.** The residual stays stated, audited and
-     visible in `describe_instance_policy`, and test 3 pins it.
-
-   Until this is ruled, the design ships (C), as described in "Schema and bundle
-   changes".
+7. **Schema and bundle authority on instances with data-class settings.** Raised in
+   revision 5 as open question 1, because it changes the permission semantics of
+   existing agent-callable tools. Decided by the operator on 2026-11-14 as option A:
+   on an instance with data-class settings, `register_schema` and the mutating
+   `manage_bundles` actions are admin-only, enforced by the #2565 N1 governance guard.
+   The options not taken were leaving the tools open while layer 0 holds new types
+   until the admin classifies them, and keeping the gap as a stated residual. See
+   "Schema and bundle changes".
 
 ## References
 
