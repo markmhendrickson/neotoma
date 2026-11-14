@@ -84,7 +84,7 @@ Not code. Not applicable, except for the Code review findings below.
 
 ## Code review
 
-`/review v0.28.0..HEAD`, run by the release-prep agent over the full source diff (`src/`, `scripts/`, workflows, `openapi.yaml`, docs) and the test files named above.
+`/review v0.28.0..HEAD`, run by the release-prep agent over the full source diff (`src/`, `scripts/`, workflows, `openapi.yaml`, docs) and the test files named above. Findings use the skill's format; its middle tier is labelled NON-BLOCKING here.
 
 ```
 [BLOCKING] doc-completeness — RESOLVED on the release branch
@@ -99,25 +99,25 @@ Rule: Checklist 10, openapi:bc-diff entries named in Breaking changes
 Finding: openapi:bc-diff reports five removed-response-status entries (401 on the subscription routes and /events/stream).
 Fix: Named in Breaking changes with the explanation that each 401 moved to the shared GuestTokenInvalid reference and the only caller-visible change is the GUEST_TOKEN_INVALID code.
 
-[ADVISORY] doc-completeness — RESOLVED on the release branch
+[NON-BLOCKING] doc-completeness — RESOLVED on the release branch
 File: docs/subsystems/guest_access_policy.md
 Rule: Phase 5c, subsystem doc silent on changed behavior
 Finding: The policy-mode table read as the whole story for guest reads; it did not describe token precedence on the share-link routes, the token check on other routes, the expansion rule or admitted-agent entity reads.
 Fix: Added a "Guest tokens" section.
 
-[ADVISORY] discoverability
+[NON-BLOCKING] discoverability
 File: docs/reference/error_codes.md
 Rule: Phase 5c, error code registry
 Finding: GUEST_TOKEN_INVALID and GUEST_TOKEN_SCOPE are registered in docs/subsystems/errors.md and openapi.yaml but not in docs/reference/error_codes.md.
 Fix: Follow-up: add both codes with status, retry eligibility and causes.
 
-[ADVISORY] contract (tooling)
+[NON-BLOCKING] contract (tooling)
 File: scripts/openapi_bc_diff.js:147
 Rule: Checklist 10
 Finding: collectResponseShape does not resolve a response-level $ref (components/responses), so moving an inline response to a shared one reports it as removed.
 Fix: Follow-up: resolve response $ref before comparing status sets.
 
-[ADVISORY] silent-behavior / observability
+[NON-BLOCKING] silent-behavior / observability
 File: src/repositories/sqlite/sqlite_client.ts (entities indexes)
 Rule: Phase 5b
 Finding: The two idempotency-key indexes log a start and end line when first built; the four new entities indexes are built silently at first start, which can delay writes on a large database with no log line.
@@ -139,7 +139,7 @@ Architecture (Phase 5): no strategy or orchestration added to the state layer; n
 Base..Head: v0.28.0..HEAD (code at 1f95f4d85)
 Files reviewed: 132
 Blocking: 2 (both resolved on the release branch)
-Advisory: 4 (1 resolved; 3 follow-ups)
+Non-blocking: 4 (1 resolved; 3 follow-ups)
 Nit: 1
 
 Verdict: APPROVED-WITH-NOTES
