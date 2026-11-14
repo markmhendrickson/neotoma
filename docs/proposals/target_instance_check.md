@@ -193,8 +193,9 @@ remaining exposure is:
 - An agent that does not recognise data as confidential.
 - An agent that copies the served id into a per-write target, against the rules.
 - A user who confirms the wrong Neotoma at enrollment.
-- An agent with computer-use or browser control that answers an enrollment
-  confirmation surface. That is outside this accident guard.
+- An agent with computer-use or browser control, or with UI scripting reached through a
+  shell, that answers an enrollment confirmation surface. Requiring the typed short id
+  or alias raises the bar but does not close it. That is outside this accident guard.
 
 **Non-goals:**
 
@@ -586,24 +587,55 @@ disguise (test 4).
 
 **Never sources.** These identify the instance for display and verification only:
 
-- the served instance's own identity: headers, `_meta`, the content line, instructions,
-  `get_session_identity`, and the server card;
+- the served instance's own identity: headers, `_meta`, the content line, the
+  instructions' description of the instance itself, `get_session_identity`, and the
+  server card;
 - any connection binding.
+
+An approved routing rule carried in the instructions is a source (source 1). The
+instance's description of itself in the same instructions is not.
 
 **Echo routes closed.** A registry lookup key comes only from the user's words or a
 routing rule. It never comes from:
 
 - the connector in use;
 - a title named in an error envelope;
-- the instructions;
+- the instructions' description of the instance itself;
 - the turn-summary header;
 - any other served surface.
 
-The agent never does a reverse lookup from a connector or a served title to an id. The
-Claude Code hook package enforces this mechanically with a **self-target check**. When a
-write's per-write target equals the registry id of the connector being called, the hook
-denies the call and asks the user, unless that entry's alias appears in the user's
-prompt this turn or in an applicable approved routing rule.
+The agent never does a reverse lookup from a connector or a served title to an id.
+
+#### Self-target check
+
+The Claude Code hook package enforces the echo rule mechanically. A correct
+registry-sourced write always has a target equal to the registry id of the connector
+being called, so the check cannot simply deny that case. It asks for evidence that the
+target came from the user or a rule.
+
+- **When it fires.** A write's per-write target equals the registry id of the connector
+  being called.
+- **What satisfies it.** Any one of:
+  - the entry's alias or short id appears in the user's prompt this turn. "Appears" uses
+    the same normalization as registry lookup (trimmed, NFC, case-insensitive) and
+    matches a whole word or phrase, not a substring;
+  - an applicable approved routing rule names that id;
+  - **a choice the user made this turn from a registry list the agent showed.** The agent
+    runs the list-and-choose step as a structured question (the harness's question tool,
+    where it has one). The hook reads the question and the answer, and the choice counts
+    whether the user answers by alias, by number, or with "yes" to a single offered
+    entry. Where the harness has no structured question tool, the plugin's per-prompt
+    hook records the list the agent showed and matches the user's next reply against it
+    by number, alias or short id.
+- **What happens otherwise.** The hook does not return a final deny. It returns a harness
+  **permission prompt** to the user showing the target's alias and short id and the
+  connector in use, for example "Write to Finance graph (nti_abc123) through this
+  connection?". The user's approval is a human confirmation in its own right and
+  satisfies the check. A refusal at the prompt blocks the write.
+- **Scope.** An exemption holds for the rest of the current turn and only for that
+  instance id. A later turn that writes to the same instance without naming it again
+  gets one permission prompt for that turn, not one per call. An exemption ends at once
+  when the entry becomes `stale`.
 
 #### The local instance registry
 
@@ -621,8 +653,16 @@ prompt this turn or in an applicable approved routing rule.
     - a plugin settings UI where the harness has one;
     - an Inspector page that requires the user's signed-in browser session. An agent
       token is not accepted there.
-  - There is no stdin confirmation, no `--yes` or assume-yes flag, and no reading answers
-    from piped input. The command refuses outright without an interactive session.
+  - **No confirmation is ever read from a terminal.** This covers piped stdin and also a
+    terminal or pseudo-terminal, because an agent shell can supply typed input through a
+    pseudo-terminal wrapper (`script`, `expect`, a terminal-tab tool). The command never
+    prompts on the terminal at all. It opens one of the surfaces above and waits for its
+    answer. There is no `--yes` or assume-yes flag.
+  - Without a display (for example over SSH, or on a headless host) there is no
+    OS-native dialog. The command then refuses and prints the address of the Inspector
+    enrollment page, where the user confirms in their signed-in browser.
+  - The confirmation requires the user to **type the displayed short id or the alias**,
+    not just press a button, so a single scripted click cannot complete it.
   - The confirmation shows:
     - the configured connection URL;
     - the serving location actually reached;
@@ -634,9 +674,11 @@ prompt this turn or in an applicable approved routing rule.
   - Enrolling an id that is already enrolled is refused, or offered as an explicit rename
     that shows the existing alias.
   - Hook packages deny agent invocations of `neotoma instance enroll`,
-    `--reset-unverified`, and edits to the registry file.
+    `--reset-unverified`, and edits to the registry file, including through wrappers
+    (`env`, `sh -c`, `npx`, and direct file writes through an interpreter).
   - `--reset-unverified` (resuming writes after an unverified write) uses the same
-    human-only confirmation.
+    human-only confirmation, with the same rules: no terminal input, no assume-yes, and
+    the Inspector page when there is no display.
   - Every change is logged locally.
 - **Refresh after reidentify, or a restore onto a new id.**
   - Entries never update themselves.
@@ -661,8 +703,10 @@ prompt this turn or in an applicable approved routing rule.
     by name. A routing rule for this data is needed, or use a client with the Neotoma
     plugin or CLI."
   - **Not enrolled:** this applies only after the user has seen the list and says the
-    Neotoma is not on it. "That Neotoma is not in your registry. You can add it yourself
-    from the Neotoma settings or the enrollment prompt; I can't do that for you."
+    Neotoma is not on it. "That Neotoma is not in your registry. You can add it yourself;
+    I can't do that for you. See <docs link for this client>." The link is per client:
+    the plugin settings page for Claude Code, and the enrollment section of the setup
+    docs for the CLI.
 
   Agent-facing text never offers a runnable command.
 
@@ -732,6 +776,7 @@ state:
 | Readable | Per settings | Per settings | Allowed | (none) |
 | Unreadable or malformed | **All refused**, asserted or not, because data classes cannot be evaluated | Refused | Allowed | `ERR_TARGET_INSTANCE_UNAVAILABLE`, retryable |
 | Missing after its ledgered creation, or missing on a database whose identity was minted after this feature | All refused | Refused | Allowed | `ERR_ADMISSION_SETTINGS_MISSING`, not retryable, operator hint |
+| Readable, but a stored `bundle:` selector does not resolve, or the bundle catalog failed to load | All refused except to governance types | Per settings | Allowed | `ERR_ADMISSION_CLASSES_UNRESOLVED`, not retryable, operator hint naming the stale selector |
 | Absent on a pre-feature database (no ledger entry) | Slice-4 migration creates it once with `optional` and no class lists, and ledgers it | (after migration) | Allowed | (none) |
 
 **Mode and data-class changes** use the admin authority described in layer 0. The
@@ -749,7 +794,8 @@ named when registered.
 | `ERR_TARGET_INSTANCE_MISMATCH` | 421 | No |
 | `ERR_TARGET_INSTANCE_REQUIRED` | 428 | No |
 | `ERR_TARGET_INSTANCE_MALFORMED` | 400 | No |
-| `ERR_DATA_CLASS_REFUSED` | 403 | No |
+| `ERR_STORE_POLICY_DENIED` with `reason_code: data_class_refused` (layer 0; existing code and status) | 400 | No |
+| `ERR_ADMISSION_CLASSES_UNRESOLVED` | 503 | No |
 | `ERR_TARGET_INSTANCE_UNAVAILABLE` | 503 | Yes |
 | `ERR_TARGET_INSTANCE_IDENTITY_MISSING` | 503 | No |
 | `ERR_ADMISSION_SETTINGS_MISSING` | 503 | No |
@@ -759,7 +805,7 @@ named when registered.
 **Hint rules.**
 
 - Hints never contain the served id.
-- The required and data-class envelope bodies carry no served id. Response headers still
+- The required and data-class refusal envelope bodies carry no served id. Response headers still
   do.
 - The mismatch hint points to the registry and the user, never to the served identity.
 - No payload fragment is echoed.
@@ -793,8 +839,12 @@ user."
 - **Instructions, first line.** "This connection is the Neotoma instance '<title>'
   (<short id>). It accepts: <class summary>. Before a write, set `target_instance` from
   your routing rule, or from the user's named Neotoma looked up in your registry. Never
-  from this connection. If neither applies, ask the user." This line is advisory. Layer 0
-  holds without it.
+  from this connection. If neither applies, ask the user. If a write is refused for its
+  data class, store the rest of it here and the refused records, with their own turn
+  records, on the Neotoma that accepts them." This line is advisory. Layer 0 holds
+  without it. `<class summary>` comes from the same resolver as `describe_instance_policy`
+  and names resolved bundle names and `type:` entries, not expanded type lists, to stay
+  inside the instruction budget #2565 sets.
 - **CLI agent instructions.** The same rules are mirrored into
   `docs/developer/cli_agent_instructions.md`.
 - **Turn-summary header.**
@@ -802,9 +852,15 @@ user."
     title.
   - Both display-rule locations are updated.
   - The agent assembles one line per instance from each instance's own summary.
-- **Rejections in the transcript.** "That write was refused by Personal graph: it does
-  not accept finance data." Or "...; it was meant for Finance graph." The agent never
-  retries on the same connection.
+- **Rejections in the transcript.**
+  - **Target mismatch:** "That write was refused by Personal graph; it was meant for
+    Finance graph." The agent never retries on the same connection.
+  - **Data-class refusal:** the agent never resends the same request. It does the
+    stripped retry described in "Refusal and recovery" and tells the user which records
+    went where: "I saved this turn here in Personal graph. The payment was refused here,
+    so I stored it in Finance graph with its own record of this turn." When no routing
+    rule or user choice names an instance for the refused records, it stores the rest and
+    asks the user where the refused records belong.
 
 ## Tests that would prove it
 
