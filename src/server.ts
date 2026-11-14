@@ -342,7 +342,6 @@ export interface CompactRelatedEntity {
 
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
-  private autoEnhancementCleanup?: () => void;
   private authenticatedUserId: string | null = null;
   /**
    * #2240: the signed-in member behind this server's authenticated identity —
@@ -10344,15 +10343,18 @@ export class NeotomaServer {
   }
 
   /**
-   * Start auto-enhancement processor (shared by both transports)
+   * Ensure the auto-enhancement processor is running (shared by both transports).
+   *
+   * The processor is one process-wide timer, not one per server instance: on
+   * the HTTP transport a NeotomaServer is minted per MCP session, and each used
+   * to start its own 30 s interval that nothing ever cleared. Repeat calls are
+   * no-ops, so nothing needs to stop it when a session closes.
    */
   private async startAutoEnhancement(): Promise<void> {
-    // Start auto-enhancement processor (runs every 30 seconds)
     try {
       const { startAutoEnhancementProcessor } =
         await import("./services/auto_enhancement_processor.js");
-      this.autoEnhancementCleanup = startAutoEnhancementProcessor(30000);
-      logger.info("[Neotoma MCP] Auto-enhancement processor started");
+      startAutoEnhancementProcessor(30000);
     } catch (error: any) {
       // Don't fail server startup if processor fails - log and continue
       logger.error(`[Neotoma MCP] Failed to start auto-enhancement processor: ${error.message}`);
