@@ -61,7 +61,7 @@ graph LR
 
 ## What you can do with it
 
-Neotoma v0.29.0 provides 67 MCP tools and 113 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
+Neotoma v0.29.1 provides 67 MCP tools and 113 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
 
 **Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. A committed, keyed structured store started on v0.26.0 that stops partway finishes its missing observations on a same-key retry; a store carrying an interpretation returns `ERR_STORE_WRITE_INCOMPLETE`, and keys left over from earlier versions behave differently over MCP and HTTP (see Known limitations). See Known limitations.
 
