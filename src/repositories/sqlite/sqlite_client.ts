@@ -856,10 +856,51 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
       )
       .run();
 
+    // Active-schema resolution. Every lookup filters on entity_type, scope and
+    // active by equality, and the user-scoped lookup on user_id as well
+    // (schema_registry.ts loadUserSpecificSchema / loadGlobalSchema /
+    // loadActiveSchemaInTransaction). Without this index each lookup was a
+    // full scan of the table, run four to eight times per stored entity and
+    // inside correction transactions while the write gate is held.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_schema_registry_resolve " +
+          "ON schema_registry(entity_type, scope, active, user_id)"
+      )
+      .run();
+
+    // Change counter for the in-memory schema lookup cache
+    // (src/repositories/db/schema_registry_cache.ts). Triggers bump it on any
+    // write to schema_registry, from any connection or process, so the cache
+    // notices writes that bypass the query adapter (raw SQL, the CLI writing
+    // the same file). One row, id = 1.
+    await db
+      .prepare(
+        "CREATE TABLE IF NOT EXISTS schema_registry_change_counter (" +
+          "id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)"
+      )
+      .run();
+    await db
+      .prepare("INSERT OR IGNORE INTO schema_registry_change_counter (id, version) VALUES (1, 0)")
+      .run();
+    for (const [name, event] of [
+      ["schema_registry_change_after_insert", "INSERT"],
+      ["schema_registry_change_after_update", "UPDATE"],
+      ["schema_registry_change_after_delete", "DELETE"],
+    ] as const) {
+      await db
+        .prepare(
+          `CREATE TRIGGER IF NOT EXISTS ${name} AFTER ${event} ON schema_registry ` +
+            "BEGIN UPDATE schema_registry_change_counter SET version = version + 1 WHERE id = 1; END"
+        )
+        .run();
+    }
+
     // Relationship-type registry (#1972 / G25). Two indexes, and neither is
-    // optional: `schema_registry` has NO index at all, so every registry read
-    // there is a full table scan — and this registry is read on the
-    // relationship WRITE path, not just at boot.
+    // optional: until idx_schema_registry_resolve above, `schema_registry` had
+    // no index at all, so every registry read there was a full table scan —
+    // and this registry is read on the relationship WRITE path, not just at
+    // boot.
     //
     // The UNIQUE index is the one `schema_registry` lacks. Without it nothing
     // prevents two rows for the same key, which is why

@@ -20,6 +20,7 @@
  * than deadlocking on the queue.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { logger } from "../../utils/logger.js";
 
 export interface DbRunResult {
@@ -94,6 +95,51 @@ export function normalizeParams(params: unknown[]): unknown[] {
  * per-tenant gate would let a second tenant's statement interleave into the
  * first tenant's transaction window and break that guarantee.
  */
+/**
+ * Effects waiting for the transaction whose async context registered them to
+ * settle (COMMIT or ROLLBACK). Shared across every gate, so a caller that does
+ * not hold the database handle can still ask "run this once my transaction is
+ * over".
+ */
+interface TransactionSettleScope {
+  settled: boolean;
+  effects: Array<() => void>;
+}
+
+const transactionSettleScope = new AsyncLocalStorage<TransactionSettleScope>();
+
+/**
+ * Run `effect` once the transaction the caller is inside settles, whether it
+ * commits or rolls back. Returns false, without registering anything, when the
+ * caller is not inside an open transaction: a statement issued there commits
+ * on its own, so the caller should run the effect itself once that statement
+ * returns.
+ *
+ * Used by in-memory caches of committed rows: a write inside a transaction is
+ * not visible to other connections until COMMIT, so a cache cleared at write
+ * time could be refilled with the old committed value before then.
+ */
+export function deferUntilCurrentTransactionSettles(effect: () => void): boolean {
+  const scope = transactionSettleScope.getStore();
+  if (!scope || scope.settled) return false;
+  scope.effects.push(effect);
+  return true;
+}
+
+function runSettleEffects(scope: TransactionSettleScope): void {
+  scope.settled = true;
+  const effects = scope.effects.splice(0);
+  for (const effect of effects) {
+    try {
+      effect();
+    } catch (error) {
+      logger.warn(
+        `DB transaction settle effect failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+}
+
 export class TransactionGate {
   private tail: Promise<void> = Promise.resolve();
   private lastSlowHoldLogAt = 0;
@@ -163,9 +209,16 @@ export class TransactionGate {
     return (async () => {
       await prev;
       const startedAt = Date.now();
+      // Only a transaction gets a settle scope. A single statement commits as
+      // it returns, and its caller is not inside `fn` anyway.
+      const settleScope: TransactionSettleScope | null =
+        kind === "transaction" ? { settled: false, effects: [] } : null;
       try {
-        return await fn();
+        return settleScope ? await transactionSettleScope.run(settleScope, fn) : await fn();
       } finally {
+        // Before release: COMMIT/ROLLBACK has run inside `fn`, and no queued
+        // transaction can begin until the effects have seen it settle.
+        if (settleScope) runSettleEffects(settleScope);
         this.noteHold(Date.now() - startedAt, startedAt - enqueuedAt, describe, kind);
         release();
       }

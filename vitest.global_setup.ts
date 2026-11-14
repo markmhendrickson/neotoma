@@ -142,6 +142,16 @@ export default async function globalSetup() {
     process.env.NEOTOMA_ISSUES_TARGET_URL = "";
   }
 
+  // This HTTP server, the forked test workers and spawned CLI processes all
+  // write one SQLite file, so each process's in-memory schema lookup cache must
+  // see the others' schema_registry writes at once rather than within the
+  // production check interval. 0 re-reads the cache's change counter on every
+  // lookup. Set before the server starts and before workers fork. The cache's
+  // own tests set the interval explicitly (tests/unit/schema_registry_cache.test.ts).
+  if (process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS === undefined) {
+    process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS = "0";
+  }
+
   // Pick a stable base port for tests and let the server probe upward if in use.
   // Default 19080 keeps tests off the 18080-18099 range used by the local
   // dev-server LaunchAgents (see scripts/reload_neotoma_launchagents.sh).
