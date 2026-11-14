@@ -7825,6 +7825,18 @@ paths:
         one of `reporter_git_sha` or `reporter_app_version`. Submissions
         missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.
         See `docs/subsystems/issues.md` § Reporter provenance.
+
+        **A guest submit only creates a new issue (v0.29.1+).** A guest submit is
+        any request from a guest principal, and any request that carries
+        `github_number`, `github_url`, `author`, `local_issue_id` or
+        `submission_timestamp` (which includes submits forwarded by another
+        instance's `submit_issue`). When its `github_number` or `local_issue_id`
+        already identifies a stored issue or issue thread on this instance, the
+        submit is refused with `400 ERR_ISSUE_IDENTITY_IN_USE` before anything is
+        written, and no guest access token is returned. `github_number` takes
+        precedence over `local_issue_id`. A submit retried with the same
+        identifier now gets this 400: treat it as "possibly already created" and
+        follow `details.hint`. See `docs/subsystems/issues.md` § Guest submits.
       operationId: issuesSubmit
       requestBody:
         required: true
@@ -7961,6 +7973,14 @@ paths:
             is returned when neither `reporter_git_sha` nor
             `reporter_app_version` is provided. `details.acceptable_field_groups`
             lists the alternatives the caller can supply.
+
+            `error_code: ERR_ISSUE_IDENTITY_IN_USE` is returned on a guest submit
+            whose `github_number` or `local_issue_id` already identifies a stored
+            issue or issue thread. Nothing was written and no guest access token
+            is returned. `details.extra.identity_field` is `github_number` or
+            `local_issue_id`; `details.extra.entity_type` is `issue` or
+            `conversation`; `details.hint` carries the retry guidance (a retry
+            after a lost response, and a `github_number` for a synced issue).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }

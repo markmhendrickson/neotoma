@@ -49,6 +49,12 @@ Use the issues surface when:
 
 Each `/issues/*` route is also mounted under `/api/issues/*` for same-origin proxies.
 
+**A guest submit only creates a new issue (v0.29.1+).** A guest submit is a `POST /issues/submit` request from a guest principal, or one that carries `github_number`, `github_url`, `author`, `local_issue_id` or `submission_timestamp` (forwarded `submit_issue` calls do). When its `github_number` or `local_issue_id` already identifies a stored issue or issue thread on the instance, it is refused with `400` and `error_code: "ERR_ISSUE_IDENTITY_IN_USE"` before anything is written, and no guest access token is returned. `details.extra.identity_field` names the identifier. A submit retried with the same identifier now gets this 400.
+
+Client note (the same text is the error's `details.hint`): nothing was written. If you are retrying a submit whose response was lost, the first submit may already have created the issue: check it with `get_issue_status` and that issue's guest access token, or, without the token, submit again with a new `local_issue_id` (or with neither `local_issue_id` nor `submission_timestamp`, so the server assigns one) and accept that this may create a second issue. `github_number` takes precedence over `local_issue_id`, so when you pass `github_number` for an issue synced from GitHub a new `local_issue_id` does not change the identity: post to that issue with `add_issue_message` and its guest access token instead.
+
+Neotoma's own reporter flow is not affected: `submit_issue` (MCP, CLI `neotoma issues create`, and the owner path of `POST /issues/submit`) derives a new `local_issue_id` from the title and the current time on every call and never sends `github_number`. When it forwards to `issues.target_url`, its only retry is one unsigned resend after an `AUTH_REQUIRED` refusal, which wrote nothing.
+
 ## Reporter provenance contract
 
 `submit_issue` (and the `add_issue_message` soft-warn path) require enough environment to reconstruct what an agent saw at filing time. The required fields:
