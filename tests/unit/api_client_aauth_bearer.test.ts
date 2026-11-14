@@ -18,8 +18,10 @@ import { exportJWK, generateKeyPair } from "jose";
 import {
   CliAAuthDisabledWithKeyError,
   type CliCredentialInput,
+  type CliKeypairSource,
   createApiClient,
   decideCliCredentials,
+  keypairMatters,
   resolveCliRequestAuth,
   setExplicitBearerRequested,
 } from "../../src/shared/api_client.js";
@@ -129,6 +131,23 @@ describe("API client: bearer beside an AAuth signature", () => {
   it("no key configured: the bearer is sent unchanged", async () => {
     process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH = missingKeyPath;
     const seen = await call({ signWithCliAAuth: true });
+    expect(seen.signature).toBeUndefined();
+    expect(seen.authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it("NODE_ENV=test + automatic signing + explicitly named key: signature only", async () => {
+    // Vitest runs with NODE_ENV=test; an explicitly named key still gets the rule.
+    expect(process.env.NODE_ENV).toBe("test");
+    process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH = keyPath;
+    const seen = await call({});
+    expect(seen.signature).toBeTruthy();
+    expect(seen.authorization).toBeUndefined();
+  });
+
+  it("NODE_ENV=test + automatic signing + no explicitly named key: bearer, unsigned", async () => {
+    // A key at the default path does not count under NODE_ENV=test.
+    delete process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH;
+    const seen = await call({});
     expect(seen.signature).toBeUndefined();
     expect(seen.authorization).toBe(`Bearer ${TOKEN}`);
   });
@@ -247,35 +266,49 @@ describe("decideCliCredentials: decision table", () => {
   type Expected = { sign: boolean; bearer: boolean } | typeof REFUSE;
   const DISABLE = "NEOTOMA_CLI_AAUTH_DISABLE=1";
   const ENABLE0 = "NEOTOMA_CLI_AAUTH_ENABLE=0";
-  // [hasKeypair, signWithCliAAuth, disabledBy, testEnv, allowBearer, expected]
-  const rows: Array<[boolean, boolean | undefined, string | null, boolean, boolean, Expected]> = [
+  const NONE = "none" as const;
+  const DEFAULT = "default_path" as const;
+  const EXPLICIT = "explicit_path" as const;
+  // [keypair, signWithCliAAuth, disabledBy, testEnv, allowBearer, expected]
+  const rows: Array<
+    [CliKeypairSource, boolean | undefined, string | null, boolean, boolean, Expected]
+  > = [
     // Automatic signing, nothing disabled.
-    [true, undefined, null, false, false, { sign: true, bearer: false }],
-    [true, undefined, null, false, true, { sign: true, bearer: true }],
-    [false, undefined, null, false, false, { sign: true, bearer: true }],
-    [false, undefined, null, false, true, { sign: true, bearer: true }],
-    // Automatic signing under NODE_ENV=test: unsigned, bearer as before.
-    [true, undefined, null, true, false, { sign: false, bearer: true }],
-    [false, undefined, null, true, false, { sign: false, bearer: true }],
+    [EXPLICIT, undefined, null, false, false, { sign: true, bearer: false }],
+    [DEFAULT, undefined, null, false, false, { sign: true, bearer: false }],
+    [EXPLICIT, undefined, null, false, true, { sign: true, bearer: true }],
+    [NONE, undefined, null, false, false, { sign: true, bearer: true }],
+    [NONE, undefined, null, false, true, { sign: true, bearer: true }],
+    // NODE_ENV=test: only an explicitly named key counts as configured.
+    [NONE, undefined, null, true, false, { sign: false, bearer: true }],
+    [DEFAULT, undefined, null, true, false, { sign: false, bearer: true }],
+    [EXPLICIT, undefined, null, true, false, { sign: true, bearer: false }],
+    [EXPLICIT, undefined, null, true, true, { sign: true, bearer: true }],
+    [NONE, undefined, DISABLE, true, false, { sign: false, bearer: true }],
+    [DEFAULT, undefined, DISABLE, true, false, { sign: false, bearer: true }],
+    [EXPLICIT, undefined, DISABLE, true, false, REFUSE],
+    [EXPLICIT, undefined, ENABLE0, true, false, REFUSE],
+    [EXPLICIT, undefined, DISABLE, true, true, { sign: false, bearer: true }],
     // Automatic signing turned off by a variable.
-    [true, undefined, DISABLE, false, false, REFUSE],
-    [true, undefined, ENABLE0, true, false, REFUSE],
-    [true, undefined, DISABLE, false, true, { sign: false, bearer: true }],
-    [false, undefined, DISABLE, false, false, { sign: false, bearer: true }],
-    // Caller chose signing.
-    [true, true, null, false, false, { sign: true, bearer: false }],
-    [true, true, DISABLE, true, false, { sign: true, bearer: false }],
-    [true, true, null, false, true, { sign: true, bearer: true }],
-    [false, true, null, false, false, { sign: true, bearer: true }],
+    [EXPLICIT, undefined, DISABLE, false, false, REFUSE],
+    [DEFAULT, undefined, ENABLE0, false, false, REFUSE],
+    [EXPLICIT, undefined, DISABLE, false, true, { sign: false, bearer: true }],
+    [NONE, undefined, DISABLE, false, false, { sign: false, bearer: true }],
+    // Caller chose signing: the key it signs with counts, test env or not.
+    [EXPLICIT, true, null, false, false, { sign: true, bearer: false }],
+    [DEFAULT, true, null, true, false, { sign: true, bearer: false }],
+    [EXPLICIT, true, DISABLE, true, false, { sign: true, bearer: false }],
+    [EXPLICIT, true, null, false, true, { sign: true, bearer: true }],
+    [NONE, true, null, false, false, { sign: true, bearer: true }],
     // Caller chose no signing.
-    [true, false, null, false, false, { sign: false, bearer: true }],
-    [true, false, DISABLE, false, false, { sign: false, bearer: true }],
-    [false, false, null, false, false, { sign: false, bearer: true }],
+    [EXPLICIT, false, null, false, false, { sign: false, bearer: true }],
+    [EXPLICIT, false, DISABLE, false, false, { sign: false, bearer: true }],
+    [NONE, false, null, false, false, { sign: false, bearer: true }],
   ];
 
-  for (const [hasKeypair, signWithCliAAuth, disabledBy, testEnv, allow, expected] of rows) {
+  for (const [keypair, signWithCliAAuth, disabledBy, testEnv, allow, expected] of rows) {
     const input: CliCredentialInput = {
-      hasKeypair,
+      keypair,
       signWithCliAAuth,
       disabledBy,
       testEnv,
@@ -290,32 +323,51 @@ describe("decideCliCredentials: decision table", () => {
     });
   }
 
-  it("over every input: a configured key never goes out beside a bearer unless requested", () => {
-    for (const hasKeypair of [true, false])
+  function* everyInput(): Generator<CliCredentialInput> {
+    for (const keypair of [NONE, DEFAULT, EXPLICIT])
       for (const signWithCliAAuth of [undefined, true, false])
         for (const disabledBy of [null, DISABLE])
           for (const testEnv of [true, false])
-            for (const allowBearerWithSignature of [true, false]) {
-              const input: CliCredentialInput = {
-                hasKeypair,
-                signWithCliAAuth,
-                disabledBy,
-                testEnv,
-                allowBearerWithSignature,
-              };
-              const refuses =
-                signWithCliAAuth === undefined &&
-                disabledBy !== null &&
-                hasKeypair &&
-                !allowBearerWithSignature;
-              if (refuses) {
-                expect(() => decideCliCredentials(input)).toThrow(CliAAuthDisabledWithKeyError);
-                continue;
-              }
-              const decision = decideCliCredentials(input);
-              if (decision.sign && hasKeypair && !allowBearerWithSignature) {
-                expect(decision.bearer).toBe(false);
-              }
-            }
+            for (const allowBearerWithSignature of [true, false])
+              yield { keypair, signWithCliAAuth, disabledBy, testEnv, allowBearerWithSignature };
+  }
+
+  it("over every input: a configured key never goes out beside a bearer unless requested", () => {
+    for (const input of everyInput()) {
+      const automatic = input.signWithCliAAuth === undefined;
+      const keyConfigured =
+        input.keypair === EXPLICIT || (input.keypair === DEFAULT && !(automatic && input.testEnv));
+      const refuses =
+        automatic && input.disabledBy !== null && keyConfigured && !input.allowBearerWithSignature;
+      if (refuses) {
+        expect(() => decideCliCredentials(input)).toThrow(CliAAuthDisabledWithKeyError);
+        continue;
+      }
+      const decision = decideCliCredentials(input);
+      if (keyConfigured && !input.allowBearerWithSignature) {
+        // A configured key is never set aside for the bearer: signed, no bearer.
+        expect(decision).toEqual(
+          input.signWithCliAAuth === false
+            ? { sign: false, bearer: true }
+            : { sign: true, bearer: false }
+        );
+      }
+    }
+  });
+
+  it("keypairMatters agrees with the decision over every input", () => {
+    for (const input of everyInput()) {
+      const { keypair: _keypair, ...policy } = input;
+      const outcomes = new Set(
+        ([NONE, DEFAULT, EXPLICIT] as const).map((keypair) => {
+          try {
+            return JSON.stringify(decideCliCredentials({ ...policy, keypair }));
+          } catch {
+            return "refuse";
+          }
+        })
+      );
+      expect(keypairMatters(policy)).toBe(outcomes.size > 1);
+    }
   });
 });

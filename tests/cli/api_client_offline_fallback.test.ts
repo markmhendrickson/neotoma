@@ -60,6 +60,8 @@ describe("api_client transport modes", () => {
     expect(getLocalTransportClientMock).toHaveBeenCalledWith({
       baseUrl: "http://localhost:3080",
       token: "token-1",
+      // The API client's own fetch, which applies the CLI credential rule.
+      fetch: expect.any(Function),
     });
     expect(localClient.POST).toHaveBeenCalledWith("/entities/query", { body: { limit: 1 } });
   });
@@ -120,6 +122,8 @@ describe("api_client transport modes", () => {
     expect(getLocalTransportClientMock).toHaveBeenCalledWith({
       baseUrl: "http://localhost:3080",
       token: "tok-prod",
+      // The API client's own fetch, which applies the CLI credential rule.
+      fetch: expect.any(Function),
     });
     expect(remoteClient.POST).not.toHaveBeenCalled();
     delete process.env.NEOTOMA_ENV;
