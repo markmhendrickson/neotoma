@@ -13,7 +13,7 @@ Neotoma v0.29.0 checks guest links in one place on every guest-readable route, l
 ### Guest links (`access_token`)
 
 - Every guest-readable route resolves a presented token through one check of its entity coverage, lifetime and revocation. This covers `GET /entities/:id`, `/entities/:id/html`, `/entities/:id/observations`, `/entities/:id/relationships`, the issue routes, the subscription routes and `GET /events/stream`.
-- A refused token returns `401 GUEST_TOKEN_INVALID` when it is unknown, malformed, expired, revoked or deleted, or when it is sent to a route that does not accept links (for example `/entities/:id/markdown`). The message is the same for every cause. A valid token presented for an item it does not cover returns `403 GUEST_TOKEN_SCOPE`. A token sent as `Authorization: Bearer` gets the same answer as one sent as the `access_token` query parameter.
+- A refused token returns `401 GUEST_TOKEN_INVALID` when it is unknown, malformed, expired, revoked or deleted, or when it is sent as `access_token` to a route that does not accept links (for example `/entities/:id/markdown`). The message is the same for every cause. A valid token presented for an item it does not cover returns `403 GUEST_TOKEN_SCOPE`. On guest-readable routes, a token sent as `Authorization: Bearer` gets the same answer as one sent as the `access_token` query parameter.
 - A link lasts the shorter of its stored lifetime and the configured `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` (default 30 days), counted from when it was minted. Lowering the setting shortens existing links; raising it does not extend them. To renew a rendered-page link, call `publish_rendered_page` again.
 - A token's state is read from every record on its token entity. Later records, including corrections, can only narrow a link: a revocation applies, the smallest lifetime applies, and the covered entities are the intersection. A token record that was deleted, merged or split refuses the link. If the token records cannot be read from storage, the response is a `5xx`, never a grant.
 - On the subscription and event routes, a guest filter outside the token's grant now returns `403 GUEST_TOKEN_SCOPE` instead of `403 FORBIDDEN`. Webhook delivery and `sync_peer_id` requests from a guest still return `403 FORBIDDEN`.
@@ -72,7 +72,7 @@ Neotoma v0.29.0 checks guest links in one place on every guest-readable route, l
 
 ## Behavior changes
 
-- Invalid guest tokens return `401 GUEST_TOKEN_INVALID` on every guest-readable route, and out-of-coverage requests return `403 GUEST_TOKEN_SCOPE`, replacing the earlier route-specific codes and messages. A guest token sent to a route that does not accept links returns `401 GUEST_TOKEN_INVALID` instead of the generic missing-Bearer `401`.
+- Invalid guest tokens return `401 GUEST_TOKEN_INVALID` on every guest-readable route, and out-of-coverage requests return `403 GUEST_TOKEN_SCOPE`, replacing the earlier route-specific codes and messages. A guest token sent as `access_token` to a route that does not accept links returns `401 GUEST_TOKEN_INVALID` instead of the generic missing-Bearer `401`.
 - A guest link minted with a lifetime longer than `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` now ends at the configured lifetime.
 - The access-policy refusal shown to guest callers no longer names an operator command; its hint now asks the reader to request a new link.
 - Guest callers see unexpanded related-entity entries for related entities they could not open through `GET /entities/:id`, and at most 50 related entities are evaluated per request.
