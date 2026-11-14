@@ -232,6 +232,7 @@ For environment and ports, see [Run development servers](getting_started.md#run-
 - `--tunnel`: Start HTTPS tunnel (ngrok/cloudflared) with server start commands.
 - `--tunnel-provider <provider>`: Force tunnel provider to `ngrok` or `cloudflare` when using `--tunnel`; default is auto-detect from installed tools.
 - `--no-update-check`: Disable the update availability check. When enabled (default), the CLI checks the npm registry for a newer version and, if available, prints a one-line notice to stderr. The notice is never shown when `--json` is used.
+- `--with-bearer`: With an AAuth key configured (`NEOTOMA_AAUTH_PRIVATE_JWK_PATH` or `~/.neotoma/aauth/private.jwk`), also send the bearer token (`NEOTOMA_BEARER_TOKEN` or the stored login) beside the request signature. Without this flag, a signed HTTP request carries the signature as its only credential. When `NEOTOMA_CLI_AAUTH_DISABLE=1` or `NEOTOMA_CLI_AAUTH_ENABLE=0` is set while a key is configured, the CLI refuses to send an HTTP request rather than drop the signature; pass `--with-bearer` to authenticate that command with the bearer instead, or unset the variable to sign with the key. With no key configured, bearer handling is the same with or without the flag.
 
 ### Issues
 

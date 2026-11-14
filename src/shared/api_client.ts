@@ -30,6 +30,61 @@ export interface ApiClientOptions {
    * likewise bypass signing). Pairs with `signWithCliAAuth`.
    */
   forceHttpTransport?: boolean;
+  /**
+   * When an AAuth keypair is configured, the request signature is the only
+   * credential sent: an environment or stored bearer passed as `token` is
+   * withheld from HTTP requests. Set this to send the bearer as well. The CLI
+   * sets it only from the explicit `--with-bearer` flag (never from an
+   * environment variable); defaults to {@link isExplicitBearerRequested}.
+   */
+  allowBearerWithSignature?: boolean;
+}
+
+/**
+ * Set by the CLI from the explicit `--with-bearer` flag on each command.
+ * Module state rather than an environment variable on purpose: an inherited
+ * variable is ambient, and the point of the rule is that only an explicit,
+ * per-invocation request may add a bearer beside an AAuth signature.
+ */
+let explicitBearerRequested = false;
+
+export function setExplicitBearerRequested(requested: boolean): void {
+  explicitBearerRequested = requested;
+}
+
+export function isExplicitBearerRequested(): boolean {
+  return explicitBearerRequested;
+}
+
+/**
+ * Environment variables that turn CLI request signing off. Returns the
+ * variable (as `NAME=value`) that does so, or null.
+ */
+export function cliAAuthDisabledByEnv(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NEOTOMA_CLI_AAUTH_DISABLE === "1") return "NEOTOMA_CLI_AAUTH_DISABLE=1";
+  if (env.NEOTOMA_CLI_AAUTH_ENABLE === "0") return "NEOTOMA_CLI_AAUTH_ENABLE=0";
+  return null;
+}
+
+export class CliAAuthDisabledWithKeyError extends Error {
+  constructor(variable: string) {
+    super(
+      `${variable} turns AAuth request signing off, but an AAuth keypair is configured ` +
+        "(NEOTOMA_AAUTH_PRIVATE_JWK_PATH or ~/.neotoma/aauth/private.jwk). Refusing to send this " +
+        `request without its signature. Unset ${variable} to sign with the configured key, or pass ` +
+        "--with-bearer to authenticate this command with the bearer token instead."
+    );
+    this.name = "CliAAuthDisabledWithKeyError";
+  }
+}
+
+function withoutAuthorization(headers: Record<string, string>): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === "authorization") continue;
+    next[key] = value;
+  }
+  return next;
 }
 
 /**
@@ -39,12 +94,22 @@ export interface ApiClientOptions {
  * indirection keeps Node-only `fs`/`jose` imports out of the browser
  * bundle via a dynamic import.
  */
-function buildMaybeSignedFetch(enabled: boolean, requireCliAAuth = false): typeof fetch {
+function buildMaybeSignedFetch(
+  enabled: boolean,
+  requireCliAAuth = false,
+  allowBearerWithSignature = false
+): typeof fetch {
   if (!enabled) return fetch;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : null;
     const url = request ? request.url : typeof input === "string" ? input : input.toString();
-    const { cliSignedFetch, loadCliSignerConfig } = await import("../cli/aauth_signer.js");
+    const { cliSignedFetch, loadCliSignerConfig, hasCliAAuthKeypair } =
+      await import("../cli/aauth_signer.js");
+    // With a keypair configured the signature is the request's credential.
+    // A bearer beside it would name a second principal, so it is withheld —
+    // on the signed request and on the unsigned fallback alike — unless the
+    // caller explicitly asked for it.
+    const withholdBearer = !allowBearerWithSignature && (await hasCliAAuthKeypair());
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     const headers: Record<string, string> = {};
     const sourceHeaders = new Headers(request?.headers);
@@ -76,7 +141,7 @@ function buildMaybeSignedFetch(enabled: boolean, requireCliAAuth = false): typeo
       }
       return await cliSignedFetch(url, {
         method,
-        headers,
+        headers: withholdBearer ? withoutAuthorization(headers) : headers,
         body,
         signal: init?.signal ?? undefined,
       });
@@ -85,8 +150,32 @@ function buildMaybeSignedFetch(enabled: boolean, requireCliAAuth = false): typeo
       // Never surface signing misconfiguration as a hard failure from the
       // API client — the caller should still reach the server and land
       // as `unverified_client` / `anonymous` tier.
+      if (withholdBearer) {
+        const unsigned = new Request(input, init);
+        unsigned.headers.delete("authorization");
+        return fetch(unsigned);
+      }
       return fetch(input, init);
     }
+  }) as typeof fetch;
+}
+
+/**
+ * Fetch used when an environment variable has turned signing off. With no
+ * keypair configured it is the global `fetch`, unchanged. With a keypair
+ * configured, the variable would silently drop the signature the caller
+ * configured, so the request is refused unless the caller explicitly asked to
+ * authenticate with the bearer instead.
+ */
+function buildEnvDisabledFetch(variable: string, allowBearerWithSignature: boolean): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!allowBearerWithSignature) {
+      const { hasCliAAuthKeypair } = await import("../cli/aauth_signer.js");
+      if (await hasCliAAuthKeypair()) {
+        throw new CliAAuthDisabledWithKeyError(variable);
+      }
+    }
+    return fetch(input, init);
   }) as typeof fetch;
 }
 
@@ -98,12 +187,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
     headers.Authorization = `Bearer ${options.token}`;
   }
 
+  const allowBearerWithSignature = options.allowBearerWithSignature ?? isExplicitBearerRequested();
+  const disabledBy = cliAAuthDisabledByEnv();
   const signingEnabled =
-    options.signWithCliAAuth ??
-    (process.env.NODE_ENV !== "test" &&
-      process.env.NEOTOMA_CLI_AAUTH_DISABLE !== "1" &&
-      process.env.NEOTOMA_CLI_AAUTH_ENABLE !== "0");
-  const fetchImpl = buildMaybeSignedFetch(signingEnabled, Boolean(options.requireCliAAuth));
+    options.signWithCliAAuth ?? (process.env.NODE_ENV !== "test" && disabledBy === null);
+  const fetchImpl =
+    options.signWithCliAAuth === undefined && disabledBy !== null
+      ? buildEnvDisabledFetch(disabledBy, allowBearerWithSignature)
+      : buildMaybeSignedFetch(
+          signingEnabled,
+          Boolean(options.requireCliAAuth),
+          allowBearerWithSignature
+        );
 
   const client = createClient<paths>({
     baseUrl: options.baseUrl,

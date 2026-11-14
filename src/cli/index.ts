@@ -25,7 +25,7 @@ import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
-import { createApiClient } from "../shared/api_client.js";
+import { createApiClient, setExplicitBearerRequested } from "../shared/api_client.js";
 import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { parseSchemaFields } from "./parse_schema_fields.js";
@@ -1836,6 +1836,11 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
  * Resolve CLI auth token using same patterns as MCP.
  * Encryption off: NEOTOMA_BEARER_TOKEN env, then stored OAuth token from config, or no token (API treats no Bearer as dev-local).
  * Encryption on: key-derived token (requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC).
+ *
+ * With an AAuth keypair configured, `createApiClient` withholds this token from
+ * signed HTTP requests unless `--with-bearer` is passed, and refuses a request
+ * when NEOTOMA_CLI_AAUTH_DISABLE=1 / NEOTOMA_CLI_AAUTH_ENABLE=0 would drop the
+ * signature (see `src/shared/api_client.ts`).
  */
 async function getCliToken(): Promise<string | undefined> {
   if (appConfig.encryption.enabled) {
@@ -2343,7 +2348,11 @@ program
     "Append CLI stdout and stderr to this file (development default: <neotoma>/data/logs/cli.<pid>.log when a Neotoma path is configured, else ~/.config/neotoma/cli.<pid>.log)"
   )
   .option("--no-log-file", "Do not append CLI output to the log file (no-op in prod)")
-  .option("--no-update-check", "Disable update availability check");
+  .option("--no-update-check", "Disable update availability check")
+  .option(
+    "--with-bearer",
+    "With an AAuth key configured, also send the bearer token (NEOTOMA_BEARER_TOKEN or the stored login) beside the request signature. Without this flag the signature is the only credential sent."
+  );
 
 function isDebug(): boolean {
   return Boolean((program.opts() as { debug?: boolean }).debug);
@@ -2462,7 +2471,12 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   const opts = (actionCommand as Command).optsWithGlobals() as {
     offline?: boolean;
     apiOnly?: boolean;
+    withBearer?: boolean;
   };
+  // Only the explicit flag may add a bearer beside an AAuth signature. Set on
+  // every command (true or false) so an interactive session does not carry one
+  // command's flag into the next.
+  setExplicitBearerRequested(opts.withBearer === true);
   const isTestEnv = process.env.NODE_ENV === "test";
 
   // Precedence: flag > env > default. NEOTOMA_API_ONLY / NEOTOMA_OFFLINE /
