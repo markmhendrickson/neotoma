@@ -10,9 +10,14 @@
  * and the resolve index exists and is the one SQLite chooses.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
+import { ensureSchema } from "../../src/repositories/sqlite/sqlite_client.js";
+import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import {
   resetSchemaRegistryCacheForTests,
   schemaRegistryCacheStatsForTests,
@@ -274,6 +279,10 @@ describe("schema lookup cache", () => {
           .from("schema_registry")
           .update({ metadata: { ...metadata, guest_access_policy: "closed" } })
           .eq("id", row.id);
+        // A lookup inside the transaction sees its own uncommitted row. It must
+        // not be remembered, or it would outlive the rollback.
+        const inside = await registry.loadGlobalSchema(TYPE);
+        expect(inside?.metadata?.guest_access_policy).toBe("closed");
         throw new Error("roll back");
       })
     ).rejects.toThrow("roll back");
@@ -352,10 +361,25 @@ describe("schema lookup cache", () => {
   });
 });
 
-describe("schema_registry resolve index", () => {
-  it("exists and is chosen for both the user-scoped and the global lookup", async () => {
-    const database = await getDb();
-    const indexes = (await database
+describe("schema_registry boot DDL (fresh database)", () => {
+  // A fresh file, so this checks what ensureSchema creates rather than what an
+  // earlier run left in the shared test database.
+  let dir: string;
+  let fresh: AsyncSqliteDatabase;
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), "schema-registry-ddl-"));
+    fresh = new AsyncSqliteDatabase(join(dir, "fresh.db"));
+    await ensureSchema(fresh);
+  });
+
+  afterAll(async () => {
+    await fresh.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("creates the resolve index, and SQLite chooses it for every active-schema lookup", async () => {
+    const indexes = (await fresh
       .prepare(
         "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'schema_registry'"
       )
@@ -374,18 +398,38 @@ describe("schema_registry resolve index", () => {
     for (const sql of statements) {
       const placeholders = (sql.match(/\?/g) ?? []).length;
       const params = ["x", "user", "global", 1].slice(0, placeholders);
-      const plan = (await database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(params)) as Array<{
+      const plan = (await fresh.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(params)) as Array<{
         detail: string;
       }>;
       const detail = plan.map((p) => p.detail).join(" | ");
-      expect(detail, sql).toContain("idx_schema_registry_resolve");
-      expect(detail, sql).not.toMatch(/\bSCAN schema_registry\b(?! USING)/);
+      expect(detail, sql).toContain("USING INDEX idx_schema_registry_resolve");
     }
   });
 
-  it("has the change-counter triggers for insert, update and delete", async () => {
-    const database = await getDb();
-    const triggers = (await database
+  it("bumps the change counter on insert, update and delete", async () => {
+    const version = async () =>
+      (
+        (await fresh
+          .prepare("SELECT version FROM schema_registry_change_counter WHERE id = 1")
+          .get()) as { version: number }
+      ).version;
+    const v0 = await version();
+    await fresh
+      .prepare(
+        "INSERT INTO schema_registry (id, entity_type, schema_version, schema_definition, reducer_config, active, scope) VALUES ('ddl-1', 'ddl_test', '1.0', '{}', '{}', 1, 'global')"
+      )
+      .run();
+    const v1 = await version();
+    await fresh.prepare("UPDATE schema_registry SET active = 0 WHERE id = 'ddl-1'").run();
+    const v2 = await version();
+    await fresh.prepare("DELETE FROM schema_registry WHERE id = 'ddl-1'").run();
+    const v3 = await version();
+    expect([v1 - v0, v2 - v1, v3 - v2]).toEqual([1, 1, 1]);
+
+    // Re-running the boot DDL keeps the counter and does not duplicate triggers.
+    await ensureSchema(fresh);
+    expect(await version()).toBe(v3);
+    const triggers = (await fresh
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'schema_registry'"
       )
