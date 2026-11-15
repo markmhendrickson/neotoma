@@ -126,7 +126,10 @@ dependencies only, rejects frontend build-only packages in the published
 runtime manifest, validates the installed dependency tree, runs the installed
 `neotoma --help`, imports the public package entry point, and requires the
 installed HTTP server to reach `/health` on an ephemeral loopback port with an
-isolated data directory.
+isolated data directory. It then requests the Inspector shell from that server
+(2xx, HTML, the `<div id="root">` mount point) and the script and stylesheet the
+shell references (2xx, JavaScript and CSS content types), so a tarball missing
+`dist/inspector` fails with a message naming the failed request.
 
 The required baseline CI lane also runs
 `python3 -m unittest discover -s tests/scripts -p test_docker_context.py -v`.

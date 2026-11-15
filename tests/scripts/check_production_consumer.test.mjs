@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assertNoFrontendBuildDependenciesInTree } from "../../scripts/check_production_consumer.js";
+import {
+  assertNoFrontendBuildDependenciesInTree,
+  extractInspectorAssetPaths,
+} from "../../scripts/check_production_consumer.js";
 
 test("rejects a forbidden package nested under a runtime dependency", () => {
   const tree = {
@@ -51,4 +54,14 @@ test("accepts a production tree without frontend build packages", () => {
   };
 
   assert.doesNotThrow(() => assertNoFrontendBuildDependenciesInTree(tree));
+});
+
+test("extracts the script and stylesheet an Inspector shell references", () => {
+  const html =
+    '<link rel="icon" href="/favicon.svg"><script type="module" crossorigin src="/assets/a.js"></script>' +
+    '<link rel="stylesheet" crossorigin href="/assets/a.css">';
+  assert.deepEqual(extractInspectorAssetPaths(html), {
+    scriptSrc: "/assets/a.js",
+    stylesheetHref: "/assets/a.css",
+  });
 });

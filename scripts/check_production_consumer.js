@@ -99,6 +99,68 @@ function run(command, args, options = {}) {
   return result.stdout ?? "";
 }
 
+const inspectorShellMarker = '<div id="root"></div>';
+
+export function extractInspectorAssetPaths(html) {
+  const scriptSrc = /<script\b[^>]*\bsrc="([^"]+)"/i.exec(html)?.[1];
+  const stylesheetHref = /<link\b[^>]*\brel="stylesheet"[^>]*\bhref="([^"]+)"/i.exec(html)?.[1];
+  return { scriptSrc, stylesheetHref };
+}
+
+async function fetchChecked(label, url, init, contentTypePattern) {
+  let response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    throw new Error(`Inspector check failed: ${label} request to ${url} errored: ${error}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Inspector check failed: ${label} ${url} returned HTTP ${response.status}`);
+  }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentTypePattern.test(contentType)) {
+    throw new Error(
+      `Inspector check failed: ${label} ${url} returned content type "${contentType}"`
+    );
+  }
+  return response;
+}
+
+// Confirms the installed package serves a usable Inspector: the SPA shell at the
+// server root (browser Accept negotiation) and the assets the shell references.
+export async function assertInspectorServed(origin) {
+  const shell = await fetchChecked(
+    "Inspector shell",
+    `${origin}/`,
+    { headers: { accept: "text/html" } },
+    /text\/html/i
+  );
+  const html = await shell.text();
+  if (!html.includes(inspectorShellMarker)) {
+    throw new Error(
+      `Inspector check failed: Inspector shell ${origin}/ is HTML but lacks the ${inspectorShellMarker} mount point`
+    );
+  }
+  const { scriptSrc, stylesheetHref } = extractInspectorAssetPaths(html);
+  if (!scriptSrc || !stylesheetHref) {
+    throw new Error(
+      "Inspector check failed: Inspector shell does not reference a script and a stylesheet"
+    );
+  }
+  await fetchChecked(
+    "Inspector script asset",
+    new URL(scriptSrc, `${origin}/`).href,
+    undefined,
+    /javascript/i
+  );
+  await fetchChecked(
+    "Inspector stylesheet asset",
+    new URL(stylesheetHref, `${origin}/`).href,
+    undefined,
+    /text\/css/i
+  );
+}
+
 async function waitForServer(child, portFile, output) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
@@ -110,7 +172,7 @@ async function waitForServer(child, portFile, output) {
       if (Number.isInteger(port) && port > 0) {
         try {
           const response = await fetch(`http://127.0.0.1:${port}/health`);
-          if (response.ok) return;
+          if (response.ok) return `http://127.0.0.1:${port}`;
         } catch {
           // The listener may have written the port file before accepting requests.
         }
@@ -223,8 +285,12 @@ async function main() {
     server.stderr.on("data", (chunk) => {
       serverOutput += chunk.toString();
     });
-    await waitForServer(server, portFile, () => serverOutput);
+    const origin = await waitForServer(server, portFile, () => serverOutput);
     console.log("Installed server reached /health.");
+
+    console.log("Requesting the installed Inspector shell and its assets...");
+    await assertInspectorServed(origin);
+    console.log("Installed server serves the Inspector shell, script and stylesheet.");
   } finally {
     if (server) await stopServer(server);
     fs.rmSync(consumerDir, { recursive: true, force: true });
