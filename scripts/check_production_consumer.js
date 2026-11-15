@@ -42,6 +42,30 @@ function assertNoFrontendBuildDependencies(manifest) {
   }
 }
 
+export function assertNoFrontendBuildDependenciesInTree(tree) {
+  const leakedPaths = [];
+
+  function visit(node, dependencyPath) {
+    for (const [key, dependency] of Object.entries(node.dependencies ?? {}).sort(([a], [b]) =>
+      a.localeCompare(b)
+    )) {
+      const name = dependency.name ?? key;
+      const nextPath = [...dependencyPath, name];
+      if (frontendBuildOnlyDependencyPatterns.some((pattern) => pattern.test(name))) {
+        leakedPaths.push(nextPath.join(" > "));
+      }
+      visit(dependency, nextPath);
+    }
+  }
+
+  visit(tree, [tree.name ?? "consumer"]);
+  if (leakedPaths.length > 0) {
+    throw new Error(
+      `Frontend build-only packages leaked into the installed production tree:\n${leakedPaths.join("\n")}`
+    );
+  }
+}
+
 function isolatedEnv(dataDir, extra = {}) {
   const env = { ...process.env };
   for (const key of [
@@ -71,7 +95,8 @@ function run(command, args, options = {}) {
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed with status ${result.status}\n${output}`);
   }
-  process.stdout.write(output);
+  if (!options.quiet) process.stdout.write(output);
+  return result.stdout ?? "";
 }
 
 async function waitForServer(child, portFile, output) {
@@ -136,7 +161,7 @@ async function main() {
     }
 
     console.log("Installing packed Neotoma with production dependencies only...");
-    run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", tarballPath], {
+    run("npm", ["install", "--omit=dev", "--offline", "--no-audit", "--no-fund", tarballPath], {
       cwd: consumerDir,
       env: isolatedEnv(dataDir),
     });
@@ -147,10 +172,14 @@ async function main() {
       )
     );
     assertNoFrontendBuildDependencies(installedManifest);
-    run("npm", ["ls", "--omit=dev"], {
-      cwd: consumerDir,
-      env: isolatedEnv(dataDir),
-    });
+    const productionTree = JSON.parse(
+      run("npm", ["ls", "--omit=dev", "--all", "--json"], {
+        cwd: consumerDir,
+        env: isolatedEnv(dataDir),
+        quiet: true,
+      })
+    );
+    assertNoFrontendBuildDependenciesInTree(productionTree);
 
     console.log("Running the installed neotoma --help...");
     const binary = path.join(
@@ -203,7 +232,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack : error);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.stack : error);
+    process.exit(1);
+  });
+}
