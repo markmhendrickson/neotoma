@@ -117,6 +117,17 @@ See `docs/testing/fixtures_standard.md`.
 ## Automated test catalog
 See `docs/testing/automated_test_catalog.md` for the canonical repo-wide inventory of automated tests and primary suite commands.
 
+## Packed production-consumer check
+
+Run `npm run check:production-consumer` after changing package dependencies or
+published build inputs. It builds and packs the package with the prebuilt
+Inspector, installs the tarball into an empty project with production
+dependencies only, rejects frontend build-only packages in the published
+runtime manifest, validates the installed dependency tree, runs the installed
+`neotoma --help`, imports the public package entry point, and requires the
+installed HTTP server to reach `/health` on an ephemeral loopback port with an
+isolated data directory.
+
 The required baseline CI lane also runs
 `python3 -m unittest discover -s tests/scripts -p test_docker_context.py -v`.
 This uses Docker's actual matcher with a synthetic-only `FROM scratch` context,

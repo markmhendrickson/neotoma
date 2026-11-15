@@ -8,7 +8,7 @@
  * 3. Installs that tarball in a temporary directory (as a consumer would)
  * 4. Runs the installed binary (npx neotoma --help) to verify it works
  * 5. Verifies OpenAPI schema can be resolved from installed package (cwd-independent)
- * 5. Cleans up
+ * 6. Cleans up
  *
  * Run before `npm publish` to catch pack/list/postinstall issues.
  */
@@ -16,7 +16,7 @@
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -36,9 +36,7 @@ function runAndCapture(command, args, opts = {}) {
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   if (result.status !== 0) {
-    throw new Error(
-      `${command} ${args.join(" ")} failed with status ${result.status}\n${output}`
-    );
+    throw new Error(`${command} ${args.join(" ")} failed with status ${result.status}\n${output}`);
   }
   return output;
 }
@@ -83,10 +81,19 @@ function main() {
     run("npx neotoma --help", { cwd: tmpDir });
 
     console.log("\nStep 5: Verifying OpenAPI schema resolution from installed package...");
-    run(
-      `node --input-type=module -e "import { resolveOpenApiPath } from 'neotoma/dist/shared/openapi_file.js'; const p = resolveOpenApiPath(); if (!p.endsWith('openapi.yaml')) { throw new Error('Unexpected OpenAPI path: ' + p); } console.log(p);"`,
+    const openApiModuleUrl = pathToFileURL(
+      path.join(tmpDir, "node_modules", "neotoma", "dist", "shared", "openapi_file.js")
+    ).href;
+    const openApiOutput = runAndCapture(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { resolveOpenApiPath } from ${JSON.stringify(openApiModuleUrl)}; const p = resolveOpenApiPath(); if (!p.endsWith("openapi.yaml")) { throw new Error("Unexpected OpenAPI path: " + p); } console.log(p);`,
+      ],
       { cwd: tmpDir }
     );
+    process.stdout.write(openApiOutput);
 
     console.log("\nSimulate install passed. Package would install and run correctly.");
   } finally {
