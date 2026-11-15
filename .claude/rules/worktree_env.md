@@ -3,54 +3,17 @@ description: "Rules for managing environment files when working in git worktrees
 alwaysApply: false
 ---
 
-<!-- Source: foundation/.cursor/rules/worktree_env.mdc -->
+<!-- Source: docs/developer/worktree_env.mdc -->
+
 
 # Worktree Environment Rules
 
-When working in a git worktree (especially Cursor worktrees):
+When working in a git worktree:
 
-1. Environment files (`.env`, `.env.dev`, `.env.development`) live in the **main repo root**, not in each worktree.
-2. Worktrees do **not** automatically get env files.
-3. To copy env into the current worktree, run:
-   - `npm run copy:env`
-   - or `node scripts/copy-env-to-worktree.js`
-4. To install the auto-copy hook (runs on `git checkout`):
-   - `npm run setup:env-hook`
-5. The copy script:
-   - Detects if you are in a worktree and finds the main repo
-   - Looks for env files in this order: `.env.dev`, `.env`, `.env.development`
-   - Copies the first one found to `.env.development` in the worktree
-   - Only overwrites if the source is newer or destination is missing
-6. Env files are gitignored and MUST NOT be committed.
+1. Worktrees do not automatically receive an env file. By default, set up a local development environment from the committed `.env.example` file.
+2. Copying a main repository env file is an explicit opt-in: run `NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env` in the destination worktree. Running `npm run copy:env` without that variable copies nothing.
+3. `npm run setup:env-hook` installs a post-checkout hook, but the hook copies only when `NEOTOMA_WORKTREE_COPY_ENV=1` is set for that checkout.
+4. The copy script checks `.env.dev`, `.env`, then `.env.development` in the main repository, with a user config fallback. It refuses a source selecting `NEOTOMA_ENV=production`, a `NEOTOMA_DATA_DIR` that resolves outside the destination worktree (including `~` paths and `..` escapes), or a `NEOTOMA_BASE_URL` whose host is not loopback (`localhost`, `127.0.0.1`, or `::1`). Remove or relocate an unsafe key in the source, or use `.env.example` to set up the worktree.
+5. An allowed source is copied to `.env.development` only if the destination is missing or older. Env files are gitignored and must not be committed.
 
-Agents should:
-- Suggest `npm run copy:env` when encountering missing env variables in a worktree
-- Never try to commit `.env*` files
-- Prefer the hook (`npm run setup:env-hook`) for developer machines
-
-## Configuration
-
-Environment file priority and worktree detection can be configured in `foundation-config.yaml`:
-
-```yaml
-tooling:
-  env_management:
-    enabled: true
-    env_file_priority:
-      - ".env.dev"
-      - ".env"
-      - ".env.development"
-    worktree_detection:
-      cursor_worktrees: true
-      custom_patterns: []
-```
-
-
-
-
-
-
-
-
-
-
+Agents should suggest the `.env.example` development setup when worktree variables are missing. Only suggest the copy command after explaining the opt-in and refusal conditions.

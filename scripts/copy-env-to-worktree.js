@@ -5,7 +5,7 @@
  */
 
 import { existsSync, copyFileSync, readFileSync, statSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import dotenv from 'dotenv';
@@ -56,10 +56,35 @@ function findEnvFile(repoPath) {
   return null;
 }
 
-function sourceUsesProductionEnvironment(filePath) {
+function validateSourceEnvironment(filePath, worktreePath) {
   const contents = readFileSync(filePath, 'utf8');
   const parsed = dotenv.parse(contents);
-  return parsed.NEOTOMA_ENV === 'production';
+  if (parsed.NEOTOMA_ENV === 'production') {
+    return 'the source selects production';
+  }
+
+  if (parsed.NEOTOMA_DATA_DIR !== undefined) {
+    const dataDir = parsed.NEOTOMA_DATA_DIR;
+    const root = resolve(worktreePath);
+    const target = resolve(root, dataDir);
+    if (dataDir.startsWith('~') || (target !== root && !target.startsWith(root + sep))) {
+      return 'NEOTOMA_DATA_DIR resolves outside the destination worktree';
+    }
+  }
+
+  if (parsed.NEOTOMA_BASE_URL !== undefined) {
+    let hostname;
+    try {
+      hostname = new URL(parsed.NEOTOMA_BASE_URL).hostname;
+    } catch {
+      return 'NEOTOMA_BASE_URL is not a valid loopback URL';
+    }
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname)) {
+      return 'NEOTOMA_BASE_URL does not use a loopback host';
+    }
+  }
+
+  return null;
 }
 
 function main() {
@@ -99,8 +124,11 @@ function main() {
   }
 
   try {
-    if (sourceUsesProductionEnvironment(envSource)) {
-      console.warn('[copy-env] Refused env copy because the source selects production.');
+    const refusal = validateSourceEnvironment(envSource, currentDir);
+    if (refusal) {
+      console.warn(refusal === 'the source selects production'
+        ? '[copy-env] Refused env copy because the source selects production.'
+        : `[copy-env] Refused env copy because ${refusal}. Remove or relocate that key in the source, or set up the worktree from .env.example.`);
       process.exitCode = 1;
       return;
     }

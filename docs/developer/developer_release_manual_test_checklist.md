@@ -59,7 +59,7 @@ To verify global and non-global behavior **without** publishing to npm:
 ### 1.4 Environment and backend
 
 - [ ] Server uses SQLite and local `data/sources/`
-- [ ] `NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env` (in worktree) copies a non-production env from the main repo and refuses a production env
+- [ ] `NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env` (in worktree) copies a safe development env and refuses production sources, data directories outside the worktree, and non-loopback base URLs
 
 ---
 
