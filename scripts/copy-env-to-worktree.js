@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Copy .env file from main repository to current worktree as .env.development
- * This is useful for Cursor worktrees which don't automatically copy gitignored files
+ * only when the caller explicitly opts in.
  */
 
 import { existsSync, copyFileSync, readFileSync, statSync } from 'fs';
@@ -55,7 +55,28 @@ function findEnvFile(repoPath) {
   return null;
 }
 
+function sourceUsesProductionEnvironment(filePath) {
+  const contents = readFileSync(filePath, 'utf8');
+  return contents.split(/\r?\n/).some((line) => {
+    const match = line.match(
+      /^\s*(?:export\s+)?NEOTOMA_ENV\s*=\s*(?:"([^"]*)"|'([^']*)'|([^#\s]*))(?:\s+#.*)?\s*$/
+    );
+    if (!match) {
+      return false;
+    }
+    const value = match[1] ?? match[2] ?? match[3] ?? '';
+    return value === 'production';
+  });
+}
+
 function main() {
+  if (process.env.NEOTOMA_WORKTREE_COPY_ENV !== '1') {
+    console.log(
+      '[copy-env] Skipped env copy. Set NEOTOMA_WORKTREE_COPY_ENV=1 to opt in.'
+    );
+    return;
+  }
+
   const currentDir = process.cwd();
   const mainRepoPath = getMainRepoPath();
   
@@ -80,10 +101,22 @@ function main() {
   
   const envSource = findEnvFile(mainRepoPath);
   if (!envSource) {
-    console.warn(`[copy-env] No .env file found in main repository (${mainRepoPath}). Skipping env copy.`);
+    console.warn('[copy-env] No source env file found. Skipping env copy.');
     return;
   }
-  
+
+  try {
+    if (sourceUsesProductionEnvironment(envSource)) {
+      console.warn('[copy-env] Refused env copy because the source selects production.');
+      process.exitCode = 1;
+      return;
+    }
+  } catch {
+    console.warn('[copy-env] Refused env copy because the source could not be validated.');
+    process.exitCode = 1;
+    return;
+  }
+
   const envDest = join(currentDir, '.env.development');
   
   // Only copy if destination doesn't exist or source is newer
@@ -102,9 +135,10 @@ function main() {
   
   try {
     copyFileSync(envSource, envDest);
-    console.log(`[copy-env] Copied ${envSource} to ${envDest}`);
-  } catch (error) {
-    console.warn(`[copy-env] Failed to copy env file: ${error.message}`);
+    console.log('[copy-env] Copied env file to .env.development.');
+  } catch {
+    console.warn('[copy-env] Failed to copy env file.');
+    process.exitCode = 1;
   }
 }
 
