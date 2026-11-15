@@ -201,3 +201,40 @@ describe("public replay demos describe `at` as assertion time", () => {
     /Estado en \d|en ese momento|instante concreto|cre[\u00ed]a el agente|vio el agente|En el momento de/
   );
 });
+
+/**
+ * Landing pages and guarantee copy describe temporal queries. They must not say
+ * the state is "valid at" an as-of instant (valid time); `at` returns the state
+ * as recorded by the cutoff.
+ */
+describe("public site copy does not claim valid-time semantics for temporal queries", () => {
+  const pages = [
+    "Cases",
+    "Healthcare",
+    "GovTech",
+    "Logistics",
+    "Contracts",
+    "Portfolio",
+    "CustomerOps",
+    "Trading",
+    "FinancialOps",
+  ]
+    .map((name) => `frontend/src/components/subpages/${name}LandingPage.tsx`)
+    .concat([
+      "frontend/src/components/subpages/agent_auth_landing_body.tsx",
+      "frontend/src/components/subpages/PersonalDataLandingPage.tsx",
+      "frontend/src/components/subpages/CrmLandingPage.tsx",
+      "frontend/src/components/subpages/CasesLandingPage.tsx",
+      "frontend/src/components/memory_guarantees/memory_guarantees_page_body.tsx",
+    ]);
+  const VALID_TIME_CLAIM =
+    /state valid (at|on)|valid (at|on) the as-of|what was my state on date|reconstruct state at any timestamp|snapshot at any prior date|post-date the as-of/i;
+
+  it.each(pages)("%s", (page) => {
+    expect(read(page)).not.toMatch(VALID_TIME_CLAIM);
+  });
+
+  it.each(pages.slice(0, 10))("%s states the recorded-by semantics", (page) => {
+    expect(read(page)).toMatch(/as recorded by|recorded by/);
+  });
+});

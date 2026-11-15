@@ -136,7 +136,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project clause-level state through time",
       desc: "Amendments apply as diffs against specific clauses and schedules. Obligations inherit deadline changes when linked amendments land, with supersession edges you can traverse in one query.",
-      detail: "Temporal queries return the state valid on the as-of date, not the last save.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the last save.",
     },
     {
       Icon: Search,

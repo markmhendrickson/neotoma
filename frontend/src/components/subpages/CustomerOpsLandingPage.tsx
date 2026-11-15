@@ -130,7 +130,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project support state through time",
       desc: "Link routing decisions to queue state and customer signals. Trace escalations back to failed resolution attempts. Reconstruct SLA timelines against actual priority change timestamps.",
-      detail: "Temporal queries return the state valid at the as-of timestamp, not the latest ticket update.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest ticket update.",
     },
     {
       Icon: Headphones,

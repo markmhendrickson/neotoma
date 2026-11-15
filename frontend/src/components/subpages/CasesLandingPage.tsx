@@ -110,10 +110,10 @@ const CONFIG: UseCaseConfig = {
     },
     {
       category: "Case state reconstruction",
-      human: "What was our case posture on the Apex IP litigation as of October 1, 2024?",
+      human: "What was our case posture on the Apex IP litigation as recorded by October 1, 2024?",
       fail: "Apex IP Ltd. v. BrightForge Inc. (S.D.N.Y. 1:23-cv-08814): active litigation; claim construction hearing set; settlement authority $4.2M.",
       succeed:
-        'Point-in-time snapshot case\u00B7apex @ 2024-10-01: Markman order not yet issued (issued Oct 18). Posture: pursuing narrow construction for term "distributed ledger node"; no settlement authority on file (authority memo obs dated Oct 9 not yet observed). Docket through DE 112 only; DE 119 (Daubert) not filed until Oct 4. Diff vs. current case\u00B7v14: authority, expert challenges, and hearing dates all post-date the as-of date.',
+        'Snapshot as recorded by 2024-10-01: case\u00B7apex @ 2024-10-01: Markman order not yet recorded (issued Oct 18). Posture: pursuing narrow construction for term "distributed ledger node"; no settlement authority on file (authority memo obs dated Oct 9 not yet observed). Docket through DE 112 only; DE 119 (Daubert) not yet recorded (filed Oct 4). Diff vs. current case\u00B7v14: authority, expert challenges, and hearing dates were all recorded after the cutoff.',
       version: "case\u00B7apex @ 2024-10-01",
       Icon: CalendarClock,
       failTitle: "Current posture returned for historical date",
@@ -139,7 +139,7 @@ const CONFIG: UseCaseConfig = {
       title: "Project matter state through time",
       desc: "Link evidence to docket events and coverage milestones. Reconstruct exhibit sets as of any filing date, hearing, or reserve meeting without rebuilding folders by hand.",
       detail:
-        "Temporal queries return the state valid on the as-of instant, not the last sync from the DMS.",
+        "Temporal queries return the state as recorded by the cutoff time, not the last sync from the DMS.",
     },
     {
       Icon: Search,

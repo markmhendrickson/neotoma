@@ -154,7 +154,7 @@ const CONFIG: UseCaseConfig = {
       title: "Project authorization state through time",
       desc: "Consent timelines, policy versions, and delegation chains are queryable at any point in time. Ask what permissions an agent had on a specific date and get the exact policy inputs.",
       detail:
-        "Temporal queries return the state valid at the as-of timestamp, not the latest policy.",
+        "Temporal queries return the state as recorded by the cutoff time, not the latest policy.",
     },
     {
       Icon: Search,

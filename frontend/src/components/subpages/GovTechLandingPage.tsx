@@ -130,7 +130,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project determination state through time",
       desc: "Link each decision to the policy version and evidence records available at determination time. Reconstruct what was known on any date without mixing pre- and post-decision data.",
-      detail: "Temporal queries return the state valid at the as-of date, not the latest case file update.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest case file update.",
     },
     {
       Icon: Shield,

@@ -129,7 +129,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project logistics state through time",
       desc: "Link routing decisions to the carrier capacity, rates, and inventory positions available at decision time. Reconstruct the constraint landscape for any past moment.",
-      detail: "Temporal queries return the state valid at the as-of timestamp, not the latest TMS sync.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest TMS sync.",
     },
     {
       Icon: Route,

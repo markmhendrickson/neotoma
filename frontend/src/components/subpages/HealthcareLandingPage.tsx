@@ -141,7 +141,7 @@ const CONFIG: UseCaseConfig = {
       title: "Project clinical state through time",
       desc: "Link care plan changes to triggering labs, orders to authorizations, and handoff items to shift boundaries. Reconstruct what was known at any moment in the care timeline.",
       detail:
-        "Temporal queries return the state valid at the as-of instant, not the last EHR sync.",
+        "Temporal queries return the state as recorded by the cutoff time, not the last EHR sync.",
     },
     {
       Icon: Stethoscope,

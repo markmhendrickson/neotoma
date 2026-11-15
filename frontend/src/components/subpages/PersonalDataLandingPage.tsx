@@ -213,7 +213,7 @@ const CONFIG: UseCaseConfig = {
     guarantees: [
       "Every workout set, transaction, and health reading is a versioned entity with full observation history",
       "Entity resolution across tools so the same concept in different agents resolves to one entity",
-      "Temporal queries answer 'what was my state on date X?' with the exact snapshot from that date",
+      "Temporal queries answer 'what had been recorded about me by date X?' with the exact snapshot as recorded by then",
       "Cross-domain queries correlate sleep with training, spending with habits, goals with outcomes",
     ],
     generalizesTitle: "Your data, your memory, your agents",

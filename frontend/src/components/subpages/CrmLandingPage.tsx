@@ -1268,7 +1268,7 @@ export function CrmLandingPageBody() {
                       "Every contact, deal, and commitment is a versioned entity with full observation history",
                       "Intro recommendations trace to specific connections and threads with auditable provenance",
                       "Deal stage transitions are schema-validated: no skipping diligence, no silent field overwrites",
-                      "Pipeline state is replayable: reconstruct any commitment or snapshot at any prior date",
+                      "Pipeline state is replayable: reconstruct any commitment or snapshot as recorded by any prior date",
                     ].map((item) => (
                       <li
                         key={item}

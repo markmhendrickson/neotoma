@@ -140,7 +140,7 @@ const CONFIG: UseCaseConfig = {
       title: "Project reconciliation and GL state through time",
       desc: "Month-end close freezes recon grids and material balances. Conflicting bank vs. AP amounts stay addressable with both timestamps and source system IDs until explicitly resolved with lineage.",
       detail:
-        "Temporal queries return the state valid on the audit or close timestamp, not the last sync job.",
+        "Temporal queries return the state as recorded by the cutoff time, not the last sync job.",
     },
     {
       Icon: Search,

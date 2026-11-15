@@ -140,7 +140,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project ownership and marks through time",
       desc: "Cap table events, follow-on wires, and valuation memos chain with supersession where appropriate. Reconstruct fully diluted ownership and last approved mark for any close date the fund names.",
-      detail: "Temporal queries return the state valid on the as-of instant, not the last ETL run.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the last ETL run.",
     },
     {
       Icon: Search,

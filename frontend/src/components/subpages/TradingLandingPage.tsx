@@ -155,7 +155,7 @@ const CONFIG: UseCaseConfig = {
       title: "Project trading state through time",
       desc: "Strategy versions, risk parameters, and portfolio compositions are queryable at any point in time. Ask what the agent's risk limits were at 3 AM and get the exact parameters, not today's configuration.",
       detail:
-        "Temporal queries return the state valid at the as-of timestamp, not the latest strategy update.",
+        "Temporal queries return the state as recorded by the cutoff time, not the latest strategy update.",
     },
     {
       Icon: Search,
