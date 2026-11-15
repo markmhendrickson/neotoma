@@ -135,8 +135,8 @@ describe("retrieve_entity_snapshot cutoff wording matches the stamped clocks", (
     const limitations = read("docs/known_limitations.md").split("### Export carries current state only")[0]!;
     expect(limitations).toMatch(/`at` filters `observed_at`/);
     expect(limitations).toMatch(/server clock when they write the observation/);
-    expect(limitations).toMatch(/Record-wide as-of reads: \[#2700\]/);
-    expect(limitations).toMatch(/Valid-time intervals: \[#2034\]/);
+    expect(limitations).toMatch(/\[#2700\]\([^)]*\) for record-wide as-of reads/);
+    expect(limitations).toMatch(/\[#2034\]\([^)]*\) for valid-time intervals/);
     expect(limitations).not.toMatch(/`at` \(event time\)/);
   });
 });

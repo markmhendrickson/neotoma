@@ -19,7 +19,7 @@ Applies to `neotoma@0.29.1`. Every entry has a tracking issue.
 
 **Reads and export**
 
-- [As-of reads are per entity](#as-of-reads-are-per-entity)
+- [As-of reads are per entity and use write clocks](#as-of-reads-are-per-entity-and-use-write-clocks)
 - [Export carries current state only](#export-carries-current-state-only)
 - [Not every read says whether its answer is complete](#not-every-read-says-whether-its-answer-is-complete)
 
@@ -103,7 +103,7 @@ Applies to `neotoma@0.29.1`. Every entry has a tracking issue.
 
 **Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at`. For domain-time questions, store the relevant dates as fields and apply the date or interval logic in the consuming application.
 
-**Tracking.** Record-wide as-of reads: [#2700](https://github.com/markmhendrickson/neotoma/issues/2700). Valid-time intervals: [#2034](https://github.com/markmhendrickson/neotoma/issues/2034).
+**Tracking.** [#2700](https://github.com/markmhendrickson/neotoma/issues/2700) for record-wide as-of reads; [#2034](https://github.com/markmhendrickson/neotoma/issues/2034) for valid-time intervals.
 
 ### Export carries current state only
 
