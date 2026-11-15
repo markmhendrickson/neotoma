@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NeotomaClient } from "../../packages/client/src/client.js";
+import { SequentialCorrectionError } from "../../packages/client/src/correction.js";
 import { HttpTransport } from "../../packages/client/src/http.js";
 import { LocalTransport, type LocalOperations } from "../../packages/client/src/local.js";
 import type {
@@ -64,9 +65,13 @@ describe("@neotoma/client correct()", () => {
   });
 
   it("adapts a deprecated map request into sorted per-field HTTP calls", async () => {
-    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) =>
-      okJson({ field: JSON.parse(String(init?.body)).field })
-    );
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const field = JSON.parse(String(init?.body)).field;
+      return okJson({
+        field,
+        entity_version: field === "priority" ? "version-3" : "version-4",
+      });
+    });
     const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
     const input: DeprecatedCorrectInput = {
       entity_id: "ent_sdk_fixture",
@@ -80,7 +85,10 @@ describe("@neotoma/client correct()", () => {
 
     const result = await transport.correct(input);
 
-    expect(result).toEqual([{ field: "priority" }, { field: "status" }]);
+    expect(result).toEqual([
+      { field: "priority", entity_version: "version-3" },
+      { field: "status", entity_version: "version-4" },
+    ]);
     expect(
       fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))
     ).toEqual([
@@ -101,7 +109,7 @@ describe("@neotoma/client correct()", () => {
         value: "done",
         idempotency_key: "sdk-map:status",
         user_id: "user-sdk-fixture",
-        expected_version: "version-2",
+        expected_version: "version-3",
         overwrite: false,
       },
     ]);
@@ -120,6 +128,85 @@ describe("@neotoma/client correct()", () => {
       })
     ).rejects.toThrow("at least one field");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["whitespace-only", " \t "],
+    ["non-string", 42],
+  ])(
+    "rejects a %s deprecated idempotency base before HTTP correction calls",
+    async (_label, idempotencyKey) => {
+      const fetchImpl = vi.fn(async () => okJson({ success: true }));
+      const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
+
+      await expect(
+        transport.correct({
+          entity_id: "ent_sdk_fixture",
+          entity_type: "sdk_fixture",
+          corrections: { status: "done" },
+          idempotency_key: idempotencyKey,
+        } as unknown as DeprecatedCorrectInput)
+      ).rejects.toThrow("non-empty idempotency key base");
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["whitespace-only", " \t "],
+    ["non-string", 42],
+  ])(
+    "rejects a %s deprecated idempotency base before local correction calls",
+    async (_label, idempotencyKey) => {
+      const correct = vi.fn(async () => ({ success: true }));
+      const transport = new LocalTransport({
+        operations: makeLocalOperations(correct),
+      });
+
+      await expect(
+        transport.correct({
+          entity_id: "ent_sdk_fixture",
+          entity_type: "sdk_fixture",
+          corrections: { status: "done" },
+          idempotency_key: idempotencyKey,
+        } as unknown as DeprecatedCorrectInput)
+      ).rejects.toThrow("non-empty idempotency key base");
+      expect(correct).not.toHaveBeenCalled();
+    }
+  );
+
+  it("reports fields committed before a later deprecated correction fails", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(okJson({ field: "priority", entity_version: "version-3" }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "ERR_FIELD_VERSION_CONFLICT" } }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
+
+    let failure: unknown;
+    try {
+      await transport.correct({
+        entity_id: "ent_sdk_fixture",
+        entity_type: "sdk_fixture",
+        corrections: { status: "done", priority: "high" },
+        idempotency_key: "sdk-partial",
+        expected_version: "version-2",
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(SequentialCorrectionError);
+    expect((failure as SequentialCorrectionError).committedFields).toEqual(["priority"]);
+    expect((failure as Error).message).toContain("Fields already committed: priority");
+    expect((failure as Error).message).toContain("correct_transaction");
   });
 
   it("uses the same canonical and deprecated request behavior for local operations", async () => {

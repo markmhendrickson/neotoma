@@ -23,6 +23,10 @@
  * based on their own error policy.
  */
 
+import {
+  assertValidCorrectionIdempotencyBase,
+  executeSequentialCorrections,
+} from "./correction.js";
 import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
 
 /**
@@ -334,6 +338,10 @@ export async function snapshotOnUpdate(
   transport: Pick<NeotomaTransport, "retrieveEntitySnapshot" | "correct">,
   input: SnapshotOnUpdateInput
 ): Promise<SnapshotOnUpdateResult> {
+  assertValidCorrectionIdempotencyBase(
+    input.idempotencyKey,
+    "snapshotOnUpdate()"
+  );
   const snapshot = await transport.retrieveEntitySnapshot({ entity_id: input.entityId });
 
   let corrections: Record<string, unknown> = input.corrections;
@@ -360,23 +368,23 @@ export async function snapshotOnUpdate(
     };
   }
 
-  const correctionResults: unknown[] = [];
-  for (const field of changedFields) {
-    correctionResults.push(
-      await transport.correct({
+  const correctionResults = await executeSequentialCorrections(
+    changedFields,
+    input.expectedVersion,
+    (field, chainedExpectedVersion) =>
+      transport.correct({
         entity_id: input.entityId,
         entity_type: input.entityType,
         field,
         value: corrections[field],
         idempotency_key: `${input.idempotencyKey}:${field}`,
         ...(input.userId !== undefined ? { user_id: input.userId } : {}),
-        ...(input.expectedVersion !== undefined
-          ? { expected_version: input.expectedVersion }
+        ...(chainedExpectedVersion !== undefined
+          ? { expected_version: chainedExpectedVersion }
           : {}),
         ...(input.overwrite !== undefined ? { overwrite: input.overwrite } : {}),
       })
-    );
-  }
+  );
 
   return {
     applied: true,

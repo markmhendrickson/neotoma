@@ -6,7 +6,20 @@ import {
   snapshotOnUpdate,
   storeChatTurn,
 } from "../../packages/client/src/helpers.js";
-import type { NeotomaTransport, StoreInput, StoreResult } from "../../packages/client/src/types.js";
+import { HttpTransport } from "../../packages/client/src/http.js";
+import { LocalTransport, type LocalOperations } from "../../packages/client/src/local.js";
+import type {
+  NeotomaTransport,
+  StoreInput,
+  StoreResult,
+} from "../../packages/client/src/types.js";
+
+function okJson(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 describe("extractStoredEntities", () => {
   it("reads entities from the top-level shape (real transport, #316)", () => {
@@ -332,7 +345,10 @@ describe("snapshotOnUpdate", () => {
     const calls: string[] = [];
     const correct = vi.fn(async (input: { field: string }) => {
       calls.push(`correct:${input.field}`);
-      return { field: input.field };
+      return {
+        field: input.field,
+        entity_version: input.field === "priority" ? "version-2" : "version-3",
+      };
     });
     const transport = makeStubTransport({
       retrieveEntitySnapshot: vi.fn(async () => {
@@ -372,11 +388,63 @@ describe("snapshotOnUpdate", () => {
         field: "status",
         value: "new",
         idempotency_key: "helper-update:status",
-        expected_version: "version-1",
+        expected_version: "version-2",
         overwrite: true,
       },
     ]);
-    expect(result.correctionResults).toEqual([{ field: "priority" }, { field: "status" }]);
+    expect(result.correctionResults).toEqual([
+      { field: "priority", entity_version: "version-2" },
+      { field: "status", entity_version: "version-3" },
+    ]);
+  });
+
+  describe.each(["HTTP", "local"] as const)("%s transport", (transportKind) => {
+    it.each([
+      ["missing", undefined],
+      ["empty", ""],
+      ["whitespace-only", " \t "],
+      ["non-string", 42],
+    ])(
+      "rejects a %s snapshotOnUpdate idempotency base before correction calls",
+      async (_label, idempotencyKey) => {
+        const correct = vi.fn(async () => ({ entity_version: "version-2" }));
+        let transport: Pick<
+          NeotomaTransport,
+          "retrieveEntitySnapshot" | "correct"
+        >;
+        let fetchImpl: ReturnType<typeof vi.fn> | undefined;
+
+        if (transportKind === "HTTP") {
+          fetchImpl = vi.fn(async (_url: unknown) =>
+            okJson({ entity_id: "ent-1", entity_version: "version-1", snapshot: {} })
+          );
+          transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
+        } else {
+          transport = new LocalTransport({
+            operations: {
+              retrieveEntitySnapshot: vi.fn(async () => ({
+                entity_id: "ent-1",
+                entity_version: "version-1",
+                snapshot: {},
+              })),
+              correct,
+            } as unknown as LocalOperations,
+          });
+        }
+
+        await expect(
+          snapshotOnUpdate(transport, {
+            entityId: "ent-1",
+            entityType: "sdk_fixture",
+            corrections: { status: "new" },
+            idempotencyKey,
+          } as unknown as Parameters<typeof snapshotOnUpdate>[1])
+        ).rejects.toThrow("non-empty idempotency key base");
+
+        expect(correct).not.toHaveBeenCalled();
+        expect(fetchImpl).not.toHaveBeenCalled();
+      }
+    );
   });
 
   it("skips the correction when the review callback returns false", async () => {
