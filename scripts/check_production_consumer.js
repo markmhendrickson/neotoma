@@ -161,7 +161,7 @@ async function main() {
     }
 
     console.log("Installing packed Neotoma with production dependencies only...");
-    run("npm", ["install", "--omit=dev", "--offline", "--no-audit", "--no-fund", tarballPath], {
+    run("npm", ["install", "--omit=dev", "--prefer-offline", "--no-audit", "--no-fund", tarballPath], {
       cwd: consumerDir,
       env: isolatedEnv(dataDir),
     });
