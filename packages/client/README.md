@@ -30,9 +30,7 @@ const client = new NeotomaClient({
 });
 
 await client.store({
-  entities: [
-    { entity_type: "task", title: "Review plan", due_date: "2026-04-15" },
-  ],
+  entities: [{ entity_type: "task", title: "Review plan", due_date: "2026-04-15" }],
   idempotency_key: "my-hook-2026-04-09-001",
 });
 ```
@@ -54,10 +52,10 @@ const result = await client.retrieveEntities({ entity_type: "task", limit: 10 })
 
 Both transports implement the `NeotomaTransport` interface, so hook plugins can switch between them by config without changing code.
 
-| Transport | When to use | Dependencies |
-|---|---|---|
-| `HttpTransport` | Hook plugin runs in a separate process; remote Neotoma instance; production deployments | Node 18+ (built-in fetch) |
-| `LocalTransport` | Hook plugin bundles Neotoma core; single Node process; avoid HTTP roundtrip | `neotoma` peer dependency |
+| Transport        | When to use                                                                             | Dependencies              |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------- |
+| `HttpTransport`  | Hook plugin runs in a separate process; remote Neotoma instance; production deployments | Node 18+ (built-in fetch) |
+| `LocalTransport` | Hook plugin bundles Neotoma core; single Node process; avoid HTTP roundtrip             | `neotoma` peer dependency |
 
 ## API
 
@@ -124,6 +122,18 @@ await client.correct({
 });
 // Sends task-update:priority, then task-update:status.
 ```
+
+The base key must be a non-empty, non-whitespace string. Multi-field calls
+are sequential and **not atomic**: earlier fields remain committed if a later
+field fails. With `expected_version` (or the helper's `expectedVersion`), the
+client sends that version for the first field, then uses each successful
+correction's returned `entity_version` for the next field. An intervening
+writer causes a version conflict; the client never drops the precondition or
+forces an overwrite. The error names the fields already committed. Re-read
+the entity, reconcile its current values, then retry only the uncommitted
+fields with a fresh base key and the current entity version. Use the MCP
+`correct_transaction` tool (REST `POST /corrections/transaction`) when all
+fields must succeed or fail together.
 
 `snapshotOnUpdate()` uses the same canonical shape internally and only sends
 fields whose reviewed values differ from the retrieved snapshot:

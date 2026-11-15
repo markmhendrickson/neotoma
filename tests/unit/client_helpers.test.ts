@@ -8,11 +8,7 @@ import {
 } from "../../packages/client/src/helpers.js";
 import { HttpTransport } from "../../packages/client/src/http.js";
 import { LocalTransport, type LocalOperations } from "../../packages/client/src/local.js";
-import type {
-  NeotomaTransport,
-  StoreInput,
-  StoreResult,
-} from "../../packages/client/src/types.js";
+import type { NeotomaTransport, StoreInput, StoreResult } from "../../packages/client/src/types.js";
 
 function okJson(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -27,9 +23,7 @@ describe("extractStoredEntities", () => {
       success: true,
       entities: [{ entity_id: "ent-1", entity_type: "contact" }],
     } as unknown as StoreResult;
-    expect(extractStoredEntities(result)).toEqual([
-      { entity_id: "ent-1", entity_type: "contact" },
-    ]);
+    expect(extractStoredEntities(result)).toEqual([{ entity_id: "ent-1", entity_type: "contact" }]);
   });
 
   it("falls back to the legacy nested `structured.entities` shape", () => {
@@ -55,11 +49,9 @@ describe("extractStoredEntities", () => {
   });
 });
 
-function makeStubTransport(
-  overrides: Partial<NeotomaTransport> = {}
-): NeotomaTransport {
+function makeStubTransport(overrides: Partial<NeotomaTransport> = {}): NeotomaTransport {
   const base: NeotomaTransport = {
-    store: vi.fn(async () => ({ structured: { entities: [] } } as StoreResult)),
+    store: vi.fn(async () => ({ structured: { entities: [] } }) as StoreResult),
     retrieveEntities: vi.fn(async () => []),
     retrieveEntityByIdentifier: vi.fn(async () => null),
     retrieveEntitySnapshot: vi.fn(async () => ({})),
@@ -83,14 +75,17 @@ describe("storeChatTurn", () => {
     // { success, replayed, entities: [...] }. There is no `structured`
     // wrapper on the live response. Helpers must read from result.entities.
     const transport = makeStubTransport({
-      store: vi.fn(async () => ({
-        success: true,
-        entities: [
-          { entity_id: "conv-1", entity_type: "conversation" },
-          { entity_id: "msg-user-1", entity_type: "conversation_message" },
-          { entity_id: "msg-assistant-1", entity_type: "conversation_message" },
-        ],
-      } as unknown as StoreResult)),
+      store: vi.fn(
+        async () =>
+          ({
+            success: true,
+            entities: [
+              { entity_id: "conv-1", entity_type: "conversation" },
+              { entity_id: "msg-user-1", entity_type: "conversation_message" },
+              { entity_id: "msg-assistant-1", entity_type: "conversation_message" },
+            ],
+          }) as unknown as StoreResult
+      ),
     });
 
     const result = await storeChatTurn(transport, {
@@ -203,14 +198,17 @@ describe("storeChatTurn", () => {
 
   it("allows storing only a user message when the assistant reply is not yet known", async () => {
     const transport = makeStubTransport({
-      store: vi.fn(async () => ({
-        structured: {
-          entities: [
-            { entity_id: "conv-1", entity_type: "conversation" },
-            { entity_id: "msg-user-1", entity_type: "conversation_message" },
-          ],
-        },
-      } as StoreResult)),
+      store: vi.fn(
+        async () =>
+          ({
+            structured: {
+              entities: [
+                { entity_id: "conv-1", entity_type: "conversation" },
+                { entity_id: "msg-user-1", entity_type: "conversation_message" },
+              ],
+            },
+          }) as StoreResult
+      ),
     });
 
     const result = await storeChatTurn(transport, {
@@ -246,10 +244,13 @@ describe("retrieveOrStore", () => {
   it("stores when no existing entity is found and returns the new entity_id (top-level shape, #316)", async () => {
     const transport = makeStubTransport({
       retrieveEntityByIdentifier: vi.fn(async () => null),
-      store: vi.fn(async () => ({
-        success: true,
-        entities: [{ entity_id: "new-1", entity_type: "contact" }],
-      } as unknown as StoreResult)),
+      store: vi.fn(
+        async () =>
+          ({
+            success: true,
+            entities: [{ entity_id: "new-1", entity_type: "contact" }],
+          }) as unknown as StoreResult
+      ),
     });
 
     const result = await retrieveOrStore(transport, {
@@ -265,9 +266,12 @@ describe("retrieveOrStore", () => {
   it("falls back to the legacy nested `structured.entities` shape when storing", async () => {
     const transport = makeStubTransport({
       retrieveEntityByIdentifier: vi.fn(async () => null),
-      store: vi.fn(async () => ({
-        structured: { entities: [{ entity_id: "legacy-1", entity_type: "contact" }] },
-      } as StoreResult)),
+      store: vi.fn(
+        async () =>
+          ({
+            structured: { entities: [{ entity_id: "legacy-1", entity_type: "contact" }] },
+          }) as StoreResult
+      ),
     });
 
     const result = await retrieveOrStore(transport, {
@@ -283,7 +287,7 @@ describe("retrieveOrStore", () => {
   it("throws when the store response contains no entity_id in either shape", async () => {
     const transport = makeStubTransport({
       retrieveEntityByIdentifier: vi.fn(async () => null),
-      store: vi.fn(async () => ({ success: true, entities: [] } as unknown as StoreResult)),
+      store: vi.fn(async () => ({ success: true, entities: [] }) as unknown as StoreResult),
     });
 
     await expect(
@@ -299,10 +303,13 @@ describe("retrieveOrStore", () => {
 describe("recordConversationTurn", () => {
   it("returns the entity_id from the top-level `entities` store response shape (#316)", async () => {
     const transport = makeStubTransport({
-      store: vi.fn(async () => ({
-        success: true,
-        entities: [{ entity_id: "turn-1", entity_type: "conversation_turn" }],
-      } as unknown as StoreResult)),
+      store: vi.fn(
+        async () =>
+          ({
+            success: true,
+            entities: [{ entity_id: "turn-1", entity_type: "conversation_turn" }],
+          }) as unknown as StoreResult
+      ),
     });
 
     const result = await recordConversationTurn(transport, {
@@ -316,9 +323,14 @@ describe("recordConversationTurn", () => {
 
   it("falls back to the legacy nested `structured.entities` shape", async () => {
     const transport = makeStubTransport({
-      store: vi.fn(async () => ({
-        structured: { entities: [{ entity_id: "turn-legacy-1", entity_type: "conversation_turn" }] },
-      } as StoreResult)),
+      store: vi.fn(
+        async () =>
+          ({
+            structured: {
+              entities: [{ entity_id: "turn-legacy-1", entity_type: "conversation_turn" }],
+            },
+          }) as StoreResult
+      ),
     });
 
     const result = await recordConversationTurn(transport, {
@@ -408,10 +420,7 @@ describe("snapshotOnUpdate", () => {
       "rejects a %s snapshotOnUpdate idempotency base before correction calls",
       async (_label, idempotencyKey) => {
         const correct = vi.fn(async () => ({ entity_version: "version-2" }));
-        let transport: Pick<
-          NeotomaTransport,
-          "retrieveEntitySnapshot" | "correct"
-        >;
+        let transport: Pick<NeotomaTransport, "retrieveEntitySnapshot" | "correct">;
         let fetchImpl: ReturnType<typeof vi.fn> | undefined;
 
         if (transportKind === "HTTP") {
@@ -421,6 +430,7 @@ describe("snapshotOnUpdate", () => {
           transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
         } else {
           transport = new LocalTransport({
+            userId: "user-sdk-fixture",
             operations: {
               retrieveEntitySnapshot: vi.fn(async () => ({
                 entity_id: "ent-1",
@@ -442,7 +452,7 @@ describe("snapshotOnUpdate", () => {
         ).rejects.toThrow("non-empty idempotency key base");
 
         expect(correct).not.toHaveBeenCalled();
-        expect(fetchImpl).not.toHaveBeenCalled();
+        if (fetchImpl) expect(fetchImpl).not.toHaveBeenCalled();
       }
     );
   });

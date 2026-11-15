@@ -2,9 +2,7 @@ import type { CorrectInput, DeprecatedCorrectInput } from "./types.js";
 
 export type CorrectRequest = CorrectInput | DeprecatedCorrectInput;
 
-export function isDeprecatedCorrectInput(
-  input: CorrectRequest
-): input is DeprecatedCorrectInput {
+export function isDeprecatedCorrectInput(input: CorrectRequest): input is DeprecatedCorrectInput {
   return "corrections" in input;
 }
 
@@ -20,18 +18,14 @@ export function assertValidCorrectionIdempotencyBase(
 function correctionEntityVersion(result: unknown): string | undefined {
   if (!result || typeof result !== "object" || Array.isArray(result)) return undefined;
   const version = (result as Record<string, unknown>).entity_version;
-  return typeof version === "string" && version.length > 0 ? version : undefined;
+  return typeof version === "string" && version.trim().length > 0 ? version : undefined;
 }
 
 export class SequentialCorrectionError extends Error {
   readonly failedField: string;
   readonly committedFields: string[];
 
-  constructor(params: {
-    failedField: string;
-    committedFields: string[];
-    cause: unknown;
-  }) {
+  constructor(params: { failedField: string; committedFields: string[]; cause: unknown }) {
     const committed =
       params.committedFields.length > 0
         ? `Fields already committed: ${params.committedFields.join(", ")}.`
@@ -73,10 +67,7 @@ export async function executeSequentialCorrections(
     results.push(result);
     committedFields.push(field);
 
-    if (
-      nextExpectedVersion !== undefined &&
-      index < fields.length - 1
-    ) {
+    if (nextExpectedVersion !== undefined && index < fields.length - 1) {
       const returnedVersion = correctionEntityVersion(result);
       if (!returnedVersion) {
         throw new SequentialCorrectionError({
@@ -111,31 +102,17 @@ export async function executeCorrectRequest(
     throw new TypeError("Deprecated correct() corrections must contain at least one field");
   }
 
-  assertValidCorrectionIdempotencyBase(
-    input.idempotency_key,
-    "Deprecated correct()"
-  );
+  assertValidCorrectionIdempotencyBase(input.idempotency_key, "Deprecated correct()");
 
-  const {
-    corrections,
-    idempotency_key,
-    expected_version,
-    overwrite,
-    ...shared
-  } = input;
-  return executeSequentialCorrections(
-    fields,
-    expected_version,
-    (field, chainedExpectedVersion) =>
-      send({
-        ...shared,
-        field,
-        value: corrections[field],
-        idempotency_key: `${idempotency_key}:${field}`,
-        ...(chainedExpectedVersion !== undefined
-          ? { expected_version: chainedExpectedVersion }
-          : {}),
-        ...(overwrite !== undefined ? { overwrite } : {}),
-      })
+  const { corrections, idempotency_key, expected_version, overwrite, ...shared } = input;
+  return executeSequentialCorrections(fields, expected_version, (field, chainedExpectedVersion) =>
+    send({
+      ...shared,
+      field,
+      value: corrections[field],
+      idempotency_key: `${idempotency_key}:${field}`,
+      ...(chainedExpectedVersion !== undefined ? { expected_version: chainedExpectedVersion } : {}),
+      ...(overwrite !== undefined ? { overwrite } : {}),
+    })
   );
 }

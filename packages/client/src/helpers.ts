@@ -27,7 +27,13 @@ import {
   assertValidCorrectionIdempotencyBase,
   executeSequentialCorrections,
 } from "./correction.js";
-import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
+import type {
+  NeotomaTransport,
+  StoreEntityInput,
+  StoreInput,
+  StoreResult,
+  StoredEntityRef,
+} from "./types.js";
 
 /**
  * Extract the stored-entity list from a {@link StoreResult}, tolerating both
@@ -197,9 +203,7 @@ export async function storeChatTurn(
   };
 
   const conversationEntityId =
-    lookupByIndex(0) ??
-    stored.find((e) => e.entity_type === "conversation")?.entity_id ??
-    "";
+    lookupByIndex(0) ?? stored.find((e) => e.entity_type === "conversation")?.entity_id ?? "";
 
   return {
     conversationEntityId,
@@ -284,7 +288,9 @@ export interface SnapshotOnUpdateInput {
    * Return `false` to skip the update. Return `true` (or a corrections
    * delta) to proceed.
    */
-  review?: (snapshot: unknown) => boolean | Record<string, unknown> | Promise<boolean | Record<string, unknown>>;
+  review?: (
+    snapshot: unknown
+  ) => boolean | Record<string, unknown> | Promise<boolean | Record<string, unknown>>;
 }
 
 export interface SnapshotOnUpdateResult {
@@ -338,10 +344,7 @@ export async function snapshotOnUpdate(
   transport: Pick<NeotomaTransport, "retrieveEntitySnapshot" | "correct">,
   input: SnapshotOnUpdateInput
 ): Promise<SnapshotOnUpdateResult> {
-  assertValidCorrectionIdempotencyBase(
-    input.idempotencyKey,
-    "snapshotOnUpdate()"
-  );
+  assertValidCorrectionIdempotencyBase(input.idempotencyKey, "snapshotOnUpdate()");
   const snapshot = await transport.retrieveEntitySnapshot({ entity_id: input.entityId });
 
   let corrections: Record<string, unknown> = input.corrections;
@@ -444,7 +447,7 @@ export interface ConversationTurnResult {
  */
 export async function recordConversationTurn(
   transport: Pick<NeotomaTransport, "store">,
-  input: ConversationTurnInput,
+  input: ConversationTurnInput
 ): Promise<ConversationTurnResult> {
   if (!input.sessionId || !input.turnId) return {};
   const turnKey = `${input.sessionId}:${input.turnId}`;
@@ -461,12 +464,16 @@ export async function recordConversationTurn(
   if (input.model) entity.model = input.model;
   if (input.status) entity.status = input.status;
   if (input.missedSteps) entity.missed_steps = [...input.missedSteps];
-  if (input.toolInvocationCount !== undefined) entity.tool_invocation_count = input.toolInvocationCount;
-  if (input.storeStructuredCalls !== undefined) entity.store_structured_calls = input.storeStructuredCalls;
+  if (input.toolInvocationCount !== undefined)
+    entity.tool_invocation_count = input.toolInvocationCount;
+  if (input.storeStructuredCalls !== undefined)
+    entity.store_structured_calls = input.storeStructuredCalls;
   if (input.retrieveCalls !== undefined) entity.retrieve_calls = input.retrieveCalls;
-  if (input.neotomaToolFailures !== undefined) entity.neotoma_tool_failures = input.neotomaToolFailures;
+  if (input.neotomaToolFailures !== undefined)
+    entity.neotoma_tool_failures = input.neotomaToolFailures;
   if (input.harnessLoopCount !== undefined) entity.harness_loop_count = input.harnessLoopCount;
-  if (input.injectedContextChars !== undefined) entity.injected_context_chars = input.injectedContextChars;
+  if (input.injectedContextChars !== undefined)
+    entity.injected_context_chars = input.injectedContextChars;
   if (input.retrievedEntityIds?.length) entity.retrieved_entity_ids = [...input.retrievedEntityIds];
   if (input.storedEntityIds?.length) entity.stored_entity_ids = [...input.storedEntityIds];
   if (input.failureHintShown !== undefined) entity.failure_hint_shown = input.failureHintShown;
@@ -480,7 +487,8 @@ export async function recordConversationTurn(
   if (input.contextSource) entity.context_source = input.contextSource;
   if (input.extra) Object.assign(entity, input.extra);
 
-  const idempotencyKey = input.idempotencyKey ?? `conversation-${input.sessionId}-${input.turnId}-turn`;
+  const idempotencyKey =
+    input.idempotencyKey ?? `conversation-${input.sessionId}-${input.turnId}-turn`;
   const result = (await transport.store({
     entities: [entity],
     idempotency_key: idempotencyKey,

@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NeotomaClient } from "../../packages/client/src/client.js";
+import { SequentialCorrectionError } from "../../packages/client/src/correction.js";
 import { snapshotOnUpdate } from "../../packages/client/src/helpers.js";
 import { app } from "../../src/actions.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
@@ -14,6 +15,34 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
   let client: NeotomaClient;
   let entityId: string;
   let runKey: string;
+  let baseUrl: string;
+
+  async function seedEntity(suffix: string): Promise<string> {
+    const stored = await client.store({
+      idempotency_key: `${runKey}-${suffix}-seed`,
+      entities: [
+        {
+          entity_type: TYPE,
+          label: `Synthetic SDK fixture ${runKey}-${suffix}`,
+          status: "seeded",
+          note: "seeded",
+        },
+      ],
+    });
+    const id = stored.entities?.[0]?.entity_id;
+    if (!id) throw new Error("SDK seed store returned no entity_id");
+    return id;
+  }
+
+  async function readEntity(id: string): Promise<{
+    entity_version: string;
+    snapshot: Record<string, unknown>;
+  }> {
+    return (await client.retrieveEntitySnapshot({ entity_id: id })) as {
+      entity_version: string;
+      snapshot: Record<string, unknown>;
+    };
+  }
 
   beforeAll(async () => {
     await schemaRegistry.register({
@@ -47,9 +76,10 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
       throw new Error("HTTP test server did not bind to a TCP port");
     }
     runKey = `sdk-client-correct-http-${address.port}`;
+    baseUrl = `http://127.0.0.1:${address.port}`;
     client = new NeotomaClient({
       transport: "http",
-      baseUrl: `http://127.0.0.1:${address.port}`,
+      baseUrl,
       fetch: (input, init) => {
         const headers = new Headers(init?.headers);
         headers.delete("Authorization");
@@ -111,6 +141,138 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
     expect(afterHelper.snapshot).toMatchObject({
       status: "canonical-updated",
       note: "helper-updated",
+    });
+  });
+
+  it("persists both deprecated map fields with a chained version precondition", async () => {
+    const id = await seedEntity("map-cas");
+    const before = await readEntity(id);
+
+    const results = await client.correct({
+      entity_id: id,
+      entity_type: TYPE,
+      corrections: { status: "map-updated", note: "map-updated" },
+      idempotency_key: `${runKey}-map-cas`,
+      expected_version: before.entity_version,
+    });
+
+    expect(results).toHaveLength(2);
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "map-updated",
+      status: "map-updated",
+    });
+  });
+
+  it("persists both snapshotOnUpdate fields with a chained version precondition", async () => {
+    const id = await seedEntity("helper-cas");
+    const before = await readEntity(id);
+
+    const result = await snapshotOnUpdate(client, {
+      entityId: id,
+      entityType: TYPE,
+      corrections: { status: "helper-cas-updated", note: "helper-cas-updated" },
+      idempotencyKey: `${runKey}-helper-cas`,
+      expectedVersion: before.entity_version,
+    });
+
+    expect(result.correctionResults).toHaveLength(2);
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "helper-cas-updated",
+      status: "helper-cas-updated",
+    });
+  });
+
+  it("refuses a stale caller version before either map field is written", async () => {
+    const id = await seedEntity("stale-cas");
+    const before = await readEntity(id);
+    await client.correct({
+      entity_id: id,
+      entity_type: TYPE,
+      field: "status",
+      value: "intervening-writer",
+      idempotency_key: `${runKey}-intervening-writer`,
+    });
+
+    await expect(
+      client.correct({
+        entity_id: id,
+        entity_type: TYPE,
+        corrections: { status: "stale-caller", note: "stale-caller" },
+        idempotency_key: `${runKey}-stale-cas`,
+        expected_version: before.entity_version,
+      })
+    ).rejects.toMatchObject({ committedFields: [] });
+
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "seeded",
+      status: "intervening-writer",
+    });
+  });
+
+  it("reports a partial conflict and retries only the uncommitted field", async () => {
+    const id = await seedEntity("partial-cas");
+    const before = await readEntity(id);
+    let intervened = false;
+    const racingClient = new NeotomaClient({
+      transport: "http",
+      baseUrl,
+      fetch: async (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.delete("Authorization");
+        const response = await fetch(input, { ...init, headers });
+        if (
+          !intervened &&
+          String(input).endsWith("/correct") &&
+          JSON.parse(String(init?.body)).field === "note"
+        ) {
+          intervened = true;
+          await client.correct({
+            entity_id: id,
+            entity_type: TYPE,
+            field: "status",
+            value: "intervening-writer",
+            idempotency_key: `${runKey}-partial-writer`,
+          });
+        }
+        return response;
+      },
+    });
+
+    let failure: unknown;
+    try {
+      await racingClient.correct({
+        entity_id: id,
+        entity_type: TYPE,
+        corrections: { status: "retry-complete", note: "first-committed" },
+        idempotency_key: `${runKey}-partial-initial`,
+        expected_version: before.entity_version,
+      });
+    } catch (error) {
+      failure = error;
+    } finally {
+      await racingClient.dispose();
+    }
+
+    expect(intervened).toBe(true);
+    expect(failure).toBeInstanceOf(SequentialCorrectionError);
+    expect((failure as SequentialCorrectionError).committedFields).toEqual(["note"]);
+    expect((failure as Error).message).toContain("Fields already committed: note");
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "first-committed",
+      status: "intervening-writer",
+    });
+
+    const retryVersion = (await readEntity(id)).entity_version;
+    await client.correct({
+      entity_id: id,
+      entity_type: TYPE,
+      corrections: { status: "retry-complete" },
+      idempotency_key: `${runKey}-partial-retry`,
+      expected_version: retryVersion,
+    });
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "first-committed",
+      status: "retry-complete",
     });
   });
 });

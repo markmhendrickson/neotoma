@@ -89,9 +89,7 @@ describe("@neotoma/client correct()", () => {
       { field: "priority", entity_version: "version-3" },
       { field: "status", entity_version: "version-4" },
     ]);
-    expect(
-      fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))
-    ).toEqual([
+    expect(fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
       {
         entity_id: "ent_sdk_fixture",
         entity_type: "sdk_fixture",
@@ -163,6 +161,7 @@ describe("@neotoma/client correct()", () => {
     async (_label, idempotencyKey) => {
       const correct = vi.fn(async () => ({ success: true }));
       const transport = new LocalTransport({
+        userId: "user-sdk-fixture",
         operations: makeLocalOperations(correct),
       });
 
@@ -207,6 +206,22 @@ describe("@neotoma/client correct()", () => {
     expect((failure as SequentialCorrectionError).committedFields).toEqual(["priority"]);
     expect((failure as Error).message).toContain("Fields already committed: priority");
     expect((failure as Error).message).toContain("correct_transaction");
+  });
+
+  it("does not send a second preconditioned field without a returned entity version", async () => {
+    const fetchImpl = vi.fn(async () => okJson({ success: true }));
+    const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
+
+    await expect(
+      transport.correct({
+        entity_id: "ent_sdk_fixture",
+        entity_type: "sdk_fixture",
+        corrections: { status: "done", priority: "high" },
+        idempotency_key: "sdk-missing-version",
+        expected_version: "version-2",
+      })
+    ).rejects.toMatchObject({ committedFields: ["priority"], failedField: "status" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("uses the same canonical and deprecated request behavior for local operations", async () => {
