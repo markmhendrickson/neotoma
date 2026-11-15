@@ -8,6 +8,7 @@ import { existsSync, copyFileSync, readFileSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,16 +58,8 @@ function findEnvFile(repoPath) {
 
 function sourceUsesProductionEnvironment(filePath) {
   const contents = readFileSync(filePath, 'utf8');
-  return contents.split(/\r?\n/).some((line) => {
-    const match = line.match(
-      /^\s*(?:export\s+)?NEOTOMA_ENV\s*=\s*(?:"([^"]*)"|'([^']*)'|([^#\s]*))(?:\s+#.*)?\s*$/
-    );
-    if (!match) {
-      return false;
-    }
-    const value = match[1] ?? match[2] ?? match[3] ?? '';
-    return value === 'production';
-  });
+  const parsed = dotenv.parse(contents);
+  return parsed.NEOTOMA_ENV === 'production';
 }
 
 function main() {

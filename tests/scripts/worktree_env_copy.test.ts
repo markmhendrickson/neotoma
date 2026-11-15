@@ -18,6 +18,15 @@ const REPO_ROOT = join(__dirname, "../..");
 const COPY_SCRIPT = join(REPO_ROOT, "scripts", "copy-env-to-worktree.js");
 const STAGED_ENV_GUARD = join(REPO_ROOT, "scripts", "deny-staged-env-files.js");
 
+const PRODUCTION_ENV_SOURCES = [
+  ["an unquoted inline comment without a separating space", "NEOTOMA_ENV=production#note\n"],
+  ['a quoted inline comment without a separating space', 'NEOTOMA_ENV="production"#note\n'],
+  ["a backtick-quoted value", "NEOTOMA_ENV=`production`\n"],
+  ["a colon assignment", "NEOTOMA_ENV: production\n"],
+  ["carriage-return-only line endings", "NEOTOMA_ENV=production\rSYNTHETIC_FLAG=local\r"],
+  ["a plain value", "NEOTOMA_ENV=production\n"],
+] as const;
+
 let sandbox: string;
 let homeDir: string;
 let mainRepo: string;
@@ -108,21 +117,65 @@ describe("worktree env copy opt-in", () => {
     expect(readFileSync(join(worktree, ".env.development"), "utf8")).toBe(contents);
   });
 
-  it("refuses a production source after explicit opt-in without leaking values", () => {
+  it.each(PRODUCTION_ENV_SOURCES)(
+    "refuses a production source using %s without leaking values",
+    (_description, productionLine) => {
+      writeFileSync(
+        join(mainRepo, ".env.dev"),
+        `${productionLine}SYNTHETIC_KEY=do-not-print\n`
+      );
+
+      const result = runNode(COPY_SCRIPT, worktree, { NEOTOMA_WORKTREE_COPY_ENV: "1" });
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr.trim()).toBe(
+        "[copy-env] Refused env copy because the source selects production."
+      );
+      expect(result.stderr).not.toContain("do-not-print");
+      expect(existsSync(join(worktree, ".env.development"))).toBe(false);
+    }
+  );
+
+  it("refuses an unreadable selected source without creating or replacing the destination", () => {
+    const source = join(mainRepo, ".env.dev");
+    const destination = join(worktree, ".env.development");
+    const preload = join(sandbox, "fail-selected-env-read.mjs");
+    const existingDestination = "NEOTOMA_ENV=development\nSYNTHETIC_KEY=keep-existing\n";
+    writeFileSync(source, "NEOTOMA_ENV=development\nSYNTHETIC_KEY=do-not-print\n");
+    writeFileSync(destination, existingDestination);
     writeFileSync(
-      join(mainRepo, ".env.dev"),
-      'export NEOTOMA_ENV = "production" # synthetic fixture\nSYNTHETIC_KEY=do-not-print\n'
+      preload,
+      [
+        'import fs from "node:fs";',
+        'import { syncBuiltinESMExports } from "node:module";',
+        "const originalReadFileSync = fs.readFileSync;",
+        "fs.readFileSync = function (...args) {",
+        '  if (String(args[0]) === process.env.NEOTOMA_TEST_FAIL_READ_PATH) {',
+        '    const error = new Error("synthetic unreadable source");',
+        '    Object.assign(error, { code: "EACCES" });',
+        "    throw error;",
+        "  }",
+        "  return originalReadFileSync.apply(this, args);",
+        "};",
+        "syncBuiltinESMExports();",
+        "",
+      ].join("\n")
     );
 
-    const result = runNode(COPY_SCRIPT, worktree, { NEOTOMA_WORKTREE_COPY_ENV: "1" });
+    const result = runNode(COPY_SCRIPT, worktree, {
+      NEOTOMA_WORKTREE_COPY_ENV: "1",
+      NEOTOMA_TEST_FAIL_READ_PATH: source,
+      NODE_OPTIONS: `--import=${preload}`,
+    });
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr.trim()).toBe(
-      "[copy-env] Refused env copy because the source selects production."
+      "[copy-env] Refused env copy because the source could not be validated."
     );
     expect(result.stderr).not.toContain("do-not-print");
-    expect(existsSync(join(worktree, ".env.development"))).toBe(false);
+    expect(readFileSync(destination, "utf8")).toBe(existingDestination);
   });
 });
 
