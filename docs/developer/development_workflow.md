@@ -63,8 +63,9 @@ cd ../neotoma-FU-XXX
 # Verify branch is based on main
 git branch --show-current  # Should show feature/FU-XXX-short-description
 git log --oneline -1       # Should show latest main commit
-# Setup worktree environment (copies .env files)
-npm run copy:env || node scripts/copy-env-to-worktree.js
+# Set up a local development env from the committed .env.example by default.
+# Optional: copy a development env after explicitly opting in.
+NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env
 # Install dependencies in worktree
 npm install
 # Push branch to remote
@@ -74,7 +75,7 @@ git push -u origin feature/FU-XXX-short-description
 - **Isolation:** Each Feature Unit has its own `node_modules`, `.env`, and build artifacts
 - **Parallel Development:** Work on multiple Feature Units simultaneously without conflicts
 - **Clean Context Switching:** Each worktree is independent
-- **Environment Management:** Automatic `.env` copying via `scripts/copy-env-to-worktree.js`
+- **Environment Management:** Set up a local development env from `.env.example` by default. Copying is opt-in via `NEOTOMA_WORKTREE_COPY_ENV=1`; automatic worktree setup leaves the env file absent. The copy refuses production and unreadable sources; it does not yet check where storage keys point, so review the source first.
 **Alternative: Traditional Branching (if not using worktrees)**
 ```bash
 # Ensure you're on main and up to date
@@ -294,7 +295,7 @@ Load when:
 1. **Always branch from `main`**: Cut feature, bugfix, and hotfix branches from `main`
 2. **One Feature Unit per branch**: Keep changes atomic
 3. **Use worktrees for isolation**: Each Feature Unit should have its own worktree when possible
-4. **Setup worktree environment**: Run `npm run copy:env` or `node scripts/copy-env-to-worktree.js` after creating worktree
+4. **Setup worktree environment**: Use `.env.example` for a local development env. If the worktree needs a safe main-repository development env, explicitly run `NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env`; the copy refuses production and unreadable sources but does not yet check where storage keys point.
 5. **Reference Feature Unit ID**: In commit messages and PR titles
 6. **Follow commit message format**: Include "References:" line
 7. **Verify tests pass**: Before creating PR

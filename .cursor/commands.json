@@ -20,10 +20,10 @@
       }
     },
     {
-      "name": "Setup: Copy Env File",
-      "description": "Copy .env file from main repository to this worktree",
+      "name": "Setup: Copy Env File (Opt In)",
+      "description": "Explicitly copy the development env from the main repository to this worktree",
       "shell": {
-        "command": "npm run copy:env"
+        "command": "NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env"
       }
     },
     {
