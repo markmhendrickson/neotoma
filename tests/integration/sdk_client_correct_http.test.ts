@@ -34,14 +34,26 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
     return id;
   }
 
+  // `/get_entity_snapshot` returns the raw snapshot row and does NOT carry
+  // `entity_version`; the entity-level version is returned by the entity query
+  // endpoint (and by each `/correct` response).
   async function readEntity(id: string): Promise<{
     entity_version: string;
     snapshot: Record<string, unknown>;
   }> {
-    return (await client.retrieveEntitySnapshot({ entity_id: id })) as {
-      entity_version: string;
+    const queried = (await client.retrieveEntities({
+      entity_type: TYPE,
+      limit: 200,
+    })) as { entities?: Array<{ entity_id: string; entity_version?: string }> };
+    const row = queried.entities?.find((entity) => entity.entity_id === id);
+    const version = row?.entity_version;
+    if (typeof version !== "string" || version.length === 0) {
+      throw new Error("entity query returned no entity_version");
+    }
+    const snap = (await client.retrieveEntitySnapshot({ entity_id: id })) as {
       snapshot: Record<string, unknown>;
     };
+    return { entity_version: version, snapshot: snap.snapshot };
   }
 
   beforeAll(async () => {
