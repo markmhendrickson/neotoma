@@ -47,6 +47,25 @@ export interface HttpTransportOptions {
 }
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3080";
+
+/**
+ * MCP tool names whose REST route is not `/<tool_name>`. Every entry maps a
+ * tool name to the POST route declared in `openapi.yaml` / `src/actions.ts`.
+ */
+const TOOL_ROUTES: Readonly<Record<string, string>> = {
+  correct_transaction: "/corrections/transaction",
+  retrieve_entities: "/entities/query",
+  retrieve_entity_snapshot: "/get_entity_snapshot",
+  retrieve_field_provenance: "/get_field_provenance",
+  list_timeline_events: "/timeline",
+  list_entity_types: "/schemas",
+  get_entity_type_counts: "/stats",
+  merge_entities: "/entities/merge",
+  split_entity: "/entities/split",
+  create_interpretation: "/interpretations/create",
+  neotoma_turn_summary: "/turn_summary",
+  get_relationship_snapshot: "/relationships/snapshot",
+};
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class HttpTransport implements NeotomaTransport {
@@ -170,11 +189,14 @@ export class HttpTransport implements NeotomaTransport {
 
   /**
    * Escape hatch for hook plugins that need to call an MCP action not yet
-   * exposed as a typed method. Maps tool names to REST endpoints using a
-   * best-effort convention (tool name with underscores → `/tool_name`).
+   * exposed as a typed method. Maps tool names to REST endpoints: known
+   * exceptions come from `TOOL_ROUTES`; every other name uses the convention
+   * `/<tool_name>`.
    */
   async executeTool(name: string, args: unknown): Promise<unknown> {
-    const path = `/${name}`;
+    const path = Object.prototype.hasOwnProperty.call(TOOL_ROUTES, name)
+      ? TOOL_ROUTES[name]
+      : `/${name}`;
     return this.post(path, args);
   }
 

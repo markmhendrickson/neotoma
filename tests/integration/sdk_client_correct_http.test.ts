@@ -287,4 +287,98 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
       status: "retry-complete",
     });
   });
+
+  it("reports a snapshotOnUpdate partial conflict and retries only the uncommitted field", async () => {
+    const id = await seedEntity("helper-partial");
+    const before = await readEntity(id);
+    let intervened = false;
+    const racingClient = new NeotomaClient({
+      transport: "http",
+      baseUrl,
+      fetch: async (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.delete("Authorization");
+        const response = await fetch(input, { ...init, headers });
+        if (
+          !intervened &&
+          String(input).endsWith("/correct") &&
+          JSON.parse(String(init?.body)).field === "note"
+        ) {
+          intervened = true;
+          await client.correct({
+            entity_id: id,
+            entity_type: TYPE,
+            field: "status",
+            value: "intervening-writer",
+            idempotency_key: `${runKey}-helper-partial-writer`,
+          });
+        }
+        return response;
+      },
+    });
+
+    let failure: unknown;
+    try {
+      await snapshotOnUpdate(racingClient, {
+        entityId: id,
+        entityType: TYPE,
+        corrections: { status: "retry-complete", note: "first-committed" },
+        idempotencyKey: `${runKey}-helper-partial-initial`,
+        expectedVersion: before.entity_version,
+      });
+    } catch (error) {
+      failure = error;
+    } finally {
+      await racingClient.dispose();
+    }
+
+    expect(intervened).toBe(true);
+    expect(failure).toBeInstanceOf(SequentialCorrectionError);
+    expect((failure as SequentialCorrectionError).committedFields).toEqual(["note"]);
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "first-committed",
+      status: "intervening-writer",
+    });
+
+    const retryVersion = (await readEntity(id)).entity_version;
+    await snapshotOnUpdate(client, {
+      entityId: id,
+      entityType: TYPE,
+      corrections: { status: "retry-complete" },
+      idempotencyKey: `${runKey}-helper-partial-retry`,
+      expectedVersion: retryVersion,
+    });
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "first-committed",
+      status: "retry-complete",
+    });
+  });
+
+  it("applies an atomic two-field update through executeTool(correct_transaction)", async () => {
+    const id = await seedEntity("transaction");
+    const { snapshot, observation_count } = (await client.retrieveEntitySnapshot({
+      entity_id: id,
+    })) as { snapshot: Record<string, unknown>; observation_count: number };
+
+    await client.executeTool("correct_transaction", {
+      idempotency_key: `${runKey}-transaction`,
+      entities: [
+        {
+          entity_id: id,
+          entity_type: TYPE,
+          expected_observation_count: observation_count,
+          expected_snapshot: { note: snapshot.note, status: snapshot.status },
+          changes: [
+            { field: "note", value: "transaction-updated" },
+            { field: "status", value: "transaction-updated" },
+          ],
+        },
+      ],
+    });
+
+    expect((await readEntity(id)).snapshot).toMatchObject({
+      note: "transaction-updated",
+      status: "transaction-updated",
+    });
+  });
 });

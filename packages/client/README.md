@@ -133,7 +133,31 @@ forces an overwrite. The error names the fields already committed. Re-read
 the entity, reconcile its current values, then retry only the uncommitted
 fields with a fresh base key and the current entity version. Use the MCP
 `correct_transaction` tool (REST `POST /corrections/transaction`) when all
-fields must succeed or fail together.
+fields must succeed or fail together:
+
+```ts
+const { snapshot, observation_count } = await client.retrieveEntitySnapshot({
+  entity_id: entityId,
+});
+await client.executeTool("correct_transaction", {
+  idempotency_key: "task-atomic-update",
+  entities: [
+    {
+      entity_id: entityId,
+      entity_type: "task",
+      expected_observation_count: observation_count,
+      expected_snapshot: { priority: snapshot.priority, status: snapshot.status },
+      changes: [
+        { field: "priority", value: "high" },
+        { field: "status", value: "done" },
+      ],
+    },
+  ],
+});
+```
+
+Over HTTP, `executeTool("correct_transaction", ...)` posts to
+`/corrections/transaction`.
 
 `snapshotOnUpdate()` uses the same canonical shape internally and only sends
 fields whose reviewed values differ from the retrieved snapshot:
