@@ -71,7 +71,8 @@ The client exposes typed wrappers for the full MCP action catalog:
 - `listTimelineEvents(input)` — timeline events in a window
 - `retrieveRelatedEntities(input)` — graph expansion
 - `createRelationship(input)` — link two existing entities
-- `correct(input)` — supersede a prior observation
+- `correct(input)` — supersede one field with the server's canonical
+  `{ entity_id, entity_type, field, value, idempotency_key }` request
 - `listEntityTypes(input)` — schema-level discovery
 - `getEntityTypeCounts(input)` — per-type cardinality
 - `executeTool(name, args)` — escape hatch for any MCP action
@@ -94,6 +95,47 @@ import { renderTurnReport } from "@neotoma/client/turn_report";
 - `diagnoseTurn(observation)` — runs per-turn invariants (missing user/assistant store, unstored attachments, store-first ordering, Parquet residue) and returns structured `Diagnosis` items with severity and suggested repair actions.
 - `applyRepairs(transport, diagnoses, conversationId, turnId)` — executes the suggested repairs in the same turn and records a `neotoma_repair` summary entity.
 - `renderTurnReport(input)` — formats the mandatory `🧠 Neotoma` section (Created / Updated / Retrieved groups, plus Issues) that agents append to every user-visible reply.
+
+### Corrections
+
+Pass one field per canonical `correct()` call:
+
+```ts
+await client.correct({
+  entity_id: entityId,
+  entity_type: "task",
+  field: "status",
+  value: "done",
+  idempotency_key: "task-status-done",
+});
+```
+
+The deprecated map overload remains for one release. It requires
+`entity_type`, a nonempty `corrections` map, and a caller-supplied base
+`idempotency_key`. The client applies fields sequentially in sorted order and
+derives keys as `<base>:<field>`:
+
+```ts
+await client.correct({
+  entity_id: entityId,
+  entity_type: "task",
+  corrections: { priority: "high", status: "done" },
+  idempotency_key: "task-update",
+});
+// Sends task-update:priority, then task-update:status.
+```
+
+`snapshotOnUpdate()` uses the same canonical shape internally and only sends
+fields whose reviewed values differ from the retrieved snapshot:
+
+```ts
+await snapshotOnUpdate(client, {
+  entityId,
+  entityType: "task",
+  corrections: { priority: "high", status: "done" },
+  idempotencyKey: "task-reviewed-update",
+});
+```
 
 ## Related packages
 

@@ -122,6 +122,35 @@ export interface RetrieveRelatedEntitiesInput {
   include_entities?: boolean;
 }
 
+/** Canonical single-field correction request accepted by the server. */
+export interface CorrectInput {
+  entity_id: string;
+  entity_type: string;
+  field: string;
+  value: unknown;
+  idempotency_key: string;
+  user_id?: string;
+  expected_version?: string;
+  overwrite?: boolean;
+}
+
+/**
+ * Legacy multi-field correction request.
+ *
+ * @deprecated Pass one {@link CorrectInput} per field. This adapter remains
+ * for one release and requires a base `idempotency_key`, from which the client
+ * derives `<base>:<field>` keys in sorted field order.
+ */
+export interface DeprecatedCorrectInput {
+  entity_id: string;
+  entity_type: string;
+  corrections: Record<string, unknown>;
+  idempotency_key: string;
+  user_id?: string;
+  expected_version?: string;
+  overwrite?: boolean;
+}
+
 /**
  * The transport-level interface every client implementation satisfies.
  *
@@ -139,7 +168,9 @@ export interface NeotomaTransport {
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  correct(input: CorrectInput): Promise<unknown>;
+  /** @deprecated Pass one canonical {@link CorrectInput} per field. */
+  correct(input: DeprecatedCorrectInput): Promise<unknown[]>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
   executeTool(name: string, args: unknown): Promise<unknown>;

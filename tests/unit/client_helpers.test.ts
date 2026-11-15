@@ -328,26 +328,55 @@ describe("recordConversationTurn", () => {
 });
 
 describe("snapshotOnUpdate", () => {
-  it("retrieves the snapshot before applying the correction", async () => {
+  it("retrieves the snapshot before correcting each changed field in sorted order", async () => {
     const calls: string[] = [];
+    const correct = vi.fn(async (input: { field: string }) => {
+      calls.push(`correct:${input.field}`);
+      return { field: input.field };
+    });
     const transport = makeStubTransport({
       retrieveEntitySnapshot: vi.fn(async () => {
         calls.push("snapshot");
-        return { entity_id: "ent-1", fields: { status: "old" } };
+        return {
+          entity_id: "ent-1",
+          snapshot: { status: "old", unchanged: "same" },
+        };
       }),
-      correct: vi.fn(async () => {
-        calls.push("correct");
-        return { ok: true };
-      }),
+      correct,
     });
 
     const result = await snapshotOnUpdate(transport, {
       entityId: "ent-1",
-      corrections: { status: "new" },
+      entityType: "sdk_fixture",
+      corrections: { unchanged: "same", status: "new", priority: "high" },
+      idempotencyKey: "helper-update",
+      expectedVersion: "version-1",
+      overwrite: true,
     });
 
     expect(result.applied).toBe(true);
-    expect(calls).toEqual(["snapshot", "correct"]);
+    expect(calls).toEqual(["snapshot", "correct:priority", "correct:status"]);
+    expect(correct.mock.calls.map(([input]) => input)).toEqual([
+      {
+        entity_id: "ent-1",
+        entity_type: "sdk_fixture",
+        field: "priority",
+        value: "high",
+        idempotency_key: "helper-update:priority",
+        expected_version: "version-1",
+        overwrite: true,
+      },
+      {
+        entity_id: "ent-1",
+        entity_type: "sdk_fixture",
+        field: "status",
+        value: "new",
+        idempotency_key: "helper-update:status",
+        expected_version: "version-1",
+        overwrite: true,
+      },
+    ]);
+    expect(result.correctionResults).toEqual([{ field: "priority" }, { field: "status" }]);
   });
 
   it("skips the correction when the review callback returns false", async () => {
@@ -359,7 +388,9 @@ describe("snapshotOnUpdate", () => {
 
     const result = await snapshotOnUpdate(transport, {
       entityId: "ent-1",
+      entityType: "sdk_fixture",
       corrections: { status: "already-set" },
+      idempotencyKey: "helper-skip",
       review: (snapshot) =>
         (snapshot as { status?: string }).status === "already-set" ? false : true,
     });
@@ -369,21 +400,48 @@ describe("snapshotOnUpdate", () => {
   });
 
   it("allows the review callback to override the corrections payload", async () => {
-    let capturedCorrections: unknown;
+    const correct = vi.fn(async () => ({}));
     const transport = makeStubTransport({
       retrieveEntitySnapshot: vi.fn(async () => ({ status: "stale" })),
-      correct: vi.fn(async (input: { entity_id: string; corrections: Record<string, unknown> }) => {
-        capturedCorrections = input.corrections;
-        return {};
-      }),
+      correct,
     });
 
     await snapshotOnUpdate(transport, {
       entityId: "ent-1",
+      entityType: "sdk_fixture",
       corrections: { status: "new" },
+      idempotencyKey: "helper-review",
       review: () => ({ status: "reconciled" }),
     });
 
-    expect(capturedCorrections).toEqual({ status: "reconciled" });
+    expect(correct).toHaveBeenCalledWith({
+      entity_id: "ent-1",
+      entity_type: "sdk_fixture",
+      field: "status",
+      value: "reconciled",
+      idempotency_key: "helper-review:status",
+    });
+  });
+
+  it("does not apply a correction when every reviewed field is unchanged", async () => {
+    const correct = vi.fn();
+    const transport = makeStubTransport({
+      retrieveEntitySnapshot: vi.fn(async () => ({
+        entity_id: "ent-1",
+        snapshot: { status: "same" },
+      })),
+      correct,
+    });
+
+    const result = await snapshotOnUpdate(transport, {
+      entityId: "ent-1",
+      entityType: "sdk_fixture",
+      corrections: { status: "same" },
+      idempotencyKey: "helper-noop",
+    });
+
+    expect(result.applied).toBe(false);
+    expect(result.correctionResults).toEqual([]);
+    expect(correct).not.toHaveBeenCalled();
   });
 });

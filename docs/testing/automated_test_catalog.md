@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **851**
-- Backend and repo Vitest files: **797**
+- Total automated test files: **853**
+- Backend and repo Vitest files: **799**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 240 |
+| Vitest unit tests | 241 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 246 |
+| Vitest integration tests | 247 |
 | Vitest CLI tests | 96 |
 | Vitest contract tests | 30 |
 | Vitest security tests | 26 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (240):**
+**Files (241):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -157,6 +157,7 @@ flowchart TD
 - `tests/unit/cli_bug_fixes.test.ts`
 - `tests/unit/cli_observation_source_flag.test.ts`
 - `tests/unit/cli_schema_register_reducer_config.test.ts`
+- `tests/unit/client_correct.test.ts`
 - `tests/unit/client_diagnose.test.ts`
 - `tests/unit/client_helpers.test.ts`
 - `tests/unit/client_turn_report.test.ts`
@@ -511,7 +512,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (246):**
+**Files (247):**
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
@@ -706,6 +707,7 @@ flowchart TD
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/schema_scope_resolution_parity.test.ts`
 - `tests/integration/schema_scope_surface_parity.test.ts`
+- `tests/integration/sdk_client_correct_http.test.ts`
 - `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/shared_graph_identity.test.ts`

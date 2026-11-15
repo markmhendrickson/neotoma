@@ -268,7 +268,13 @@ export async function retrieveOrStore(
 
 export interface SnapshotOnUpdateInput {
   entityId: string;
+  entityType: string;
   corrections: Record<string, unknown>;
+  /** Base key used to derive one `<base>:<field>` key per changed field. */
+  idempotencyKey: string;
+  userId?: string;
+  expectedVersion?: string;
+  overwrite?: boolean;
   /**
    * Called with the current snapshot before the correction is applied.
    * Return `false` to skip the update. Return `true` (or a corrections
@@ -280,7 +286,38 @@ export interface SnapshotOnUpdateInput {
 export interface SnapshotOnUpdateResult {
   applied: boolean;
   previousSnapshot: unknown;
+  correctionResults?: unknown[];
+  /** @deprecated Use `correctionResults`. */
   correctionResult?: unknown;
+}
+
+function snapshotFields(snapshot: unknown): Record<string, unknown> {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return {};
+  const record = snapshot as Record<string, unknown>;
+  for (const key of ["snapshot", "fields"]) {
+    const nested = record[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      return nested as Record<string, unknown>;
+    }
+  }
+  return record;
+}
+
+function normalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeJsonValue);
+  if (value && typeof value === "object") {
+    const normalized: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      normalized[key] = normalizeJsonValue((value as Record<string, unknown>)[key]);
+    }
+    return normalized;
+  }
+  return value;
+}
+
+function correctionValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  return JSON.stringify(normalizeJsonValue(left)) === JSON.stringify(normalizeJsonValue(right));
 }
 
 /**
@@ -310,12 +347,43 @@ export async function snapshotOnUpdate(
     }
   }
 
-  const correctionResult = await transport.correct({
-    entity_id: input.entityId,
-    corrections,
-  });
+  const current = snapshotFields(snapshot);
+  const changedFields = Object.keys(corrections)
+    .filter((field) => !correctionValuesEqual(current[field], corrections[field]))
+    .sort();
+  if (changedFields.length === 0) {
+    return {
+      applied: false,
+      previousSnapshot: snapshot,
+      correctionResults: [],
+      correctionResult: [],
+    };
+  }
 
-  return { applied: true, previousSnapshot: snapshot, correctionResult };
+  const correctionResults: unknown[] = [];
+  for (const field of changedFields) {
+    correctionResults.push(
+      await transport.correct({
+        entity_id: input.entityId,
+        entity_type: input.entityType,
+        field,
+        value: corrections[field],
+        idempotency_key: `${input.idempotencyKey}:${field}`,
+        ...(input.userId !== undefined ? { user_id: input.userId } : {}),
+        ...(input.expectedVersion !== undefined
+          ? { expected_version: input.expectedVersion }
+          : {}),
+        ...(input.overwrite !== undefined ? { overwrite: input.overwrite } : {}),
+      })
+    );
+  }
+
+  return {
+    applied: true,
+    previousSnapshot: snapshot,
+    correctionResults,
+    correctionResult: correctionResults,
+  };
 }
 
 // ---------------------------------------------------------------------------

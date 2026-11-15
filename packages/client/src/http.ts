@@ -10,9 +10,12 @@
  * keeps the hook process decoupled from the Neotoma server lifecycle.
  */
 
+import { executeCorrectRequest, type CorrectRequest } from "./correction.js";
 import {
+  CorrectInput,
   CreateRelationshipsInput,
   CreateRelationshipInput,
+  DeprecatedCorrectInput,
   ListObservationsInput,
   ListTimelineEventsInput,
   NeotomaClientError,
@@ -150,11 +153,11 @@ export class HttpTransport implements NeotomaTransport {
     return this.post("/create_relationships", input);
   }
 
-  async correct(input: {
-    entity_id: string;
-    corrections: Record<string, unknown>;
-  }): Promise<unknown> {
-    return this.post("/correct", input);
+  async correct(input: CorrectInput): Promise<unknown>;
+  /** @deprecated Pass one canonical CorrectInput per field. */
+  async correct(input: DeprecatedCorrectInput): Promise<unknown[]>;
+  async correct(input: CorrectRequest): Promise<unknown | unknown[]> {
+    return executeCorrectRequest(input, (request) => this.post("/correct", request));
   }
 
   async listEntityTypes(input: { search?: string } = {}): Promise<unknown> {
