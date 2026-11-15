@@ -20,6 +20,18 @@ import { join } from "node:path";
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 
+import {
+  CLI_DEMO_AGENTIC_SCENARIOS_EN,
+  CLI_DEMO_API_SCENARIOS_EN,
+  CLI_DEMO_CHAT_SCENARIOS_EN,
+  CLI_DEMO_CLI_SCENARIOS_EN,
+} from "../../frontend/src/i18n/locales/cli_demo_scenarios_en.js";
+import {
+  CLI_DEMO_AGENTIC_SCENARIOS_ES,
+  CLI_DEMO_API_SCENARIOS_ES,
+  CLI_DEMO_CHAT_SCENARIOS_ES,
+  CLI_DEMO_CLI_SCENARIOS_ES,
+} from "../../frontend/src/i18n/locales/cli_demo_scenarios_es.js";
 import { FUNCTIONALITY_MATRIX } from "../../frontend/src/site/site_data.js";
 
 import { getOpenApiInputSchemaOrThrow } from "../../src/shared/openapi_schema.js";
@@ -139,4 +151,53 @@ describe("retrieve_entity_snapshot cutoff wording matches the stamped clocks", (
     expect(limitations).toMatch(/\[#2034\]\([^)]*\) for valid-time intervals/);
     expect(limitations).not.toMatch(/`at` \(event time\)/);
   });
+});
+
+/**
+ * Public replay demos show `at` on the home CLI/agent/API/chat demos. They must
+ * describe what had been recorded by a write-time checkpoint, never the world
+ * state at an event time.
+ */
+describe("public replay demos describe `at` as assertion time", () => {
+  const replayDemos = (
+    label: string,
+    sets: Record<string, Array<{ label: string }>>,
+    recorded: RegExp,
+    eventTimeClaim: RegExp
+  ) => {
+    describe(label, () => {
+      it.each(Object.entries(sets))("%s replay scenario", (name, scenarios) => {
+        const replay = scenarios.filter((s) => /replay|reproducci/i.test(s.label));
+        expect(replay.length, `${name}: replay scenario present`).toBeGreaterThan(0);
+        for (const scenario of replay) {
+          const text = JSON.stringify(scenario);
+          expect(text, `${name}: states what was recorded`).toMatch(recorded);
+          expect(text, `${name}: no event-time claim`).not.toMatch(eventTimeClaim);
+        }
+      });
+    });
+  };
+
+  replayDemos(
+    "en",
+    {
+      cli: CLI_DEMO_CLI_SCENARIOS_EN,
+      agentic: CLI_DEMO_AGENTIC_SCENARIOS_EN,
+      api: CLI_DEMO_API_SCENARIOS_EN,
+      chat: CLI_DEMO_CHAT_SCENARIOS_EN,
+    },
+    /recorded by/,
+    /State at \d|state at that time|at a specific point in time|what did the agent (believe|see)|At the time of run/
+  );
+  replayDemos(
+    "es",
+    {
+      cli: CLI_DEMO_CLI_SCENARIOS_ES,
+      agentic: CLI_DEMO_AGENTIC_SCENARIOS_ES,
+      api: CLI_DEMO_API_SCENARIOS_ES,
+      chat: CLI_DEMO_CHAT_SCENARIOS_ES,
+    },
+    /registrad/,
+    /Estado en \d|en ese momento|instante concreto|cre[\u00ed]a el agente|vio el agente|En el momento de/
+  );
 });
