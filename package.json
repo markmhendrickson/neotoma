@@ -18,6 +18,7 @@
   },
   "scripts": {
     "pretest": "npm run build:server",
+    "pretest:remote:critical": "npm run build:server",
     "build": "npm run build:server && npm run build:inspector",
     "build:server": "tsc && node scripts/copy_pdf_worker_wrapper.js && node scripts/copy_bundle_assets.js && npm run build:scripts && npm run build:bundled-docs",
     "bundles:check": "tsx scripts/bundles_check.ts",

@@ -103,4 +103,11 @@ describe("dist/ fast-fail guard (#2090 AC 3)", () => {
     // hard guard — the inspector is a named skip, not a fatal prerequisite.
     expect(guard).not.toContain("inspector");
   });
+
+  it("the remote critical suite builds the server before vitest runs", () => {
+    // `test:remote:critical` calls vitest directly, so without its own pre-hook
+    // nothing builds dist/ and the guard above refuses the whole nightly run.
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf-8"));
+    expect(pkg.scripts["pretest:remote:critical"]).toBe("npm run build:server");
+  });
 });
