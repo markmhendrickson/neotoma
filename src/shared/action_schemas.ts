@@ -191,8 +191,28 @@ export const StoreRelationshipInputSchema = z
     }
   });
 
+/**
+ * Record-wide as-of cutoffs (#2700). Same names and meaning as the
+ * single-entity snapshot read (`EntitySnapshotRequestSchema`): `at` bounds an
+ * observation's `observed_at`, `at_ingested` bounds its `created_at`, and
+ * supplying both applies both (AND).
+ */
+const asOfTimestamp = (name: "at" | "at_ingested") =>
+  z
+    .string()
+    .refine((value) => !isNaN(new Date(value).getTime()), {
+      message: `Invalid timestamp format for '${name}'. Expected ISO 8601 format.`,
+    })
+    .optional();
+
+export const AsOfCutoffFields = {
+  at: asOfTimestamp("at"),
+  at_ingested: asOfTimestamp("at_ingested"),
+};
+
 export const ListRelationshipsRequestSchema = z
   .object({
+    ...AsOfCutoffFields,
     entity_id: z.string().optional(),
     source_entity_id: z.string().optional(),
     target_entity_id: z.string().optional(),
@@ -1122,6 +1142,7 @@ export const RetrieveEntityByIdentifierSchema = z.object({
 });
 
 export const RetrieveRelatedEntitiesSchema = z.object({
+  ...AsOfCutoffFields,
   entity_id: z.string(),
   relationship_types: z.array(RelationshipTypeSchema).optional(),
   direction: z.enum(["inbound", "outbound", "both"]).optional().default("both"),

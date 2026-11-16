@@ -8,7 +8,8 @@
  *
  * Semantics
  * ---------
- * - `at`          — upper bound on `observed_at` (event time).  "What had happened by T?"
+ * - `at`          — upper bound on `observed_at`. A write-time cutoff: "the state as
+ *                   recorded by T, by observed time", not event (valid) time.
  * - `at_ingested` — upper bound on `created_at` (ingestion time). "What did we KNOW by T?"
  * - When both are supplied, both bounds are applied (AND), giving the most
  *   conservative "knowledge-as-of" view and preventing look-ahead leaks from
@@ -48,6 +49,62 @@ export interface EntitySnapshotAtTimeResult {
 }
 
 // ---------------------------------------------------------------------------
+// Shared cutoff rules (also used by the record-wide reads in record_as_of.ts)
+// ---------------------------------------------------------------------------
+
+/** The two write-clock cutoffs. Both apply when both are supplied (AND). */
+export interface AsOfCutoffs {
+  /** Upper bound on an observation's `observed_at` (ISO 8601). */
+  at?: string;
+  /** Upper bound on an observation's `created_at` (ISO 8601). */
+  at_ingested?: string;
+}
+
+/**
+ * Validate cutoff timestamps before touching the database. One validator, one
+ * error wording, for every as-of read. As in the per-entity read, an absent (or
+ * empty) value means "no cutoff here"; the request schemas and the CLI reject an
+ * empty string before it reaches this point.
+ */
+export function validateAsOfCutoffs(cutoffs: AsOfCutoffs): void {
+  for (const name of ["at", "at_ingested"] as const) {
+    const value = cutoffs[name];
+    if (!value) continue;
+    if (isNaN(new Date(value).getTime())) {
+      throw new Error(
+        `Invalid timestamp format for '${name}': ${value}. Expected ISO 8601 format.`
+      );
+    }
+  }
+}
+
+/** True when at least one cutoff was supplied. */
+export function hasAsOfCutoff(cutoffs: AsOfCutoffs): boolean {
+  return Boolean(cutoffs.at || cutoffs.at_ingested);
+}
+
+/**
+ * The one visibility predicate: an observation is visible as of the cutoffs when
+ * its `observed_at` is at or before `at` and its `created_at` is at or before
+ * `at_ingested`. A missing or unparseable time is not visible (fails closed).
+ */
+export function isObservationVisibleAsOf(
+  obs: { observed_at?: string | null; created_at?: string | null },
+  cutoffs: AsOfCutoffs
+): boolean {
+  if (cutoffs.at && !(Date.parse(obs.observed_at as string) <= Date.parse(cutoffs.at))) {
+    return false;
+  }
+  if (
+    cutoffs.at_ingested &&
+    !(Date.parse(obs.created_at as string) <= Date.parse(cutoffs.at_ingested))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -56,7 +113,7 @@ export interface EntitySnapshotAtTimeResult {
  *
  * @param entityId   - The entity to retrieve.
  * @param userId     - Scope reads to this user (required; prevents cross-user reads).
- * @param at         - Optional event-time upper bound (ISO 8601).
+ * @param at         - Optional upper bound on observed_at (ISO 8601), a write-time cutoff.
  * @param atIngested - Optional ingestion-time upper bound (ISO 8601).
  *
  * @returns
@@ -76,20 +133,7 @@ export async function computeEntitySnapshotAtTime(
   // ------------------------------------------------------------------
   // 1. Validate timestamps before touching the DB.
   // ------------------------------------------------------------------
-  if (at) {
-    const ts = new Date(at);
-    if (isNaN(ts.getTime())) {
-      throw new Error(`Invalid timestamp format for 'at': ${at}. Expected ISO 8601 format.`);
-    }
-  }
-  if (atIngested) {
-    const ts = new Date(atIngested);
-    if (isNaN(ts.getTime())) {
-      throw new Error(
-        `Invalid timestamp format for 'at_ingested': ${atIngested}. Expected ISO 8601 format.`
-      );
-    }
-  }
+  validateAsOfCutoffs({ at, at_ingested: atIngested });
 
   // ------------------------------------------------------------------
   // 2. Resolve entity_type from the entities table (also serves as an
@@ -247,10 +291,8 @@ export async function computeEntitySnapshotAtTime(
   );
   const replayRows =
     lifecycleContext.mode === "pre_migration"
-      ? mappedObservations.filter(
-          (o) =>
-            (!at || Date.parse(o.observed_at) <= Date.parse(at)) &&
-            (!atIngested || Date.parse(o.created_at) <= Date.parse(atIngested))
+      ? mappedObservations.filter((o) =>
+          isObservationVisibleAsOf(o, { at, at_ingested: atIngested })
         )
       : mappedObservations;
   const historicalSnapshot = replayRows.length
