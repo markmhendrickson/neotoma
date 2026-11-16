@@ -1,11 +1,18 @@
 # Test coverage review — v0.29.2
 
-Range: `v0.29.1..3dea54e80` — 2 non-merge commits (#2848 proposal, +1879; #2816 CI workflow step, +16). Release-branch commits on top change only the version, version lines in `README.md` and `docs/known_limitations.md`, and release docs.
+Range: `v0.29.1..db746e7d6`, 4 non-merge commits (#2848 proposal; #2816 CI step; #2860 dependency split; #2862 worktree env copy). Release-branch commits on top change only the version, version lines in `README.md` and `docs/known_limitations.md`, and release docs.
 
 ## Surfaces
 
-No user-facing surface changed (#2816 adds CI coverage and is itself a test gate): no CLI command or flag, no API path, no parser, no migration, no server runtime setting. Nothing in this range needs a regression test.
+- Published package manifest (#2860): covered by the new `npm run check:production-consumer`, which installs the packed tarball with `--omit=dev` and exercises the CLI, the package import, `/health` and the Inspector shell and assets. CI ran it green on `db746e7d6`. Its helpers are covered by `tests/scripts/check_production_consumer.test.mjs` (4 passed locally).
+- Contributor tooling (#2862): covered by `tests/scripts/worktree_env_copy.test.ts` (20 passed locally), now a required baseline CI step.
+- #2816 is itself a test gate. #2848 is a design-only document.
+- No CLI command or flag, API path, parser, migration or server runtime setting changed.
 
 ## Code review
 
-`/review v0.29.1..HEAD` verdict: APPROVE. Findings: none BLOCKING, none ADVISORY. The CI change adds a workflow step with no source change; the test files it invokes already exist. The proposal is a design-only document under `docs/proposals/` that states "No implementation in this change"; it touches no code, `openapi.yaml`, contract mapping, schema, agent instruction file or test. The file name is snake_case and the document is not in the repo root.
+`/review v0.29.1..HEAD` verdict: APPROVE. Findings: none BLOCKING.
+
+- ADVISORY: a downstream project that imported React, `turndown`, `papaparse` or another moved package transitively through `neotoma` will need to declare it. Called out in the supplement under "What changed for npm package users".
+- ADVISORY: the `Remote integration nightly` workflow has failed on `main` since 2026-11-13 (before this range) because the job runs vitest without building `dist/`. Not introduced by this range; it does not gate the release.
+- No `openapi.yaml`, contract mapping, schema, MCP tool or agent instruction changed. New files are snake_case or follow existing kebab-case script names in `scripts/`; none are in the repo root.
