@@ -42,6 +42,9 @@ jobs:
       - name: Init inspector submodule (Vitest imports inspector sources)
         run: git submodule update --init --depth 1 inspector
 
+      - name: Install Inspector build dependencies
+        run: npm ci --prefix inspector
+
       - name: Build @neotoma/client, @neotoma/agent, and cursor-hooks (Vitest hook tests)
         run: |
           npm ci --prefix packages/client
@@ -81,6 +84,12 @@ jobs:
 
       - name: Build server (required by CLI tests)
         run: npm run build:server
+
+      - name: Check packed production consumer
+        run: npm run check:production-consumer
+
+      - name: Test production dependency tree inspection
+        run: node --test tests/scripts/check_production_consumer.test.mjs
 
       - name: Execute native compiled schema release gate
         run: |
