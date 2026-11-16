@@ -112,6 +112,103 @@ export const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
 ];
 
 /**
+ * Catch-all family (round 3). The patterns above match phrase shapes, so each
+ * review round found a new wording of the same promise. This family is
+ * structural: a promise verb and an event-anchored time in the same clause.
+ *
+ *   promise verb  : know, prove, show, see, reconstruct, answer, return, get,
+ *                   replay, audit (plus explain, available, visible)
+ *   event anchor  : "when <a|the> <noun> was <verb>ed", "at the time of <noun>",
+ *                   "<noun>-time <state|snapshot|slice|...>", "as of <event>",
+ *                   "at <event>"
+ *
+ * Problem-framing lines that describe the buyer's pain and promise nothing are
+ * exempted one by one in ALLOWLIST; a test fails if an exemption stops matching.
+ */
+const PROMISE =
+  "(?:know|knew|known|knows|prove|proves|show|shows|see|sees|seen|reconstructs?|answers?|returns?|gets?|replays?|audits?|explains?|available|visible)";
+const CLAUSE = "[^.?!;\"`]";
+const DET = "(?:a|an|the|that|this|each|any|every|our|my|your|its|their)";
+const PARTICIPLE =
+  "(?:made|taken|filed|approved|signed|decided|executed|performed|sent|run|ran|done|given|held|issued|submitted|built|written|shipped|[a-z]{3,}ed)";
+const EVENT_NOUN =
+  "(?:decision|filing|approval|incident|trade|vote|signing|failure|determination|recommendation|transfer|deploy(?:ment)?|audit|close|closing|review|call|meeting|purchase|order|claim|refund|diagnosis|dosage|award|hire|launch|release|merge|payment|liquidation|breach|outage|event|transaction|action|interaction|visit|submission|settlement|handoff|escalation|investigation|inspection|run|ruling|verdict|loan|sale|procedure|treatment|allocation|commitment|prescription|shipment|assessment|evaluation|authorization|enrollment|onboarding|diagnos[ie]s)";
+const WHEN_EVENT = `\\bwhen ${DET} (?:[\\w'-]+ ){0,5}?${EVENT_NOUN} (?:was|were|is|are|had been) (?:[\\w-]+ )?${PARTICIPLE}\\b`;
+const NOT_EVENT_PREFIX =
+  "(?!(?:write|read|real|run|query|ingest|ingestion|wall|clock|build|compile|load|response|turn|session|insert|store|observation|first|full|part|any|some|over|life|long|short|each|one|two|lead|down|up|cycle|peak|off|on)-time)";
+
+export const CATCH_ALL_PATTERNS: Array<[string, RegExp]> = [
+  [
+    "catch-all: promise verb ... when <a|the> <noun> was <verb>ed",
+    new RegExp(`\\b${PROMISE}\\b${CLAUSE}{0,140}?${WHEN_EVENT}`, "gi"),
+  ],
+  [
+    "catch-all: when <a|the> <noun> was <verb>ed ... promise verb",
+    new RegExp(`${WHEN_EVENT}${CLAUSE}{0,100}?\\b${PROMISE}\\b`, "gi"),
+  ],
+  [
+    "catch-all: promise verb ... at the time of|the <noun>",
+    new RegExp(`\\b${PROMISE}\\b${CLAUSE}{0,140}?\\bat the time (?:of|that|the|when)\\b`, "gi"),
+  ],
+  [
+    "catch-all: at the time of <noun> ... promise verb",
+    new RegExp(`\\bat the time (?:of|that|the|when)\\b${CLAUSE}{0,100}?\\b${PROMISE}\\b`, "gi"),
+  ],
+  [
+    "catch-all: <noun>-time state|snapshot|slice|view|...",
+    new RegExp(
+      `\\b${NOT_EVENT_PREFIX}[a-z]+-time (?:state|snapshots?|slices?|views?|truth|reconstruction|replay|answers?|records?|data|quer(?:y|ies)|copy|picture|evidence|knowledge|belief|context|versions?|inputs|rules)\\b`,
+      "gi"
+    ),
+  ],
+  [
+    "catch-all: as of <event noun>",
+    new RegExp(`\\bas of (?:${DET} )?(?:[a-z-]+ )?${EVENT_NOUN}\\b`, "gi"),
+  ],
+  [
+    "catch-all: promise verb ... at|by <event noun> (event, not a time)",
+    new RegExp(`\\b${PROMISE}\\b${CLAUSE}{0,100}?\\b(?:at|during) (?:${DET} )?(?:[a-z-]+ )?${EVENT_NOUN}\\b`, "gi"),
+  ],
+];
+
+/**
+ * Every line quoted on rounds 1 to 3 that promises or asks for state at an
+ * event rather than as recorded by a time, as the copy read at round 2 head
+ * (841b45337). Each must be flagged by the catch-all family ALONE, so the
+ * structural check does not lean on the phrase-shaped patterns above.
+ */
+export const CATCH_ALL_SEEDS: string[] = [
+  "Prove what inventory was available when a fulfillment decision was made, separate from the current balance.",
+  "faces the same requirement: prove what was known when a decision was made.",
+  "Know exactly what was known when the decision was made",
+  "Know exactly what was known when the decision was made. Neotoma provides versioned findings",
+  "Reconstruct what the system knew when a routing or fulfillment decision was made.",
+  "Evidence timelines & filing-time slices",
+  "what did the system know when the decision was made?",
+  "Billing cannot prove what authorization status existed when a procedure was performed.",
+  "Without temporal state, the answer is the current rule set, not the rule and evidence that applied when the decision was made.",
+  "Show what the income data looked like when the decision was made.",
+  "Separate what was available at the decision from what arrived later.",
+  "they do not preserve the award-time record",
+  "reconstruct what the agent knew at the time of failure.",
+  "Answer what was known when the claim was filed.",
+  "Prove what was known as of the vote.",
+];
+
+/** Promise-free or write-time lines the catch-all must NOT flag. */
+export const CATCH_ALL_ACCEPTED: string[] = [
+  "Show what inventory had been recorded as available by the time a fulfillment decision was made.",
+  "Know exactly what had been recorded by the time the decision was made.",
+  "Evidence timelines & recorded-by-filing snapshots",
+  "they do not preserve the record as written by the award",
+  "When a write is rejected by policy the server returns HTTP 403.",
+  "existing installs see no behavior change when the variable is introduced.",
+  "Optional similarity search is available when an embedding provider is configured.",
+  "operators can see when a field was introduced, deprecated, or restored.",
+  "Write-time cutoffs return what had been recorded by a time.",
+];
+
+/**
  * Wording that is correct under write time. It exempts a match only when it
  * appears in the same clause and within a short window of the match, and only
  * as cutoff wording: "as recorded", "recorded by / up to / as of", "had been
@@ -128,6 +225,8 @@ export const ALLOWLIST: RegExp[] = [
   /statement about an entity at a point in time/i,
   // Problem framing, reviewed individually: describes what an agent does with stale state, not a state query.
   /do not notice when the agent acts confidently on state/i,
+  // Problem framing, reviewed individually: issue reports must carry the reporter's own environment as captured when the report is filed; it promises no snapshot query.
+  /reconstruct what an agent saw at filing time/i,
 ];
 
 const WINDOW_BEFORE = 60;
@@ -159,11 +258,14 @@ export interface Offender {
   context: string;
 }
 
-/** Every event-time promise in `rawText` that no write-time wording in its own clause excuses. */
-export function findEventTimeOffenders(rawText: string): Offender[] {
+/** Every event-time promise in `rawText` that no write-time wording in its own clause excuses. Pass `CATCH_ALL_PATTERNS` alone to test the structural family by itself. */
+export function findEventTimeOffenders(
+  rawText: string,
+  patterns: Array<[string, RegExp]> = [...EVENT_TIME_PATTERNS, ...CATCH_ALL_PATTERNS]
+): Offender[] {
   const text = collapseWhitespace(rawText);
   const offenders: Offender[] = [];
-  for (const [label, re] of EVENT_TIME_PATTERNS) {
+  for (const [label, re] of patterns) {
     re.lastIndex = 0;
     for (const m of text.matchAll(re)) {
       const start = m.index ?? 0;
@@ -247,6 +349,12 @@ export const SEEDED_EVENT_TIME_PHRASES: string[] = [
   "Explain any past routing decision against its original inputs",
   "Diff states between dates.",
   "constraints that existed at the time",
+  // Round 3 review quotes
+  "Prove what inventory was available when a fulfillment decision was made, separate from the current balance.",
+  "prove what was known when a decision was made. Neotoma generalizes the pattern to your clinical stack.",
+  "Know exactly what was known when the decision was made",
+  "Reconstruct what the system knew when a routing or fulfillment decision was made.",
+  "Evidence timelines & filing-time slices",
 ];
 
 /**
@@ -273,6 +381,11 @@ export const ACCEPTED_WRITE_TIME_PHRASES: string[] = [
   "Bind each hop to the entity state and policy version recorded with it.",
   "Reconstruct any past decision from the inputs recorded with it.",
   "followed the DAO's rules as recorded by the time the vote closed, not today's rules.",
+  // Round 3 accepted forms
+  "Show what inventory had been recorded as available by the time a fulfillment decision was made, separate from the current balance.",
+  "Know exactly what had been recorded by the time the decision was made",
+  "Evidence timelines & recorded-by-filing snapshots",
+  "Reconstruct what the system had recorded by the time a routing or fulfillment decision was made.",
 ];
 
 /**

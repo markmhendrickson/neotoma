@@ -48,7 +48,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: RotateCcw,
     title: "Can't reconstruct state after failure",
     description:
-      "A production agent crashed mid-run. In-memory state was lost. Without an append-only log, there was no way to reconstruct what the agent knew at the time of failure.",
+      "A production agent crashed mid-run. In-memory state was lost. Without an append-only log, there was no way to reconstruct what the agent had recorded by the time of the failure.",
     scenario: {
       left: "Reconstruct agent state as recorded by the 03:12 UTC crash.",
       fail: "State unavailable. Last checkpoint: 22:00 UTC.",

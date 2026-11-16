@@ -58,7 +58,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Scale,
       title: "Unexplainable automated decisions",
-      desc: "Constituents and oversight bodies ask why a benefits claim was denied. Without temporal state, the answer is the current rule set, not the rule and evidence that applied when the decision was made.",
+      desc: "Constituents and oversight bodies ask why a benefits claim was denied. Without temporal state, the answer is the current rule set, not the rule and evidence recorded by the time the decision was made.",
     },
   ],
   problemCallout: "Inspectors general, courts, and constituents require explainable, auditable government decisions.",
@@ -87,7 +87,7 @@ const CONFIG: UseCaseConfig = {
       Icon: FileText,
       failTitle: "Current permit status with post-decision data",
       failDesc:
-        "The Phase II ESA that found contamination came after the approval. Mixing pre- and post-decision evidence in the record would misrepresent what the agency knew when it approved the permit.",
+        "The Phase II ESA that found contamination came after the approval. Mixing pre- and post-decision evidence in the record would misrepresent what the agency had recorded by the time it approved the permit.",
     },
     {
       category: "Benefits appeal",
@@ -99,7 +99,7 @@ const CONFIG: UseCaseConfig = {
       Icon: History,
       failTitle: "Denial reason given, evidence timeline missing",
       failDesc:
-        "The appeal board needs to see that the income data was not available at initial approval and only arrived via cross-match in January. Without the timeline, the denial looks inconsistent with the original approval.",
+        "The appeal board needs to see that the income data had not been recorded by the initial approval and was first recorded via cross-match in January. Without the timeline, the denial looks inconsistent with the original approval.",
     },
     {
       category: "Inter-agency reconciliation",
@@ -159,7 +159,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "Evidence timeline reconstruction",
-      desc: "Show the sequence of applicant submissions, cross-matches, and verifications that led to a determination. Separate what was available before vs. after the decision.",
+      desc: "Show the sequence of applicant submissions, cross-matches, and verifications that led to a determination. Separate what had been recorded before vs. after the decision.",
       tags: ["evidence", "temporal", "appeal"],
     },
     {

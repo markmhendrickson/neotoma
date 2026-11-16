@@ -1509,7 +1509,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/diligence": {
     title: "Neotoma for Due Diligence | State Integrity for M&A and Investment Diligence",
     description:
-      "Know exactly what was known when the decision was made. Neotoma provides versioned findings, conflict detection between diligence agents, and temporal state queries for investment committees and regulators.",
+      "Know exactly what had been recorded by the time the decision was made. Neotoma provides versioned findings, conflict detection between diligence agents, and temporal state queries for investment committees and regulators.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1597,7 +1597,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/logistics": {
     title: "Neotoma for Logistics | Versioned Routing State and Constraint Provenance",
     description:
-      "Reconstruct what the system knew when a routing or fulfillment decision was made. Neotoma provides versioned routing decisions, inventory position timelines, and carrier constraint snapshots for supply chain operations.",
+      "Reconstruct what the system had recorded by the time a routing or fulfillment decision was made. Neotoma provides versioned routing decisions, inventory position timelines, and carrier constraint snapshots for supply chain operations.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

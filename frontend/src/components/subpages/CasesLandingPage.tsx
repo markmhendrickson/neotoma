@@ -146,7 +146,7 @@ const CONFIG: UseCaseConfig = {
       title: "Let agents answer with provenance",
       desc: "Litigation and claims agents read the same versioned graph. Responses cite first-seen timestamps, analyst IDs, and docket anchors so counsel and SIU can defend the answer.",
       detail:
-        "Built for hearings, carrier exams, and internal investigations: who knew what, when, and from which source.",
+        "Built for hearings, carrier exams, and internal investigations: who recorded what, when it was written, and from which source.",
     },
   ],
   capTitle: "Capabilities built for dockets, investigations, and claims",
@@ -156,8 +156,8 @@ const CONFIG: UseCaseConfig = {
   capabilities: [
     {
       Icon: History,
-      title: "Evidence timelines & filing-time slices",
-      desc: "Bind exhibits to motions, discovery responses, and carrier reports. Answer what had been recorded when a pleading was filed, with clerk timestamps and hash lineage.",
+      title: "Evidence timelines & recorded-by-filing snapshots",
+      desc: "Bind exhibits to motions, discovery responses, and carrier reports. Answer what had been recorded by the time a pleading was filed, with clerk timestamps and hash lineage.",
       tags: ["evidence", "filing", "temporal"],
     },
     {

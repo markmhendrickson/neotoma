@@ -77,7 +77,7 @@ export const USE_CASES: UseCaseCard[] = [
     icon: Search,
     label: "Due Diligence",
     title: "M&A and investment diligence",
-    tagline: "Know exactly what was known when the decision was made",
+    tagline: "Know exactly what had been recorded by the time the decision was made",
     entityExamples: ["target company", "finding", "red flag", "assessment"],
     thenQuestion: "What had we recorded about the target when the IC voted?",
     accent: "text-sky-600 dark:text-sky-400",

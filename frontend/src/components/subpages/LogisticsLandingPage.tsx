@@ -62,7 +62,7 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: "\"Why did we route it that way?\" requires the constraint state as recorded at decision time, not today's dashboard.",
   problemCalloutDesc:
-    "Customer claims, carrier disputes, and ops retrospectives all ask the same question: what did the system know when the decision was made? Showing current rates and transit times after the fact does not explain a routing choice made under different constraints 48 hours ago.",
+    "Customer claims, carrier disputes, and ops retrospectives all ask the same question: what had the system recorded by the time the decision was made? Showing current rates and transit times after the fact does not explain a routing choice made under different constraints 48 hours ago.",
   scenarios: [
     {
       category: "Routing decision audit",
@@ -135,7 +135,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Route,
       title: "Let agents and ops teams answer with provenance",
       desc: "Routing agents, inventory planners, and ops analysts query the same versioned graph. Responses cite constraint snapshots, carrier commitments, and decision timestamps.",
-      detail: "Built for carrier disputes, delay investigations, and routing optimization: what was known, what was available, and why.",
+      detail: "Built for carrier disputes, delay investigations, and routing optimization: what had been recorded, what was recorded as available, and why.",
     },
   ],
   capTitle: "Capabilities built for logistics integrity and operational replay",
@@ -152,7 +152,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Warehouse,
       title: "Inventory position timelines",
-      desc: "Track available-to-promise at every allocation and commit point. Prove what inventory was available when a fulfillment decision was made, separate from the current balance.",
+      desc: "Track available-to-promise positions as recorded for each allocation and commit. Show what inventory had been recorded as available by the time a fulfillment decision was made, separate from the current balance.",
       tags: ["inventory_snapshot", "ATP", "temporal"],
     },
     {

@@ -39,6 +39,9 @@ import { buildToolDefinitions } from "../../src/tool_definitions.js";
 import {
   ACCEPTED_WRITE_TIME_PHRASES,
   ALLOWLIST,
+  CATCH_ALL_ACCEPTED,
+  CATCH_ALL_PATTERNS,
+  CATCH_ALL_SEEDS,
   collapseWhitespace,
   findEventTimeOffenders,
   NOT_EXCUSED_BY_NEARBY_WORDS,
@@ -245,6 +248,21 @@ describe("public copy never promises event-time (valid-time) answers", () => {
   it("the pattern set fires on every event-time phrase reviewers quoted", () => {
     for (const phrase of SEEDED_EVENT_TIME_PHRASES) {
       expect(findEventTimeOffenders(phrase).length, `pattern set must catch: ${phrase}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("the catch-all family alone flags every seeded promise-verb plus event-anchor line", () => {
+    for (const phrase of CATCH_ALL_SEEDS) {
+      expect(
+        findEventTimeOffenders(phrase, CATCH_ALL_PATTERNS).length,
+        `catch-all must catch: ${phrase}`
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("the catch-all family leaves write-time and promise-free lines alone", () => {
+    for (const phrase of CATCH_ALL_ACCEPTED) {
+      expect(findEventTimeOffenders(phrase, CATCH_ALL_PATTERNS), `must accept: ${phrase}`).toEqual([]);
     }
   });
 

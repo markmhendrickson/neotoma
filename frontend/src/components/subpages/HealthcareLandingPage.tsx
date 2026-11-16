@@ -43,12 +43,12 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "healthcare",
   problemTitle: "EHR systems store records; they do not preserve decision context",
   problemDesc:
-    "Clinical decisions depend on what was known at the time: lab results, imaging reads, specialist notes, and prior auth status. When multiple agents and clinicians update the same patient record across shifts and referrals, the inputs that drove a specific decision get overwritten by the next update.",
+    "Clinical decisions depend on what had been recorded by the time of the decision: lab results, imaging reads, specialist notes, and prior auth status. When multiple agents and clinicians update the same patient record across shifts and referrals, the inputs that drove a specific decision get overwritten by the next update.",
   problemCards: [
     {
       Icon: Clock,
       title: "No reconstruction of what was recorded by the decision",
-      desc: "The EHR shows current vitals and active orders. It cannot reconstruct which labs and notes were available when the night-shift agent recommended a dosage change at 3am.",
+      desc: "The EHR shows current vitals and active orders. It cannot reconstruct which labs and notes had been recorded by the time the night-shift agent recommended a dosage change at 3am.",
     },
     {
       Icon: Link2,
@@ -58,7 +58,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: AlertTriangle,
       title: "Authorization state drift",
-      desc: "Prior auth approvals, denials, and appeals overwrite each other. Billing cannot prove what authorization status existed when a procedure was performed.",
+      desc: "Prior auth approvals, denials, and appeals overwrite each other. Billing cannot show what authorization status had been recorded by the time a procedure was performed.",
     },
     {
       Icon: Activity,
@@ -148,7 +148,7 @@ const CONFIG: UseCaseConfig = {
       title: "Let agents and clinicians answer with provenance",
       desc: "Clinical agents, quality reviewers, and billing teams query the same versioned graph. Responses cite observation IDs, clinician identities, and timestamps so answers are defensible.",
       detail:
-        "Built for payer audits, quality reviews, and malpractice defense: what was known, by whom, and when.",
+        "Built for payer audits, quality reviews, and malpractice defense: what had been recorded, by whom, and when it was written.",
     },
   ],
   capTitle: "Capabilities built for clinical integrity and operational auditability",
@@ -249,7 +249,7 @@ const CONFIG: UseCaseConfig = {
     ],
     generalizesTitle: "If agents touch clinical data, you need reconstructable healthcare state",
     generalizesDesc:
-      "Any team deploying clinical agents for documentation, triage, prior auth, or care coordination faces the same requirement: prove what was known when a decision was made. Neotoma generalizes the pattern to your clinical stack.",
+      "Any team deploying clinical agents for documentation, triage, prior auth, or care coordination faces the same requirement: show what had been recorded by the time a decision was made. Neotoma generalizes the pattern to your clinical stack.",
   },
   ctaHeadline: "Ship clinical agents that can defend",
   ctaHighlight: "every decision they supported",

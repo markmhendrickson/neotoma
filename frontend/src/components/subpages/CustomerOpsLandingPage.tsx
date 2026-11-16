@@ -53,7 +53,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: RefreshCw,
       title: "Silent priority changes",
-      desc: "Priority and SLA tier update in place. When a VIP flag was added at 2pm but the response missed the 1-hour window, there is no record of when the priority actually changed.",
+      desc: "Priority and SLA tier update in place. When a VIP flag was added at 2pm but the response missed the 1-hour window, there is no record of when the change was written.",
     },
     {
       Icon: GitCompare,

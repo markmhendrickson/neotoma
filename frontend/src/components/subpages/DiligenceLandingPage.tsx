@@ -43,7 +43,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "No reconstruction of what was recorded by the vote",
-      desc: "Partners ask what the file showed when the IC approved the $180M term sheet. The workspace only returns today's memo, mixing post-vote remediation with pre-vote risk.",
+      desc: "Partners ask what the file had recorded by the time the IC approved the $180M term sheet. The workspace only returns today's memo, mixing post-vote remediation with pre-vote risk.",
     },
     {
       Icon: GitBranch,
@@ -245,7 +245,7 @@ const CONFIG: UseCaseConfig = {
       "Growth equity, corporate development, and vendor risk teams all run long-horizon processes where truth evolves. Neotoma generalizes the pattern: versioned entities, explicit supersession, and temporal queries for the questions that matter when checks clear.",
   },
   ctaHeadline: "Ship diligence agents that can answer",
-  ctaHighlight: "what the IC actually knew",
+  ctaHighlight: "what the file had recorded by the IC vote",
   ctaDesc:
     "Install Neotoma, connect your data room and agent mesh, and stop treating the latest memo as the system of record.",
   ctaFeatures: [

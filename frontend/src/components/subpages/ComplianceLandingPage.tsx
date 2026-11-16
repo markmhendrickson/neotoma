@@ -897,7 +897,7 @@ export function ComplianceLandingPageBody() {
                   {
                     Icon: Eye,
                     title: "No temporal queries",
-                    desc: "A regulator asks what you knew about a vendor on a specific date. Your database shows today's state. Reconstructing the past means digging through unstructured logs.",
+                    desc: "A regulator asks what you had recorded about a vendor by a specific date. Your database shows today's state. Reconstructing the past means digging through unstructured logs.",
                   },
                   {
                     Icon: Scale,
