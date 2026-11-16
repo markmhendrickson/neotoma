@@ -61,6 +61,12 @@ if [ -d "$FOUNDATION/agent_instructions/cursor_rules" ]; then
   echo "[setup_cursor_from_foundation] Installed $count rule(s) to .cursor/rules/"
 fi
 
+# Keep this repository's env-copy rule ahead of the generic foundation rule.
+RULES_DST="$REPO_ROOT/.cursor/rules"
+mkdir -p "$RULES_DST"
+rm -f "$RULES_DST/worktree_env.mdc"
+ln -s ../../docs/developer/worktree_env.mdc "$RULES_DST/worktree_env.mdc"
+
 # Commands: if foundation has cursor_commands, symlink or copy into .cursor/commands/
 if [ -d "$FOUNDATION/agent_instructions/cursor_commands" ]; then
   CMDS_DST="$REPO_ROOT/.cursor/commands"

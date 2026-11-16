@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **853**
-- Backend and repo Vitest files: **799**
+- Total automated test files: **854**
+- Backend and repo Vitest files: **800**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -85,7 +85,7 @@ flowchart TD
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 4 |
-| Tests Scripts | 4 |
+| Tests Scripts | 5 |
 
 ## Primary validation commands
 - `npm test`
@@ -97,7 +97,7 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-- Required baseline CI runs `type-check`, `lint`, `lint:site-copy`, `test:unit`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps` on Node 20; it then rebuilds on Node 24 and runs `NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts` in the same required job. Missing native `DatabaseSync` fails rather than skips.
+- Required baseline CI runs `type-check`, `lint`, `lint:site-copy`, `test:unit`, `npx vitest run tests/scripts/worktree_env_copy.test.ts`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps` on Node 20; it then rebuilds on Node 24 and runs `NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts` in the same required job. Missing native `DatabaseSync` fails rather than skips.
 - Baseline CI also runs `python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v`: six owned native SQLite cases executing the freshly compiled schema release entry, with exact vocabulary/custom-row preservation and nonzero failure assertions. Required prerequisites fail rather than skip.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
@@ -1071,11 +1071,12 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (4):**
+**Files (5):**
 - `tests/scripts/bundles_scaffold.test.ts`
 - `tests/scripts/generate_automated_test_catalog.test.ts`
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
 - `tests/scripts/validate_libsql_migration.test.ts`
+- `tests/scripts/worktree_env_copy.test.ts`
 
 ### Python unit tests
 **Directory:** `packages/client-python/tests/`

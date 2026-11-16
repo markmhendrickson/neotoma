@@ -4,7 +4,7 @@
 # Repo root (husky runs from repo root)
 REPO_ROOT="$(cd "$(dirname -- "$0")/.." && pwd)"
 
-# 1) Worktree env copy (same behavior as legacy .git/hooks/post-checkout)
+# 1) Optional worktree env copy (same behavior as legacy .git/hooks/post-checkout)
 WORKTREE_PATH=""
 if [ -n "$GIT_DIR" ] && [ "$GIT_DIR" != ".git" ]; then
   if [ -f "$GIT_DIR/gitdir" ]; then
@@ -19,8 +19,12 @@ if [ -z "$WORKTREE_PATH" ]; then
   fi
 fi
 if [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "$REPO_ROOT" ]; then
-  COPY_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
-  [ -f "$COPY_SCRIPT" ] && command -v node >/dev/null 2>&1 && (cd "$WORKTREE_PATH" && node "$COPY_SCRIPT" 2>/dev/null) || true
+  if [ "${NEOTOMA_WORKTREE_COPY_ENV:-}" = "1" ]; then
+    COPY_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
+    [ -f "$COPY_SCRIPT" ] && command -v node >/dev/null 2>&1 && (cd "$WORKTREE_PATH" && node "$COPY_SCRIPT") || true
+  else
+    echo "[copy-env] Skipped env copy. Set NEOTOMA_WORKTREE_COPY_ENV=1 to opt in."
+  fi
 fi
 
 # 2) Refresh .cursor/ from foundation only when submodule commit actually changed
