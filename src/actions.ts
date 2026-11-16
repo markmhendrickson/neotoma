@@ -353,7 +353,7 @@ app.set("trust proxy", true);
 // SECURITY: CSP tightened per docs/reports/security_audit_2026_04_22.md S-9.
 // Operators who need to broaden connectSrc (e.g. self-hosted API at a
 // different origin) can set NEOTOMA_CSP_CONNECT_SRC to a comma-separated list.
-const extraConnectSrc = (process.env.NEOTOMA_CSP_CONNECT_SRC || "")
+const extraConnectSrc = (runtimeEnv().NEOTOMA_CSP_CONNECT_SRC || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -404,7 +404,7 @@ app.use(
 // the embed preflight and its response is not pre-empted), and before the auth
 // stack (so a CORS preflight OPTIONS is answered without a bearer, as browsers
 // require).
-const embedAllowedOrigins = parseAllowedEmbedOrigins(process.env[EMBED_ALLOWED_ORIGINS_ENV]);
+const embedAllowedOrigins = parseAllowedEmbedOrigins(runtimeEnv()[EMBED_ALLOWED_ORIGINS_ENV]);
 if (embedAllowedOrigins.length > 0) {
   logger.info(
     `[EmbedCORS] Cross-origin Inspector embed enabled for: ${embedAllowedOrigins.join(", ")}`
@@ -454,7 +454,7 @@ app.use((req, res, next) => {
 
 // Configure CORS to allow frontend origin
 const corsOptions = {
-  origin: process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195",
+  origin: runtimeEnv().NEOTOMA_FRONTEND_URL || runtimeEnv().FRONTEND_URL || "http://localhost:5195",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
@@ -519,7 +519,7 @@ if (isSandboxMode()) {
 //     get the shell BEFORE the JSON data routes can intercept them.
 //   - installInspectorSpaFallback (registered at the END): catches any
 //     remaining unmatched HTML request. Both reuse the same handler.
-installInspectorRootStaticAssets(app, process.env, logger);
+installInspectorRootStaticAssets(app, runtimeEnv(), logger);
 installInspectorLegacyRedirect(app, logger);
 
 // ── Sandbox session endpoints ───────────────────────────────────────────
@@ -555,8 +555,8 @@ if (isSandboxMode()) {
     }
     try {
       const baseUrl =
-        process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() ||
-        `http://127.0.0.1:${process.env.HTTP_PORT?.trim() || "3180"}`;
+        runtimeEnv().NEOTOMA_SANDBOX_BASE_URL?.trim() ||
+        `http://127.0.0.1:${runtimeEnv().HTTP_PORT?.trim() || "3180"}`;
       const seeded = await seedForSession({
         packId: session.packId,
         baseUrl,
@@ -732,8 +732,8 @@ function safeCompareTokens(a: string, b: string): boolean {
 // header is compared in constant time. Destructive-route gating is unaffected
 // (seeding never calls destructive routes), and per-user write limits remain.
 const SANDBOX_SEED_TOKEN_HEADER = "x-neotoma-seed-token";
-const SANDBOX_SEED_TOKEN = process.env.NEOTOMA_SANDBOX_SEED_TOKEN?.trim() || randomUUID();
-process.env.NEOTOMA_SANDBOX_SEED_TOKEN = SANDBOX_SEED_TOKEN;
+const SANDBOX_SEED_TOKEN = runtimeEnv().NEOTOMA_SANDBOX_SEED_TOKEN?.trim() || randomUUID();
+runtimeEnv().NEOTOMA_SANDBOX_SEED_TOKEN = SANDBOX_SEED_TOKEN;
 function isInternalSeedRequest(req: express.Request): boolean {
   const token = req.header(SANDBOX_SEED_TOKEN_HEADER);
   return (
@@ -747,7 +747,7 @@ function isInternalSeedRequest(req: express.Request): boolean {
 // can tune with NEOTOMA_WRITE_RATE_LIMIT_PER_MIN.
 const WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
-  Number.parseInt(process.env.NEOTOMA_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 120
+  Number.parseInt(runtimeEnv().NEOTOMA_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 120
 );
 /** Build the shared write limiter; exported so its limiting effect is testable without a listener. */
 export function createWriteRateLimit(max: number = WRITE_RATE_LIMIT_PER_MIN) {
@@ -777,7 +777,7 @@ const writeRateLimit = createWriteRateLimit();
 // Key by cryptographic guest identity first, then scoped guest token, then IP.
 const GUEST_WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
-  Number.parseInt(process.env.NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30
+  Number.parseInt(runtimeEnv().NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30
 );
 
 // SECURITY: sandbox write paths share a single user_id, so keying only by
@@ -786,7 +786,7 @@ const GUEST_WRITE_RATE_LIMIT_PER_MIN = Math.max(
 // tighter per-minute cap tuned for the `sandbox.neotoma.io` demo.
 const SANDBOX_WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
-  Number.parseInt(process.env.NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30
+  Number.parseInt(runtimeEnv().NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30
 );
 const sandboxWriteRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -923,7 +923,7 @@ mountDocsRoutes(app);
 
 // Smithery / MCP registry static metadata when automatic scan cannot finish (same host as /mcp)
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
-  const override = process.env.NEOTOMA_MCP_SERVER_CARD_JSON?.trim();
+  const override = runtimeEnv().NEOTOMA_MCP_SERVER_CARD_JSON?.trim();
   if (override) {
     try {
       const parsed = JSON.parse(override) as Record<string, unknown>;
@@ -1087,9 +1087,10 @@ app.get("/.well-known/aauth-resource.json", (_req, res) => {
 // Settings page can surface "This instance" and "Endpoints" info without
 // requiring auth.
 app.get("/server-info", (req, res) => {
-  const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
+  const httpPortEnv = runtimeEnv().NEOTOMA_HTTP_PORT || runtimeEnv().HTTP_PORT;
   const httpPort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
-  const mcpBase = process.env.NEOTOMA_MCP_PROXY_URL || process.env.MCP_PROXY_URL || config.apiBase;
+  const mcpBase =
+    runtimeEnv().NEOTOMA_MCP_PROXY_URL || runtimeEnv().MCP_PROXY_URL || config.apiBase;
   const base = mcpBase.replace(/\/$/, "");
   const mcpUrl = base.endsWith("/mcp") ? base : `${base}/mcp`;
   const mode = resolveLandingMode(req);
@@ -1204,7 +1205,7 @@ export function parseMcpSseKeepaliveMs(raw: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : MCP_SSE_KEEPALIVE_DEFAULT_MS;
 }
 
-const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS);
+const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(runtimeEnv().NEOTOMA_MCP_SSE_KEEPALIVE_MS);
 
 // ----------------------------------------------------------------------------
 // MCP SSE reconnect hint (issue #1503)
@@ -1241,7 +1242,7 @@ export function parseMcpSseRetryMs(raw: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : MCP_SSE_RETRY_DEFAULT_MS;
 }
 
-const MCP_SSE_RETRY_MS = parseMcpSseRetryMs(process.env.NEOTOMA_MCP_SSE_RETRY_MS);
+const MCP_SSE_RETRY_MS = parseMcpSseRetryMs(runtimeEnv().NEOTOMA_MCP_SSE_RETRY_MS);
 
 /**
  * Attach SSE keepalive behavior to a `/mcp` GET request before the transport
@@ -1409,7 +1410,7 @@ function isLoopbackAddress(value: string | undefined): boolean {
  * Parse NEOTOMA_TRUSTED_PROXY_IPS into an array of IP/CIDR strings.
  * Accepts comma-separated values. Returns empty array when unset.
  */
-function parseTrustedProxyIPs(env: NodeJS.ProcessEnv = process.env): string[] {
+function parseTrustedProxyIPs(env: NodeJS.ProcessEnv = runtimeEnv()): string[] {
   const raw = env.NEOTOMA_TRUSTED_PROXY_IPS || "";
   return raw
     .split(",")
@@ -1422,7 +1423,7 @@ function parseTrustedProxyIPs(env: NodeJS.ProcessEnv = process.env): string[] {
  * Supports exact IPv4 match, IPv4 /8–/32 CIDR notation, and ::ffff:<ipv4> mapped addresses.
  * When NEOTOMA_TRUSTED_PROXY_IPS is not set this always returns false.
  */
-export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = process.env): boolean {
+export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
   const candidates = parseTrustedProxyIPs(env);
   if (candidates.length === 0) return false;
 
@@ -1497,7 +1498,7 @@ function forwardedForValues(req: express.Request): string[] {
  * their own `NEOTOMA_ENV`, an inherited `NODE_ENV`, or a NEOTOMA_ENV typo,
  * without having to already know this precedence rule exists.
  */
-function describeProductionSource(env: NodeJS.ProcessEnv = process.env): string {
+function describeProductionSource(env: NodeJS.ProcessEnv = runtimeEnv()): string {
   const neotomaEnvRaw = (env.NEOTOMA_ENV ?? "").trim();
   const neotomaEnv = neotomaEnvRaw.toLowerCase();
   const nodeEnv = (env.NODE_ENV ?? "").trim().toLowerCase();
@@ -1596,7 +1597,7 @@ export function isLocalRequest(req: express.Request): boolean {
     // entry is either a loopback address or an explicitly trusted proxy IP.
     const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
     if (untrusted.length > 0) {
-      const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
+      const debugTunnel = runtimeEnv().NEOTOMA_DEBUG_TUNNEL === "1";
       const displayed = debugTunnel
         ? untrusted.join(", ")
         : untrusted.map(redactIpForLog).join(", ");
@@ -1626,12 +1627,12 @@ export function isLocalRequest(req: express.Request): boolean {
     // request is actually about to be refused — not when
     // NEOTOMA_TRUST_PROD_LOOPBACK=1 will still admit it below. Never echo
     // header values here — only the setting names an operator needs.
-    if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK !== "1") {
+    if (isProductionEnvironment() && runtimeEnv().NEOTOMA_TRUST_PROD_LOOPBACK !== "1") {
       logUntrustedNearestHopOncePerInterval();
     }
   }
 
-  if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
+  if (isProductionEnvironment() && runtimeEnv().NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
     return true;
   }
 
@@ -1750,7 +1751,7 @@ export function resolveSignInSessionTtlMs(raw: string | undefined): number {
 }
 
 const SIGN_IN_SESSION_TTL_MS = resolveSignInSessionTtlMs(
-  process.env.NEOTOMA_SIGN_IN_SESSION_TTL_MIN
+  runtimeEnv().NEOTOMA_SIGN_IN_SESSION_TTL_MIN
 );
 
 function readCookie(req: express.Request, name: string): string | undefined {
@@ -2046,7 +2047,7 @@ export function getGoogleVerifiedIdentity(req: express.Request): BoundIdentity |
  * a different authority. See src/middleware/aauth_verify.ts.
  */
 export function canonicalAauthAuthority(): string {
-  const explicit = process.env.NEOTOMA_AAUTH_AUTHORITY?.trim();
+  const explicit = runtimeEnv().NEOTOMA_AAUTH_AUTHORITY?.trim();
   if (explicit) {
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(explicit)) {
       try {
@@ -2058,7 +2059,7 @@ export function canonicalAauthAuthority(): string {
     }
     return explicit;
   }
-  const publicBase = process.env.NEOTOMA_PUBLIC_BASE_URL?.trim();
+  const publicBase = runtimeEnv().NEOTOMA_PUBLIC_BASE_URL?.trim();
   if (publicBase) {
     try {
       return new URL(publicBase).host;
@@ -2078,7 +2079,7 @@ function resolvePublicAppOriginFromRequest(req: express.Request): {
   origin?: string;
   source?: "configured" | "request";
 } {
-  const configured = normalizeSessionOrigin(process.env.NEOTOMA_PUBLIC_BASE_URL);
+  const configured = normalizeSessionOrigin(runtimeEnv().NEOTOMA_PUBLIC_BASE_URL);
   if (configured) return { origin: configured, source: "configured" };
 
   const host = req.get("host");
@@ -2103,7 +2104,7 @@ function resolvePublicAppOriginFromRequest(req: express.Request): {
 app.use(
   aauthVerify({
     authority: canonicalAauthAuthority(),
-    verbose: process.env.NEOTOMA_AAUTH_VERBOSE === "1",
+    verbose: runtimeEnv().NEOTOMA_AAUTH_VERBOSE === "1",
   })
 );
 
@@ -2215,7 +2216,7 @@ app.all("/mcp", async (req, res) => {
           }
         }
       }
-      if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
+      if (authHeader?.startsWith("Bearer ") && runtimeEnv().NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
         // Either configured slot (primary, or the retiring bearer while its
         // handover window is open) takes the SAME branch: same principal,
@@ -2706,8 +2707,8 @@ function logError(
   // NEOTOMA_LOG_STACKS=1. See docs/reports/security_audit_2026_04_22.md S-5.
   const includeStacks =
     config.environment !== "production" ||
-    process.env.NEOTOMA_LOG_STACKS === "1" ||
-    process.env.NEOTOMA_LOG_STACKS === "true";
+    runtimeEnv().NEOTOMA_LOG_STACKS === "1" ||
+    runtimeEnv().NEOTOMA_LOG_STACKS === "true";
   const payload = {
     method: req.method,
     path: req.path,
@@ -2879,7 +2880,7 @@ app.get("/sandbox/terms", (_req, res) => {
 // Tight per-IP limiter for /sandbox/report so bots can't flood the forwarder.
 const SANDBOX_REPORT_RATE_LIMIT_PER_MIN = Math.max(
   1,
-  Number.parseInt(process.env.NEOTOMA_SANDBOX_REPORT_RATE_LIMIT_PER_MIN || "", 10) || 5
+  Number.parseInt(runtimeEnv().NEOTOMA_SANDBOX_REPORT_RATE_LIMIT_PER_MIN || "", 10) || 5
 );
 const sandboxReportRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -2987,7 +2988,7 @@ app.post("/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
     }
 
     const frontendBase =
-      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
+      runtimeEnv().NEOTOMA_FRONTEND_URL || runtimeEnv().FRONTEND_URL || "http://localhost:5195";
     const finalRedirectUri =
       typeof redirect_uri === "string" && redirect_uri.length > 0
         ? redirect_uri
@@ -3071,7 +3072,7 @@ app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
 
     // Default: redirect to frontend success page
     const frontendBase =
-      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
+      runtimeEnv().NEOTOMA_FRONTEND_URL || runtimeEnv().FRONTEND_URL || "http://localhost:5195";
     const successUrl = `${frontendBase}/oauth?connection_id=${encodeURIComponent(connectionId)}&status=success`;
     return res.redirect(successUrl);
   } catch (error: any) {
@@ -3101,7 +3102,7 @@ app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
     }
 
     const frontendBaseForError =
-      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
+      runtimeEnv().NEOTOMA_FRONTEND_URL || runtimeEnv().FRONTEND_URL || "http://localhost:5195";
     const errorUrl = `${frontendBaseForError}/oauth?${params.toString()}`;
     return res.redirect(errorUrl);
   }
@@ -3121,7 +3122,7 @@ app.get("/mcp/oauth/key-auth", async (req, res) => {
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   const nextPathEscaped = escapeHtml(nextPath);
-  const hasBearerFallback = Boolean((process.env.NEOTOMA_BEARER_TOKEN || "").trim());
+  const hasBearerFallback = Boolean((runtimeEnv().NEOTOMA_BEARER_TOKEN || "").trim());
   const defaultCredentialMode = hasBearerFallback ? "bearer" : "private_key";
   const googleEnabled = isGoogleSigninEnabled();
   const googleStartHref = `/mcp/oauth/google/start?next=${encodeURIComponent(nextPath)}`;
@@ -3218,7 +3219,7 @@ app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (r
     return res.redirect(nextPath);
   }
 
-  const defaultCredentialMode = (process.env.NEOTOMA_BEARER_TOKEN || "").trim()
+  const defaultCredentialMode = (runtimeEnv().NEOTOMA_BEARER_TOKEN || "").trim()
     ? "bearer"
     : "private_key";
   const postedMode = ((req.body?.credential_mode as string | undefined) || "").trim();
@@ -3348,7 +3349,7 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // to something unusable (malformed, or the nil UUID). The signer silently
     // falls back to their isolated per-email graph, which looks like an empty
     // team graph rather than an error — so say so once per sign-in.
-    if (!sharedGraphUserId && (process.env.NEOTOMA_SHARED_GRAPH_USER_ID || "").trim()) {
+    if (!sharedGraphUserId && (runtimeEnv().NEOTOMA_SHARED_GRAPH_USER_ID || "").trim()) {
       logWarn("SharedGraphUserIdRejected", req, {
         reason: "not a usable UUID (malformed or nil); falling back to isolated per-email graph",
       });
@@ -3683,7 +3684,7 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
       }
     );
     const frontendBase =
-      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
+      runtimeEnv().NEOTOMA_FRONTEND_URL || runtimeEnv().FRONTEND_URL || "http://localhost:5195";
     const frontendOauth = `${frontendBase}/oauth`;
     if (redirectUri) {
       if (!clientState && redirectUri.startsWith(frontendOauth)) {
@@ -4801,7 +4802,7 @@ async function relatedEntitiesReadableByGuest(
 // docs HTML still win). Routes that register LATER (e.g. /me at ~3306,
 // /openapi.yaml at ~9960) are NOT shadowed because their paths are in the
 // API-only deny-list, so this handler next()s them through.
-installInspectorSpaShellEarly(app, process.env, logger);
+installInspectorSpaShellEarly(app, runtimeEnv(), logger);
 
 // Public key-based authentication middleware
 // MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token
@@ -4939,7 +4940,7 @@ app.use(async (req, res, next) => {
         return next();
       }
     }
-    if (headerAuth.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
+    if (headerAuth.startsWith("Bearer ") && runtimeEnv().NEOTOMA_BEARER_TOKEN) {
       const token = headerAuth.slice(7).trim();
       // Either configured slot takes the SAME branch: same principal, same
       // grants. See src/services/bearer_slots.ts.
@@ -5443,8 +5444,8 @@ function handleApiError(
   // security_audit_2026_04_22.md S-5.
   const includeDetail =
     config.environment !== "production" ||
-    process.env.NEOTOMA_VERBOSE_ERRORS === "1" ||
-    process.env.NEOTOMA_VERBOSE_ERRORS === "true";
+    runtimeEnv().NEOTOMA_VERBOSE_ERRORS === "1" ||
+    runtimeEnv().NEOTOMA_VERBOSE_ERRORS === "true";
   const message = includeDetail && error instanceof Error ? error.message : defaultMessage;
   return res.status(500).json(buildErrorEnvelope(errorCode, message));
 }
@@ -10330,12 +10331,13 @@ app.post("/store", writeRateLimit, handleStorePost);
 
 // POST /github/webhook - Receive verified GitHub webhook events
 import { verifyGithubSignature, mapEventToStore } from "./services/github_webhook.js";
+import { runtimeEnv } from "./config_embedded.js";
 
 app.post(
   "/github/webhook",
   express.raw({ type: "application/json", limit: "1mb" }),
   async (req: express.Request, res: express.Response) => {
-    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    const secret = runtimeEnv().GITHUB_WEBHOOK_SECRET;
     if (!secret) {
       return res.status(503).json({
         error: { code: "WEBHOOK_NOT_CONFIGURED", message: "GITHUB_WEBHOOK_SECRET is not set." },
@@ -14353,7 +14355,7 @@ app.get("/openapi_actions.yaml", (req, res) => {
 // excluded so they never serve HTML even with Accept: text/html.
 //
 // Mutations (POST/PATCH/DELETE) are not dispatched — only GET / HEAD.
-installInspectorSpaFallback(app, process.env, logger);
+installInspectorSpaFallback(app, runtimeEnv(), logger);
 
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
 
@@ -14404,7 +14406,7 @@ function assertRouteTableIsReachable(): void {
  * diverge the way they did prior to #<security-fix> (posture reported
  * loopback while the socket was actually open on all interfaces).
  */
-export function resolveHttpBindHost(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveHttpBindHost(env: NodeJS.ProcessEnv = runtimeEnv()): string {
   return resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env);
 }
 
@@ -14469,8 +14471,8 @@ export function tryListen(
       // exceed keepAliveTimeout to avoid a Node bug where the socket is
       // closed before the headers timeout fires.
       // Both values are configurable via env vars (milliseconds).
-      server.keepAliveTimeout = parseInt(process.env.NEOTOMA_KEEPALIVE_TIMEOUT_MS ?? "120000", 10);
-      server.headersTimeout = parseInt(process.env.NEOTOMA_HEADERS_TIMEOUT_MS ?? "125000", 10);
+      server.keepAliveTimeout = parseInt(runtimeEnv().NEOTOMA_KEEPALIVE_TIMEOUT_MS ?? "120000", 10);
+      server.headersTimeout = parseInt(runtimeEnv().NEOTOMA_HEADERS_TIMEOUT_MS ?? "125000", 10);
 
       resolve({ server, port: boundPort });
     });
@@ -14693,7 +14695,7 @@ export async function startHTTPServer() {
     const intendedHost = resolveHttpBindHost();
     const loopbackBindOnly = isLoopbackHost(intendedHost);
     const productionEnv = isProductionEnvironment();
-    const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
+    const authConfigured = (runtimeEnv().NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
     const refusePolicy = resolveRefusePolicy();
     const forceMode = resolveForceMode();
     // Hard-reject FORCE_MODE in production envs. The resolver itself ignores
@@ -14776,9 +14778,9 @@ export async function startHTTPServer() {
     }
   }
 
-  const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
+  const httpPortEnv = runtimeEnv().NEOTOMA_HTTP_PORT || runtimeEnv().HTTP_PORT;
   const basePort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
-  const portFile = process.env.NEOTOMA_SESSION_PORT_FILE;
+  const portFile = runtimeEnv().NEOTOMA_SESSION_PORT_FILE;
   const maxTries = 20;
   // basePort === 0 means OS-assigned ephemeral port; retrying on EADDRINUSE
   // makes no sense (and would try port 1, 2, ...). The eval harness uses
@@ -14818,11 +14820,11 @@ export async function startHTTPServer() {
           isLoopbackHost,
           resolve: (loopbackBindOnly) =>
             resolveSandboxMode({
-              authConfigured: (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1",
+              authConfigured: (runtimeEnv().NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1",
               loopbackBindOnly,
               productionEnv:
-                (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
-                (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod",
+                (runtimeEnv().NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
+                (runtimeEnv().NEOTOMA_ENV || "").trim().toLowerCase() === "prod",
               hostedSandboxEnabled: isSandboxMode(),
               refusePolicy: resolveRefusePolicy(),
               forceMode: resolveForceMode(),
@@ -14864,7 +14866,7 @@ export async function startHTTPServer() {
       }
       // eslint-disable-next-line no-console
       console.log(`HTTP Actions listening on :${boundPort}`);
-      if (process.env.NODE_ENV !== "test") {
+      if (runtimeEnv().NODE_ENV !== "test") {
         writeLocalHttpPortFile(config.projectRoot, boundPort, config.environment);
       }
 
@@ -15011,7 +15013,7 @@ export function installAbandonedAbortContainment(): void {
 
 // Only auto-start if not disabled AND if this is the main module
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
-if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+if (runtimeEnv().NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
   installAbandonedAbortContainment();
 
   // Exit diagnostics. A long-running server should never reach `beforeExit`:
@@ -15091,11 +15093,11 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
   // `pathToFileURL(realResolved).href`, so the loader receives the exact
   // canonical path the guard just checked — not a second, independently
   // parsed interpretation of the original string.
-  if (process.env.NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
-    const testModule = process.env.NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
+  if (runtimeEnv().NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
+    const testModule = runtimeEnv().NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
     const allowedTestModuleDir = path.join(process.cwd(), "node_modules");
     const allowedTestModulePrefix = ".neotoma-abort-contain-test-";
-    if (testModule && process.env.NODE_ENV === "production") {
+    if (testModule && runtimeEnv().NODE_ENV === "production") {
       console.error(
         "[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE is set but NODE_ENV=production; refusing to import it."
       );

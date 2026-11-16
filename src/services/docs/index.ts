@@ -31,6 +31,7 @@ import { loadManifest } from "./manifest_loader.js";
 import { resolveDocsSources } from "./docs_root.js";
 import type { VisibilityEnv } from "./visibility.js";
 import { acceptPrefersHtml } from "../inspector_mount.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -115,7 +116,7 @@ export function getBundledDocsIndex(opts: {
   envSource?: VisibilityEnv;
 }): DocsIndex {
   const { docsRoot, manifestPath } = resolveDocsSources(opts.repoRoot);
-  const env = opts.envSource ?? (process.env as VisibilityEnv);
+  const env = opts.envSource ?? (runtimeEnv() as VisibilityEnv);
   return getDocsIndex({ docsRoot, manifestPath, env });
 }
 
@@ -140,7 +141,7 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
   };
 
   app.get("/docs", (req, res, next) => {
-    const env = opts.envSource ?? (process.env as VisibilityEnv);
+    const env = opts.envSource ?? (runtimeEnv() as VisibilityEnv);
     const index = getDocsIndex({
       docsRoot,
       manifestPath,
@@ -168,7 +169,7 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
   // `*` matches the rest of the path; Express puts the captured segment in
   // `req.params[0]`.
   app.get("/docs/*", (req, res, next) => {
-    const env = opts.envSource ?? (process.env as VisibilityEnv);
+    const env = opts.envSource ?? (runtimeEnv() as VisibilityEnv);
     const manifest = loadManifest(manifestPath);
     const rawSlug = (req.params as Record<string, string>)[0] ?? "";
     const lookup = lookupDoc(rawSlug, {

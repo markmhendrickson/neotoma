@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 /**
  * Canonical production-environment detector, shared by every module that
  * needs to know whether this process is running in production.
@@ -97,7 +98,7 @@ function warnUnrecognizedNeotomaEnvOncePerInterval(rawValue: string): void {
   );
 }
 
-export function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isProductionEnvironment(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
   const nodeEnv = (env.NODE_ENV ?? "").trim().toLowerCase();
   const nodeEnvIsProduction = nodeEnv === "production";
 

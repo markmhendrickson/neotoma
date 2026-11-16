@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../../config_embedded.js";
 /**
  * Shared SSRF guard: detect private / loopback / link-local hostnames so remote
  * fetches (peer sync inbound, repo-discovery manifest fetch, guest-token
@@ -13,7 +14,7 @@
 
 /** True when `NEOTOMA_HOSTED_MODE` opts the process into multi-tenant SSRF hardening. */
 export function isHostedMode(): boolean {
-  return /^(1|true|yes)$/i.test(process.env.NEOTOMA_HOSTED_MODE ?? "");
+  return /^(1|true|yes)$/i.test(runtimeEnv().NEOTOMA_HOSTED_MODE ?? "");
 }
 
 /**

@@ -9,8 +9,9 @@ import {
   readLocalNeotomaPackageVersion,
   type PeerRemoteHealth,
 } from "./peer_health.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
-const MAX_PEERS = parseInt(process.env.NEOTOMA_MAX_PEERS ?? "10", 10) || 10;
+const MAX_PEERS = parseInt(runtimeEnv().NEOTOMA_MAX_PEERS ?? "10", 10) || 10;
 
 export interface PeerConfigRecord {
   entity_id: string;

@@ -21,6 +21,7 @@ import { db } from "../../db.js";
 import { generateGuestAccessToken } from "../guest_access_token.js";
 import { checkRenderedPageConformance } from "./conformance.js";
 import type { ConformancePolicy, RenderedPageWarning } from "./conformance.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 /**
  * Best-effort resolve the caller's active `conformance_policy` entity (its
@@ -206,7 +207,7 @@ export async function publishRenderedPage(
   });
 
   const ttlSeconds = (() => {
-    const configured = Number.parseInt(process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS ?? "", 10);
+    const configured = Number.parseInt(runtimeEnv().NEOTOMA_GUEST_TOKEN_TTL_SECONDS ?? "", 10);
     return Number.isFinite(configured) && configured > 0 ? configured : 30 * 24 * 60 * 60;
   })();
 

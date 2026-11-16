@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runtimeEnv } from "../config_embedded.js";
 
 const OPENAPI_FILENAME = "openapi.yaml";
 const OPENAPI_ACTIONS_FILENAME = "openapi_actions.yaml";
@@ -11,7 +12,7 @@ function getPackageRootFromModule(): string {
 }
 
 export function resolveOpenApiPath(): string {
-  const fromEnv = process.env.NEOTOMA_OPENAPI_PATH?.trim();
+  const fromEnv = runtimeEnv().NEOTOMA_OPENAPI_PATH?.trim();
   const candidates = [
     fromEnv || "",
     join(getPackageRootFromModule(), OPENAPI_FILENAME),

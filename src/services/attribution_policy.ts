@@ -20,6 +20,7 @@
 
 import type { AgentIdentity, AttributionTier } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Canonical write-path identifier. Used as the per-path override key and
@@ -107,10 +108,10 @@ function parsePerPath(
  */
 export function getAttributionPolicySnapshot(): AttributionPolicySnapshot {
   const anonymousWrites =
-    parseAnonymousWriteMode(process.env.NEOTOMA_ATTRIBUTION_POLICY) ??
+    parseAnonymousWriteMode(runtimeEnv().NEOTOMA_ATTRIBUTION_POLICY) ??
     DEFAULT_POLICY.anonymous_writes;
-  const minTier = parseMinTier(process.env.NEOTOMA_MIN_ATTRIBUTION_TIER);
-  const perPath = parsePerPath(process.env.NEOTOMA_ATTRIBUTION_POLICY_JSON);
+  const minTier = parseMinTier(runtimeEnv().NEOTOMA_MIN_ATTRIBUTION_TIER);
+  const perPath = parsePerPath(runtimeEnv().NEOTOMA_ATTRIBUTION_POLICY_JSON);
   const snapshot: AttributionPolicySnapshot = {
     anonymous_writes: anonymousWrites,
   };

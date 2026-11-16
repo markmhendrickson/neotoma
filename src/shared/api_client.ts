@@ -1,6 +1,7 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./openapi_types.js";
 import { getLocalTransportClient } from "./local_transport.js";
+import { isEmbeddedMode, runtimeEnv } from "../config_embedded.js";
 
 export interface ApiClientOptions {
   baseUrl?: string;
@@ -64,7 +65,7 @@ export function isExplicitBearerRequested(): boolean {
  * Environment variables that turn CLI request signing off. Returns the
  * variable (as `NAME=value`) that does so, or null.
  */
-export function cliAAuthDisabledByEnv(env: NodeJS.ProcessEnv = process.env): string | null {
+export function cliAAuthDisabledByEnv(env: NodeJS.ProcessEnv = runtimeEnv()): string | null {
   if (env.NEOTOMA_CLI_AAUTH_DISABLE === "1") return "NEOTOMA_CLI_AAUTH_DISABLE=1";
   if (env.NEOTOMA_CLI_AAUTH_ENABLE === "0") return "NEOTOMA_CLI_AAUTH_ENABLE=0";
   return null;
@@ -198,18 +199,21 @@ function cliCredentialPolicy(options: {
   allowBearerWithSignature?: boolean;
 }): CliCredentialPolicy {
   return {
-    signWithCliAAuth: options.signWithCliAAuth,
+    // Embedded mode never signs: the CLI key pair is host state under the home directory,
+    // not part of the explicit configuration.
+    signWithCliAAuth: isEmbeddedMode() ? false : options.signWithCliAAuth,
     disabledBy: cliAAuthDisabledByEnv(),
-    testEnv: process.env.NODE_ENV === "test",
+    testEnv: runtimeEnv().NODE_ENV === "test",
     allowBearerWithSignature: options.allowBearerWithSignature ?? isExplicitBearerRequested(),
     requireCliAAuth: Boolean(options.requireCliAAuth),
   };
 }
 
 async function checkCliKeypair(): Promise<CliKeypairSource> {
+  // embedded-import-ok: reached only when signing is on, which embedded mode never allows
   const { hasCliAAuthKeypair } = await import("../cli/aauth_signer.js");
   if (!(await hasCliAAuthKeypair())) return "none";
-  return process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH ? "explicit_path" : "default_path";
+  return runtimeEnv().NEOTOMA_AAUTH_PRIVATE_JWK_PATH ? "explicit_path" : "default_path";
 }
 
 /**
@@ -226,6 +230,7 @@ async function sendSigned(
 ): Promise<Response> {
   const request = input instanceof Request ? input : null;
   const url = request ? request.url : typeof input === "string" ? input : input.toString();
+  // embedded-import-ok: reached only when signing is on, which embedded mode never allows
   const { cliSignedFetch, loadCliSignerConfig } = await import("../cli/aauth_signer.js");
   const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = {};
@@ -354,16 +359,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
     fetch: fetchImpl,
   });
 
+  const env = runtimeEnv();
+  // Embedded mode never starts or falls back to the local transport (a separate local API
+  // process whose environment and home-directory state are not part of the explicit
+  // configuration): requests go to the base URL the host named, or fail.
+  const httpOnly = options.forceHttpTransport || isEmbeddedMode();
   const defaultFallback =
-    process.env.NODE_ENV === "test"
+    env.NODE_ENV === "test"
       ? false
-      : process.env.NEOTOMA_ENABLE_OFFLINE_FALLBACK === "true" &&
-        process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK !== "true";
-  const shouldFallback = options.forceHttpTransport
-    ? false
-    : (options.useOfflineFallback ?? defaultFallback);
-  const forceLocal =
-    !options.forceHttpTransport && process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
+      : env.NEOTOMA_ENABLE_OFFLINE_FALLBACK === "true" &&
+        env.NEOTOMA_DISABLE_OFFLINE_FALLBACK !== "true";
+  const shouldFallback = httpOnly ? false : (options.useOfflineFallback ?? defaultFallback);
+  const forceLocal = !httpOnly && env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
 
   const canFallbackForPath = (path: string): boolean => path !== "/health";
   const isNetworkError = (err: unknown): boolean => {

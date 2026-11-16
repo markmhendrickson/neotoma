@@ -17,8 +17,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type express from "express";
+import { runtimeEnv } from "../config_embedded.js";
 
-export function isSandboxMode(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isSandboxMode(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
   const raw = (env.NEOTOMA_SANDBOX_MODE ?? "").toString().trim().toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes";
 }
@@ -302,7 +303,7 @@ export function decidePostureReconciliation(inputs: {
  * upgrades do not regress existing self-host configs. Operators flip to
  * "enforce" once they have confirmed their topology.
  */
-export function resolveRefusePolicy(env: NodeJS.ProcessEnv = process.env): "warn" | "enforce" {
+export function resolveRefusePolicy(env: NodeJS.ProcessEnv = runtimeEnv()): "warn" | "enforce" {
   const raw = (env.NEOTOMA_REFUSE_MODE ?? "warn").toString().trim().toLowerCase();
   return raw === "enforce" ? "enforce" : "warn";
 }
@@ -323,7 +324,7 @@ export function resolveRefusePolicy(env: NodeJS.ProcessEnv = process.env): "warn
  * resolved mode regardless.
  */
 export function resolveForceMode(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnv()
 ): NeotomaSandboxModeName | null {
   const raw = (env.NEOTOMA_FORCE_MODE ?? "").toString().trim().toLowerCase();
   if (!raw) return null;
