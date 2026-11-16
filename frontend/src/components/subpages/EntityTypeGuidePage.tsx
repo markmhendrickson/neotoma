@@ -347,14 +347,14 @@ retrieve_entities({
   limit: 20
 })
 
-// Reconstruct state at a past date
+// Reconstruct state as recorded by a past date
 retrieve_entity_by_identifier({
   identifier: "Acme Corp - SaaS License Agreement",
   entity_type: "contract",
   as_of: "2026-06-01"
 })`,
     relatedQueries: [
-      "What were the terms of the Acme contract when we signed?",
+      "What terms of the Acme contract had been recorded when we signed?",
       "Which contracts renew in the next 90 days?",
       "Show all amendments to the SaaS license agreement",
     ],

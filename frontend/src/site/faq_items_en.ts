@@ -38,14 +38,14 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     answer:
       "Mem0 and Zep use retrieval-augmented memory: vector embeddings, semantic search, and probabilistic matching. Neotoma uses deterministic state: append-only logs, schema-bound entities, and reducers that always produce the same snapshot from the same observations.",
     detail:
-      "Retrieval memory is useful for context injection into prompts. Deterministic memory is necessary when you need to reconstruct the exact state of an entity at a past point in time, resolve multi-writer conflicts consistently, or prove provenance for audits.",
+      "Retrieval memory is useful for context injection into prompts. Deterministic memory is necessary when you need to reconstruct the exact state of an entity as recorded by a past point in time, resolve multi-writer conflicts consistently, or prove provenance for audits.",
     link: { href: "/memory-models", label: "Memory models comparison" },
   },
   {
     sectionId: "what-s-the-difference-between-rag-memory-and-deterministic-memory",
     question: "What's the difference between RAG memory and deterministic memory?",
     answer:
-      "RAG memory stores text chunks and retrieves them by semantic similarity. Deterministic memory stores structured observations and composes entity state via reducers. RAG answers 'what is relevant?'; deterministic memory answers 'what was true?'",
+      "RAG memory stores text chunks and retrieves them by semantic similarity. Deterministic memory stores structured observations and composes entity state via reducers. RAG answers 'what is relevant?'; deterministic memory answers 'what was recorded?'",
     detail:
       "RAG is optimized for prompt augmentation. Deterministic memory is optimized for state integrity: temporal queries, multi-writer consistency, schema validation, and reproducible reconstruction.",
     link: { href: "/memory-models", label: "Memory models" },
@@ -54,7 +54,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     sectionId: "why-can-t-i-just-use-markdown-files-for-agent-memory",
     question: "Why can't I just use markdown files for agent memory?",
     answer:
-      "Markdown files are maximally portable and human-editable, but they conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state at a past moment. Git provides file-level versioning but not field-level provenance or deterministic merge logic.",
+      "Markdown files are maximally portable and human-editable, but they conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state as recorded at a past moment. Git provides file-level versioning but not field-level provenance or deterministic merge logic.",
     link: { href: "/neotoma-vs-files", label: "Neotoma vs file-based memory" },
   },
   {
@@ -63,7 +63,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     answer:
       "Those products usually version a shared context tree, rules pack, or prompt bundle so teams can sync what coding agents read. Neotoma is a structured state layer: append-only observations, schema-bound entities, reducers, and field-level provenance, with replay and diff on entity state across MCP-connected tools—not Git operations on a single vendor context package.",
     detail:
-      "Git-style workflows address collaboration and drift for agent-facing files. Neotoma answers a different core question: what was true at time T, from which source, and how did state change? The two can complement (synced context plus Neotoma as system of record) or substitute when you need cross-tool structured memory beyond one codebase context.",
+      "Git-style workflows address collaboration and drift for agent-facing files. Neotoma answers a different core question: what had been recorded by time T, from which source, and how did state change? The two can complement (synced context plus Neotoma as system of record) or substitute when you need cross-tool structured memory beyond one codebase context.",
     link: { href: "/memory-guarantees", label: "Memory guarantees" },
   },
   {

@@ -38,7 +38,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "diligence",
   problemTitle: 'Diligence stacks collapse weeks of work into one "current" view',
   problemDesc:
-    "Multiple agents scrape filings, model revenue, interview customers, and log red flags in parallel. Traditional stores keep the last write on each field: a superseded legal finding disappears, a resolved red flag vanishes from dashboards, and nobody can reconstruct the belief state on the morning of the IC vote.",
+    "Multiple agents scrape filings, model revenue, interview customers, and log red flags in parallel. Traditional stores keep the last write on each field: a superseded legal finding disappears, a resolved red flag vanishes from dashboards, and nobody can reconstruct the belief state as recorded by the morning of the IC vote.",
   problemCards: [
     {
       Icon: History,
@@ -69,7 +69,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Investment committee readiness",
       human:
-        "What did we know about Horizon Semiconductor when the IC voted yes on April 17, 2025?",
+        "What had we recorded about Horizon Semiconductor by the time the IC voted yes on April 17, 2025?",
       fail: "Horizon Semiconductor: ARR $94M (management case), gross margin 61%, top-3 customer concentration 28%, legal clean, proceed to docs.",
       succeed:
         "IC vote Apr 17, 2025 4:12pm PT (deal\u00B7v9 snapshot): ARR case $94M with diligence-agent range $88\u2013102M; gross margin 61% per FP&A model v3 (Mar 28). Customer concentration 34% in legal-agent finding fin\u00B7v6 (Apr 2), not yet reconciled with sales-agent 28% figure from Mar 22. One open P1 red flag (supply sole-source) documented in red_flag\u00B7v4, accepted with board-level mitigation plan attached. Post-vote work (May 1\u20139) is excluded from this snapshot.",
@@ -110,10 +110,10 @@ const CONFIG: UseCaseConfig = {
       human: "What was our working view of target company Cobalt Rail's net debt on March 3, 2025?",
       fail: "Cobalt Rail net debt $127M (cash $41M, gross debt $168M) per latest model.",
       succeed:
-        "As of 2025-03-03 close of business: net debt $134M (cash $38M, gross debt $172M) per FP&A snapshot target\u00B7v14 @ 2025-03-03, includes $6M revolver draw disclosed Mar 1. The $127M figure appears first in target\u00B7v16 (Mar 9) after receivables true-up. Point-in-time answer uses target\u00B7v14, not current target\u00B7v18.",
+        "As recorded by 2025-03-03 close of business: net debt $134M (cash $38M, gross debt $172M) per FP&A snapshot target\u00B7v14 @ 2025-03-03, includes $6M revolver draw disclosed Mar 1. The $127M figure appears first in target\u00B7v16 (Mar 9) after receivables true-up. The answer as recorded by that date uses target\u00B7v14, not current target\u00B7v18.",
       version: "target\u00B7v14 @ 2025-03-03",
       Icon: History,
-      failTitle: "Current model returned for an as-of date",
+      failTitle: "Current model returned for a date cutoff",
       failDesc:
         "Debt bridges drive purchase price adjustments. Answering with March 9 numbers for a March 3 question can shift implied equity by millions.",
     },
@@ -134,7 +134,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project snapshots for votes, signings, and audits",
-      desc: "Materialize the belief graph as it existed when the IC voted, when exclusivity dropped, or when the board deck was finalized. Diff any two snapshots to explain what changed and why.",
+      desc: "Materialize the belief graph as recorded by the time the IC voted, when exclusivity dropped, or when the board deck was finalized. Diff any two snapshots to explain what changed and why.",
       detail: 'Same API for "today" and "2025-04-17 4:12pm PT." No one-off spreadsheets.',
     },
     {
@@ -152,7 +152,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Target,
       title: "Vote- and signing-time snapshots",
-      desc: 'Bind IC decks, fairness opinions, and disclosure schedules to exact versions of target and deal entities. Answer "what did we know when?" without reconstructing Slack exports.',
+      desc: 'Bind IC decks, fairness opinions, and disclosure schedules to exact versions of target and deal entities. Answer "what had we recorded when?" without reconstructing Slack exports.',
       tags: ["deal", "target", "snapshot"],
     },
     {
@@ -181,8 +181,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: History,
-      title: "Point-in-time financial and risk fields",
-      desc: "Replay net debt, margin cases, and concentration metrics as they were on any close date. Critical for purchase price mechanics and earn-out disputes.",
+      title: "Financial and risk fields as recorded",
+      desc: "Replay net debt, margin cases, and concentration metrics as recorded by any close date. Critical for purchase price mechanics and earn-out disputes.",
       tags: ["target", "temporal", "PPA"],
     },
   ],
@@ -217,7 +217,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project current state or reconstruct belief at IC vote, signing, or any regulatory as-of date.",
+      desc: "Project current state or reconstruct belief as recorded by the IC vote, signing, or any regulatory reporting date.",
     },
     {
       label: "Serve partners & auditors",

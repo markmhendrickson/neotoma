@@ -72,15 +72,15 @@ const COMPLIANCE_SCENARIOS = [
       "Without versioned entity state, risk score updates overwrote previous values. The AI saw only the current score, not the change. Twelve vendors had material risk changes including a beneficial ownership flag, all invisible because the system discarded the history.",
   },
   {
-    human: "What did we know about NovaPay on February 15?",
+    human: "What had we recorded about NovaPay by February 15?",
     fail: "NovaPay: risk score 2.1, status approved.",
     succeed:
-      "As of Feb 15: NovaPay risk score was 4.7 (elevated), flagged by screening agent on Feb 12 for adverse media. Diligence agent issued questionnaire Feb 13, response pending. Status: under review. The score was later reduced to 2.1 on Mar 3 after remediation evidence submitted.",
+      "As recorded by Feb 15: NovaPay risk score was 4.7 (elevated), flagged by screening agent on Feb 12 for adverse media. Diligence agent issued questionnaire Feb 13, response pending. Status: under review. The score was later reduced to 2.1 on Mar 3 after remediation evidence submitted.",
     version: "vendor\u00B7v18 @ 2025-02-15",
     category: "Temporal state queries",
     failTitle: "Current state returned, not historical state",
     failDesc:
-      "The AI returned today's risk score (2.1, approved) for a question about February 15, when the vendor was actually flagged at 4.7 and under active review. Without temporal state queries, the system cannot distinguish what is true now from what was true then, a critical failure for regulatory reporting.",
+      "The AI returned today's risk score (2.1, approved) for a question about February 15, when the record by then showed the vendor flagged at 4.7 and under active review. Without temporal state queries, the system cannot distinguish what is recorded now from what had been recorded by then, a critical failure for regulatory reporting.",
   },
 ];
 
@@ -1103,7 +1103,7 @@ export function ComplianceLandingPageBody() {
                   {
                     Icon: RotateCcw,
                     title: "Temporal state queries",
-                    desc: "Answer 'what did we know about Vendor X on February 15?' with the exact snapshot from that date, not today's state back-projected. Required for regulatory reporting and incident review.",
+                    desc: "Answer 'what had we recorded about Vendor X by February 15?' with the exact snapshot recorded by that date, not today's state back-projected. Required for regulatory reporting and incident review.",
                     tags: ["vendor\u00B7v18 @ 2025-02-15", "replay"],
                   },
                   {
@@ -1230,7 +1230,7 @@ export function ComplianceLandingPageBody() {
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                   AI-native compliance platforms run diligence from intake through screening,
                   analysis, and continuous monitoring. Neotoma versions every risk profile,
-                  assessment, and monitoring event so you can reconstruct compliance state at any
+                  assessment, and monitoring event so you can reconstruct compliance state as recorded by any
                   audit or examination date.
                 </p>
               </div>

@@ -38,7 +38,7 @@ const CONFIG: UseCaseConfig = {
   ],
   heroFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "SOC 2 compatible"],
   analyticsPrefix: "procurement",
-  problemTitle: "P2P and sourcing tools store artifacts; they do not preserve award-time truth",
+  problemTitle: "P2P and sourcing tools store artifacts; they do not preserve the award-time record",
   problemDesc:
     'Suppliers change risk profiles mid-contract. Specs drift between engineering releases and PO line items. Bid tabs rot in spreadsheets. Approvals collapse to "approved" in workflow logs. Without temporal snapshots, "what did we actually select and why?" becomes a reconstruction project.',
   problemCards: [
@@ -71,7 +71,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Bid comparison",
       human:
-        "What were the competing bids when we selected Meridian Steel for the Q2 structural steel package, and what spec did the approval reference?",
+        "What competing bids had been recorded when we selected Meridian Steel for the Q2 structural steel package, and what spec did the approval reference?",
       fail: "Meridian Steel was awarded the structural steel package at $1,184,000 with 14-week delivery; approval status: completed.",
       succeed:
         "At award snapshot 2025-03-18 16:02 UTC: (1) Meridian Steel bid\u00B7v3, $1,184,000, score 87.4, submitted Mar 12 9:41am; (2) Harbor Forge bid\u00B7v2, $1,205,500, score 82.1, Mar 11 4:18pm; (3) Summit Alloys bid\u00B7v4, $1,098,000, score 78.6 (penalized for 18-week lead), Mar 13 11:05am. Approval approval\u00B7v5 linked specification\u00B7v7 (Rev C, hash a3f9\u20262c1) and explicitly cited Exhibit B tensile requirements, not today's Rev D.",
@@ -131,7 +131,7 @@ const CONFIG: UseCaseConfig = {
       title: "Ingest every sourcing touch as an observation",
       desc: "RFP responses, score models, spec releases, PO amendments, and agent-generated comparisons become structured observations on supplier, bid, specification, purchase order, and approval entities.",
       detail:
-        "Immutable history by default. Award-time snapshots are computed, not recreated from email attachments.",
+        "Immutable history by default. Snapshots as recorded at award time are computed, not recreated from email attachments.",
     },
     {
       Icon: Layers,
@@ -154,8 +154,8 @@ const CONFIG: UseCaseConfig = {
   capabilities: [
     {
       Icon: Gavel,
-      title: "Award-time bid reconstruction",
-      desc: "Replay competing offers with scores, timestamps, and evaluator notes as they existed at selection. Not just the contracted winner's PDF.",
+      title: "Bid reconstruction as recorded at award",
+      desc: "Replay competing offers with scores, timestamps, and evaluator notes as recorded at selection. Not just the contracted winner's PDF.",
       tags: ["bid", "supplier", "award"],
     },
     {
@@ -220,7 +220,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project current state per entity, or reconstruct award-time and as-of views for protests, audits, and dispute response.",
+      desc: "Project current state per entity, or reconstruct views as recorded at award time or by any later date for protests, audits, and dispute response.",
     },
     {
       label: "Serve agents & reviewers",

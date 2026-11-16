@@ -63,7 +63,7 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: "Inspectors general, courts, and constituents require explainable, auditable government decisions.",
   problemCalloutDesc:
-    "FOIA requests, administrative appeals, and IG investigations all ask the same question: under which rules and evidence was this decision made? Current systems answer with today's policy and the latest case file, not the state at determination time.",
+    "FOIA requests, administrative appeals, and IG investigations all ask the same question: under which rules and evidence was this decision made? Current systems answer with today's policy and the latest case file, not the state as recorded at determination time.",
   scenarios: [
     {
       category: "Eligibility audit",
@@ -130,7 +130,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project determination state through time",
       desc: "Link each decision to the policy version and evidence records available at determination time. Reconstruct what was known on any date without mixing pre- and post-decision data.",
-      detail: "Temporal queries return the state valid at the as-of date, not the latest case file update.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest case file update.",
     },
     {
       Icon: Shield,
@@ -170,8 +170,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: CalendarClock,
-      title: "Point-in-time case state",
-      desc: "Answer what the case record showed on any date relevant to an appeal, FOIA request, or legislative inquiry. Essential when policy changed between determination and review.",
+      title: "Case state as recorded",
+      desc: "Answer what the case record had recorded by any date relevant to an appeal, FOIA request, or legislative inquiry. Essential when policy changed between determination and review.",
       tags: ["case_record", "temporal", "FOIA"],
     },
     {
@@ -212,7 +212,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest determination state per entity, or reconstruct historical state for any timestamp relevant to an appeal, audit, or legislative review.",
+      desc: "Project the latest determination state per entity, or reconstruct state as recorded by any timestamp relevant to an appeal, audit, or legislative review.",
     },
     {
       label: "Serve agents & reviewers",

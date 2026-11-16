@@ -6,7 +6,7 @@
  * plain and concrete, no hype, no em dashes. Do not add a claim without adding its evidence.
  * Not claimed anywhere: hosted Neotoma for sale, export with history, a unified platform,
  * multi-operator authority, "corrections always win", database-enforced append-only,
- * an as-of read across the whole record. A per-entity as-of read does exist
+ * a record-wide read as recorded by a cutoff. A per-entity read as recorded by a cutoff does exist
  * (retrieve_entity_snapshot with `at` and `at_ingested`); the page does not claim it, and must not
  * deny it.
  */

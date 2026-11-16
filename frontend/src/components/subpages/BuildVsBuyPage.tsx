@@ -39,7 +39,7 @@ const GAP_ROWS: GapRow[] = [
     observabilityDesc:
       "Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.",
     stateIntegrityDesc:
-      "Reconstruct the composed entity state at any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was true.",
+      "Reconstruct the composed entity state as recorded by any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was recorded.",
     Icon: Clock,
   },
   {
@@ -88,9 +88,9 @@ const ASSESSMENT_ITEMS: AssessmentItem[] = [
       "Chat agents, cron jobs, CLI scripts, or services all touch the same contact, task, or ledger row. Logging each write is not the same as a single deterministic snapshot everyone reads-especially when tools disagree.",
   },
   {
-    question: "You need the composed state at a specific point in time",
+    question: "You need the composed state as recorded by a specific point in time",
     detail:
-      "Not only which events fired, but what was true: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
+      "Not only which events fired, but what was recorded: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
   },
   {
     question: "Rules or context change while entities have active state",
@@ -361,7 +361,7 @@ export function BuildVsBuyPageBody() {
               <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               Observability shows you what happened. State integrity tells you
-              what was true: the composed entity state at any moment, with
+              what was recorded: the composed entity state as recorded by any moment, with
               deterministic reconstruction guarantees-what you need when agents
               must not contradict themselves across sessions and tools without
               you re-typing context every time. The second problem does not reduce
@@ -382,7 +382,7 @@ export function BuildVsBuyPageBody() {
                   history, and conflict resolution, is a qualitatively different
                   problem from saving files. The same gap exists between logging
                   what your agents did and knowing the composed state of your
-                  entities at any point in time.
+                  entities as recorded by any point in time.
                 </p>
               </div>
             </div>
@@ -621,7 +621,7 @@ export function BuildVsBuyPageBody() {
               <h2 id="observability-tells-you-what-happened" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 Observability tells you what happened.{" "}
                 <span className="text-muted-foreground">
-                  State integrity proves what was true.
+                  State integrity proves what was recorded.
                 </span>
               </h2>
             </div>
@@ -657,7 +657,7 @@ export function BuildVsBuyPageBody() {
                 </p>
                 <ul className="list-none pl-0 space-y-2.5">
                   {[
-                    "Deterministic reconstruction of entity state at any historical point",
+                    "Deterministic reconstruction of entity state as recorded by any historical point",
                     "Multi-writer conflict resolution with guaranteed consistency",
                     "Every decision bound to the exact policy version and context that produced it",
                     "Provenance chains traversable from outcome back to origin",

@@ -60,7 +60,7 @@ const CONFIG: UseCaseConfig = {
       desc: "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state was at each transfer point requires temporal data the TMS does not retain.",
     },
   ],
-  problemCallout: "\"Why did we route it that way?\" requires the constraint state at decision time, not today's dashboard.",
+  problemCallout: "\"Why did we route it that way?\" requires the constraint state as recorded at decision time, not today's dashboard.",
   problemCalloutDesc:
     "Customer claims, carrier disputes, and ops retrospectives all ask the same question: what did the system know when the decision was made? Showing current rates and transit times after the fact does not explain a routing choice made under different constraints 48 hours ago.",
   scenarios: [
@@ -128,8 +128,8 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project logistics state through time",
-      desc: "Link routing decisions to the carrier capacity, rates, and inventory positions available at decision time. Reconstruct the constraint landscape for any past moment.",
-      detail: "Temporal queries return the state valid at the as-of timestamp, not the latest TMS sync.",
+      desc: "Link routing decisions to the carrier capacity, rates, and inventory positions available at decision time. Reconstruct the constraint landscape as recorded for any past moment.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest TMS sync.",
     },
     {
       Icon: Route,
@@ -211,7 +211,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest logistics state per entity, or reconstruct historical state for any timestamp relevant to a delay investigation, dispute, or optimization review.",
+      desc: "Project the latest logistics state per entity, or reconstruct state as recorded by any timestamp relevant to a delay investigation, dispute, or optimization review.",
     },
     {
       label: "Serve agents & analysts",
@@ -221,7 +221,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How logistics teams use Neotoma as their integrity layer",
     desc:
-      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state at any decision point.",
+      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state as recorded at any decision point.",
     featuresHeading: "What logistics teams build",
     features: [
       "Routing agents that evaluate carrier capacity, rates, and transit times across ground, air, and ocean in real time",
@@ -230,7 +230,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every carrier poll, inventory position, and routing decision",
-      "Temporal snapshots so delay investigations and disputes reference the constraint state at decision time",
+      "Temporal snapshots so delay investigations and disputes reference the constraint state as recorded at decision time",
       "Relationship integrity between orders, shipments, routing decisions, and carrier commitments",
       "Audit-oriented exports that trace any delivery from order through allocation, routing, and each shipment leg",
     ],

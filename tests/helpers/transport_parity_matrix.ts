@@ -282,9 +282,9 @@ export const TRANSPORT_PARITY_MATRIX: TransportParityScenario[] = [
     transports: ["mcp", "offline"],
   },
   {
-    id: "snapshot_at_event_time_cutoff",
+    id: "snapshot_at_observed_at_cutoff",
     issue: "#1819",
-    label: "at event-time cutoff excludes a future-observed observation",
+    label: "at observed_at cutoff excludes a later assertion",
     transports: ["mcp", "offline"],
   },
   {

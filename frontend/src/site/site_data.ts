@@ -95,7 +95,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Versioned history",
     slug: "versioned-history",
     tooltip:
-      "Every change to an entity creates a new version rather than overwriting the previous one. Earlier states are preserved and accessible, so you can review what an entity looked like at any point in time.",
+      "Every change to an entity creates a new version rather than overwriting the previous one. Earlier states are preserved and accessible, so you can review what an entity looked like as recorded by any point in time.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "manual",
@@ -906,11 +906,11 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     functionality: "Get an entity snapshot with provenance.",
     openapi: "POST /get_entity_snapshot",
     endpointDescriptions: ["Get an entity snapshot with provenance."],
-    endpointParameters: ["body: entity_id, at?"],
+    endpointParameters: ["body: entity_id, at?, at_ingested?"],
     cli: "request --operation getEntitySnapshot",
-    cliParameters: ["--entity-id, --at?"],
+    cliParameters: ["--body JSON: entity_id, at?, at_ingested?"],
     mcp: "retrieve_entity_snapshot",
-    mcpParameters: ["entity_id, at?"],
+    mcpParameters: ["entity_id, at?, at_ingested?"],
     testCoverage: "cli_to_mcp_entities, mcp_resource_variations, cli_to_mcp_stats_snapshots",
   },
   {

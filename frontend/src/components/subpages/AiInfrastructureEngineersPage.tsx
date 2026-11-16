@@ -50,7 +50,7 @@ const outcomes: IcpOutcomeCard[] = [
     description:
       "A production agent crashed mid-run. In-memory state was lost. Without an append-only log, there was no way to reconstruct what the agent knew at the time of failure.",
     scenario: {
-      left: "Reconstruct agent state at 03:12 UTC crash.",
+      left: "Reconstruct agent state as recorded by the 03:12 UTC crash.",
       fail: "State unavailable. Last checkpoint: 22:00 UTC.",
       succeed: "State reconstructed from 847 observations. Timeline to 03:12 ready.",
     },
@@ -171,8 +171,8 @@ export function AiInfrastructureEngineersPageBody() {
           body: (
             <p>
               Records are immutable. Corrections add new data; they never
-              overwrite. The full state can be reconstructed from the log at any
-              point in time.
+              overwrite. The full state can be reconstructed from the log as recorded by
+              any point in time.
             </p>
           ),
         },
