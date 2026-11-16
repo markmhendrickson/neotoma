@@ -95,7 +95,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Versioned history",
     slug: "versioned-history",
     tooltip:
-      "Every change to an entity creates a new version rather than overwriting the previous one. Earlier states are preserved and accessible, so you can review what an entity looked like at any point in time.",
+      "Every change to an entity creates a new version rather than overwriting the previous one. Earlier states are preserved and accessible, so you can review what an entity looked like as recorded by any point in time.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "manual",

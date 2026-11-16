@@ -14,7 +14,7 @@ database is lost, replay reconstructs the same state deterministically.
 ## Before vs after
 
 Before: restoring requires uncertain backups and manual reconciliation. After: replay up to timestamp T
-recreates state at T exactly, then replay to present restores current state.
+recreates state as recorded by T exactly, then replay to present restores current state.
 
 ```bash
 # Verify timeline events are available

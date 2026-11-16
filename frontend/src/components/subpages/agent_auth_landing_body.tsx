@@ -152,7 +152,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Clock,
       title: "Project authorization state through time",
-      desc: "Consent timelines, policy versions, and delegation chains are queryable at any point in time. Ask what permissions an agent had on a specific date and get the exact policy inputs.",
+      desc: "Consent timelines, policy versions, and delegation chains are queryable as recorded by any point in time. Ask what permissions had been recorded for an agent by a specific date and get the exact policy inputs.",
       detail:
         "Temporal queries return the state as recorded by the cutoff time, not the latest policy.",
     },
@@ -244,7 +244,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest authorization state per entity, or reconstruct historical state for any timestamp relevant to incident response or audit.",
+      desc: "Project the latest authorization state per entity, or reconstruct state as recorded by any timestamp relevant to incident response or audit.",
     },
     {
       label: "Serve agents & auditors",
@@ -254,7 +254,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How agent authorization teams use Neotoma as their integrity layer",
     desc:
-      "Production agent authorization surfaces need durable records of which agents are bound to which subjects, under what scopes, when consent changed, and how offboarding revokes authority. Neotoma versions every binding, delegation, and policy evaluation so you can reconstruct authorization state at any point in time.",
+      "Production agent authorization surfaces need durable records of which agents are bound to which subjects, under what scopes, when consent changed, and how offboarding revokes authority. Neotoma versions every binding, delegation, and policy evaluation so you can reconstruct authorization state as recorded by any point in time.",
     featuresHeading: "What agent authorization teams build",
     features: [
       "Bind software agents to subjects with explicit scopes (payments, PII, infra changes) instead of ad hoc API keys",

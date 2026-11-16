@@ -88,9 +88,9 @@ const CONFIG: UseCaseConfig = {
         "As of Feb 14 (decision date per goal\u00B7v8): trailing 3-month average spend was $4,280/mo. Largest categories: rent $1,850, groceries $620, dining $410. Savings rate: 28% of post-tax income. Cash reserve: $18,400 (4.3 months expenses). The car purchase ($22,500 on Feb 16, transaction\u00B7v41) reduced reserve to 0.9 months, flagged by budget agent Feb 17.",
       version: "transaction\u00B7v41 @ 2026-02-14",
       Icon: Wallet,
-      failTitle: "Cannot reconstruct your financial state at decision time",
+      failTitle: "Cannot reconstruct your recorded financial state at decision time",
       failDesc:
-        "Your banking app shows current balances. It cannot tell you what your spending rate, savings ratio, and cash reserve looked like on the day you committed to a major purchase.",
+        "Your banking app shows current balances. It cannot tell you what your spending rate, savings ratio, and cash reserve looked like in your records on the day you committed to a major purchase.",
     },
     {
       category: "Health correlations",

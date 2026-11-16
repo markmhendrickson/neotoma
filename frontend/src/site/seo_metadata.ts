@@ -1248,7 +1248,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/versioned-history": {
     title: "Versioned History | Neotoma",
     description:
-      "Every entity change creates a new version. Earlier states are preserved and accessible at any point in time.",
+      "Every entity change creates a new version. Earlier states are preserved and accessible as recorded by any point in time.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1531,7 +1531,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/cases": {
     title: "Neotoma for Case Management | State Integrity for Legal and Investigation Cases",
     description:
-      "Reconstruct what was known at any point in a case timeline. Neotoma provides versioned evidence, temporal state queries for litigation, and auditable provenance for every filing and assessment.",
+      "Reconstruct what had been recorded by any point in a case timeline. Neotoma provides versioned evidence, temporal state queries for litigation, and auditable provenance for every filing and assessment.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1542,7 +1542,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/financial-ops": {
     title: "Neotoma for Financial Ops | State Integrity for Reconciliation and Audit",
     description:
-      "Deterministic state for every ledger entry, reconciliation, and month-end close. Neotoma provides point-in-time snapshots for SOX compliance, audit verification, and transaction provenance.",
+      "Deterministic state for every ledger entry, reconciliation, and month-end close. Neotoma provides snapshots as recorded by a date for SOX compliance, audit verification, and transaction provenance.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1564,7 +1564,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/healthcare": {
     title: "Neotoma for Healthcare | Versioned Clinical State and Decision Provenance",
     description:
-      "Reconstruct what was known about a patient at any point in their care timeline. Neotoma provides versioned clinical decisions, authorization lifecycles, and care plan lineage for healthcare operations.",
+      "Reconstruct what had been recorded about a patient by any point in their care timeline. Neotoma provides versioned clinical decisions, authorization lifecycles, and care plan lineage for healthcare operations.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1630,7 +1630,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/trading": {
     title: "Neotoma for Autonomous Trading | Reconstructable Decision State for Trading Agents",
     description:
-      "Version control for every analyst assessment, debate resolution, and trade decision. Neotoma provides strategy version history, risk state time travel, and analyst attribution for multi-agent trading systems.",
+      "Version control for every analyst assessment, debate resolution, and trade decision. Neotoma provides strategy version history, risk state history, and analyst attribution for multi-agent trading systems.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1805,12 +1805,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "When do I need a state integrity layer instead of observability?",
         answer:
-          "When multiple writers update the same entities, you need the composed state at a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context.",
+          "When multiple writers update the same entities, you need the composed state as recorded by a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context.",
       },
       {
         question: "What is the difference between observability and state integrity?",
         answer:
-          "Observability shows what happened: events, logs, traces. State integrity proves what was true: the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance.",
+          "Observability shows what happened: events, logs, traces. State integrity proves what was recorded: the deterministic composed entity state as recorded by any moment, with multi-writer conflict resolution and version-bound provenance.",
       },
       {
         question: "Is observability enough for my agent system?",
@@ -2066,7 +2066,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "Why can't I just use markdown files for agent memory?",
         answer:
-          "Markdown files conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state at a past moment without building significant application logic on top.",
+          "Markdown files conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state as recorded at a past moment without building significant application logic on top.",
       },
       {
         question: "Can git replace versioned history?",

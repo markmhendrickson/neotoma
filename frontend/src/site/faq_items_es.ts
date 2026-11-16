@@ -17,14 +17,14 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     answer:
       "Mem0 y Zep usan memoria aumentada por recuperación: incrustaciones vectoriales, búsqueda semántica y coincidencia probabilística. Neotoma usa estado determinista: registros solo-append, entidades ligadas al esquema y reductores que siempre producen la misma instantánea a partir de las mismas observaciones.",
     detail:
-      "La memoria por recuperación sirve para inyectar contexto en prompts. La memoria determinista es necesaria cuando necesitas reconstruir el estado exacto de una entidad en un momento pasado, resolver conflictos multi-escritor de forma coherente o probar procedencia para auditorías.",
+      "La memoria por recuperación sirve para inyectar contexto en prompts. La memoria determinista es necesaria cuando necesitas reconstruir el estado exacto de una entidad tal como estaba registrado en un momento pasado, resolver conflictos multi-escritor de forma coherente o probar procedencia para auditorías.",
     link: { href: "/memory-models", label: "Comparación de modelos de memoria" },
   },
   {
     sectionId: "what-s-the-difference-between-rag-memory-and-deterministic-memory",
     question: "¿Qué diferencia hay entre memoria RAG y memoria determinista?",
     answer:
-      "La memoria RAG almacena fragmentos de texto y los recupera por similitud semántica. La memoria determinista almacena observaciones estructuradas y compone el estado de la entidad mediante reductores. RAG responde «¿qué es relevante?»; la memoria determinista responde «¿qué era cierto?».",
+      "La memoria RAG almacena fragmentos de texto y los recupera por similitud semántica. La memoria determinista almacena observaciones estructuradas y compone el estado de la entidad mediante reductores. RAG responde «¿qué es relevante?»; la memoria determinista responde «¿qué estaba registrado?».",
     detail:
       "RAG está optimizado para aumentar prompts. La memoria determinista está optimizada para la integridad del estado: consultas temporales, coherencia multi-escritor, validación de esquema y reconstrucción reproducible.",
     link: { href: "/memory-models", label: "Modelos de memoria" },
@@ -33,7 +33,7 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     sectionId: "why-can-t-i-just-use-markdown-files-for-agent-memory",
     question: "¿Por qué no puedo usar solo archivos Markdown como memoria del agente?",
     answer:
-      "Los Markdown son muy portables y editables por humanos, pero mezclan observaciones con instantáneas. Cuando dos agentes escriben valores en conflicto, ambas ediciones quedan en silencio. No hay validación de esquema, detección de conflictos ni forma de reconstruir el estado de la entidad en un momento pasado. Git versiona a nivel de archivo, no la procedencia a nivel de campo ni la lógica de fusión determinista.",
+      "Los Markdown son muy portables y editables por humanos, pero mezclan observaciones con instantáneas. Cuando dos agentes escriben valores en conflicto, ambas ediciones quedan en silencio. No hay validación de esquema, detección de conflictos ni forma de reconstruir el estado de la entidad tal como estaba registrado en un momento pasado. Git versiona a nivel de archivo, no la procedencia a nivel de campo ni la lógica de fusión determinista.",
     link: { href: "/neotoma-vs-files", label: "Neotoma frente a memoria basada en archivos" },
   },
   {
@@ -43,7 +43,7 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     answer:
       "Esos productos suelen versionar un árbol de contexto compartido, un paquete de reglas o un bundle de prompts para que los equipos sincronicen lo que leen los agentes de código. Neotoma es una capa de estado estructurada: observaciones solo-append, entidades ligadas al esquema, reductores y procedencia a nivel de campo, con reproducción y diff del estado de entidad entre herramientas conectadas por MCP — no operaciones Git sobre un único paquete de contexto del proveedor.",
     detail:
-      "Los flujos estilo Git abordan colaboración y deriva de archivos orientados al agente. Neotoma responde otra pregunta central: ¿qué era cierto en el tiempo T, desde qué fuente y cómo cambió el estado? Pueden complementarse (contexto sincronizado más Neotoma como fuente de verdad) o sustituirse cuando necesitas memoria estructurada entre herramientas más allá de un solo contexto de código.",
+      "Los flujos estilo Git abordan colaboración y deriva de archivos orientados al agente. Neotoma responde otra pregunta central: ¿qué estaba registrado hasta el tiempo T, desde qué fuente y cómo cambió el estado? Pueden complementarse (contexto sincronizado más Neotoma como fuente de verdad) o sustituirse cuando necesitas memoria estructurada entre herramientas más allá de un solo contexto de código.",
     link: { href: "/memory-guarantees", label: "Garantías de memoria" },
   },
   {

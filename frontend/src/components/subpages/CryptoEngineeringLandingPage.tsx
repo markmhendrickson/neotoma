@@ -243,7 +243,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project current state or reconstruct what the agent knew, checked, and skipped at any historical timestamp.",
+      desc: "Project current state or reconstruct what the agent knew, checked, and skipped as recorded by any historical timestamp.",
     },
     {
       label: "Serve agents, reviewers, and security",
@@ -264,7 +264,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every session, commit, review, deploy, and finding",
-      "Temporal snapshots so audit and incident questions resolve against the state at the moment of the event",
+      "Temporal snapshots so audit and incident questions resolve against the state as recorded by the moment of the event",
       "Relationship integrity across sessions, commits, reviews, deploys, and bounty reports - across agents, repos, and chains",
       "Export-ready provenance bundles for external audit firms, regulators, and ecosystem partners",
     ],

@@ -1099,7 +1099,7 @@ export function CrmLandingPageBody() {
                   {
                     Icon: RotateCcw,
                     title: "Replayable account history",
-                    desc: "Reconstruct the state of any account, pipeline, or relationship at any point in time. Useful for QBRs, forecasting audits, and compliance reviews.",
+                    desc: "Reconstruct the state of any account, pipeline, or relationship as recorded by any point in time. Useful for QBRs, forecasting audits, and compliance reviews.",
                     tags: ["account\u00B7v9", "snapshot\u00B7replay"],
                   },
                   {
@@ -1226,7 +1226,7 @@ export function CrmLandingPageBody() {
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                   AI relationship intelligence platforms surface warm intros, track deal diligence,
                   and flag commitment windows. Neotoma versions every contact, deal stage, and
-                  relationship signal so you can reconstruct pipeline state at any prior date.
+                  relationship signal so you can reconstruct pipeline state as recorded by any prior date.
                 </p>
               </div>
 

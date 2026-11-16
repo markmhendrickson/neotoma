@@ -14,7 +14,7 @@
  * tests/integration/temporal_natural_surface_acceptance.test.ts.
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import yaml from "js-yaml";
@@ -203,38 +203,123 @@ describe("public replay demos describe `at` as assertion time", () => {
 });
 
 /**
- * Landing pages and guarantee copy describe temporal queries. They must not say
- * the state is "valid at" an as-of instant (valid time); `at` returns the state
- * as recorded by the cutoff.
+ * Sweep of every shipped copy surface (all of frontend/src and docs/site, every
+ * locale). `at` filters write time, so no copy may promise that a query returns
+ * what was TRUE, VALID or IN EFFECT at a past date (event time). A phrase that
+ * is true under write-time semantics ("as recorded by", "had been recorded")
+ * stays; a phrase that promises event time fails here. Event-time queries are
+ * not supported (#2034), see docs/known_limitations.md.
  */
-describe("public site copy does not claim valid-time semantics for temporal queries", () => {
-  const pages = [
-    "Cases",
-    "Healthcare",
-    "GovTech",
-    "Logistics",
-    "Contracts",
-    "Portfolio",
-    "CustomerOps",
-    "Trading",
-    "FinancialOps",
-  ]
-    .map((name) => `frontend/src/components/subpages/${name}LandingPage.tsx`)
-    .concat([
-      "frontend/src/components/subpages/agent_auth_landing_body.tsx",
-      "frontend/src/components/subpages/PersonalDataLandingPage.tsx",
-      "frontend/src/components/subpages/CrmLandingPage.tsx",
-      "frontend/src/components/subpages/CasesLandingPage.tsx",
-      "frontend/src/components/memory_guarantees/memory_guarantees_page_body.tsx",
-    ]);
-  const VALID_TIME_CLAIM =
-    /state valid (at|on)|valid (at|on) the as-of|what was my state on date|reconstruct state at any timestamp|snapshot at any prior date|post-date the as-of/i;
+describe("public copy never promises event-time (valid-time) answers", () => {
+  const COPY_ROOTS = ["frontend/src", "docs/site"];
+  const COPY_EXT = /\.(tsx?|mdx?|ya?ml|json)$/;
+  const SKIP_DIR = /(^|\/)(node_modules|generated|dist)(\/|$)/;
 
-  it.each(pages)("%s", (page) => {
-    expect(read(page)).not.toMatch(VALID_TIME_CLAIM);
+  const walk = (rel: string): string[] =>
+    readdirSync(join(root, rel), { withFileTypes: true }).flatMap((entry) => {
+      const child = `${rel}/${entry.name}`;
+      if (SKIP_DIR.test(child)) return [];
+      if (entry.isDirectory()) return walk(child);
+      return COPY_EXT.test(entry.name) ? [child] : [];
+    });
+
+  const files = COPY_ROOTS.flatMap(walk).sort();
+
+  /** Phrases that say or imply the cutoff returns state as it was true at an event date. */
+  const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
+    [
+      "at any (historical|past|prior) moment, timestamp, date or point",
+      /\bat any (?:(?:historical|past|prior|given|specific) )?(?:timestamp|moment|date|point in time|point in (?:their|the) \w+ timeline|point in a case timeline|point)\b/gi,
+    ],
+    ["state (valid) at/on/as of a date", /\bstate (?:valid )?(?:at|as of) |\bstate on (?:[A-Z]|\d)/g],
+    ["what was true", /\bwhat (?:was|were) (?:\w+ )?true\b|\bwhat was known at (?:any|decision)/gi],
+    ["time travel", /\btime[- ]travel/gi],
+    [
+      "as-of date/timestamp/view/query/answer",
+      /\bas[- ]of (?:any |a |the |and |snapshots?|date|timestamp|time|view|quer|answer|reconstruction|state)|\bany as-of\b|\bas-of\b(?=["' ]*[,.;)])/gi,
+    ],
+    ["point-in-time", /\bpoint[- ]in[- ]time\b/gi],
+    ["when we signed", /\bwhen we signed\b/gi],
+    [
+      "what did we know on <date>",
+      /\bwhat did we know [^.?'"]{0,60}\b(?:on|by) [A-Z][a-z]+ \d/g,
+    ],
+    ["on/at any calendar, close, filing, audit or prior date", /\b(?:on|at|as of) any (?:calendar |historical |close |prior |filing |audit |regulatory )+date\b/gi],
+    ["valid at / event time", /\bvalid (?:at|on) the as-of|\bevent[- ]time\b/gi],
+    ["award-time truth/views", /\baward-time (?:truth|views?)\b/gi],
+    ["Spanish: qu\u00e9 era cierto / en cualquier momento pasado", /qu[\u00e9e] era cierto|punto en el tiempo|viaje en el tiempo/gi],
+  ];
+
+  /** Wording that is correct under write time. */
+  const WRITE_TIME_CONTEXT = /recorded|registrad|asserted|stored/i;
+
+  /** Reviewed lines where the match is not a temporal-query claim. */
+  const ALLOWLIST: RegExp[] = [
+    // Not a temporal-query claim: a backup instruction, and the definition of an observation.
+    /copy aside at any point/i,
+    /statement about an entity at a point in time/i,
+  ];
+
+  const collapse = (text: string) => text.replace(/\s+/g, " ");
+
+  it("scans a non-trivial set of copy files, including Spanish and docs", () => {
+    expect(files.length).toBeGreaterThan(200);
+    expect(files).toContain("frontend/src/components/subpages/TradingLandingPage.tsx");
+    expect(files).toContain("frontend/src/site/faq_items_es.ts");
+    expect(files).toContain("docs/site/pages/en/replayable-timeline.md");
+    expect(files).toContain("docs/site/pages/en/faq.md");
   });
 
-  it.each(pages.slice(0, 10))("%s states the recorded-by semantics", (page) => {
-    expect(read(page)).toMatch(/as recorded by|recorded by/);
+  it("the pattern set fires on each event-time phrase it exists to catch", () => {
+    const seeded = [
+      "at any historical timestamp",
+      "what was the diagnosis at any historical moment",
+      "what were the terms when we signed?",
+      "Reconstruct exhibit sets as of any filing date",
+      "for any as-of timestamp",
+      "Risk state time travel",
+      "what was true then",
+      "reconstruct award-time and as-of views",
+      "As of 2025-03-03 close of business ... Point-in-time answer",
+      "reconstruct state at any timestamp",
+      "what did we know about NovaPay on February 15?",
+      "reconstruct belief at IC vote, signing, or any regulatory as-of date",
+    ];
+    for (const phrase of seeded) {
+      const hit = EVENT_TIME_PATTERNS.some(([, re]) => {
+        re.lastIndex = 0;
+        return re.test(phrase);
+      });
+      expect(hit, `pattern set must catch: ${phrase}`).toBe(true);
+    }
+  });
+
+  it("no copy file promises event-time (valid-time) answers", () => {
+    const offenders: string[] = [];
+    for (const file of files) {
+      const text = collapse(read(file));
+      for (const [label, re] of EVENT_TIME_PATTERNS) {
+        re.lastIndex = 0;
+        for (const m of text.matchAll(re)) {
+          const start = m.index ?? 0;
+          const context = text.slice(Math.max(0, start - 60), start + m[0].length + 30);
+          if (WRITE_TIME_CONTEXT.test(context)) continue;
+          if (ALLOWLIST.some((a) => a.test(context))) continue;
+          offenders.push(`${file} [${label}]: ...${context}...`);
+        }
+      }
+    }
+    expect(offenders, offenders.join("\n")).toEqual([]);
+  });
+
+  it("landing pages that show temporal features state the recorded-by semantics", () => {
+    const landing = files.filter((f) => /subpages\/\w+LandingPage\.tsx$/.test(f));
+    expect(landing.length).toBeGreaterThanOrEqual(12);
+    for (const page of landing) {
+      const text = read(page);
+      if (/Temporal snapshots so/.test(text)) {
+        expect(text, `${page}: states the recorded-by semantics`).toMatch(/recorded by|as recorded|had been recorded/);
+      }
+    }
   });
 });

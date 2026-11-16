@@ -58,7 +58,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: AlertTriangle,
-      title: "Risk state is point-in-time only",
+      title: "Risk state is current-only",
       desc: "Position limits, drawdown caps, and kill switches change over time. When a liquidation happens at 3 AM, nobody can reconstruct whether the risk limits were already breached or just changed.",
     },
     {
@@ -77,7 +77,7 @@ const CONFIG: UseCaseConfig = {
         "Why did the agent go long ETH at $3,840 on March 12? The price dropped 8% in the next hour.",
       fail: "The agent's current strategy is bullish on ETH based on positive funding rates and network activity. The position was opened at $3,840.",
       succeed:
-        "On 2026-03-12 at 14:23 UTC, strategy strat·v7 (momentum + on-chain hybrid, last modified Mar 10) was active. Six analysts reported: Technical OVERWEIGHT (RSI divergence, confidence 0.82), Sentiment NEUTRAL (mixed social signals), News OVERWEIGHT (ETF inflow report), Fundamentals OVERWEIGHT (TVL growth +12% WoW), Tokenomics NEUTRAL (unlock schedule neutral), Competitive UNDERWEIGHT (SOL gaining DEX share). Bull case won debate 4-2 with combined confidence 0.71. PM decision: OVERWEIGHT at trade_decision·v3. Risk state at entry: position limit 15% portfolio, drawdown cap 5%, kill switch inactive. The 8% drop triggered the drawdown cap at 15:41 UTC (risk_state·v4).",
+        "On 2026-03-12 at 14:23 UTC, strategy strat·v7 (momentum + on-chain hybrid, last modified Mar 10) was active. Six analysts reported: Technical OVERWEIGHT (RSI divergence, confidence 0.82), Sentiment NEUTRAL (mixed social signals), News OVERWEIGHT (ETF inflow report), Fundamentals OVERWEIGHT (TVL growth +12% WoW), Tokenomics NEUTRAL (unlock schedule neutral), Competitive UNDERWEIGHT (SOL gaining DEX share). Bull case won debate 4-2 with combined confidence 0.71. PM decision: OVERWEIGHT at trade_decision·v3. Risk state recorded at entry: position limit 15% portfolio, drawdown cap 5%, kill switch inactive. The 8% drop triggered the drawdown cap at 15:41 UTC (risk_state·v4).",
       version: "trade_decision·v3",
       Icon: Scale,
       failTitle: "Current strategy cited, historical reasoning missing",
@@ -90,7 +90,7 @@ const CONFIG: UseCaseConfig = {
         "Why did the agent skip the SOL long at 09:42 UTC on March 27 when my manual watchlist flagged it? It ran 14% in the next four hours.",
       fail: "The agent focuses on high-conviction setups. SOL did not meet its filters on March 27.",
       succeed:
-        "On 2026-03-27 at 09:42 UTC, pass_decision·v12 was recorded against ticker SOL-PERP. Six analysts reported: Technical OVERWEIGHT (breakout confirmed, confidence 0.74), Sentiment OVERWEIGHT (funding flipped long, 0.68), News NEUTRAL (no catalyst), Fundamentals UNDERWEIGHT (TVL outflow 4% WoW), Tokenomics UNDERWEIGHT (upcoming unlock in 7 days, 2.1% of supply), Competitive NEUTRAL. Debate resolved bull 3-3 with combined confidence 0.52, below the 0.60 entry threshold in strategy strat·v7. Risk state at evaluation: drawdown already 3.4%, two correlated SOL-beta positions open (portfolio_snapshot·v19, correlation gate triggered). PM decision: PASS with rationale 'confidence below threshold and correlated exposure too high'. Pass reason preserved at pass_decision·v12 linked to analysis·v74-79, debate·v23, and strategy·v7.",
+        "On 2026-03-27 at 09:42 UTC, pass_decision·v12 was recorded against ticker SOL-PERP. Six analysts reported: Technical OVERWEIGHT (breakout confirmed, confidence 0.74), Sentiment OVERWEIGHT (funding flipped long, 0.68), News NEUTRAL (no catalyst), Fundamentals UNDERWEIGHT (TVL outflow 4% WoW), Tokenomics UNDERWEIGHT (upcoming unlock in 7 days, 2.1% of supply), Competitive NEUTRAL. Debate resolved bull 3-3 with combined confidence 0.52, below the 0.60 entry threshold in strategy strat·v7. Risk state recorded at evaluation: drawdown already 3.4%, two correlated SOL-beta positions open (portfolio_snapshot·v19, correlation gate triggered). PM decision: PASS with rationale 'confidence below threshold and correlated exposure too high'. Pass reason preserved at pass_decision·v12 linked to analysis·v74-79, debate·v23, and strategy·v7.",
       version: "pass_decision·v12",
       Icon: CircleSlash,
       failTitle: "Current filter framing, historical rationale missing",
@@ -153,7 +153,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Clock,
       title: "Project trading state through time",
-      desc: "Strategy versions, risk parameters, and portfolio compositions are queryable at any point in time. Ask what the agent's risk limits were at 3 AM and get the exact parameters, not today's configuration.",
+      desc: "Strategy versions, risk parameters, and portfolio compositions are queryable as recorded by any point in time. Ask what risk limits had been recorded for the agent by 3 AM and get the exact parameters, not today's configuration.",
       detail:
         "Temporal queries return the state as recorded by the cutoff time, not the latest strategy update.",
     },
@@ -173,7 +173,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Scale,
       title: "Trade decision reconstruction",
-      desc: "Link every trade backward through PM decision, debate resolution, analyst outputs, market signals, and strategy version. Reconstruct the complete reasoning chain for any historical trade.",
+      desc: "Link every trade backward through PM decision, debate resolution, analyst outputs, market signals, and strategy version. Reconstruct the complete reasoning chain recorded for any historical trade.",
       tags: ["trade_decision", "debate", "provenance"],
     },
     {
@@ -190,8 +190,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: Shield,
-      title: "Risk state time travel",
-      desc: "Reconstruct position limits, drawdown caps, kill switch status, and spending caps at any historical timestamp. Verify what constraints were active during any market event.",
+      title: "Risk state history",
+      desc: "Reconstruct position limits, drawdown caps, kill switch status, and spending caps as recorded by any timestamp. Verify what constraints had been recorded when a market event occurred.",
       tags: ["risk_state", "temporal", "compliance"],
     },
     {
@@ -203,7 +203,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: LineChart,
       title: "Portfolio state snapshots",
-      desc: "Version portfolio composition, exposure by chain and asset, and unrealized P&L at any timestamp. Compare pre- and post-rebalance states with full provenance.",
+      desc: "Version portfolio composition, exposure by chain and asset, and unrealized P&L as recorded by any timestamp. Compare pre- and post-rebalance states with full provenance.",
       tags: ["portfolio_snapshot", "temporal", "audit"],
     },
     {
@@ -245,7 +245,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest state per entity, or reconstruct historical state for any timestamp relevant to post-trade analysis, risk audit, or strategy review.",
+      desc: "Project the latest state per entity, or reconstruct state as recorded by any timestamp relevant to post-trade analysis, risk audit, or strategy review.",
     },
     {
       label: "Serve agents & users",
@@ -255,7 +255,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How autonomous trading platforms use Neotoma as their integrity layer",
     desc:
-      "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade at any point in time.",
+      "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade as recorded by any point in time.",
     featuresHeading: "What trading teams build",
     features: [
       "Multi-analyst reasoning chains with versioned assessments, confidence scores, and debate resolutions linked to every trade decision, including the pass decisions the agent made and why",

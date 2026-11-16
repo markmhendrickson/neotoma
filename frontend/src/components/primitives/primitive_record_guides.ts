@@ -425,7 +425,7 @@ export const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
         id: "three-layer",
         heading: "The three-layer truth model",
         body:
-          "Source carries raw bytes. Interpretation carries the audit trail of how those bytes were read. Observations carry granular facts that link back to both. Snapshots are deterministically composed from all observations for an entity by the reducer. This separation is what lets Neotoma reinterpret without rewriting history and replay snapshots at any point in time.",
+          "Source carries raw bytes. Interpretation carries the audit trail of how those bytes were read. Observations carry granular facts that link back to both. Snapshots are deterministically composed from all observations for an entity by the reducer. This separation is what lets Neotoma reinterpret without rewriting history and replay snapshots as recorded by any point in time.",
       },
       {
         id: "immutability",

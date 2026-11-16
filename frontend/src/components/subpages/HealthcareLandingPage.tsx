@@ -26,7 +26,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Clinical and operational state that survives",
   heroHighlight: "handoffs, revisions, and multi-agent care coordination",
   heroDesc:
-    "Patient records, treatment plans, and prior authorizations change through every shift, consult, and agent action. Neotoma versions entity state so you can answer what was known about a patient at any point in their care timeline.",
+    "Patient records, treatment plans, and prior authorizations change through every shift, consult, and agent action. Neotoma versions entity state so you can answer what had been recorded about a patient by any point in their care timeline.",
   heroTags: [
     { tag: "patient", Icon: UserCheck },
     { tag: "encounter", Icon: Stethoscope },
@@ -69,7 +69,7 @@ const CONFIG: UseCaseConfig = {
   problemCallout:
     "Regulators, payers, and malpractice review boards need temporal evidence, not current state.",
   problemCalloutDesc:
-    "HIPAA audits, payer disputes, and quality reviews all ask the same question: what was known, and what was the basis for the decision at the time it was made? Current EHR snapshots answer what is true now, not what was true then.",
+    "HIPAA audits, payer disputes, and quality reviews all ask the same question: what was known, and what was the basis for the decision at the time it was made? Current EHR snapshots answer what is true now, not what had been recorded by then.",
   scenarios: [
     {
       category: "Clinical decision audit",
@@ -90,7 +90,7 @@ const CONFIG: UseCaseConfig = {
         "What was the authorization status for Mr. Reeves' cardiac MRI when it was performed on February 20?",
       fail: "Mr. Reeves' cardiac MRI (order ORD-8891) has prior auth status: denied. Appeal submitted February 25.",
       succeed:
-        "As of 2025-02-20 10:00 (procedure start), auth\u00B7v4 showed status APPROVED (auto-approved Feb 18 via payer portal, ref PA-2025-44102). Denial auth\u00B7v6 posted Feb 22 after retrospective review. Appeal filed Feb 25 (auth\u00B7v7). The procedure was performed under a valid approval. Timeline: requested Feb 16 \u2192 approved Feb 18 \u2192 performed Feb 20 \u2192 retro-denied Feb 22 \u2192 appeal Feb 25. Snapshot auth\u00B7v4 @ 2025-02-20 confirms approval was active at procedure time.",
+        "As recorded by 2025-02-20 10:00 (procedure start), auth\u00B7v4 showed status APPROVED (auto-approved Feb 18 via payer portal, ref PA-2025-44102). Denial auth\u00B7v6 posted Feb 22 after retrospective review. Appeal filed Feb 25 (auth\u00B7v7). The procedure was performed under a valid approval. Timeline: requested Feb 16 \u2192 approved Feb 18 \u2192 performed Feb 20 \u2192 retro-denied Feb 22 \u2192 appeal Feb 25. Snapshot auth\u00B7v4 @ 2025-02-20 shows the approval as recorded by procedure time.",
       version: "auth\u00B7v4 @ 2025-02-20",
       Icon: FileText,
       failTitle: "Current denial status returned for a historical question",
@@ -139,7 +139,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project clinical state through time",
-      desc: "Link care plan changes to triggering labs, orders to authorizations, and handoff items to shift boundaries. Reconstruct what was known at any moment in the care timeline.",
+      desc: "Link care plan changes to triggering labs, orders to authorizations, and handoff items to shift boundaries. Reconstruct what had been recorded by any moment in the care timeline.",
       detail:
         "Temporal queries return the state as recorded by the cutoff time, not the last EHR sync.",
     },
@@ -182,8 +182,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: History,
-      title: "Point-in-time patient state",
-      desc: "Answer what was the diagnosis, medication list, and active orders at any historical moment. Essential for quality reviews, incident investigations, and payer disputes.",
+      title: "Patient state as recorded",
+      desc: "Answer what the diagnosis, medication list, and active orders were as recorded by any historical moment. Essential for quality reviews, incident investigations, and payer disputes.",
       tags: ["patient", "temporal", "reporting"],
     },
     {
@@ -224,7 +224,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest clinical state per entity, or reconstruct historical state for any timestamp relevant to a quality review, audit, or dispute.",
+      desc: "Project the latest clinical state per entity, or reconstruct state as recorded by any timestamp relevant to a quality review, audit, or dispute.",
     },
     {
       label: "Serve agents & reviewers",
@@ -234,7 +234,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How healthcare teams use Neotoma as their integrity layer",
     desc:
-      "AI-native care coordination platforms automate clinical documentation, prior auth management, and shift handoff summaries for hospital systems. Neotoma versions every clinical input, recommendation, and authorization change so you can reconstruct what was known at any decision point.",
+      "AI-native care coordination platforms automate clinical documentation, prior auth management, and shift handoff summaries for hospital systems. Neotoma versions every clinical input, recommendation, and authorization change so you can reconstruct what had been recorded by any decision point.",
     featuresHeading: "What healthcare teams build",
     features: [
       "Clinical agents that generate shift summaries and flag deterioration patterns across ICU and med-surg units",
@@ -243,7 +243,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every clinical input, agent recommendation, and authorization state change",
-      'Temporal snapshots so "what was known at decision time" uses the chart state at that moment, not the latest update',
+      'Temporal snapshots so "what was recorded at decision time" uses the chart state as recorded by that moment, not the latest update',
       "Relationship integrity between patients, encounters, care plans, and authorization records",
       "Audit-oriented exports that trace clinical decisions from triggering observation through agent recommendation to clinician action",
     ],

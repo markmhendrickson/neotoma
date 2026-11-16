@@ -75,12 +75,12 @@ const CONFIG: UseCaseConfig = {
         "Did accrued bonus liability ACC-LIAB-4411 exist in our books on the audit date December 31, 2024, and what was its balance?",
       fail: "Accrued bonus liability ACC-LIAB-4411: current balance $388,420.00 as of today; last updated by payroll accrual batch.",
       succeed:
-        "As of 2024-12-31 (audit date), ACC-LIAB-4411 snapshot shows balance $412,900.00 per ledger\u00B7v18 @ 2024-12-31T23:59:00-05:00, sourced from JE-2024-12-30-884 (payroll close) and recon entry rec\u00B7v3 tying to Workday accrual export hash a3f9\u20262c1. Post-audit true-up JE-2025-01-15-102 reduced the balance to $388,420.00, preserved as ledger\u00B7v21 with full provenance. The assistant returned point-in-time state, not current GL.",
+        "As recorded by 2024-12-31 (audit date), ACC-LIAB-4411 snapshot shows balance $412,900.00 per ledger\u00B7v18 @ 2024-12-31T23:59:00-05:00, sourced from JE-2024-12-30-884 (payroll close) and recon entry rec\u00B7v3 tying to Workday accrual export hash a3f9\u20262c1. Post-audit true-up JE-2025-01-15-102 reduced the balance to $388,420.00, preserved as ledger\u00B7v21 with full provenance. The assistant returned the state recorded by then, not current GL.",
       version: "ledger\u00B7v18 @ 2024-12-31",
       Icon: ShieldCheck,
       failTitle: "Current liability balance, audit date indistinguishable",
       failDesc:
-        "Without as-of reconstruction, the assistant reports today's $388k and implies it was always true, understating the Dec 31 accrual auditors must tie to.",
+        "Without reconstruction as recorded by a date, the assistant reports today's $388k and implies it was always true, understating the Dec 31 accrual auditors must tie to.",
     },
     {
       category: "Reconciliation conflicts",
@@ -133,7 +133,7 @@ const CONFIG: UseCaseConfig = {
       title: "Ingest every feed and post as an observation",
       desc: "Bank files, invoice extracts, ERP journals, and agent outputs become structured observations on transaction, account, reconciliation entry, ledger, and invoice entities. Nothing overwrites prior tie-outs.",
       detail:
-        "Immutable history by default. Close and as-of views are computed from observations, not re-keyed spreadsheets.",
+        "Immutable history by default. Close views as recorded by a date are computed from observations, not re-keyed spreadsheets.",
     },
     {
       Icon: Layers,
@@ -157,8 +157,8 @@ const CONFIG: UseCaseConfig = {
   capabilities: [
     {
       Icon: ShieldCheck,
-      title: "Audit-date and as-of balances",
-      desc: "Reconstruct liabilities, accruals, and cash positions on any calendar date with ledger and account snapshots tied to journal and recon observations.",
+      title: "Balances as recorded by audit date",
+      desc: "Reconstruct liabilities, accruals, and cash positions as recorded by any calendar date with ledger and account snapshots tied to journal and recon observations.",
       tags: ["ledger", "audit", "temporal"],
     },
     {
@@ -170,7 +170,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Calendar,
       title: "Month-end close snapshots",
-      desc: "Freeze tie-out state at close datetime including cleared vs. outstanding lines, preparer and reviewer attestations, and material account exceptions.",
+      desc: "Freeze tie-out state as recorded at close datetime including cleared vs. outstanding lines, preparer and reviewer attestations, and material account exceptions.",
       tags: ["close", "snapshot", "control"],
     },
     {
@@ -224,7 +224,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project latest state per entity, or reconstruct historical state for audit dates, close datetimes, and investigation windows.",
+      desc: "Project latest state per entity, or reconstruct state as recorded by audit dates, close datetimes, and investigation windows.",
     },
     {
       label: "Serve agents & auditors",
@@ -234,7 +234,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How financial operations teams use Neotoma as their integrity layer",
     desc:
-      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state at any audit date.",
+      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state as recorded by any audit date.",
     featuresHeading: "What financial operations teams build",
     features: [
       "Continuous bank-to-ledger matching with agent-proposed categorization across thousands of daily transactions",
