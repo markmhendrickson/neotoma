@@ -80,7 +80,7 @@ See [`docs/developer/agent_onboarding_confirmation.md`](../developer/agent_onboa
 
 **Tooling config after activation:** configure the current tool only after the user has seen value. Examples: Custom GPT or remote MCP for ChatGPT where supported, Projects plus connector setup for Claude, and local MCP wiring first for Cursor / Claude Code / Codex / OpenClaw.
 
-**Activation mechanisms (post-aha):** time-travel queries, decision extraction, cross-source synthesis, missing-context alerts, automatic project dossier. All maintain provenance in output.
+**Activation mechanisms (post-aha):** snapshot reads as recorded by a write-time cutoff, decision extraction, cross-source synthesis, missing-context alerts, automatic project dossier. All maintain provenance in output.
 
 ## 1. Web UI Onboarding Philosophy (Complementary Path)
 

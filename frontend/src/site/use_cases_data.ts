@@ -216,7 +216,7 @@ export const USE_CASES: UseCaseCard[] = [
     title: "Personal agent state",
     tagline: "Versioned memory for health, finance, habits, and goals across every AI tool",
     entityExamples: ["workout", "transaction", "health_metric", "habit", "goal"],
-    thenQuestion: "How has my bench press progressed, and what was my spending rate when I bought the car?",
+    thenQuestion: "How has my bench press progressed, and what spending rate had I recorded when I bought the car?",
     accent: "text-violet-600 dark:text-violet-400",
     accentBg: "bg-violet-500/5",
     accentBorder: "border-violet-500/20",

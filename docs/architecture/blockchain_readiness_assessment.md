@@ -1,4 +1,7 @@
 # Neotoma MVP Blockchain Readiness Assessment
+
+> Later correction: historical snapshot cutoffs (`at`, `at_ingested`) filter write time, not event or valid time, so "state at any point in time" below means state as recorded by a cutoff. See `docs/known_limitations.md`.
+
 ## Executive Summary
 Assessment of Neotoma MVP plans against blockchain-ready, decentralized architecture criteria. **Revised recommendation: Incorporate foundational patterns into MVP** to avoid expensive post-MVP refactoring.
 **Key Finding:** Event-sourcing, repository abstractions, and cryptographic schema fields are **architectural foundations** that are expensive to retrofit. These should be included in MVP even if full implementation is deferred.

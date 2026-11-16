@@ -1,4 +1,7 @@
 # Feature Unit: FU-050 Event-Sourcing Foundation
+
+> Later correction: historical snapshot cutoffs (`at`, `at_ingested`) filter write time, not event or valid time, so "state at any point in time" below means state as recorded by a cutoff. See `docs/known_limitations.md`.
+
 **Status:** Draft
 **Priority:** P0 (Critical)
 **Risk Level:** High

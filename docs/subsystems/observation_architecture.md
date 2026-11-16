@@ -240,7 +240,7 @@ Neotoma's event-sourcing foundation (FU-050) provides:
 Observations integrate with event-sourcing:
 - **Observation Creation:** Emits `ObservationCreated` event
 - **Snapshot Computation:** Emits `SnapshotComputed` event
-- **Historical Replay (Primary):** Observations can be replayed to recompute entity snapshots at any point in time—this is the primary historical inspection capability since entities evolve over time as new observations arrive
+- **Historical Replay (Primary):** Observations can be replayed to recompute entity snapshots as recorded by any write-time cutoff (`at` filters `observed_at`; `at_ingested` filters `created_at`; neither is valid time)—this is the primary historical inspection capability since entities evolve over time as new observations arrive
 **Event Emission:**
 ```typescript
 async function createObservation(observation: Observation): Promise<void> {

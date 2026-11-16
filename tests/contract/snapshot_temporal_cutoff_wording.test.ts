@@ -210,15 +210,24 @@ describe("public replay demos describe `at` as assertion time", () => {
 });
 
 /**
- * Sweep of every shipped copy surface (all of frontend/src and docs/site, every
- * locale). `at` filters write time, so no copy may promise that a query returns
- * what was TRUE, VALID or IN EFFECT at a past date (event time). A phrase that
- * is true under write-time semantics ("as recorded by", "had been recorded")
- * stays; a phrase that promises event time fails here. Event-time queries are
+ * Sweep of every shipped copy surface (all of frontend/src, docs/site, every
+ * locale, plus the reference docs under docs/specs, docs/foundation,
+ * docs/subsystems, docs/use_cases and docs/developer). `at` filters write
+ * time, so no copy may promise that a query returns what was TRUE, VALID or
+ * IN EFFECT at a past date (event time). A phrase that is true under
+ * write-time semantics ("as recorded by", "had been recorded") stays; a phrase that promises event time fails here. Event-time queries are
  * not supported (#2034), see docs/known_limitations.md.
  */
 describe("public copy never promises event-time (valid-time) answers", () => {
-  const COPY_ROOTS = ["frontend/src", "docs/site"];
+  const COPY_ROOTS = [
+    "frontend/src",
+    "docs/site",
+    "docs/specs",
+    "docs/foundation",
+    "docs/subsystems",
+    "docs/use_cases",
+    "docs/developer",
+  ];
   const COPY_EXT = /\.(tsx?|mdx?|ya?ml|json)$/;
   const SKIP_DIR = /(^|\/)(node_modules|generated|dist)(\/|$)/;
 
@@ -238,6 +247,18 @@ describe("public copy never promises event-time (valid-time) answers", () => {
     expect(files).toContain("frontend/src/site/faq_items_es.ts");
     expect(files).toContain("docs/site/pages/en/replayable-timeline.md");
     expect(files).toContain("docs/site/pages/en/faq.md");
+    for (const doc of [
+      "docs/specs/MCP_SPEC.md",
+      "docs/foundation/product_positioning.md",
+      "docs/foundation/core_identity.md",
+      "docs/foundation/what_to_store.md",
+      "docs/subsystems/entity_snapshots.md",
+      "docs/subsystems/observation_architecture.md",
+      "docs/use_cases/contracts.md",
+      "docs/developer/cli_agent_instructions.md",
+    ]) {
+      expect(files, `${doc} is scanned`).toContain(doc);
+    }
   });
 
   it("the pattern set fires on every event-time phrase reviewers quoted", () => {

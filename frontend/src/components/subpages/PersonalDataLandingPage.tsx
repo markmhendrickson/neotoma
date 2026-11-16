@@ -156,7 +156,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "Temporal queries on your own life",
-      desc: "Answer 'what was my financial state when I made that decision?' or 'what were my vitals when I started this supplement?' with exact historical snapshots, not today's numbers.",
+      desc: "Answer 'what had I recorded about my finances by the time I made that decision?' or 'what vitals had I recorded by the time I started this supplement?' with exact historical snapshots, not today's numbers.",
       tags: ["transaction\u00B7v41 @ 2026-02-14", "replay"],
     },
     {

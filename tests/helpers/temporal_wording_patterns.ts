@@ -55,6 +55,10 @@ export const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
     "as it existed / stood at",
     /\bas (?:it|they|that) (?:existed|stood|was|were) (?:at|on|as of|during|when|by)\b|\bagainst (?:its|their) original (?:rules|polic)/gi,
   ],
+  [
+    "what was/were <noun> when we|I|it <verb>",
+    /\bwhat (?:was|were) (?!known\b)(?:the |my |our |its |their )?[\w' -]{1,40} when (?:we|I|it|they|the \w+) /gi,
+  ],
   ["point-in-time", /\bpoint[- ]in[- ]time\b/gi],
   ["when we signed", /\bwhen we signed\b/gi],
   [
@@ -92,6 +96,18 @@ export const ALLOWLIST: RegExp[] = [
   // Not a temporal-query claim: a backup instruction, and the definition of an observation.
   /copy aside at any point/i,
   /statement about an entity at a point in time/i,
+  // Definition of an observation (what one source said at a specific point in time).
+  /said about the \[entity\]\(\S*\) at a specific point in time/i,
+  // Backup and recovery, not a temporal query.
+  /point-in-time (?:recovery|backup)|not a point-in-time backup/i,
+  // "As of" introducing a subsystem, not a date.
+  /As of the markdown-mirror subsystem/i,
+  // Retention and lifecycle wording, not a temporal query.
+  /excluded at any point|active at a time/i,
+  // Correct negations that state the event-time reading is not what the cutoff does.
+  /not the event time|not 'what was true in the world at T'/i,
+  // Documented failure example: a stale answer from a store that overwrites.
+  /Unpaid as of Feb 2/i,
 ];
 
 const WINDOW_BEFORE = 60;
@@ -135,7 +151,8 @@ export function findEventTimeOffenders(rawText: string): Offender[] {
       const window = clauseWindow(text, start, end);
       if (WRITE_TIME_CONTEXT.test(window)) continue;
       const wide = text.slice(Math.max(0, start - WINDOW_BEFORE), end + WINDOW_AFTER);
-      if (ALLOWLIST.some((a) => a.test(wide))) continue;
+      const allowWindow = text.slice(Math.max(0, start - 160), end + 60);
+      if (ALLOWLIST.some((a) => a.test(allowWindow))) continue;
       offenders.push({ label, context: wide });
     }
   }
@@ -184,6 +201,10 @@ export const SEEDED_EVENT_TIME_PHRASES: string[] = [
   "at any approval decision point",
   "at any point in a case timeline",
   "time-travel queries",
+  "What was the valuation when we made the follow-on?",
+  "what was my financial state when I made that decision?",
+  "Neotoma answers: What was true (composed state) when it happened?",
+  "reconstruct what an agent knew at decision time",
   "entity state at any point in time",
   "ISO 8601 timestamp to get historical snapshot state",
   "view entity state at any point in time",
