@@ -1543,7 +1543,8 @@ function formatRequestError(error: unknown): string {
     };
     if (typeof envelope.error_code === "string") {
       const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
-      return `${envelope.error_code}${message}`;
+      const hint = hintOf(error);
+      return `${envelope.error_code}${message}${hint ? ` ${hint}` : ""}`;
     }
     if (typeof envelope.code === "string") {
       const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
