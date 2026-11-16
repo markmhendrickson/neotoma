@@ -29,10 +29,10 @@
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { logger } from "../../utils/logger.js";
+import { runtimeEnv, userStateDir } from "../../config_embedded.js";
 
 /**
  * The default-install bundles. These ship in every Neotoma install, are always
@@ -67,9 +67,9 @@ const STATE_VERSION = 1 as const;
 
 /** Resolves the bundle state file path (overridable for tests). */
 export function bundleStatePath(): string {
-  const override = process.env.NEOTOMA_BUNDLE_STATE_PATH?.trim();
+  const override = runtimeEnv().NEOTOMA_BUNDLE_STATE_PATH?.trim();
   if (override) return override;
-  return path.join(os.homedir(), ".config", "neotoma", "bundle_state.json");
+  return path.join(userStateDir(), "bundle_state.json");
 }
 
 let cached: BundleStateFile | undefined;

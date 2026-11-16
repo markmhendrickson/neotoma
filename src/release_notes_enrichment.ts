@@ -1,3 +1,4 @@
+import { runtimeEnv } from "./config_embedded.js";
 /**
  * Optional npm registry + GitHub release enrichment for npm_check_update.
  * Best-effort only; never throws to callers.
@@ -94,7 +95,7 @@ export async function fetchGithubReleaseBody(params: {
   repo: string;
   version: string;
 }): Promise<{ body: string | null; html_url: string | null; error: string | null }> {
-  const token = process.env.GITHUB_TOKEN?.trim();
+  const token = runtimeEnv().GITHUB_TOKEN?.trim();
   const tagCandidates = [
     params.version.startsWith("v") ? params.version : `v${params.version}`,
     params.version,

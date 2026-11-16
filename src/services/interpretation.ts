@@ -41,6 +41,7 @@ import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 import { emitStoreWriteEvents } from "../events/substrate_store_emit.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export interface InterpretationConfig {
   provider: string;
@@ -532,7 +533,7 @@ export async function runInterpretation(
 
       // Fallback to code-defined entity schemas if database schema not found
       if (!schema) {
-        if (process.env.NEOTOMA_ENV !== "production") {
+        if (runtimeEnv().NEOTOMA_ENV !== "production") {
           console.warn(
             `[Schema Fallback] No database entity schema found for entity type "${entityType}". ` +
               `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`

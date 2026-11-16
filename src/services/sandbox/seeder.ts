@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSandboxPack, DEFAULT_SANDBOX_PACK_ID, type SandboxPack } from "./pack_registry.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -88,7 +89,7 @@ export async function seedForSession(options: SeedForSessionOptions): Promise<bo
     const child = spawn(command, args, {
       cwd: REPO_ROOT,
       env: {
-        ...process.env,
+        ...runtimeEnv(),
         // The seed script reads the bearer from this env var, not a flag.
         ...(options.bearer ? { NEOTOMA_SANDBOX_BEARER: options.bearer } : {}),
       },

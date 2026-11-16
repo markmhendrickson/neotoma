@@ -11,6 +11,8 @@ Neotoma should not depend on any of those. The embedded entry point takes the
 configuration in code.
 
 ```ts
+// Call createEmbeddedNeotoma BEFORE anything else imports a Neotoma module.
+// Configuration is read once, when the first Neotoma module loads.
 import { createEmbeddedNeotoma } from "neotoma/embedded";
 
 const neotoma = await createEmbeddedNeotoma({
@@ -24,17 +26,48 @@ await ops.store({ entities: [{ entity_type: "note", title: "hello" }] });
 
 ## What the embedded path guarantees
 
-- Reads no env file: not the project `.env*` files, not the user-level env
-  file, not the user-level CLI config file.
-- Needs no running server or daemon. Operations run in-process.
-- Does not write to the host process environment.
-- Does not read the host process environment unless you ask. Name the
-  variables you want in `allowProcessEnv`; explicit options and `env` always
-  win over them.
-- Reads no tunnel-discovery files.
-- Makes no network request unless you configure an adapter. Embeddings are off
-  unless you pass `openaiApiKey`; without it, embedding calls report
-  `embedding_not_configured`.
+Each statement below is covered by a test in `tests/unit/embedded_config.test.ts`
+or `tests/unit/embedded_env_routing.test.ts`. The exceptions that apply to a
+statement are listed next to it.
+
+- **No env file is read.** Not the project `.env*` files, not the user-level env
+  file, not the user-level CLI config file, and no tunnel-discovery file.
+  _Exception:_ none known on the embedded operations path.
+- **The host process environment is not written.** _Exception:_ none known.
+- **The host process environment is not read unless you name a variable in
+  `allowProcessEnv`.** Every runtime setting in the code that embedded
+  operations run through is read from the explicit configuration instead:
+  `config.ts`, plus the attribution policy, entity-type guards, tenant and
+  sandbox scoping, schema mode, guest access-policy overrides
+  (`NEOTOMA_ACCESS_POLICY_*`), the logger switches, mirroring, overflow sinks
+  and the remaining tuning variables. A value in `env` takes effect, a host
+  value takes effect only when named in `allowProcessEnv`, and `env` wins when
+  both are given. A test fails if a new direct read of the process environment
+  is added to that code.
+  _Exceptions:_ the CLI, the stdio proxy, the OpenClaw entry point, the
+  WebSocket bridge, the dev shim and the maintenance migration tool still read
+  the process environment; they are separate programs and are not part of the
+  embedded operations. Child processes started by the embedded code are given
+  the explicit configuration rather than the host environment; no test covers
+  that.
+- **No home-directory file is read.** The small state files that Neotoma keeps
+  beside a user's CLI configuration (the access-policy and issues settings in
+  `config.json`, the mirror settings, and `bundle_state.json`) are read from and
+  written to `dataDir` instead. A conflicting file under a home directory is
+  ignored, and the `gh` command-line tool and its stored credentials are not
+  consulted: provide a GitHub token through `env`
+  (`NEOTOMA_ISSUES_GITHUB_TOKEN`) if you use the issue tools.
+  _Exception:_ if you name `HOME` (or `USERPROFILE`) in `allowProcessEnv`, those
+  files are read from and written to that home directory, as in standard mode.
+- **No server or daemon is needed.** Operations run in-process.
+- **No network request is made on the default store, retrieve and embedding
+  paths.** The tests watch `fetch`, `http.request` and `https.request` while
+  storing without an adapter, and check that embedding calls report
+  `embedding_not_configured` when `openaiApiKey` is absent.
+  _Exception:_ this is not a guarantee about every tool. Tools reachable through
+  `executeTool` that exist to contact another system (issue sync, peer sync,
+  webhooks, mirror pushes) make requests when you configure and call them; the
+  tests do not cover those.
 
 ## Options
 
@@ -44,28 +77,54 @@ await ops.store({ entities: [{ entity_type: "note", title: "hello" }] });
 | `environment`                                            | `"development"` (default) or `"production"`. Selects default file names such as `neotoma.db` and `neotoma.prod.db`. |
 | `projectRoot`                                            | Absolute package root used to find bundled docs. Defaults to the installed package location.                        |
 | `sqlitePath`, `rawStorageDir`, `logsDir`, `eventLogPath` | Optional absolute overrides for individual locations.                                                               |
-| `openaiApiKey`                                           | Optional embeddings adapter.                                                                                        |
-| `env`                                                    | Other explicit settings by their usual names, for example `NEOTOMA_ENCRYPTION_ENABLED`.                             |
-| `allowProcessEnv`                                        | Host variable names to read. Empty by default.                                                                      |
+| `openaiApiKey`                                           | Optional embeddings adapter, a string.                                                                              |
+| `env`                                                    | Other explicit settings by their usual names, as string values, for example `NEOTOMA_ENCRYPTION_ENABLED`.           |
+| `allowProcessEnv`                                        | Array of host variable names to read. Empty by default.                                                             |
 
-Invalid options throw an `EmbeddedConfigError` with `code: "invalid_option"`.
+Invalid options throw an `EmbeddedConfigError` with `code: "invalid_option"`:
+a missing or relative path, an unknown `environment`, an `allowProcessEnv` that
+is not an array of non-empty names, an `env` that is not an object of string
+values, or an `openaiApiKey` that is not a string.
 
 ## Ordering
 
 Embedded mode must be established before any other Neotoma module is loaded in
-the process. If the standard configuration has already loaded, or a second
-call asks for a different data directory, `createEmbeddedNeotoma` throws an
-`EmbeddedConfigError` with `code: "config_already_loaded"`. Call it first and
-import the rest of Neotoma afterwards.
+the process. If the standard configuration has already loaded,
+`createEmbeddedNeotoma` throws an `EmbeddedConfigError` with
+`code: "config_already_loaded"`. Call it first and import the rest of Neotoma
+afterwards.
+
+## Calling it more than once
+
+Calling `createEmbeddedNeotoma` again with the same options returns the same
+instance. Any difference in the resolved options (data directory, environment,
+path overrides, `env`, `openaiApiKey`, or the names in `allowProcessEnv`)
+throws `config_already_loaded`: the configuration is read once per process and
+cannot change.
+
+If the first call fails after the configuration loaded (for example the data
+directory cannot be created), retry with the same options after fixing the
+cause. A retry with a different data directory throws `config_already_loaded`
+rather than reporting the first call's locations; restart the process to use a
+different configuration.
+
+## Shutting down
+
+There is no separate server to stop. `ops.dispose()` is the lifecycle hook for
+an operations handle; today it releases nothing beyond the handle itself, and
+handles from `createOperations` need no other cleanup. The SQLite connection
+belongs to the process and closes when it exits. A host that needs to release
+the data directory earlier should end the process (or worker) that embedded
+Neotoma.
 
 ## Not yet covered
 
-This first slice routes the central runtime configuration (`src/config.ts`)
-and database initialization. A few optional features still read the process
-environment directly (for example mirroring, overflow sinks and some tuning
-knobs) and are not switched on by the embedded path. Lazy loading of further
-optional adapters, with structured errors when one is unavailable, is a
-follow-up.
-
-The CLI and server startup are unchanged; see the CLI reference for the
-file-based path.
+- Lazy loading of optional adapters with a structured "unavailable" error is
+  done for embeddings only. Other adapters are not yet loaded lazily.
+- The test that finds direct process-environment reads scans source files; it
+  does not observe every setting at run time. The run-time tests cover the
+  attribution policy, entity-type guards, tenant and sandbox scoping, schema
+  mode, access-policy overrides and the logger switch.
+- The CLI and server startup are unchanged. For the file-based path see the
+  [CLI reference](cli_reference.md#configuration-and-storage-paths) and the
+  [environment variable documentation](environment/README.md).

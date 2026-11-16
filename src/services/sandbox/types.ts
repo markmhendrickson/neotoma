@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../../config_embedded.js";
 /**
  * Types shared by the sandbox-report local + HTTP transports. Kept parallel
  * to `src/services/feedback/types.ts` so the reporting pipeline for the
@@ -58,7 +59,7 @@ export interface SandboxReportTransport {
 export type SandboxReportTransportKind = "local" | "http";
 
 export function resolveSandboxReportTransportKind(
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = runtimeEnv()
 ): SandboxReportTransportKind {
   const explicit = (env.NEOTOMA_SANDBOX_REPORT_TRANSPORT ?? "").toLowerCase();
   if (explicit === "local" || explicit === "http") return explicit;

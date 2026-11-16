@@ -11,12 +11,14 @@
  * daemon, and does not let the host process environment override the explicit
  * configuration. See docs/developer/embedded_configuration.md.
  *
- * Limits of this first slice: embedded mode applies to the central runtime
- * configuration (`src/config.ts`). It must be established before any other
- * Neotoma module in the process loads; otherwise a structured
- * `config_already_loaded` error is thrown. Optional feature switches read
- * directly from the process environment elsewhere (for example mirroring)
- * are out of scope here.
+ * Scope: every runtime setting read by the code embedded operations run through
+ * comes from the explicit configuration (`runtimeEnv()` in `config_embedded.ts`),
+ * and the small user-level state files (`config.json`, `bundle_state.json`) live
+ * under `dataDir` instead of a home directory. The CLI, proxy and maintenance
+ * entry points are not part of the embedded path. It must be established before
+ * any other Neotoma module in the process loads; otherwise a structured
+ * `config_already_loaded` error is thrown. The configuration is read once, so a
+ * second call with different options is refused.
  */
 
 import {
@@ -47,33 +49,63 @@ export interface EmbeddedNeotoma {
 }
 
 let active: Promise<EmbeddedNeotoma> | undefined;
-let activeKey: string | undefined;
+let activeFingerprint: string | undefined;
+
+const ALREADY_LOADED_ORDER_HINT =
+  "Call createEmbeddedNeotoma before importing other Neotoma modules.";
 
 export async function createEmbeddedNeotoma(
   options: EmbeddedConfigOptions
 ): Promise<EmbeddedNeotoma> {
   const resolved = resolveEmbeddedConfig(options);
-  const key = JSON.stringify([resolved.options.dataDir, resolved.env.NEOTOMA_ENV]);
+  const requested = resolved.fingerprint;
+
   if (active) {
-    if (key !== activeKey) {
+    // Same options return the same instance; any difference (env, openaiApiKey,
+    // path overrides, environment, allowProcessEnv names, data directory) is refused.
+    if (requested !== activeFingerprint) {
       throw new EmbeddedConfigError(
         "config_already_loaded",
-        "Neotoma is already embedded in this process with a different configuration."
+        "Neotoma is already embedded in this process with different options. Options cannot change after the first call."
       );
     }
     return active;
   }
-  if (getEmbeddedConfig() === undefined) setEmbeddedConfig(resolved);
-  activeKey = key;
+
+  // A previous attempt in this process may have declared embedded mode and then failed
+  // after config.ts loaded (for example the database could not be initialised). That
+  // configuration is cached in the loaded modules, so a retry must ask for the same
+  // options; anything else would report the earlier call's locations.
+  const declared = getEmbeddedConfig();
+  if (declared !== undefined && declared.fingerprint !== requested) {
+    throw new EmbeddedConfigError(
+      "config_already_loaded",
+      "Neotoma configuration was already loaded in this process with different options. Retry with the same options, or restart the process."
+    );
+  }
+  if (declared === undefined) setEmbeddedConfig(resolved);
+  activeFingerprint = requested;
+
   active = (async () => {
     const { config } = await import("./config.js");
     if (!config.embedded) {
       clearEmbeddedConfig();
-      active = undefined;
-      activeKey = undefined;
       throw new EmbeddedConfigError(
         "config_already_loaded",
-        "Neotoma configuration was already loaded in this process before embedding. Call createEmbeddedNeotoma before importing other Neotoma modules."
+        `Neotoma configuration was already loaded in this process before embedding. ${ALREADY_LOADED_ORDER_HINT}`
+      );
+    }
+    // Belt and braces: the loaded configuration must be the one requested.
+    const expectedEnvironment = resolved.options.environment ?? "development";
+    if (
+      config.dataDir !== resolved.options.dataDir ||
+      config.environment !== expectedEnvironment ||
+      (resolved.options.sqlitePath !== undefined &&
+        config.sqlitePath !== resolved.options.sqlitePath)
+    ) {
+      throw new EmbeddedConfigError(
+        "config_already_loaded",
+        "The Neotoma configuration loaded in this process does not match the requested options."
       );
     }
     const { initDatabase } = await import("./db.js");
@@ -94,8 +126,10 @@ export async function createEmbeddedNeotoma(
     };
   })();
   active.catch(() => {
+    // Allow a retry. Declared embedded state is kept on purpose (see above): the
+    // loaded config.ts is cached, so only a retry with identical options is accepted.
     active = undefined;
-    activeKey = undefined;
+    activeFingerprint = undefined;
   });
   return active;
 }
@@ -103,6 +137,6 @@ export async function createEmbeddedNeotoma(
 /** Test hook: forget the in-process singleton. Module state of config.ts is not reset. */
 export function resetEmbeddedForTests(): void {
   active = undefined;
-  activeKey = undefined;
+  activeFingerprint = undefined;
   clearEmbeddedConfig();
 }

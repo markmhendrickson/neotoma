@@ -42,6 +42,7 @@ import { getDb } from "./connection.js";
 import type { DbDatabase } from "./driver.js";
 import { deferUntilCurrentTransactionSettles } from "./driver.js";
 import { SCHEMA_REGISTRY_CHANGE_COUNTER_TABLE } from "../sqlite/internal_tables.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 export { SCHEMA_REGISTRY_CHANGE_COUNTER_TABLE };
 
@@ -71,13 +72,13 @@ const buckets = new WeakMap<DbDatabase, Bucket>();
 const counters = { hits: 0, misses: 0, bypasses: 0, invalidations: 0 };
 
 function cacheDisabled(): boolean {
-  const value = process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE?.trim().toLowerCase();
+  const value = runtimeEnv().NEOTOMA_SCHEMA_REGISTRY_CACHE?.trim().toLowerCase();
   return value === "off" || value === "0" || value === "false";
 }
 
 function checkIntervalMs(): number {
   if (checkIntervalOverrideMs !== null) return checkIntervalOverrideMs;
-  const raw = process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS?.trim();
+  const raw = runtimeEnv().NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS?.trim();
   if (raw) {
     const parsed = Number(raw);
     if (Number.isFinite(parsed) && parsed >= 0) return Math.min(parsed, 60_000);

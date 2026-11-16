@@ -10,6 +10,7 @@ A running Neotoma server also serves these files at its own `/docs` route. To in
 
 - [Developer getting started](developer/getting_started.md): local development setup with SQLite and the local filesystem.
 - [CLI reference](developer/cli_reference.md): every `neotoma` command.
+- [Embedded configuration](developer/embedded_configuration.md): use Neotoma inside a host application with explicit configuration, no env files and no server.
 - [MCP overview](developer/mcp_overview.md): connect an agent host over MCP, with a guide per host.
 - [REST API](api/rest_api.md) and the [OpenAPI spec](../openapi.yaml): largely the same capabilities over HTTP, as a separate implementation from the MCP server.
 - [Integrations matrix](integrations/matrix.md): every documented host and how it connects. The README table covers the common hosts; the matrix also lists hosts that are configured by hand.

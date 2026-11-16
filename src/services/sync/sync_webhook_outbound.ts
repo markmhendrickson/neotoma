@@ -10,6 +10,7 @@ import { listPeersWithSecrets, type PeerConfigRecord } from "./peer_ops.js";
 import { SYNC_ENTITY_TYPE_REFUSED_ERROR_CODE } from "./remote_snapshot_admission.js";
 import type { SyncWebhookPayload } from "./sync_webhook_inbound.js";
 import type { SyncEntitiesPayload } from "./sync_webhook_inbound.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000];
 const DELIVERY_TIMESTAMPS = new Map<string, number[]>();
@@ -72,13 +73,13 @@ async function isEntityTypeRefusal(res: Response): Promise<boolean> {
 }
 
 export function getNeotomaPublicBaseUrl(): string | null {
-  const u = process.env.NEOTOMA_PUBLIC_BASE_URL?.trim();
+  const u = runtimeEnv().NEOTOMA_PUBLIC_BASE_URL?.trim();
   if (!u) return null;
   return u.replace(/\/$/, "");
 }
 
 export function getLocalPeerIdForOutboundSync(): string | null {
-  const id = process.env.NEOTOMA_LOCAL_PEER_ID?.trim();
+  const id = runtimeEnv().NEOTOMA_LOCAL_PEER_ID?.trim();
   return id || null;
 }
 

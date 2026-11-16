@@ -183,6 +183,7 @@ import {
 } from "./services/issues/issue_operations.js";
 import { syncIssuesFromGitHub } from "./services/issues/sync_issues_from_github.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import { runtimeEnv } from "./config_embedded.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -298,7 +299,7 @@ let stdioSignalHandlersInstalled = false;
  */
 export function installStdioSignalHandlers(close: () => Promise<void>): boolean {
   if (stdioSignalHandlersInstalled) return false;
-  if (process.env.NODE_ENV === "test") return false;
+  if (runtimeEnv().NODE_ENV === "test") return false;
   stdioSignalHandlersInstalled = true;
 
   process.on("SIGINT", async () => {
@@ -583,7 +584,7 @@ export class NeotomaServer {
     let connectionId =
       this.sessionConnectionId ||
       (authInfo as any)?.connectionId ||
-      (isHTTPTransport ? getCurrentMcpConnectionId() : process.env.NEOTOMA_CONNECTION_ID) ||
+      (isHTTPTransport ? getCurrentMcpConnectionId() : runtimeEnv().NEOTOMA_CONNECTION_ID) ||
       undefined;
 
     // If no connection ID header, try to get it from Bearer token
@@ -642,7 +643,7 @@ export class NeotomaServer {
 
     if (connectionId) {
       // In test environment, allow test connection ID to bypass authentication
-      const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+      const isTestEnv = runtimeEnv().NODE_ENV === "test" || runtimeEnv().VITEST === "true";
       if (connectionId === "test-connection-bypass" && isTestEnv) {
         this.setAuthenticatedIdentity("00000000-0000-0000-0000-000000000000", null);
         this.requestAuth.set(requestId, {
@@ -1333,7 +1334,7 @@ export class NeotomaServer {
     isHTTPTransport: boolean,
     timeoutMs: number
   ): Promise<{ message: string; latestVersion: string } | null> {
-    if (isHTTPTransport || process.env.NO_UPDATE_NOTIFIER === "1") {
+    if (isHTTPTransport || runtimeEnv().NO_UPDATE_NOTIFIER === "1") {
       return null;
     }
 
@@ -6424,7 +6425,7 @@ export class NeotomaServer {
       return [];
     }
 
-    if (process.env.NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
+    if (runtimeEnv().NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
       logger.debug(
         `Found ${observations.length} observation(s) for source ${sourceId}:`,
         observations.map((obs: { id: string; entity_id: string | null }) => ({
@@ -6443,7 +6444,7 @@ export class NeotomaServer {
       )
     );
 
-    if (process.env.NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
+    if (runtimeEnv().NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
       logger.debug(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
     }
     return entityIds;

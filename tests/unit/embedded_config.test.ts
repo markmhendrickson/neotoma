@@ -202,6 +202,116 @@ describe("embedded configuration", () => {
   });
 });
 
+describe("embedded instance reuse, retry and option validation", () => {
+  let f: Fixture;
+
+  beforeEach(async () => {
+    f = await makeFixture();
+    vi.resetModules();
+    stubHostEnvironment(f, "development");
+  });
+
+  afterEach(async () => {
+    const { clearEmbeddedConfig } = await import("../../src/config_embedded.ts");
+    clearEmbeddedConfig();
+    vi.unstubAllEnvs();
+    await fs.rm(f.root, { recursive: true, force: true });
+  });
+
+  it("returns the same instance for identical options and refuses any difference", async () => {
+    const { createEmbeddedNeotoma } = await import("../../src/embedded.ts");
+    const base = {
+      dataDir: f.explicitDataDir,
+      openaiApiKey: "synthetic-key-one",
+      env: { NEOTOMA_ENCRYPTION_ENABLED: "false" },
+      allowProcessEnv: ["NEOTOMA_PORT"],
+    };
+    const first = await createEmbeddedNeotoma(base);
+    // Same options (key order and a copied array do not matter) -> same instance.
+    const again = await createEmbeddedNeotoma({
+      allowProcessEnv: ["NEOTOMA_PORT"],
+      env: { NEOTOMA_ENCRYPTION_ENABLED: "false" },
+      openaiApiKey: "synthetic-key-one",
+      dataDir: f.explicitDataDir,
+    });
+    expect(again).toBe(first);
+
+    const different: Array<Record<string, unknown>> = [
+      { openaiApiKey: "synthetic-key-two" },
+      { env: { NEOTOMA_ENCRYPTION_ENABLED: "true" } },
+      { env: {} },
+      { allowProcessEnv: ["NEOTOMA_PORT", "NEOTOMA_HTTP_PORT"] },
+      { allowProcessEnv: [] },
+      { sqlitePath: path.join(f.explicitDataDir, "other.db") },
+      { environment: "production" },
+      { dataDir: path.join(f.root, "other-data") },
+    ];
+    for (const change of different) {
+      await expect(createEmbeddedNeotoma({ ...base, ...change } as never)).rejects.toMatchObject({
+        code: "config_already_loaded",
+      });
+    }
+    // The original instance is still the one returned for the original options.
+    expect(await createEmbeddedNeotoma(base)).toBe(first);
+  });
+
+  it("refuses a retry for a different data directory after the first call failed", async () => {
+    const blocker = path.join(f.root, "blocker");
+    await fs.writeFile(blocker, "not a directory");
+    const unusable = path.join(blocker, "data");
+    const { createEmbeddedNeotoma } = await import("../../src/embedded.ts");
+    await expect(createEmbeddedNeotoma({ dataDir: unusable })).rejects.toBeDefined();
+
+    // The loaded configuration still describes `unusable`; a retry for another directory
+    // must not silently report the first call's locations.
+    await expect(createEmbeddedNeotoma({ dataDir: f.explicitDataDir })).rejects.toMatchObject({
+      code: "config_already_loaded",
+    });
+    const { config } = await import("../../src/config.ts");
+    expect(config.dataDir).toBe(unusable);
+  });
+
+  it("rejects malformed allowProcessEnv, env and openaiApiKey with invalid_option", async () => {
+    const { resolveEmbeddedConfig, EmbeddedConfigError } =
+      await import("../../src/config_embedded.ts");
+    const { createEmbeddedNeotoma } = await import("../../src/embedded.ts");
+    const dataDir = f.explicitDataDir;
+    const bad: Array<Record<string, unknown>> = [
+      { allowProcessEnv: "NEOTOMA_PORT" },
+      { allowProcessEnv: [1] },
+      { allowProcessEnv: [""] },
+      { allowProcessEnv: [" NEOTOMA_PORT"] },
+      { allowProcessEnv: [null] },
+      { env: "NEOTOMA_PORT=1" },
+      { env: ["NEOTOMA_PORT"] },
+      { env: null },
+      { env: { NEOTOMA_PORT: 3000 } },
+      { env: { NEOTOMA_PORT: {} } },
+      { openaiApiKey: 12345 },
+      { openaiApiKey: {} },
+    ];
+    for (const extra of bad) {
+      const options = { dataDir, ...extra } as never;
+      expect(() => resolveEmbeddedConfig(options)).toThrow(EmbeddedConfigError);
+      await expect(createEmbeddedNeotoma(options)).rejects.toMatchObject({
+        code: "invalid_option",
+      });
+    }
+    await expect(createEmbeddedNeotoma(undefined as never)).rejects.toMatchObject({
+      code: "invalid_option",
+    });
+    // Valid shapes are accepted, including an undefined env value.
+    expect(() =>
+      resolveEmbeddedConfig({
+        dataDir,
+        allowProcessEnv: ["NEOTOMA_PORT"],
+        env: { NEOTOMA_PORT: "1", NEOTOMA_HTTP_PORT: undefined },
+        openaiApiKey: "k",
+      })
+    ).not.toThrow();
+  });
+});
+
 describe("standard (CLI and server) configuration is unchanged", () => {
   let f: Fixture;
 

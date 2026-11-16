@@ -52,6 +52,7 @@ import {
   type RenderTimelineEventInput,
   type RenderSchemaInput,
 } from "./canonical_markdown.js";
+import { runtimeEnv, userStateDir } from "../config_embedded.js";
 
 // ============================================================================
 // Config
@@ -176,9 +177,7 @@ export interface MirrorConfig {
 }
 
 function readUserConfig(): Record<string, unknown> | null {
-  const home = process.env.HOME || process.env.USERPROFILE;
-  if (!home) return null;
-  const configPath = path.join(home, ".config", "neotoma", "config.json");
+  const configPath = path.join(userStateDir(), "config.json");
   try {
     const raw = fsSync.readFileSync(configPath, "utf8");
     return JSON.parse(raw) as Record<string, unknown>;
@@ -188,9 +187,7 @@ function readUserConfig(): Record<string, unknown> | null {
 }
 
 function writeUserConfig(patch: Record<string, unknown>): void {
-  const home = process.env.HOME || process.env.USERPROFILE;
-  if (!home) return;
-  const dir = path.join(home, ".config", "neotoma");
+  const dir = userStateDir();
   const configPath = path.join(dir, "config.json");
   fsSync.mkdirSync(dir, { recursive: true });
   let current: Record<string, unknown> = {};
@@ -270,27 +267,28 @@ export function getMirrorConfig(): MirrorConfig {
     profiles: user?.profiles ?? defaults.profiles,
   };
 
-  if (process.env.NEOTOMA_MIRROR_ENABLED !== undefined) {
-    merged.enabled = process.env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
+  const env = runtimeEnv();
+  if (env.NEOTOMA_MIRROR_ENABLED !== undefined) {
+    merged.enabled = env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
   }
-  if (process.env.NEOTOMA_MIRROR_PATH) merged.path = process.env.NEOTOMA_MIRROR_PATH;
-  if (process.env.NEOTOMA_MIRROR_KINDS) {
-    merged.kinds = process.env.NEOTOMA_MIRROR_KINDS.split(",")
+  if (env.NEOTOMA_MIRROR_PATH) merged.path = env.NEOTOMA_MIRROR_PATH;
+  if (env.NEOTOMA_MIRROR_KINDS) {
+    merged.kinds = env.NEOTOMA_MIRROR_KINDS.split(",")
       .map((s) => s.trim() as MirrorKind)
       .filter((k) => ALL_MIRROR_KINDS.includes(k));
   }
-  if (process.env.NEOTOMA_MIRROR_GIT_ENABLED !== undefined) {
-    merged.git_enabled = process.env.NEOTOMA_MIRROR_GIT_ENABLED.toLowerCase() === "true";
+  if (env.NEOTOMA_MIRROR_GIT_ENABLED !== undefined) {
+    merged.git_enabled = env.NEOTOMA_MIRROR_GIT_ENABLED.toLowerCase() === "true";
   }
-  if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_ENABLED !== undefined) {
+  if (env.NEOTOMA_MIRROR_MEMORY_EXPORT_ENABLED !== undefined) {
     merged.memory_export.enabled =
-      process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_ENABLED.toLowerCase() === "true";
+      env.NEOTOMA_MIRROR_MEMORY_EXPORT_ENABLED.toLowerCase() === "true";
   }
-  if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_PATH) {
-    merged.memory_export.path = process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_PATH;
+  if (env.NEOTOMA_MIRROR_MEMORY_EXPORT_PATH) {
+    merged.memory_export.path = env.NEOTOMA_MIRROR_MEMORY_EXPORT_PATH;
   }
-  if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES) {
-    const n = parseInt(process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES, 10);
+  if (env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES) {
+    const n = parseInt(env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES, 10);
     if (Number.isFinite(n) && n > 0) merged.memory_export.limit_lines = n;
   }
 

@@ -27,6 +27,7 @@ import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js
 import { logger } from "../utils/logger.js";
 import { getCurrentAAuthAdmission } from "./request_context.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
@@ -363,7 +364,7 @@ export class LegacyAgentCapabilityEnvError extends Error {
  * during server boot (see {@link assertCapabilityEnvOnBoot} for the
  * Express-friendly wrapper used in `src/server.ts`).
  */
-export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = process.env): void {
+export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = runtimeEnv()): void {
   const present = LEGACY_CAPABILITY_ENV_VARS.filter((name) => {
     const value = env[name];
     return typeof value === "string" && value.trim().length > 0;
@@ -382,7 +383,7 @@ export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = process.env
  * agent is denied iff this flag is true and its tier is sufficient.
  */
 export function isAgentDefaultDenyEnabled(): boolean {
-  const raw = process.env.NEOTOMA_AGENT_DEFAULT_DENY;
+  const raw = runtimeEnv().NEOTOMA_AGENT_DEFAULT_DENY;
   if (!raw) return false;
   const normalised = raw.trim().toLowerCase();
   return normalised === "true" || normalised === "1" || normalised === "yes";

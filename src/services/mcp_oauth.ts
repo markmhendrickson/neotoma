@@ -13,6 +13,7 @@ import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
 import { clearDbCache, getDb } from "../repositories/db/connection.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
 import type { DbConnection } from "../repositories/db/driver.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 // Cached service role client instance
 let cachedServiceRoleClient: LocalDbClient | null = null;
@@ -82,8 +83,8 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 minutes before expir
 
 // Encryption key for refresh tokens (use environment variable or config)
 const ENCRYPTION_KEY =
-  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
-  process.env.MCP_TOKEN_ENCRYPTION_KEY ||
+  runtimeEnv().NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
+  runtimeEnv().MCP_TOKEN_ENCRYPTION_KEY ||
   config.mcpTokenEncryptionKey;
 const isLocalBackend = config.storageBackend === "local";
 
@@ -1210,7 +1211,7 @@ export async function initiateOAuthFlow(
 
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
   const frontendBase =
-    process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
+    runtimeEnv().NEOTOMA_FRONTEND_URL || runtimeEnv().FRONTEND_URL || "http://localhost:5195";
   const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
 
   if (isLocalBackend) {
@@ -1245,8 +1246,8 @@ export async function initiateOAuthFlow(
   // Default to NEOTOMA_HOST_URL (or discovered tunnel URL) so OAuth callbacks are reachable from internet
   // Still allow explicit NEOTOMA_OAUTH_REDIRECT_BASE_URL or OAUTH_REDIRECT_BASE_URL override for edge cases
   const oauthRedirectBase =
-    process.env.NEOTOMA_OAUTH_REDIRECT_BASE_URL ||
-    process.env.OAUTH_REDIRECT_BASE_URL ||
+    runtimeEnv().NEOTOMA_OAUTH_REDIRECT_BASE_URL ||
+    runtimeEnv().OAUTH_REDIRECT_BASE_URL ||
     config.apiBase;
   const oauthRedirectUri = `${oauthRedirectBase}/mcp/oauth/callback`;
 

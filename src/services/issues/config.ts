@@ -7,14 +7,13 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import type { GitHubAuthMethod, IssueReportingMode, IssuesConfig } from "./types.js";
 import { DEFAULT_ISSUES_CONFIG, DEFAULT_ISSUES_TARGET_URL } from "./types.js";
 import { ALLOWED_REPOS_ENV, parseAllowedRepos } from "./repo_allowlist.js";
+import { runtimeEnv, userStateDir } from "../../config_embedded.js";
 
 function configFilePath(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-  return path.join(home, ".config", "neotoma", "config.json");
+  return path.join(userStateDir(), "config.json");
 }
 
 interface ConfigShape {
@@ -44,34 +43,35 @@ async function writeConfig(cfg: ConfigShape): Promise<void> {
 export async function loadIssuesConfig(): Promise<IssuesConfig> {
   const cfg = await readConfig();
   const stored = cfg.issues ?? {};
+  const env = runtimeEnv();
 
-  const githubAuth: GitHubAuthMethod = process.env.NEOTOMA_ISSUES_GITHUB_TOKEN
+  const githubAuth: GitHubAuthMethod = env.NEOTOMA_ISSUES_GITHUB_TOKEN
     ? "token"
     : (stored.github_auth ?? DEFAULT_ISSUES_CONFIG.github_auth);
 
-  const repo = process.env.NEOTOMA_ISSUES_REPO ?? stored.repo ?? DEFAULT_ISSUES_CONFIG.repo;
+  const repo = env.NEOTOMA_ISSUES_REPO ?? stored.repo ?? DEFAULT_ISSUES_CONFIG.repo;
 
   // Extra repos `sync_issues` may target besides `repo`. The env var wins over the config
   // file when it is set at all (an empty value means "none": fail closed).
-  const envAllowedRepos = process.env[ALLOWED_REPOS_ENV];
+  const envAllowedRepos = env[ALLOWED_REPOS_ENV];
   const allowedRepos = parseAllowedRepos(
     envAllowedRepos !== undefined ? envAllowedRepos : stored.allowed_repos
   );
 
   const reportingMode: IssueReportingMode =
-    (process.env.NEOTOMA_ISSUES_REPORTING_MODE as IssueReportingMode | undefined) ??
+    (env.NEOTOMA_ISSUES_REPORTING_MODE as IssueReportingMode | undefined) ??
     stored.reporting_mode ??
     DEFAULT_ISSUES_CONFIG.reporting_mode;
 
-  const syncStalenessMs = process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS
-    ? parseInt(process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS, 10)
+  const syncStalenessMs = env.NEOTOMA_ISSUES_SYNC_STALENESS_MS
+    ? parseInt(env.NEOTOMA_ISSUES_SYNC_STALENESS_MS, 10)
     : (stored.sync_staleness_ms ?? DEFAULT_ISSUES_CONFIG.sync_staleness_ms);
 
   // When the env var is **absent**, fall back to stored config then the product
   // default operator URL. When it is **present** (including empty string), honor
   // it so isolated tests and operators can disable remote forwarding without
   // inheriting DEFAULT_ISSUES_TARGET_URL from this merge order.
-  const rawIssuesTargetEnv = process.env.NEOTOMA_ISSUES_TARGET_URL;
+  const rawIssuesTargetEnv = env.NEOTOMA_ISSUES_TARGET_URL;
   const hasIssuesTargetEnv = rawIssuesTargetEnv !== undefined;
   const envTargetTrimmed =
     typeof rawIssuesTargetEnv === "string" ? rawIssuesTargetEnv.trim() : rawIssuesTargetEnv;
@@ -86,7 +86,7 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
     typeof storedRaw === "string" && storedRaw.length > 0 ? storedRaw : undefined;
   const targetUrl =
     envTarget !== undefined ? envTarget : (storedTarget ?? DEFAULT_ISSUES_TARGET_URL);
-  const envAuthorAliasRaw = process.env.NEOTOMA_ISSUES_AUTHOR_ALIAS?.trim();
+  const envAuthorAliasRaw = env.NEOTOMA_ISSUES_AUTHOR_ALIAS?.trim();
   const envAuthorAlias =
     envAuthorAliasRaw && envAuthorAliasRaw.length > 0 ? envAuthorAliasRaw : undefined;
   const storedAuthorAliasRaw =

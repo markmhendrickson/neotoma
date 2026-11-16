@@ -7,6 +7,7 @@ import {
 
 import { RetrieveEntityByIdentifierSchema } from "../shared/action_schemas.js";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 type Terminal = "finish" | "close";
 
@@ -24,7 +25,7 @@ export type McpLookupTiming = {
 const pending = new WeakMap<Request, McpLookupTiming>();
 
 /** Capture first HTTP receipt, before parsing or authentication, without logging it. */
-export function createMcpLookupReceiptObserver(env: NodeJS.ProcessEnv = process.env) {
+export function createMcpLookupReceiptObserver(env: NodeJS.ProcessEnv = runtimeEnv()) {
   const header = env.NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_HEADER?.toLowerCase();
   const titlePrefix = env.NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_TITLE_PREFIX;
   if (!header || !/^x-[a-z0-9-]{1,55}-trace$/.test(header)) return;
