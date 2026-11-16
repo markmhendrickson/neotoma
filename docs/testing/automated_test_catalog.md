@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **852**
-- Backend and repo Vitest files: **798**
+- Total automated test files: **854**
+- Backend and repo Vitest files: **800**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,8 +72,8 @@ flowchart TD
 | Vitest unit tests | 240 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 246 |
-| Vitest CLI tests | 96 |
+| Vitest integration tests | 247 |
+| Vitest CLI tests | 97 |
 | Vitest contract tests | 30 |
 | Vitest security tests | 26 |
 | Vitest subscription tests | 7 |
@@ -511,7 +511,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (246):**
+**Files (247):**
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
@@ -589,6 +589,7 @@ flowchart TD
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
+- `tests/integration/field_provenance_contract_parity.test.ts`
 - `tests/integration/field_provenance_corrected_and_merged.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/flow_mutation_capability_coverage.test.ts`
@@ -764,7 +765,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (96):**
+**Files (97):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_aauth_bearer.test.ts`
@@ -789,6 +790,7 @@ flowchart TD
 - `tests/cli/cli_entity_commands.test.ts`
 - `tests/cli/cli_entity_subcommands.test.ts`
 - `tests/cli/cli_error_envelope_preservation.test.ts`
+- `tests/cli/cli_field_provenance.test.ts`
 - `tests/cli/cli_infra_commands.test.ts`
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`
