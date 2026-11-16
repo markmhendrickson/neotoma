@@ -1,14 +1,12 @@
 /** Natural built generic CLI effects; valid data is written through public commands. */
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config } from "../../src/config.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
-const execFileAsync = promisify(execFile);
 const FOREIGN = "00000000-0000-4000-8000-000000000099";
 const SECRET = "UNRELATED-SYNTHETIC-SECRET";
 const RECEIPT = "INTERNAL-SYNTHETIC-RECEIPT";
@@ -24,7 +22,7 @@ describe.each(["offline", "api"] as const)("generic CLI field provenance, %s", (
   let sql: any;
 
   async function cli(...args: string[]): Promise<Json> {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await execFileLocal(
       process.execPath,
       [
         resolve("dist/cli/index.js"),
