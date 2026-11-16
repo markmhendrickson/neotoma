@@ -297,4 +297,23 @@ describe("@neotoma/client correct()", () => {
 
     expect(correct).toHaveBeenCalledTimes(2);
   });
+
+  it("maps only correct_transaction; other tools post to /<name>", async () => {
+    const fetchMock = vi.fn(async (_url: unknown, _init?: unknown) => okJson({ ok: true }));
+    const transport = new HttpTransport({
+      baseUrl: "http://127.0.0.1:1",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    await transport.executeTool("correct_transaction", { entities: [] });
+    await transport.executeTool("some_other_tool", {});
+    await transport.executeTool("constructor", {});
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls).toEqual([
+      "http://127.0.0.1:1/corrections/transaction",
+      "http://127.0.0.1:1/some_other_tool",
+      "http://127.0.0.1:1/constructor",
+    ]);
+  });
 });

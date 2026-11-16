@@ -108,7 +108,7 @@ await client.correct({
 });
 ```
 
-The deprecated map overload remains for one release. It requires
+The deprecated map overload remains until 0.2.0, the next minor release. It requires
 `entity_type`, a nonempty `corrections` map, and a caller-supplied base
 `idempotency_key`. The client applies fields sequentially in sorted order and
 derives keys as `<base>:<field>`:
@@ -160,7 +160,9 @@ Over HTTP, `executeTool("correct_transaction", ...)` posts to
 `/corrections/transaction`.
 
 `snapshotOnUpdate()` uses the same canonical shape internally and only sends
-fields whose reviewed values differ from the retrieved snapshot:
+fields whose reviewed values differ from the retrieved snapshot. It now
+requires `entityType` and `idempotencyKey` (the base key; per-field keys are
+derived as `<base>:<field>`):
 
 ```ts
 await snapshotOnUpdate(client, {

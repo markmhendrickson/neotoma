@@ -138,7 +138,7 @@ export interface CorrectInput {
  * Legacy multi-field correction request.
  *
  * @deprecated Pass one {@link CorrectInput} per field. This adapter remains
- * for one release and requires a base `idempotency_key`, from which the client
+ * until 0.2.0, the next minor release and requires a base `idempotency_key`, from which the client
  * derives `<base>:<field>` keys in sorted field order.
  */
 export interface DeprecatedCorrectInput {
