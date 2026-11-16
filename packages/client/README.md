@@ -108,37 +108,32 @@ await client.correct({
 });
 ```
 
-The deprecated map overload remains until 0.2.0, the next minor release. It requires
-`entity_type`, a nonempty `corrections` map, and a caller-supplied base
-`idempotency_key`. The client applies fields sequentially in sorted order and
-derives keys as `<base>:<field>`:
+The deprecated map overload (`{ entity_id, entity_type, corrections, idempotency_key }`)
+remains for one more release (the next minor release). It accepts a map with exactly
+one entry and sends it as the single-field request above, using your
+`idempotency_key` unchanged. The client never derives or invents a retry key.
+A map with more than one field is refused with `MultiFieldCorrectionError`
+before any request is sent, so no field is written. The key must be a
+non-empty, non-whitespace string.
+
+Migration notes:
+
+- Replace `correct({ entity_id, corrections: { a, b } })` with one canonical
+  `correct()` call per field, each with its own caller-supplied key, or with
+  the atomic `correct_transaction` tool when fields must succeed or fail
+  together.
+- Sending several single-field calls is not atomic: an earlier call stays
+  committed if a later one fails.
+- Retrieving an entity before writing does not give compare-and-swap on its
+  own. To guard against an intervening writer, pass `expected_version`
+  (or the helper's `expectedVersion`); the client forwards it unchanged.
+- `correct_transaction` (REST `POST /corrections/transaction`) applies related
+  fields atomically:
 
 ```ts
-await client.correct({
+const { snapshot, observation_count } = (await client.retrieveEntitySnapshot({
   entity_id: entityId,
-  entity_type: "task",
-  corrections: { priority: "high", status: "done" },
-  idempotency_key: "task-update",
-});
-// Sends task-update:priority, then task-update:status.
-```
-
-The base key must be a non-empty, non-whitespace string. Multi-field calls
-are sequential and **not atomic**: earlier fields remain committed if a later
-field fails. With `expected_version` (or the helper's `expectedVersion`), the
-client sends that version for the first field, then uses each successful
-correction's returned `entity_version` for the next field. An intervening
-writer causes a version conflict; the client never drops the precondition or
-forces an overwrite. The error names the fields already committed. Re-read
-the entity, reconcile its current values, then retry only the uncommitted
-fields with a fresh base key and the current entity version. Use the MCP
-`correct_transaction` tool (REST `POST /corrections/transaction`) when all
-fields must succeed or fail together:
-
-```ts
-const { snapshot, observation_count } = await client.retrieveEntitySnapshot({
-  entity_id: entityId,
-});
+})) as { snapshot: Record<string, unknown>; observation_count: number };
 await client.executeTool("correct_transaction", {
   idempotency_key: "task-atomic-update",
   entities: [
@@ -159,19 +154,25 @@ await client.executeTool("correct_transaction", {
 Over HTTP, `executeTool("correct_transaction", ...)` posts to
 `/corrections/transaction`.
 
-`snapshotOnUpdate()` uses the same canonical shape internally and only sends
-fields whose reviewed values differ from the retrieved snapshot. It now
-requires `entityType` and `idempotencyKey` (the base key; per-field keys are
-derived as `<base>:<field>`):
+`snapshotOnUpdate()` retrieves the snapshot, runs your `review` callback, and
+skips fields whose reviewed values already match. If exactly one field
+changed, it sends one single-field correction with your `idempotencyKey`
+unchanged and any `expectedVersion` you pass. If more than one field changed
+it throws `MultiFieldCorrectionError` before writing anything. It requires
+`entityType` and `idempotencyKey`, and returns the correction in
+`correctionResult`:
 
 ```ts
 await snapshotOnUpdate(client, {
   entityId,
   entityType: "task",
-  corrections: { priority: "high", status: "done" },
+  corrections: { status: "done" },
   idempotencyKey: "task-reviewed-update",
 });
 ```
+
+A compiled-consumer type example lives in `examples/correct_consumer.ts` and is
+type-checked in CI.
 
 ## Related packages
 

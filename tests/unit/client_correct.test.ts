@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NeotomaClient } from "../../packages/client/src/client.js";
-import { SequentialCorrectionError } from "../../packages/client/src/correction.js";
+import { MultiFieldCorrectionError } from "../../packages/client/src/correction.js";
 import { HttpTransport } from "../../packages/client/src/http.js";
 import { LocalTransport, type LocalOperations } from "../../packages/client/src/local.js";
 import type {
@@ -64,19 +64,13 @@ describe("@neotoma/client correct()", () => {
     expect(JSON.parse(String(init?.body))).toEqual(input);
   });
 
-  it("adapts a deprecated map request into sorted per-field HTTP calls", async () => {
-    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      const field = JSON.parse(String(init?.body)).field;
-      return okJson({
-        field,
-        entity_version: field === "priority" ? "version-3" : "version-4",
-      });
-    });
+  it("converts a single-entry deprecated map into the canonical request with the caller's key unchanged", async () => {
+    const fetchImpl = vi.fn(async () => okJson({ success: true, entity_version: "version-3" }));
     const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
     const input: DeprecatedCorrectInput = {
       entity_id: "ent_sdk_fixture",
       entity_type: "sdk_fixture",
-      corrections: { status: "done", priority: "high" },
+      corrections: { status: "done" },
       idempotency_key: "sdk-map",
       user_id: "user-sdk-fixture",
       expected_version: "version-2",
@@ -85,32 +79,18 @@ describe("@neotoma/client correct()", () => {
 
     const result = await transport.correct(input);
 
-    expect(result).toEqual([
-      { field: "priority", entity_version: "version-3" },
-      { field: "status", entity_version: "version-4" },
-    ]);
-    expect(fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
-      {
-        entity_id: "ent_sdk_fixture",
-        entity_type: "sdk_fixture",
-        field: "priority",
-        value: "high",
-        idempotency_key: "sdk-map:priority",
-        user_id: "user-sdk-fixture",
-        expected_version: "version-2",
-        overwrite: false,
-      },
-      {
-        entity_id: "ent_sdk_fixture",
-        entity_type: "sdk_fixture",
-        field: "status",
-        value: "done",
-        idempotency_key: "sdk-map:status",
-        user_id: "user-sdk-fixture",
-        expected_version: "version-3",
-        overwrite: false,
-      },
-    ]);
+    expect(result).toEqual({ success: true, entity_version: "version-3" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toEqual({
+      entity_id: "ent_sdk_fixture",
+      entity_type: "sdk_fixture",
+      field: "status",
+      value: "done",
+      idempotency_key: "sdk-map",
+      user_id: "user-sdk-fixture",
+      expected_version: "version-2",
+      overwrite: false,
+    });
   });
 
   it("rejects an empty deprecated corrections map before making a request", async () => {
@@ -128,65 +108,8 @@ describe("@neotoma/client correct()", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["missing", undefined],
-    ["empty", ""],
-    ["whitespace-only", " \t "],
-    ["non-string", 42],
-  ])(
-    "rejects a %s deprecated idempotency base before HTTP correction calls",
-    async (_label, idempotencyKey) => {
-      const fetchImpl = vi.fn(async () => okJson({ success: true }));
-      const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
-
-      await expect(
-        transport.correct({
-          entity_id: "ent_sdk_fixture",
-          entity_type: "sdk_fixture",
-          corrections: { status: "done" },
-          idempotency_key: idempotencyKey,
-        } as unknown as DeprecatedCorrectInput)
-      ).rejects.toThrow("non-empty idempotency key base");
-      expect(fetchImpl).not.toHaveBeenCalled();
-    }
-  );
-
-  it.each([
-    ["missing", undefined],
-    ["empty", ""],
-    ["whitespace-only", " \t "],
-    ["non-string", 42],
-  ])(
-    "rejects a %s deprecated idempotency base before local correction calls",
-    async (_label, idempotencyKey) => {
-      const correct = vi.fn(async () => ({ success: true }));
-      const transport = new LocalTransport({
-        userId: "user-sdk-fixture",
-        operations: makeLocalOperations(correct),
-      });
-
-      await expect(
-        transport.correct({
-          entity_id: "ent_sdk_fixture",
-          entity_type: "sdk_fixture",
-          corrections: { status: "done" },
-          idempotency_key: idempotencyKey,
-        } as unknown as DeprecatedCorrectInput)
-      ).rejects.toThrow("non-empty idempotency key base");
-      expect(correct).not.toHaveBeenCalled();
-    }
-  );
-
-  it("reports fields committed before a later deprecated correction fails", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(okJson({ field: "priority", entity_version: "version-3" }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: { code: "ERR_FIELD_VERSION_CONFLICT" } }), {
-          status: 409,
-          headers: { "Content-Type": "application/json" },
-        })
-      );
+  it("refuses a multi-field deprecated map over HTTP before any request, naming correct_transaction", async () => {
+    const fetchImpl = vi.fn(async () => okJson({ success: true }));
     const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
 
     let failure: unknown;
@@ -195,20 +118,37 @@ describe("@neotoma/client correct()", () => {
         entity_id: "ent_sdk_fixture",
         entity_type: "sdk_fixture",
         corrections: { status: "done", priority: "high" },
-        idempotency_key: "sdk-partial",
-        expected_version: "version-2",
+        idempotency_key: "sdk-multi",
       });
     } catch (error) {
       failure = error;
     }
 
-    expect(failure).toBeInstanceOf(SequentialCorrectionError);
-    expect((failure as SequentialCorrectionError).committedFields).toEqual(["priority"]);
-    expect((failure as Error).message).toContain("Fields already committed: priority");
+    expect(failure).toBeInstanceOf(MultiFieldCorrectionError);
+    expect((failure as MultiFieldCorrectionError).fields).toEqual(["priority", "status"]);
     expect((failure as Error).message).toContain("correct_transaction");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("does not send a second preconditioned field without a returned entity version", async () => {
+  it("refuses a multi-field deprecated map over local operations before any call", async () => {
+    const correct = vi.fn(async () => ({ success: true }));
+    const transport = new LocalTransport({
+      userId: "user-sdk-fixture",
+      operations: makeLocalOperations(correct),
+    });
+
+    await expect(
+      transport.correct({
+        entity_id: "ent_sdk_fixture",
+        entity_type: "sdk_fixture",
+        corrections: { status: "done", priority: "high" },
+        idempotency_key: "sdk-multi-local",
+      })
+    ).rejects.toBeInstanceOf(MultiFieldCorrectionError);
+    expect(correct).not.toHaveBeenCalled();
+  });
+
+  it("rejects input carrying both corrections and field before any request", async () => {
     const fetchImpl = vi.fn(async () => okJson({ success: true }));
     const transport = new HttpTransport({ fetch: fetchImpl as typeof fetch });
 
@@ -216,15 +156,42 @@ describe("@neotoma/client correct()", () => {
       transport.correct({
         entity_id: "ent_sdk_fixture",
         entity_type: "sdk_fixture",
-        corrections: { status: "done", priority: "high" },
-        idempotency_key: "sdk-missing-version",
-        expected_version: "version-2",
-      })
-    ).rejects.toMatchObject({ committedFields: ["priority"], failedField: "status" });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+        field: "status",
+        value: "done",
+        corrections: { priority: "high" },
+        idempotency_key: "sdk-mixed",
+      } as unknown as CorrectInput)
+    ).rejects.toThrow("not both");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("uses the same canonical and deprecated request behavior for local operations", async () => {
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["whitespace-only", " \t "],
+    ["non-string", 42],
+  ])("rejects a %s deprecated idempotency key before any correction call", async (_label, key) => {
+    const fetchImpl = vi.fn(async () => okJson({ success: true }));
+    const correct = vi.fn(async () => ({ success: true }));
+    const http = new HttpTransport({ fetch: fetchImpl as typeof fetch });
+    const local = new LocalTransport({
+      userId: "user-sdk-fixture",
+      operations: makeLocalOperations(correct),
+    });
+    const request = {
+      entity_id: "ent_sdk_fixture",
+      entity_type: "sdk_fixture",
+      corrections: { status: "done" },
+      idempotency_key: key,
+    } as unknown as DeprecatedCorrectInput;
+
+    await expect(http.correct(request)).rejects.toThrow("caller-supplied idempotency key");
+    await expect(local.correct(request)).rejects.toThrow("caller-supplied idempotency key");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(correct).not.toHaveBeenCalled();
+  });
+
+  it("uses the same canonical and single-entry deprecated behavior for local operations", async () => {
     const correct = vi.fn(async (input: CorrectInput) => ({ field: input.field }));
     const transport = new LocalTransport({
       userId: "user-sdk-fixture",
@@ -242,7 +209,7 @@ describe("@neotoma/client correct()", () => {
     const legacyResult = await transport.correct({
       entity_id: "ent_sdk_fixture",
       entity_type: "sdk_fixture",
-      corrections: { zeta: 2, alpha: 1 },
+      corrections: { alpha: 1 },
       idempotency_key: "sdk-local-map",
       overwrite: true,
     });
@@ -261,19 +228,11 @@ describe("@neotoma/client correct()", () => {
         entity_type: "sdk_fixture",
         field: "alpha",
         value: 1,
-        idempotency_key: "sdk-local-map:alpha",
-        overwrite: true,
-      },
-      {
-        entity_id: "ent_sdk_fixture",
-        entity_type: "sdk_fixture",
-        field: "zeta",
-        value: 2,
-        idempotency_key: "sdk-local-map:zeta",
+        idempotency_key: "sdk-local-map",
         overwrite: true,
       },
     ]);
-    expect(legacyResult).toEqual([{ field: "alpha" }, { field: "zeta" }]);
+    expect(legacyResult).toEqual({ field: "alpha" });
   });
 
   it("exposes both overloads through the NeotomaClient facade", async () => {

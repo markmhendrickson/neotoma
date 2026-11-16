@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MultiFieldCorrectionError } from "../../packages/client/src/correction.js";
 import {
   extractStoredEntities,
   recordConversationTurn,
@@ -353,22 +354,16 @@ describe("recordConversationTurn", () => {
 });
 
 describe("snapshotOnUpdate", () => {
-  it("retrieves the snapshot before correcting each changed field in sorted order", async () => {
+  it("retrieves the snapshot, then sends one single-field correction with the caller's key", async () => {
     const calls: string[] = [];
     const correct = vi.fn(async (input: { field: string }) => {
       calls.push(`correct:${input.field}`);
-      return {
-        field: input.field,
-        entity_version: input.field === "priority" ? "version-2" : "version-3",
-      };
+      return { field: input.field, entity_version: "version-2" };
     });
     const transport = makeStubTransport({
       retrieveEntitySnapshot: vi.fn(async () => {
         calls.push("snapshot");
-        return {
-          entity_id: "ent-1",
-          snapshot: { status: "old", unchanged: "same" },
-        };
+        return { entity_id: "ent-1", snapshot: { status: "old", unchanged: "same" } };
       }),
       correct,
     });
@@ -376,38 +371,54 @@ describe("snapshotOnUpdate", () => {
     const result = await snapshotOnUpdate(transport, {
       entityId: "ent-1",
       entityType: "sdk_fixture",
-      corrections: { unchanged: "same", status: "new", priority: "high" },
+      corrections: { unchanged: "same", status: "new" },
       idempotencyKey: "helper-update",
       expectedVersion: "version-1",
       overwrite: true,
     });
 
     expect(result.applied).toBe(true);
-    expect(calls).toEqual(["snapshot", "correct:priority", "correct:status"]);
+    expect(calls).toEqual(["snapshot", "correct:status"]);
     expect(correct.mock.calls.map(([input]) => input)).toEqual([
-      {
-        entity_id: "ent-1",
-        entity_type: "sdk_fixture",
-        field: "priority",
-        value: "high",
-        idempotency_key: "helper-update:priority",
-        expected_version: "version-1",
-        overwrite: true,
-      },
       {
         entity_id: "ent-1",
         entity_type: "sdk_fixture",
         field: "status",
         value: "new",
-        idempotency_key: "helper-update:status",
-        expected_version: "version-2",
+        idempotency_key: "helper-update",
+        expected_version: "version-1",
         overwrite: true,
       },
     ]);
-    expect(result.correctionResults).toEqual([
-      { field: "priority", entity_version: "version-2" },
-      { field: "status", entity_version: "version-3" },
-    ]);
+    expect(result.correctionResult).toEqual({ field: "status", entity_version: "version-2" });
+  });
+
+  it("refuses two changed fields before any write, naming correct_transaction", async () => {
+    const correct = vi.fn(async () => ({}));
+    const transport = makeStubTransport({
+      retrieveEntitySnapshot: vi.fn(async () => ({
+        entity_id: "ent-1",
+        snapshot: { status: "old", priority: "low" },
+      })),
+      correct,
+    });
+
+    let failure: unknown;
+    try {
+      await snapshotOnUpdate(transport, {
+        entityId: "ent-1",
+        entityType: "sdk_fixture",
+        corrections: { status: "new", priority: "high" },
+        idempotencyKey: "helper-multi",
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(MultiFieldCorrectionError);
+    expect((failure as MultiFieldCorrectionError).fields).toEqual(["priority", "status"]);
+    expect((failure as Error).message).toContain("correct_transaction");
+    expect(correct).not.toHaveBeenCalled();
   });
 
   describe.each(["HTTP", "local"] as const)("%s transport", (transportKind) => {
@@ -417,7 +428,7 @@ describe("snapshotOnUpdate", () => {
       ["whitespace-only", " \t "],
       ["non-string", 42],
     ])(
-      "rejects a %s snapshotOnUpdate idempotency base before correction calls",
+      "rejects a %s snapshotOnUpdate idempotency key before correction calls",
       async (_label, idempotencyKey) => {
         const correct = vi.fn(async () => ({ entity_version: "version-2" }));
         let transport: Pick<NeotomaTransport, "retrieveEntitySnapshot" | "correct">;
@@ -449,7 +460,7 @@ describe("snapshotOnUpdate", () => {
             corrections: { status: "new" },
             idempotencyKey,
           } as unknown as Parameters<typeof snapshotOnUpdate>[1])
-        ).rejects.toThrow("non-empty idempotency key base");
+        ).rejects.toThrow("caller-supplied idempotency key");
 
         expect(correct).not.toHaveBeenCalled();
         if (fetchImpl) expect(fetchImpl).not.toHaveBeenCalled();
@@ -497,7 +508,7 @@ describe("snapshotOnUpdate", () => {
       entity_type: "sdk_fixture",
       field: "status",
       value: "reconciled",
-      idempotency_key: "helper-review:status",
+      idempotency_key: "helper-review",
     });
   });
 
@@ -519,7 +530,7 @@ describe("snapshotOnUpdate", () => {
     });
 
     expect(result.applied).toBe(false);
-    expect(result.correctionResults).toEqual([]);
+    expect(result.correctionResult).toBeUndefined();
     expect(correct).not.toHaveBeenCalled();
   });
 });

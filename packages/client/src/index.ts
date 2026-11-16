@@ -7,6 +7,8 @@ export type { HttpTransportOptions } from "./http.js";
 export { LocalTransport } from "./local.js";
 export type { LocalTransportOptions, LocalOperations } from "./local.js";
 
+export { MultiFieldCorrectionError } from "./correction.js";
+
 export {
   NeotomaClientError,
   type CorrectInput,

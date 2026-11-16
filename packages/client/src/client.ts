@@ -72,12 +72,12 @@ export class NeotomaClient implements NeotomaTransport {
     return this.transport.createRelationships(input);
   }
   correct(input: CorrectInput): Promise<unknown>;
-  /** @deprecated Pass one canonical CorrectInput per field. */
-  correct(input: DeprecatedCorrectInput): Promise<unknown[]>;
-  correct(input: CorrectRequest): Promise<unknown | unknown[]> {
+  /** @deprecated Pass one canonical CorrectInput. A map with more than one field is refused. */
+  correct(input: DeprecatedCorrectInput): Promise<unknown>;
+  correct(input: CorrectRequest): Promise<unknown> {
     const correct = this.transport.correct as (
       request: CorrectRequest
-    ) => Promise<unknown | unknown[]>;
+    ) => Promise<unknown>;
     return correct.call(this.transport, input);
   }
   listEntityTypes(input: { search?: string } = {}): Promise<unknown> {

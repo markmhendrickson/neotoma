@@ -1,9 +1,11 @@
 import { createServer } from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { NeotomaClient } from "../../packages/client/src/client.js";
-import { SequentialCorrectionError } from "../../packages/client/src/correction.js";
+import { MultiFieldCorrectionError } from "../../packages/client/src/correction.js";
 import { snapshotOnUpdate } from "../../packages/client/src/helpers.js";
+import { LocalTransport, type LocalOperations } from "../../packages/client/src/local.js";
 import { app } from "../../src/actions.js";
+import { createOperations } from "../../src/core/operations.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { cleanupEntityType, cleanupTestSchema } from "../helpers/cleanup_helpers.js";
@@ -16,6 +18,33 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
   let entityId: string;
   let runKey: string;
   let baseUrl: string;
+
+  // The server marks a replay with `replayed: true` and returns the original
+  // observation; entity_version reflects the entity's current version.
+  function expectReplayOfSameEffect(first: unknown, second: unknown): void {
+    const a = first as Record<string, unknown>;
+    const b = second as Record<string, unknown>;
+    expect(a.replayed).toBe(false);
+    expect(b.replayed).toBe(true);
+    expect(b.observation_id).toBe(a.observation_id);
+    expect(b.field).toBe(a.field);
+    expect(b.value).toBe(a.value);
+  }
+
+  function countingClient(): { client: NeotomaClient; correctCalls: () => number } {
+    let calls = 0;
+    const counting = new NeotomaClient({
+      transport: "http",
+      baseUrl,
+      fetch: (input, init) => {
+        if (String(input).endsWith("/correct")) calls += 1;
+        const headers = new Headers(init?.headers);
+        headers.delete("Authorization");
+        return fetch(input, { ...init, headers });
+      },
+    });
+    return { client: counting, correctCalls: () => calls };
+  }
 
   async function seedEntity(suffix: string): Promise<string> {
     const stored = await client.store({
@@ -146,7 +175,7 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
     });
 
     expect(helperResult.applied).toBe(true);
-    expect(helperResult.correctionResults).toHaveLength(1);
+    expect(helperResult.correctionResult).toBeDefined();
     const afterHelper = (await client.retrieveEntitySnapshot({
       entity_id: entityId,
     })) as { snapshot?: Record<string, unknown> };
@@ -156,201 +185,207 @@ describe("@neotoma/client correct() against the real HTTP server", () => {
     });
   });
 
-  it("persists both deprecated map fields with a chained version precondition", async () => {
-    const id = await seedEntity("map-cas");
-    const before = await readEntity(id);
+  it("persists a single-entry deprecated map using the caller's key unchanged", async () => {
+    const id = await seedEntity("map-single");
 
-    const results = await client.correct({
+    await client.correct({
       entity_id: id,
       entity_type: TYPE,
-      corrections: { status: "map-updated", note: "map-updated" },
-      idempotency_key: `${runKey}-map-cas`,
-      expected_version: before.entity_version,
+      corrections: { status: "map-updated" },
+      idempotency_key: `${runKey}-map-single`,
     });
 
-    expect(results).toHaveLength(2);
     expect((await readEntity(id)).snapshot).toMatchObject({
-      note: "map-updated",
+      note: "seeded",
       status: "map-updated",
     });
   });
 
-  it("persists both snapshotOnUpdate fields with a chained version precondition", async () => {
-    const id = await seedEntity("helper-cas");
-    const before = await readEntity(id);
+  it("replays the same key over HTTP as one effect with the same result", async () => {
+    const id = await seedEntity("replay");
+    const key = `${runKey}-replay`;
+    const request = {
+      entity_id: id,
+      entity_type: TYPE,
+      field: "status",
+      value: "replayed",
+      idempotency_key: key,
+    };
 
-    const result = await snapshotOnUpdate(client, {
-      entityId: id,
-      entityType: TYPE,
-      corrections: { status: "helper-cas-updated", note: "helper-cas-updated" },
-      idempotencyKey: `${runKey}-helper-cas`,
-      expectedVersion: before.entity_version,
-    });
-
-    expect(result.correctionResults).toHaveLength(2);
-    expect((await readEntity(id)).snapshot).toMatchObject({
-      note: "helper-cas-updated",
-      status: "helper-cas-updated",
-    });
-  });
-
-  it("refuses a stale caller version before either map field is written", async () => {
-    const id = await seedEntity("stale-cas");
-    const before = await readEntity(id);
+    const first = await client.correct(request);
     await client.correct({
       entity_id: id,
       entity_type: TYPE,
       field: "status",
-      value: "intervening-writer",
-      idempotency_key: `${runKey}-intervening-writer`,
+      value: "later-writer",
+      idempotency_key: `${key}-later`,
     });
+    const second = await client.correct(request);
+
+    expectReplayOfSameEffect(first, second);
+    // The replay did not write a second observation over the later writer.
+    expect((await readEntity(id)).snapshot.status).toBe("later-writer");
+  });
+
+  it("refuses a multi-field deprecated map over HTTP with no request and nothing persisted", async () => {
+    const id = await seedEntity("refuse-map");
+    const { client: counting, correctCalls } = countingClient();
+
+    await expect(
+      counting.correct({
+        entity_id: id,
+        entity_type: TYPE,
+        corrections: { status: "refused", note: "refused" },
+        idempotency_key: `${runKey}-refuse-map`,
+      })
+    ).rejects.toBeInstanceOf(MultiFieldCorrectionError);
+    await counting.dispose();
+
+    expect(correctCalls()).toBe(0);
+    expect((await readEntity(id)).snapshot).toMatchObject({ note: "seeded", status: "seeded" });
+  });
+
+  it("refuses a multi-field snapshotOnUpdate over HTTP with no write and nothing persisted", async () => {
+    const id = await seedEntity("refuse-helper");
+    const { client: counting, correctCalls } = countingClient();
+
+    await expect(
+      snapshotOnUpdate(counting, {
+        entityId: id,
+        entityType: TYPE,
+        corrections: { status: "refused", note: "refused" },
+        idempotencyKey: `${runKey}-refuse-helper`,
+      })
+    ).rejects.toBeInstanceOf(MultiFieldCorrectionError);
+    await counting.dispose();
+
+    expect(correctCalls()).toBe(0);
+    expect((await readEntity(id)).snapshot).toMatchObject({ note: "seeded", status: "seeded" });
+  });
+
+  it("forwards expected_version unchanged: current version applies, stale version is refused", async () => {
+    const id = await seedEntity("version");
+    const before = await readEntity(id);
+
+    await snapshotOnUpdate(client, {
+      entityId: id,
+      entityType: TYPE,
+      corrections: { status: "version-current" },
+      idempotencyKey: `${runKey}-version-current`,
+      expectedVersion: before.entity_version,
+    });
+    expect((await readEntity(id)).snapshot.status).toBe("version-current");
 
     await expect(
       client.correct({
         entity_id: id,
         entity_type: TYPE,
-        corrections: { status: "stale-caller", note: "stale-caller" },
-        idempotency_key: `${runKey}-stale-cas`,
+        field: "note",
+        value: "version-stale",
+        idempotency_key: `${runKey}-version-stale`,
         expected_version: before.entity_version,
       })
-    ).rejects.toMatchObject({ committedFields: [] });
-
+    ).rejects.toBeDefined();
     expect((await readEntity(id)).snapshot).toMatchObject({
       note: "seeded",
-      status: "intervening-writer",
+      status: "version-current",
     });
   });
 
-  it("reports a partial conflict and retries only the uncommitted field", async () => {
-    const id = await seedEntity("partial-cas");
-    const before = await readEntity(id);
-    let intervened = false;
-    const racingClient = new NeotomaClient({
-      transport: "http",
-      baseUrl,
-      fetch: async (input, init) => {
-        const headers = new Headers(init?.headers);
-        headers.delete("Authorization");
-        const response = await fetch(input, { ...init, headers });
-        if (
-          !intervened &&
-          String(input).endsWith("/correct") &&
-          JSON.parse(String(init?.body)).field === "note"
-        ) {
-          intervened = true;
-          await client.correct({
-            entity_id: id,
-            entity_type: TYPE,
-            field: "status",
-            value: "intervening-writer",
-            idempotency_key: `${runKey}-partial-writer`,
-          });
-        }
-        return response;
-      },
-    });
+  describe("local transport", () => {
+    function localTransport(
+      spy?: ReturnType<typeof vi.fn>
+    ): { transport: LocalTransport; calls: () => number } {
+      const operations = createOperations({ userId: LOCAL_DEV_USER_ID });
+      const wrapped = {
+        ...operations,
+        correct: (input: Parameters<LocalOperations["correct"]>[0]) => {
+          spy?.(input);
+          return operations.correct(input);
+        },
+      } as unknown as LocalOperations;
+      return {
+        transport: new LocalTransport({ userId: LOCAL_DEV_USER_ID, operations: wrapped }),
+        calls: () => spy?.mock.calls.length ?? 0,
+      };
+    }
 
-    let failure: unknown;
-    try {
-      await racingClient.correct({
+    it("persists a canonical correction and a single-field snapshotOnUpdate", async () => {
+      const id = await seedEntity("local-effect");
+      const { transport } = localTransport();
+
+      await transport.correct({
         entity_id: id,
         entity_type: TYPE,
-        corrections: { status: "retry-complete", note: "first-committed" },
-        idempotency_key: `${runKey}-partial-initial`,
-        expected_version: before.entity_version,
+        field: "status",
+        value: "local-canonical",
+        idempotency_key: `${runKey}-local-canonical`,
       });
-    } catch (error) {
-      failure = error;
-    } finally {
-      await racingClient.dispose();
-    }
+      expect((await readEntity(id)).snapshot.status).toBe("local-canonical");
 
-    expect(intervened).toBe(true);
-    expect(failure).toBeInstanceOf(SequentialCorrectionError);
-    expect((failure as SequentialCorrectionError).committedFields).toEqual(["note"]);
-    expect((failure as Error).message).toContain("Fields already committed: note");
-    expect((await readEntity(id)).snapshot).toMatchObject({
-      note: "first-committed",
-      status: "intervening-writer",
-    });
-
-    const retryVersion = (await readEntity(id)).entity_version;
-    await client.correct({
-      entity_id: id,
-      entity_type: TYPE,
-      corrections: { status: "retry-complete" },
-      idempotency_key: `${runKey}-partial-retry`,
-      expected_version: retryVersion,
-    });
-    expect((await readEntity(id)).snapshot).toMatchObject({
-      note: "first-committed",
-      status: "retry-complete",
-    });
-  });
-
-  it("reports a snapshotOnUpdate partial conflict and retries only the uncommitted field", async () => {
-    const id = await seedEntity("helper-partial");
-    const before = await readEntity(id);
-    let intervened = false;
-    const racingClient = new NeotomaClient({
-      transport: "http",
-      baseUrl,
-      fetch: async (input, init) => {
-        const headers = new Headers(init?.headers);
-        headers.delete("Authorization");
-        const response = await fetch(input, { ...init, headers });
-        if (
-          !intervened &&
-          String(input).endsWith("/correct") &&
-          JSON.parse(String(init?.body)).field === "note"
-        ) {
-          intervened = true;
-          await client.correct({
-            entity_id: id,
-            entity_type: TYPE,
-            field: "status",
-            value: "intervening-writer",
-            idempotency_key: `${runKey}-helper-partial-writer`,
-          });
-        }
-        return response;
-      },
-    });
-
-    let failure: unknown;
-    try {
-      await snapshotOnUpdate(racingClient, {
+      const result = await snapshotOnUpdate(transport, {
         entityId: id,
         entityType: TYPE,
-        corrections: { status: "retry-complete", note: "first-committed" },
-        idempotencyKey: `${runKey}-helper-partial-initial`,
-        expectedVersion: before.entity_version,
+        corrections: { note: "local-helper" },
+        idempotencyKey: `${runKey}-local-helper`,
       });
-    } catch (error) {
-      failure = error;
-    } finally {
-      await racingClient.dispose();
-    }
-
-    expect(intervened).toBe(true);
-    expect(failure).toBeInstanceOf(SequentialCorrectionError);
-    expect((failure as SequentialCorrectionError).committedFields).toEqual(["note"]);
-    expect((await readEntity(id)).snapshot).toMatchObject({
-      note: "first-committed",
-      status: "intervening-writer",
+      expect(result.applied).toBe(true);
+      expect((await readEntity(id)).snapshot).toMatchObject({
+        status: "local-canonical",
+        note: "local-helper",
+      });
     });
 
-    const retryVersion = (await readEntity(id)).entity_version;
-    await snapshotOnUpdate(client, {
-      entityId: id,
-      entityType: TYPE,
-      corrections: { status: "retry-complete" },
-      idempotencyKey: `${runKey}-helper-partial-retry`,
-      expectedVersion: retryVersion,
+    it("replays the same key as one effect with the same result", async () => {
+      const id = await seedEntity("local-replay");
+      const { transport } = localTransport();
+      const key = `${runKey}-local-replay`;
+      const request = {
+        entity_id: id,
+        entity_type: TYPE,
+        field: "status",
+        value: "local-replayed",
+        idempotency_key: key,
+      };
+
+      const first = await transport.correct(request);
+      await transport.correct({
+        entity_id: id,
+        entity_type: TYPE,
+        field: "status",
+        value: "local-later",
+        idempotency_key: `${key}-later`,
+      });
+      const second = await transport.correct(request);
+
+      expectReplayOfSameEffect(first, second);
+      expect((await readEntity(id)).snapshot.status).toBe("local-later");
     });
-    expect((await readEntity(id)).snapshot).toMatchObject({
-      note: "first-committed",
-      status: "retry-complete",
+
+    it("refuses multi-field input with no operation call and nothing persisted", async () => {
+      const id = await seedEntity("local-refuse");
+      const spy = vi.fn();
+      const { transport, calls } = localTransport(spy);
+
+      await expect(
+        transport.correct({
+          entity_id: id,
+          entity_type: TYPE,
+          corrections: { status: "refused", note: "refused" },
+          idempotency_key: `${runKey}-local-refuse-map`,
+        })
+      ).rejects.toBeInstanceOf(MultiFieldCorrectionError);
+      await expect(
+        snapshotOnUpdate(transport, {
+          entityId: id,
+          entityType: TYPE,
+          corrections: { status: "refused", note: "refused" },
+          idempotencyKey: `${runKey}-local-refuse-helper`,
+        })
+      ).rejects.toBeInstanceOf(MultiFieldCorrectionError);
+
+      expect(calls()).toBe(0);
+      expect((await readEntity(id)).snapshot).toMatchObject({ note: "seeded", status: "seeded" });
     });
   });
 

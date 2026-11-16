@@ -163,9 +163,9 @@ export class HttpTransport implements NeotomaTransport {
   }
 
   async correct(input: CorrectInput): Promise<unknown>;
-  /** @deprecated Pass one canonical CorrectInput per field. */
-  async correct(input: DeprecatedCorrectInput): Promise<unknown[]>;
-  async correct(input: CorrectRequest): Promise<unknown | unknown[]> {
+  /** @deprecated Pass one canonical CorrectInput. A map with more than one field is refused. */
+  async correct(input: DeprecatedCorrectInput): Promise<unknown>;
+  async correct(input: CorrectRequest): Promise<unknown> {
     return executeCorrectRequest(input, (request) => this.post("/correct", request));
   }
 

@@ -2,97 +2,57 @@ import type { CorrectInput, DeprecatedCorrectInput } from "./types.js";
 
 export type CorrectRequest = CorrectInput | DeprecatedCorrectInput;
 
-export function isDeprecatedCorrectInput(input: CorrectRequest): input is DeprecatedCorrectInput {
-  return "corrections" in input;
+/**
+ * Raised, before any request is sent, when a caller asks for more than one
+ * field to be corrected through an adapter that only issues single-field
+ * corrections. Use the atomic `correct_transaction` tool for multi-field
+ * updates.
+ */
+export class MultiFieldCorrectionError extends Error {
+  readonly fields: string[];
+
+  constructor(caller: string, fields: string[]) {
+    super(
+      `${caller} cannot apply ${fields.length} fields (${fields.join(", ")}) in one call. ` +
+        "No request was sent and nothing was written. Send one single-field correct() per " +
+        "field, or use correct_transaction for an atomic multi-field update."
+    );
+    this.name = "MultiFieldCorrectionError";
+    this.fields = [...fields];
+  }
 }
 
-export function assertValidCorrectionIdempotencyBase(
+export function isDeprecatedCorrectInput(input: CorrectRequest): input is DeprecatedCorrectInput {
+  const record = input as unknown as Record<string, unknown>;
+  const hasMap = "corrections" in record;
+  const hasField = "field" in record;
+  if (hasMap && hasField) {
+    throw new TypeError(
+      "correct() input must carry either `field` and `value` or the deprecated `corrections` map, not both"
+    );
+  }
+  return hasMap;
+}
+
+export function assertValidCorrectionIdempotencyKey(
   value: unknown,
   caller: string
 ): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new TypeError(`${caller} requires a non-empty idempotency key base`);
+    throw new TypeError(`${caller} requires a non-empty caller-supplied idempotency key`);
   }
-}
-
-function correctionEntityVersion(result: unknown): string | undefined {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return undefined;
-  const version = (result as Record<string, unknown>).entity_version;
-  return typeof version === "string" && version.trim().length > 0 ? version : undefined;
-}
-
-export class SequentialCorrectionError extends Error {
-  readonly failedField: string;
-  readonly committedFields: string[];
-
-  constructor(params: { failedField: string; committedFields: string[]; cause: unknown }) {
-    const committed =
-      params.committedFields.length > 0
-        ? `Fields already committed: ${params.committedFields.join(", ")}.`
-        : "No fields committed.";
-    super(
-      `Sequential correction failed at field "${params.failedField}". ${committed} ` +
-        "Re-read the entity, then retry only the uncommitted fields with a fresh " +
-        "idempotency key base, or use correct_transaction for an atomic multi-field update.",
-      { cause: params.cause }
-    );
-    this.name = "SequentialCorrectionError";
-    this.failedField = params.failedField;
-    this.committedFields = [...params.committedFields];
-  }
-}
-
-export async function executeSequentialCorrections(
-  fields: string[],
-  expectedVersion: string | undefined,
-  send: (field: string, expectedVersion: string | undefined) => Promise<unknown>
-): Promise<unknown[]> {
-  const results: unknown[] = [];
-  const committedFields: string[] = [];
-  let nextExpectedVersion = expectedVersion;
-
-  for (let index = 0; index < fields.length; index += 1) {
-    const field = fields[index];
-    let result: unknown;
-    try {
-      result = await send(field, nextExpectedVersion);
-    } catch (cause) {
-      throw new SequentialCorrectionError({
-        failedField: field,
-        committedFields,
-        cause,
-      });
-    }
-
-    results.push(result);
-    committedFields.push(field);
-
-    if (nextExpectedVersion !== undefined && index < fields.length - 1) {
-      const returnedVersion = correctionEntityVersion(result);
-      if (!returnedVersion) {
-        throw new SequentialCorrectionError({
-          failedField: fields[index + 1],
-          committedFields,
-          cause: new TypeError(
-            `Correction response for field "${field}" omitted entity_version required for sequential compare-and-set`
-          ),
-        });
-      }
-      nextExpectedVersion = returnedVersion;
-    }
-  }
-
-  return results;
 }
 
 /**
- * Execute a canonical correction unchanged or expand the deprecated map form
- * into deterministic, sequential, single-field requests.
+ * Execute a canonical correction unchanged, or convert the deprecated map form
+ * with exactly one entry into the canonical single-field request using the
+ * caller's idempotency key unchanged. A map with more than one field is
+ * refused before any request is sent.
  */
 export async function executeCorrectRequest(
   input: CorrectRequest,
   send: (request: CorrectInput) => Promise<unknown>
-): Promise<unknown | unknown[]> {
+): Promise<unknown> {
   if (!isDeprecatedCorrectInput(input)) {
     return send(input);
   }
@@ -101,18 +61,13 @@ export async function executeCorrectRequest(
   if (fields.length === 0) {
     throw new TypeError("Deprecated correct() corrections must contain at least one field");
   }
+  if (fields.length > 1) {
+    throw new MultiFieldCorrectionError("Deprecated correct()", fields);
+  }
 
-  assertValidCorrectionIdempotencyBase(input.idempotency_key, "Deprecated correct()");
+  assertValidCorrectionIdempotencyKey(input.idempotency_key, "Deprecated correct()");
 
-  const { corrections, idempotency_key, expected_version, overwrite, ...shared } = input;
-  return executeSequentialCorrections(fields, expected_version, (field, chainedExpectedVersion) =>
-    send({
-      ...shared,
-      field,
-      value: corrections[field],
-      idempotency_key: `${idempotency_key}:${field}`,
-      ...(chainedExpectedVersion !== undefined ? { expected_version: chainedExpectedVersion } : {}),
-      ...(overwrite !== undefined ? { overwrite } : {}),
-    })
-  );
+  const { corrections, ...shared } = input;
+  const field = fields[0];
+  return send({ ...shared, field, value: corrections[field] });
 }

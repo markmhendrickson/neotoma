@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **854**
-- Backend and repo Vitest files: **800**
+- Total automated test files: **855**
+- Backend and repo Vitest files: **801**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 241 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 247 |
+| Vitest integration tests | 248 |
 | Vitest CLI tests | 96 |
 | Vitest contract tests | 30 |
 | Vitest security tests | 26 |
@@ -512,7 +512,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (247):**
+**Files (248):**
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
@@ -708,6 +708,7 @@ flowchart TD
 - `tests/integration/schema_scope_resolution_parity.test.ts`
 - `tests/integration/schema_scope_surface_parity.test.ts`
 - `tests/integration/sdk_client_correct_http.test.ts`
+- `tests/integration/sdk_client_correct_types.test.ts`
 - `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/shared_graph_identity.test.ts`

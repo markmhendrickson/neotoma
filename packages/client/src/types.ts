@@ -135,11 +135,14 @@ export interface CorrectInput {
 }
 
 /**
- * Legacy multi-field correction request.
+ * Legacy map-shaped correction request.
  *
- * @deprecated Pass one {@link CorrectInput} per field. This adapter remains
- * until 0.2.0, the next minor release and requires a base `idempotency_key`, from which the client
- * derives `<base>:<field>` keys in sorted field order.
+ * @deprecated Pass one {@link CorrectInput}. This adapter remains for one more
+ * release (the next minor release). It accepts a map with exactly one entry
+ * and sends it as a canonical single-field request using the caller's
+ * `idempotency_key` unchanged. A map with more than one field is refused
+ * before any request is sent; use `correct_transaction` for atomic
+ * multi-field updates.
  */
 export interface DeprecatedCorrectInput {
   entity_id: string;
@@ -169,8 +172,8 @@ export interface NeotomaTransport {
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
   correct(input: CorrectInput): Promise<unknown>;
-  /** @deprecated Pass one canonical {@link CorrectInput} per field. */
-  correct(input: DeprecatedCorrectInput): Promise<unknown[]>;
+  /** @deprecated Pass one canonical {@link CorrectInput}. A map with more than one field is refused. */
+  correct(input: DeprecatedCorrectInput): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
   executeTool(name: string, args: unknown): Promise<unknown>;

@@ -23,10 +23,7 @@
  * based on their own error policy.
  */
 
-import {
-  assertValidCorrectionIdempotencyBase,
-  executeSequentialCorrections,
-} from "./correction.js";
+import { assertValidCorrectionIdempotencyKey, MultiFieldCorrectionError } from "./correction.js";
 import type {
   NeotomaTransport,
   StoreEntityInput,
@@ -278,7 +275,7 @@ export interface SnapshotOnUpdateInput {
   entityId: string;
   entityType: string;
   corrections: Record<string, unknown>;
-  /** Base key used to derive one `<base>:<field>` key per changed field. */
+  /** Caller-supplied key, sent unchanged with the single changed field. */
   idempotencyKey: string;
   userId?: string;
   expectedVersion?: string;
@@ -296,8 +293,6 @@ export interface SnapshotOnUpdateInput {
 export interface SnapshotOnUpdateResult {
   applied: boolean;
   previousSnapshot: unknown;
-  correctionResults?: unknown[];
-  /** @deprecated Use `correctionResults`. */
   correctionResult?: unknown;
 }
 
@@ -344,7 +339,7 @@ export async function snapshotOnUpdate(
   transport: Pick<NeotomaTransport, "retrieveEntitySnapshot" | "correct">,
   input: SnapshotOnUpdateInput
 ): Promise<SnapshotOnUpdateResult> {
-  assertValidCorrectionIdempotencyBase(input.idempotencyKey, "snapshotOnUpdate()");
+  assertValidCorrectionIdempotencyKey(input.idempotencyKey, "snapshotOnUpdate()");
   const snapshot = await transport.retrieveEntitySnapshot({ entity_id: input.entityId });
 
   let corrections: Record<string, unknown> = input.corrections;
@@ -363,38 +358,25 @@ export async function snapshotOnUpdate(
     .filter((field) => !correctionValuesEqual(current[field], corrections[field]))
     .sort();
   if (changedFields.length === 0) {
-    return {
-      applied: false,
-      previousSnapshot: snapshot,
-      correctionResults: [],
-      correctionResult: [],
-    };
+    return { applied: false, previousSnapshot: snapshot };
+  }
+  if (changedFields.length > 1) {
+    throw new MultiFieldCorrectionError("snapshotOnUpdate()", changedFields);
   }
 
-  const correctionResults = await executeSequentialCorrections(
-    changedFields,
-    input.expectedVersion,
-    (field, chainedExpectedVersion) =>
-      transport.correct({
-        entity_id: input.entityId,
-        entity_type: input.entityType,
-        field,
-        value: corrections[field],
-        idempotency_key: `${input.idempotencyKey}:${field}`,
-        ...(input.userId !== undefined ? { user_id: input.userId } : {}),
-        ...(chainedExpectedVersion !== undefined
-          ? { expected_version: chainedExpectedVersion }
-          : {}),
-        ...(input.overwrite !== undefined ? { overwrite: input.overwrite } : {}),
-      })
-  );
+  const field = changedFields[0];
+  const correctionResult = await transport.correct({
+    entity_id: input.entityId,
+    entity_type: input.entityType,
+    field,
+    value: corrections[field],
+    idempotency_key: input.idempotencyKey,
+    ...(input.userId !== undefined ? { user_id: input.userId } : {}),
+    ...(input.expectedVersion !== undefined ? { expected_version: input.expectedVersion } : {}),
+    ...(input.overwrite !== undefined ? { overwrite: input.overwrite } : {}),
+  });
 
-  return {
-    applied: true,
-    previousSnapshot: snapshot,
-    correctionResults,
-    correctionResult: correctionResults,
-  };
+  return { applied: true, previousSnapshot: snapshot, correctionResult };
 }
 
 // ---------------------------------------------------------------------------
