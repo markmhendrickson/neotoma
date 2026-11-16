@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * Copy .env file from main repository to current worktree as .env.development
- * This is useful for Cursor worktrees which don't automatically copy gitignored files
+ * only when the caller explicitly opts in.
  */
 
 import { existsSync, copyFileSync, readFileSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -55,7 +56,24 @@ function findEnvFile(repoPath) {
   return null;
 }
 
+function validateSourceEnvironment(filePath) {
+  const contents = readFileSync(filePath, 'utf8');
+  const parsed = dotenv.parse(contents);
+  if (parsed.NEOTOMA_ENV === 'production') {
+    return 'the source selects production';
+  }
+
+  return null;
+}
+
 function main() {
+  if (process.env.NEOTOMA_WORKTREE_COPY_ENV !== '1') {
+    console.log(
+      '[copy-env] Skipped env copy. Set NEOTOMA_WORKTREE_COPY_ENV=1 to opt in.'
+    );
+    return;
+  }
+
   const currentDir = process.cwd();
   const mainRepoPath = getMainRepoPath();
   
@@ -80,10 +98,23 @@ function main() {
   
   const envSource = findEnvFile(mainRepoPath);
   if (!envSource) {
-    console.warn(`[copy-env] No .env file found in main repository (${mainRepoPath}). Skipping env copy.`);
+    console.warn('[copy-env] No source env file found. Skipping env copy.');
     return;
   }
-  
+
+  try {
+    const refusal = validateSourceEnvironment(envSource);
+    if (refusal) {
+      console.warn(`[copy-env] Refused env copy because ${refusal}. Set up from the example file instead: cp .env.example .env.development`);
+      process.exitCode = 1;
+      return;
+    }
+  } catch {
+    console.warn('[copy-env] Refused env copy because the source could not be validated. Set up from the example file instead: cp .env.example .env.development');
+    process.exitCode = 1;
+    return;
+  }
+
   const envDest = join(currentDir, '.env.development');
   
   // Only copy if destination doesn't exist or source is newer
@@ -102,9 +133,10 @@ function main() {
   
   try {
     copyFileSync(envSource, envDest);
-    console.log(`[copy-env] Copied ${envSource} to ${envDest}`);
-  } catch (error) {
-    console.warn(`[copy-env] Failed to copy env file: ${error.message}`);
+    console.log('[copy-env] Copied env file to .env.development.');
+  } catch {
+    console.warn('[copy-env] Failed to copy env file.');
+    process.exitCode = 1;
   }
 }
 

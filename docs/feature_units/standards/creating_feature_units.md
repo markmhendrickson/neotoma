@@ -163,14 +163,15 @@ Before creating a Feature Unit, verify:
    # Verify branch is based on main
    git branch --show-current  # Should show feature/FU-XXX-short-description
    git log --oneline -1       # Should show latest main commit
-   # Setup worktree environment (copies .env files)
-   npm run copy:env || node scripts/copy-env-to-worktree.js
+   # Set up a local development env from .env.example by default.
+   # Optional: copy a safe development env after explicitly opting in.
+   NEOTOMA_WORKTREE_COPY_ENV=1 npm run copy:env
    # Install dependencies in worktree
    npm install
    # Push branch to remote
    git push -u origin feature/FU-XXX-short-description
    ```
-   **Note:** Using worktrees allows parallel development of multiple Feature Units. Each worktree is isolated with its own `node_modules`, `.env`, and build artifacts. If not using worktrees, create branch in main repo instead (see `docs/developer/development_workflow.md`).
+   **Note:** Using worktrees allows parallel development of multiple Feature Units. Each worktree is isolated with its own `node_modules`, optional `.env`, and build artifacts. Worktree setup does not copy env files unless `NEOTOMA_WORKTREE_COPY_ENV=1` is set. The copy refuses production and unreadable sources but does not yet check where storage keys point. If not using worktrees, create a branch in the main repo instead (see `docs/developer/development_workflow.md`).
 3. **Follow implementation order (from execution_instructions.md):**
    - Domain logic (deterministic, pure functions)
    - Application logic (services, orchestration)
