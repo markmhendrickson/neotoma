@@ -23,7 +23,14 @@
  * based on their own error policy.
  */
 
-import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
+import { assertValidCorrectionIdempotencyKey, MultiFieldCorrectionError } from "./correction.js";
+import type {
+  NeotomaTransport,
+  StoreEntityInput,
+  StoreInput,
+  StoreResult,
+  StoredEntityRef,
+} from "./types.js";
 
 /**
  * Extract the stored-entity list from a {@link StoreResult}, tolerating both
@@ -193,9 +200,7 @@ export async function storeChatTurn(
   };
 
   const conversationEntityId =
-    lookupByIndex(0) ??
-    stored.find((e) => e.entity_type === "conversation")?.entity_id ??
-    "";
+    lookupByIndex(0) ?? stored.find((e) => e.entity_type === "conversation")?.entity_id ?? "";
 
   return {
     conversationEntityId,
@@ -268,19 +273,56 @@ export async function retrieveOrStore(
 
 export interface SnapshotOnUpdateInput {
   entityId: string;
+  entityType: string;
   corrections: Record<string, unknown>;
+  /** Caller-supplied key, sent unchanged with the single changed field. */
+  idempotencyKey: string;
+  userId?: string;
+  expectedVersion?: string;
+  overwrite?: boolean;
   /**
    * Called with the current snapshot before the correction is applied.
    * Return `false` to skip the update. Return `true` (or a corrections
    * delta) to proceed.
    */
-  review?: (snapshot: unknown) => boolean | Record<string, unknown> | Promise<boolean | Record<string, unknown>>;
+  review?: (
+    snapshot: unknown
+  ) => boolean | Record<string, unknown> | Promise<boolean | Record<string, unknown>>;
 }
 
 export interface SnapshotOnUpdateResult {
   applied: boolean;
   previousSnapshot: unknown;
   correctionResult?: unknown;
+}
+
+function snapshotFields(snapshot: unknown): Record<string, unknown> {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return {};
+  const record = snapshot as Record<string, unknown>;
+  for (const key of ["snapshot", "fields"]) {
+    const nested = record[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      return nested as Record<string, unknown>;
+    }
+  }
+  return record;
+}
+
+function normalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeJsonValue);
+  if (value && typeof value === "object") {
+    const normalized: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      normalized[key] = normalizeJsonValue((value as Record<string, unknown>)[key]);
+    }
+    return normalized;
+  }
+  return value;
+}
+
+function correctionValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  return JSON.stringify(normalizeJsonValue(left)) === JSON.stringify(normalizeJsonValue(right));
 }
 
 /**
@@ -297,6 +339,7 @@ export async function snapshotOnUpdate(
   transport: Pick<NeotomaTransport, "retrieveEntitySnapshot" | "correct">,
   input: SnapshotOnUpdateInput
 ): Promise<SnapshotOnUpdateResult> {
+  assertValidCorrectionIdempotencyKey(input.idempotencyKey, "snapshotOnUpdate()");
   const snapshot = await transport.retrieveEntitySnapshot({ entity_id: input.entityId });
 
   let corrections: Record<string, unknown> = input.corrections;
@@ -310,9 +353,27 @@ export async function snapshotOnUpdate(
     }
   }
 
+  const current = snapshotFields(snapshot);
+  const changedFields = Object.keys(corrections)
+    .filter((field) => !correctionValuesEqual(current[field], corrections[field]))
+    .sort();
+  if (changedFields.length === 0) {
+    return { applied: false, previousSnapshot: snapshot };
+  }
+  if (changedFields.length > 1) {
+    throw new MultiFieldCorrectionError("snapshotOnUpdate()", changedFields);
+  }
+
+  const field = changedFields[0];
   const correctionResult = await transport.correct({
     entity_id: input.entityId,
-    corrections,
+    entity_type: input.entityType,
+    field,
+    value: corrections[field],
+    idempotency_key: input.idempotencyKey,
+    ...(input.userId !== undefined ? { user_id: input.userId } : {}),
+    ...(input.expectedVersion !== undefined ? { expected_version: input.expectedVersion } : {}),
+    ...(input.overwrite !== undefined ? { overwrite: input.overwrite } : {}),
   });
 
   return { applied: true, previousSnapshot: snapshot, correctionResult };
@@ -368,7 +429,7 @@ export interface ConversationTurnResult {
  */
 export async function recordConversationTurn(
   transport: Pick<NeotomaTransport, "store">,
-  input: ConversationTurnInput,
+  input: ConversationTurnInput
 ): Promise<ConversationTurnResult> {
   if (!input.sessionId || !input.turnId) return {};
   const turnKey = `${input.sessionId}:${input.turnId}`;
@@ -385,12 +446,16 @@ export async function recordConversationTurn(
   if (input.model) entity.model = input.model;
   if (input.status) entity.status = input.status;
   if (input.missedSteps) entity.missed_steps = [...input.missedSteps];
-  if (input.toolInvocationCount !== undefined) entity.tool_invocation_count = input.toolInvocationCount;
-  if (input.storeStructuredCalls !== undefined) entity.store_structured_calls = input.storeStructuredCalls;
+  if (input.toolInvocationCount !== undefined)
+    entity.tool_invocation_count = input.toolInvocationCount;
+  if (input.storeStructuredCalls !== undefined)
+    entity.store_structured_calls = input.storeStructuredCalls;
   if (input.retrieveCalls !== undefined) entity.retrieve_calls = input.retrieveCalls;
-  if (input.neotomaToolFailures !== undefined) entity.neotoma_tool_failures = input.neotomaToolFailures;
+  if (input.neotomaToolFailures !== undefined)
+    entity.neotoma_tool_failures = input.neotomaToolFailures;
   if (input.harnessLoopCount !== undefined) entity.harness_loop_count = input.harnessLoopCount;
-  if (input.injectedContextChars !== undefined) entity.injected_context_chars = input.injectedContextChars;
+  if (input.injectedContextChars !== undefined)
+    entity.injected_context_chars = input.injectedContextChars;
   if (input.retrievedEntityIds?.length) entity.retrieved_entity_ids = [...input.retrievedEntityIds];
   if (input.storedEntityIds?.length) entity.stored_entity_ids = [...input.storedEntityIds];
   if (input.failureHintShown !== undefined) entity.failure_hint_shown = input.failureHintShown;
@@ -404,7 +469,8 @@ export async function recordConversationTurn(
   if (input.contextSource) entity.context_source = input.contextSource;
   if (input.extra) Object.assign(entity, input.extra);
 
-  const idempotencyKey = input.idempotencyKey ?? `conversation-${input.sessionId}-${input.turnId}-turn`;
+  const idempotencyKey =
+    input.idempotencyKey ?? `conversation-${input.sessionId}-${input.turnId}-turn`;
   const result = (await transport.store({
     entities: [entity],
     idempotency_key: idempotencyKey,
