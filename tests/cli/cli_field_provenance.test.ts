@@ -272,7 +272,7 @@ describe.each(["offline", "api"] as const)("generic CLI field provenance, %s", (
     expect(result.observations[0]).toMatchObject({
       id: correction.observation_id,
       source_id: null,
-      observation_source: "correction",
+      observation_source: null,
       idempotency_key: key,
       fields: { tags: ["new"] },
     });
@@ -281,7 +281,7 @@ describe.each(["offline", "api"] as const)("generic CLI field provenance, %s", (
     expect(result.source_observation).toEqual(result.observations[0]);
     expect(raw(id).find((row) => row.id === correction.observation_id)).toMatchObject({
       source_id: null,
-      observation_source: "correction",
+      observation_source: null,
       idempotency_key: key,
     });
   });

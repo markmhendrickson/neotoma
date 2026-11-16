@@ -96,7 +96,7 @@ export function buildToolDefinitions(
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve complete provenance for one visible snapshot field: observation_ids and observations include every contributor with only the requested field and actual write metadata; sources contain safe metadata without file paths. Singular source_observation/source/observed_at aliases select the most recent contributor for compatibility, not a winner for merged fields. A source-less correction has source null. Unavailable referenced observations or non-null sources fail with PROVENANCE_INTEGRITY_ERROR; no partial chain or fabricated file_urls is returned."
+        "Retrieve complete provenance for one visible snapshot field: observation_ids, observations (every contributor, requested field only, actual write metadata) and sources (safe metadata, no file paths). Singular source_observation/source/observed_at are the most recent contributor, not a merged-field winner. source is null for a source-less correction. Unavailable references fail with PROVENANCE_INTEGRITY_ERROR; no partial chain."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },

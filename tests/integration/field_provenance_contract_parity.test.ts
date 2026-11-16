@@ -270,12 +270,45 @@ describe("complete field provenance contract (#2649)", () => {
     expect(chain.observation_ids).toEqual([corrected.observation_id]);
     expect(chain.observations[0]).toMatchObject({
       source_id: null,
-      observation_source: "correction",
+      observation_source: null,
       idempotency_key: key,
       fields: { tags: ["new"] },
     });
     expect(chain.source).toBeNull();
     expect(chain.sources).toEqual([]);
+  });
+
+  it("returns an interpreted field's interpretation link identically on both surfaces", async () => {
+    const { a, chain } = await fixture();
+    const target = chain.observations[0];
+    const interpretationId = randomUUID();
+    await db.from("interpretations").insert({
+      id: interpretationId,
+      source_id: target.source_id,
+      status: "completed",
+      observations_created: 1,
+      user_id: USER,
+      created_at: new Date().toISOString(),
+    });
+    try {
+      await db
+        .from("observations")
+        .update({ interpretation_id: interpretationId })
+        .eq("id", target.id);
+      const interpreted = await both(a.id, "tags");
+      expect(interpreted.observations).toHaveLength(2);
+      const row = interpreted.observations.find((o: any) => o.id === target.id);
+      expect(row).toMatchObject({
+        interpretation_id: interpretationId,
+        source_id: target.source_id,
+      });
+      expect(interpreted.sources.map((x: any) => x.id)).toContain(target.source_id);
+      // The other contributor stays uninterpreted: the link is per observation.
+      const other = interpreted.observations.find((o: any) => o.id !== target.id);
+      expect(other.interpretation_id).toBeNull();
+    } finally {
+      await db.from("interpretations").delete().eq("id", interpretationId);
+    }
   });
 
   it("retains mixed NULL sources, deduplicates shared sources, and normalizes contributor order", async () => {
