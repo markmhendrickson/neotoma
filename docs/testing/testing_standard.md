@@ -148,6 +148,11 @@ absence, skipped tests, external attempts and changed candidate bindings fail.
 Partial additive registry writes on failure are retained; no rollback, remote
 image, deployment or real-instance schema authority is inferred.
 
+The required baseline CI lane also runs
+`npx vitest run tests/scripts/worktree_env_copy.test.ts`. This verifies that
+worktree env copying requires explicit opt-in, refuses production-selected or
+unreadable sources without leaking their contents, and rejects staged env files.
+
 The required `baseline` CI job first runs its regular tests on Node 20, then
 switches to Node 24 and runs `NEOTOMA_REQUIRE_NATIVE_SQLITE=1
 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts` after a fresh

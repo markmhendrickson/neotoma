@@ -99,6 +99,9 @@ jobs:
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
 
+      - name: Run worktree env-copy safety regressions
+        run: npx vitest run tests/scripts/worktree_env_copy.test.ts
+
       - name: Validate Playwright coverage map
         run: npm run validate:coverage
 
