@@ -96,7 +96,7 @@ export function buildToolDefinitions(
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve the provenance chain for a specific field in an entity snapshot. source is null when the winning observation has no source document (for example a correction). For a merged array field, source_observation and source describe the most recent contributing observation, not every contributor."
+        "Retrieve complete provenance for one visible snapshot field: observation_ids, observations (every contributor, requested field only, actual write metadata) and sources (safe metadata, no file paths). Singular source_observation/source/observed_at are the most recent contributor, not a merged-field winner. source is null for a source-less correction. Unavailable references fail with PROVENANCE_INTEGRITY_ERROR; no partial chain."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },
