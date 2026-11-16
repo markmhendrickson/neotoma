@@ -73,6 +73,14 @@ adapt_mdc_for_claude() {
     fi
 }
 
+if [[ "${1:-}" == "--check-worktree-env" ]]; then
+    expected_rule=$(mktemp)
+    trap 'rm -f "$expected_rule"' EXIT
+    adapt_mdc_for_claude "docs/developer/worktree_env.mdc" "docs/developer/worktree_env.mdc" > "$expected_rule"
+    diff -u "$expected_rule" ".claude/rules/worktree_env.md"
+    exit $?
+fi
+
 # Drop leading YAML frontmatter (--- ... ---) so Claude skill output has a single frontmatter block
 strip_leading_yaml_frontmatter() {
     awk '
@@ -292,6 +300,8 @@ print_info "Processing repository rules from docs/..."
 REPO_RULES_COPIED=0
 
 if [ -d "docs" ]; then
+    rule_list=$(mktemp)
+    find docs -name "*_rules.mdc" -o -name "*_rules.md" | sort | tr '\n' '\0' > "$rule_list"
     while IFS= read -r -d '' rule_file; do
         rel_path="${rule_file#docs/}"
         base_name=$(basename "$rule_file")
@@ -318,10 +328,14 @@ if [ -d "docs" ]; then
         adapt_mdc_for_claude "$rule_file" "$rule_file" > "$target_file"
         print_info "  ✓ Adapted $base_name → $target_name"
         REPO_RULES_COPIED=$((REPO_RULES_COPIED + 1))
-    done < <(find docs -name "*_rules.mdc" -o -name "*_rules.md" | sort | tr '\n' '\0')
+    done < "$rule_list"
+    rm "$rule_list"
 fi
 
 print_info "Adapted $REPO_RULES_COPIED repository rule(s)"
+
+# Neotoma's worktree env policy is repository-specific and overrides the foundation rule.
+adapt_mdc_for_claude "docs/developer/worktree_env.mdc" "docs/developer/worktree_env.mdc" > ".claude/rules/worktree_env.md"
 
 # Condense index_rules.md if over 40k chars (Claude Code performance limit)
 INDEX_RULES=".claude/rules/index_rules.md"

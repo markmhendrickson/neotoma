@@ -29,7 +29,7 @@ development:
   workflow:
     use_worktrees: true
     worktree_base_path: "../{repo}-{branch}"
-    env_copy_script: "scripts/copy-env-to-worktree.js"  # optional
+    env_copy_script: "scripts/copy-env-to-worktree.js"  # requires NEOTOMA_WORKTREE_COPY_ENV=1
   
   # Commit format
   commit_format:
