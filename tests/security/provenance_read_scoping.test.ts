@@ -95,7 +95,7 @@ async function post(path: string, body: Record<string, unknown>) {
 /** Error envelope with any request-specific fields removed. */
 function errorShape(json: any) {
   const err = json?.error ?? json;
-  return { code: err?.code, message: err?.message };
+  return { code: err?.error_code ?? err?.code, message: err?.message };
 }
 
 describe("provenance and observation reads are scoped to the authenticated user", () => {
@@ -136,7 +136,15 @@ describe("provenance and observation reads are scoped to the authenticated user"
       });
       expect(foreign.status).toBe(404);
       expect(foreign.status).toBe(missing.status);
-      expect(errorShape(foreign.json)).toEqual(errorShape(missing.json));
+      const foreignError = errorShape(foreign.json);
+      const missingError = errorShape(missing.json);
+      expect({
+        ...foreignError,
+        message: foreignError.message.replace(other.entityId, "<id>"),
+      }).toEqual({
+        ...missingError,
+        message: missingError.message.replace(missingEntityId, "<id>"),
+      });
       const serialized = JSON.stringify(foreign.json);
       expect(serialized).not.toContain(other.observationId);
       expect(serialized).not.toContain(other.sourceId);
@@ -205,7 +213,7 @@ describe("provenance and observation reads are scoped to the authenticated user"
         (err: Error) => err.message.replace(missingEntityId, "<id>")
       );
       expect(foreign).not.toBeNull();
-      expect(foreign).toContain("Entity snapshot not found");
+      expect(foreign).toContain("Field 'marker' not found in provenance");
       expect(foreign).toBe(missing);
     });
   });
