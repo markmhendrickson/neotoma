@@ -298,7 +298,13 @@ describe("retrieve_field_provenance on corrected and merged fields (#2026)", () 
     it("MCP still reports it as an error (integrity violation)", async () => {
       await expect(
         server.retrieveFieldProvenance({ entity_id: entityId, field: "notes" })
-      ).rejects.toThrow(/Failed to get source/);
+      ).rejects.toMatchObject({
+        code: -32603,
+        data: {
+          error_code: "PROVENANCE_INTEGRITY_ERROR",
+          details: { field: "notes", reference_kind: "source" },
+        },
+      });
     });
   });
 });
