@@ -116,7 +116,7 @@ const CONFIG: UseCaseConfig = {
       Icon: History,
       failTitle: "Current terms returned for a historical question",
       failDesc:
-        "Finance asked what governed revenue triggers on the close date. Surfacing today's net-30 terms would misstate when cash was contractually due, compounding in ASC 606 memos.",
+        "Finance asked which terms had been recorded for revenue triggers by the close. Surfacing today's net-30 terms would misstate when cash was contractually due, compounding in ASC 606 memos.",
     },
   ],
   outcomeTitle: "From brittle documents to explainable contract state",

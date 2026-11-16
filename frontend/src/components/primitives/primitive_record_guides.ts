@@ -173,7 +173,7 @@ export const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
         id: "deterministic",
         heading: "Deterministic by construction",
         body:
-          "Same observations + same schema + same reducer config ⇒ same snapshot, byte-for-byte (modulo computed_at). Re-running the reducer never randomly changes a field. This is what lets Neotoma replay historical state, audit truth, and detect non-determinism in custom reducers.",
+          "Same observations + same schema + same reducer config ⇒ same snapshot, byte-for-byte (modulo computed_at). Re-running the reducer never randomly changes a field. This is what lets Neotoma replay state as recorded, audit truth, and detect non-determinism in custom reducers.",
       },
       {
         id: "provenance-map",

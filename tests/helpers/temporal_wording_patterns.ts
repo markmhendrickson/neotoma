@@ -44,6 +44,40 @@ export const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
     new RegExp(`\\bwhat (?:was|were|is|are)\\b[^.?]{0,100}\\b(?:on|as of) ${MONTH}\\.? \\d{1,2}(?:, \\d{4})?\\s*\\?`, "gi"),
   ],
   [
+    "<were|was|did|which|under which ...> question ending on|at|as of|before|by <date>?",
+    new RegExp(
+      `(?:^|["'\`(]|[.?!:;] )(?:were|was|did|does|do|had|which|under which)\\b[^.?]{0,120}\\b(?:on|at|as of|before|by) (?:${MONTH}\\.? \\d{1,2}|${MONTH}\\.? \\d{4}|${ISO_DATE})[^.?]{0,40}\\?`,
+      "gi"
+    ),
+  ],
+  ["as of <noun> date <date>", /\bas of (?:the |any )?[a-z-]+ date\b/gi],
+  [
+    "on|at the <noun> date",
+    /\b(?:on|at|as of) (?:the|a|that|any) (?:audit|filing|coverage|close|closing|decision|signing|vote|trade|approval|reporting|regulatory|valuation|effective|determination|event|incident|contract) date\b/gi,
+  ],
+  [
+    "when we|I|you <verb>ed / made / started",
+    /\bwhen (?:we|I|you) (?:[a-z]+ )?(?:filed|approved|made|started|began|decided|signed|launched|closed|submitted|shipped|hired|changed|bought|sold|ordered|committed|executed|reviewed|performed|authorized|achieved|quit|moved|joined|set|stopped)\b/gi,
+  ],
+  [
+    "when the agent|assistant|system <verb>s/<verb>ed",
+    /\bwhen the (?:agent|assistant|model|system|analyst|team) (?:[a-z]+ )?(?:acted|recommended|approved|filed|signed|decided|made|executed|ran|runs|acts|approves|files|signs|decides|executes|recommends|authorized|authorizes|performed|performs|failed|fails|closed|closes|flagged|flags|routed|routes)\b/gi,
+  ],
+  ["at that moment", /\bat that (?:moment|instant)\b/gi],
+  [
+    "at the time the <noun> <verb>ed / existed at the time",
+    /\bat the time (?:the|that the) (?:[a-z-]+ ){1,2}(?:[a-z]+ed|ran|began|closed)\b|\bexisted at the time\b/gi,
+  ],
+  ["the context that governed it", /\b(?:context|rules?|policy|terms) that (?:governed|applied|existed)\b/gi],
+  [
+    "the effective <noun> was / <noun> was <value> on <date>",
+    new RegExp(
+      `\\bthe effective (?:[a-z-]+ ){1,2}(?:was|were)\\b|\\b(?:cap|limit|rate|price|balance|status|policy|term|threshold)s? (?:was|were) [^.?]{1,30}\\b(?:on|as of|at) (?:${MONTH}\\.? \\d|${ISO_DATE})`,
+      "gi"
+    ),
+  ],
+  ["diff states between dates", /\bdiff(?:erence)? states? between (?:two |any )?(?:dates|points|moments|times)\b/gi],
+  [
     "in effect / valid / active / live at|during|on|as of",
     /\b(?:in effect|in force|valid|active|effective) (?:at|during|on|as of) |\blive (?:on|as of) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d/gi,
   ],
@@ -53,7 +87,7 @@ export const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
   ],
   [
     "as it existed / stood at",
-    /\bas (?:it|they|that) (?:existed|stood|was|were) (?:at|on|as of|during|when|by)\b|\bagainst (?:its|their) original (?:rules|polic)/gi,
+    /\bas (?:it|they|that) (?:existed|stood|was|were) (?:at|on|as of|during|when|by)\b|\bagainst (?:its|their) original (?:rules|polic|inputs)/gi,
   ],
   ["point-in-time", /\bpoint[- ]in[- ]time\b/gi],
   ["when we signed", /\bwhen we signed\b/gi],
@@ -85,13 +119,15 @@ export const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
  * "asserted" do not count.
  */
 export const WRITE_TIME_CONTEXT =
-  /\bas recorded\b|\brecorded (?:by|up to|until|as of)\b|\bhad (?:been )?recorded\b|\bregistrad[oa]s?\b/i;
+  /\bas recorded\b|\brecorded (?:by|up to|until|as of)\b|\bhad(?: \w+){0,4} (?:been )?recorded\b|\bregistrad[oa]s?\b/i;
 
 /** Reviewed lines where the match is not a temporal-query claim. */
 export const ALLOWLIST: RegExp[] = [
   // Not a temporal-query claim: a backup instruction, and the definition of an observation.
   /copy aside at any point/i,
   /statement about an entity at a point in time/i,
+  // Problem framing, reviewed individually: describes what an agent does with stale state, not a state query.
+  /do not notice when the agent acts confidently on state/i,
 ];
 
 const WINDOW_BEFORE = 60;
@@ -188,6 +224,29 @@ export const SEEDED_EVENT_TIME_PHRASES: string[] = [
   "ISO 8601 timestamp to get historical snapshot state",
   "view entity state at any point in time",
   "list red flags as they existed on a given Monday",
+  // Round 2 review quotes
+  "Were my risk limits already breached when the liquidation happened at 3:42 AM on April 1?",
+  "At 03:42 UTC the effective cap was 8%, not 5%.",
+  "misses that the cap was 8% on April 1",
+  "Was the billing agent authorized to issue refunds on March 12?",
+  "Under which policy version was the claim determined on November 3?",
+  "was the reconciliation state correct at March 2025 month-end close?",
+  "What evidence was available when we filed the motion to compel?",
+  "As of filing date 2025-01-22 4:00pm PT (docket entry DE 47)",
+  "What did we know about this vendor when we approved them?",
+  "Did this liability exist in our books on the audit date?",
+  "What was known about this patient when the agent recommended the dosage change?",
+  "the state of the file on a coverage date",
+  "What was your monthly spending when you decided to change jobs?",
+  "what was my financial state when I made that decision?",
+  "what were my vitals when I started this supplement?",
+  "Bind each hop to the entity state and policy version at that moment",
+  "Prove that a treasury transfer followed the DAO's rules at the time the vote closed, not today's rules.",
+  "Historical queries return the decision bound to the exact context that governed it.",
+  "Reconstruct any past decision against its original inputs",
+  "Explain any past routing decision against its original inputs",
+  "Diff states between dates.",
+  "constraints that existed at the time",
 ];
 
 /**
@@ -202,6 +261,18 @@ export const ACCEPTED_WRITE_TIME_PHRASES: string[] = [
   "Snapshots as recorded by the vote and by signing",
   "the observation log reconstructs any past state as recorded",
   "cases decided in December cannot be re-evaluated against the rules recorded with each decision.",
+  // Round 2 accepted forms
+  "Which risk limits had been recorded by 3:42 AM UTC on April 1, when the liquidation completed?",
+  "As recorded by 03:42 UTC on Apr 1, the drawdown cap recorded at that cutoff is 8%.",
+  "Had the billing agent been recorded as authorized to initiate the wire transfer by March 12?",
+  "What had we recorded about this vendor by the time we approved them?",
+  "What had been recorded about this patient by the time the agent recommended the dosage change?",
+  "Had this liability been recorded in our books by the audit date?",
+  "As recorded by the filing cutoff 2025-01-22 4:00pm PT, the matter held exhibits A to F only.",
+  "Diff states as recorded between two timestamps.",
+  "Bind each hop to the entity state and policy version recorded with it.",
+  "Reconstruct any past decision from the inputs recorded with it.",
+  "followed the DAO's rules as recorded by the time the vote closed, not today's rules.",
 ];
 
 /**

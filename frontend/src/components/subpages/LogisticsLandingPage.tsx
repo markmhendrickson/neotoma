@@ -25,7 +25,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Supply chain state that survives",
   heroHighlight: "re-routing, constraint changes, and multi-carrier coordination",
   heroDesc:
-    "Shipments change route mid-transit, inventory levels shift between warehouse checks, and carrier commitments update hourly. Neotoma versions every logistics entity so you can reconstruct what the system knew when a routing or fulfillment decision was made.",
+    "Shipments change route mid-transit, inventory levels shift between warehouse checks, and carrier commitments update hourly. Neotoma versions every logistics entity so you can reconstruct what the system had recorded by the time a routing or fulfillment decision was made.",
   heroTags: [
     { tag: "shipment", Icon: Package },
     { tag: "route_decision", Icon: Route },
@@ -78,7 +78,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       category: "Inventory commitment dispute",
-      human: "Did we actually have the 500 units of SKU-4401 available when we committed them to the Vertex order at 2pm?",
+      human: "What availability had been recorded for the 500 units of SKU-4401 by 2pm, when they were committed to the Vertex order?",
       fail: "SKU-4401 current inventory: 312 units available. Vertex order ORD-2025-91002: 500 units allocated.",
       succeed:
         "As recorded by 2025-03-12 14:00 UTC, inventory snapshot inv\u00B7sku4401_v8 showed: on-hand 820, allocated 290, available-to-promise 530. Fulfillment agent committed 500 units (allocation\u00B7v3). Between 14:00 and 16:00, two other orders consumed 218 units (allocation\u00B7v4, v5), dropping ATP to 312 (inv\u00B7sku4401_v11). The commitment was made against the availability recorded at that time. Current deficit is from subsequent allocations, not an over-commit. Full inventory timeline at inv\u00B7sku4401_v8 through v11.",
@@ -146,7 +146,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Route,
       title: "Routing decision provenance",
-      desc: "Bind each routing choice to the carrier rates, capacity, transit times, and SLA constraints the agent evaluated. Explain any past routing decision against its original inputs.",
+      desc: "Bind each routing choice to the carrier rates, capacity, transit times, and SLA constraints the agent evaluated. Explain any past routing decision from the inputs recorded with it.",
       tags: ["route_decision", "carrier", "audit"],
     },
     {
@@ -236,7 +236,7 @@ const CONFIG: UseCaseConfig = {
     ],
     generalizesTitle: "If agents make routing and fulfillment decisions, you need reconstructable logistics state",
     generalizesDesc:
-      "Any team running logistics agents for carrier selection, inventory allocation, or shipment coordination faces the same requirement: explain why a decision was made with the constraints that existed at the time. Neotoma generalizes the pattern to your supply chain stack.",
+      "Any team running logistics agents for carrier selection, inventory allocation, or shipment coordination faces the same requirement: explain why a decision was made with the constraints recorded by the time of the decision. Neotoma generalizes the pattern to your supply chain stack.",
   },
   ctaHeadline: "Ship logistics agents that can explain",
   ctaHighlight: "every routing and fulfillment decision",

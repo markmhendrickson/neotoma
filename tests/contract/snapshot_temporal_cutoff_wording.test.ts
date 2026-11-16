@@ -38,6 +38,8 @@ import { getOpenApiInputSchemaOrThrow } from "../../src/shared/openapi_schema.js
 import { buildToolDefinitions } from "../../src/tool_definitions.js";
 import {
   ACCEPTED_WRITE_TIME_PHRASES,
+  ALLOWLIST,
+  collapseWhitespace,
   findEventTimeOffenders,
   NOT_EXCUSED_BY_NEARBY_WORDS,
   SEEDED_EVENT_TIME_PHRASES,
@@ -255,6 +257,13 @@ describe("public copy never promises event-time (valid-time) answers", () => {
   it("a nearby unrelated 'stored' or 'recorded' in another clause cannot excuse an event-time promise", () => {
     for (const phrase of NOT_EXCUSED_BY_NEARBY_WORDS) {
       expect(findEventTimeOffenders(phrase).length, `must still flag: ${phrase}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("every reviewed exemption still matches a real copy line (no stale or broad exemption)", () => {
+    const corpus = files.map((f) => collapseWhitespace(read(f))).join("\n");
+    for (const entry of ALLOWLIST) {
+      expect(entry.test(corpus), `exemption matches no copy line: ${entry}`).toBe(true);
     }
   });
 

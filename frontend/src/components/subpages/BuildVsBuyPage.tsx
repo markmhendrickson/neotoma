@@ -55,7 +55,7 @@ const GAP_ROWS: GapRow[] = [
     observabilityDesc:
       "Trace requests across services with correlation IDs. See the path a decision took through your system. Build dashboards showing delegation and approval patterns.",
     stateIntegrityDesc:
-      "Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version at that moment. Prove the chain is complete.",
+      "Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version recorded with it. Prove the chain is complete.",
     Icon: Network,
   },
   {
@@ -63,7 +63,7 @@ const GAP_ROWS: GapRow[] = [
     observabilityDesc:
       "Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.",
     stateIntegrityDesc:
-      "Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context that governed it. Counterfactual queries are supported.",
+      "Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context recorded with it. Counterfactual queries are supported.",
     Icon: Shield,
   },
   {
@@ -90,7 +90,7 @@ const ASSESSMENT_ITEMS: AssessmentItem[] = [
   {
     question: "You need the composed state as recorded by a specific point in time",
     detail:
-      "Not only which events fired, but what was recorded: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
+      "Not only which events fired, but what was recorded: the full derived state from every observation recorded up to that cutoff. That is how you answer “what had the stack recorded by last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
   },
   {
     question: "Rules or context change while entities have active state",
@@ -105,7 +105,7 @@ const ASSESSMENT_ITEMS: AssessmentItem[] = [
   {
     question: "Explanation requires the full input context, not a summary",
     detail:
-      "Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution at that moment-not a terse log line or today’s live row.",
+      "Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution as recorded with the run, not a terse log line or today’s live row.",
   },
 ];
 

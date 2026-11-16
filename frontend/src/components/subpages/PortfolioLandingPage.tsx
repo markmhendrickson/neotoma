@@ -100,10 +100,10 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Milestone tracking",
       human:
-        "Which revenue and security milestones had Helio Robotics achieved before we received the Series B term sheet on March 3, 2025?",
+        "Which revenue and security milestones had been recorded for Helio Robotics by the time the Series B term sheet arrived, March 3, 2025?",
       fail: "Helio Robotics: ARR $9.2M (Aug 2025), SOC2 Type II complete, 42 enterprise logos, EU entity live. Aligned with current fundraising narrative.",
       succeed:
-        "Chronology through 2025-03-03: ARR crossed $4.0M (obs Jan 18, 2025), SOC2 Type II in progress (not complete until Apr 2025), 9 enterprise logos (not 42), EU entity not formed. Series B term sheet snapshot milestone_ms\u00B7pre_b shows only achievements with observation timestamps before Mar 3. Full timeline preserved for diligence.",
+        "As recorded by 2025-03-03: ARR crossed $4.0M (obs Jan 18, 2025), SOC2 Type II in progress (completion was recorded in Apr 2025, after the cutoff), 9 enterprise logos (not 42), no EU entity recorded. Series B term sheet snapshot milestone_ms\u00B7pre_b shows only achievements with observation timestamps before Mar 3. Full timeline preserved for diligence.",
       version: "milestone_ms\u00B7pre_b",
       Icon: Target,
       failTitle: "Post-deal milestones mixed into pre-term-sheet question",
@@ -157,13 +157,13 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: LineChart,
       title: "Valuation & ownership as recorded",
-      desc: "Bind follow-on decisions and LP letters to valuation and cap-table snapshots. Show implied pre- and post-money at the wire, not after the next comp cycle.",
+      desc: "Bind follow-on decisions and LP letters to valuation and cap-table snapshots. Show implied pre- and post-money as recorded by the wire, not after the next comp cycle.",
       tags: ["valuation", "investment", "temporal"],
     },
     {
       Icon: PieChart,
       title: "Quarter-end and IC snapshots",
-      desc: "Freeze portfolio state for any fund-defined close: basis, ownership, marks, and commitments as they were, not as they drifted the next morning.",
+      desc: "Freeze portfolio state for any fund-defined close: basis, ownership, marks, and commitments as recorded by that close, not as later writes changed them.",
       tags: ["LP", "reporting", "audit"],
     },
     {

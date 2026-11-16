@@ -30,7 +30,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Financial operations that survive",
   heroHighlight: "reconciliation, close, and audit",
   heroDesc:
-    "Bank feeds, invoices, and GL entries disagree daily while agents auto-match and categorize. Neotoma versions every reconciliation entry and ledger state so you can answer what the books showed on the audit date or at month-end close.",
+    "Bank feeds, invoices, and GL entries disagree daily while agents auto-match and categorize. Neotoma versions every reconciliation entry and ledger state so you can answer what the books had recorded by the audit date or by month-end close.",
   heroTags: [
     { tag: "transaction", Icon: ArrowLeftRight },
     { tag: "account", Icon: Landmark },
@@ -67,12 +67,12 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: 'Auditors do not accept "we reconciled it in the tool."',
   problemCalloutDesc:
-    "They ask whether a liability existed on the audit date, how month-end tie-outs looked at close, and how a specific balance rolled forward. When reconciliation state lives only in the latest UI, you rebuild history from exports and tickets.",
+    "They ask whether a liability had been recorded by the audit date, how month-end tie-outs looked as recorded at close, and how a specific balance rolled forward. When reconciliation state lives only in the latest UI, you rebuild history from exports and tickets.",
   scenarios: [
     {
       category: "Audit date verification",
       human:
-        "Did accrued bonus liability ACC-LIAB-4411 exist in our books on the audit date December 31, 2024, and what was its balance?",
+        "Had accrued bonus liability ACC-LIAB-4411 been recorded in our books by the audit cutoff of December 31, 2024, and what balance had been recorded for it?",
       fail: "Accrued bonus liability ACC-LIAB-4411: current balance $388,420.00 as of today; last updated by payroll accrual batch.",
       succeed:
         "As recorded by 2024-12-31 (audit date), ACC-LIAB-4411 snapshot shows balance $412,900.00 per ledger\u00B7v18 @ 2024-12-31T23:59:00-05:00, sourced from JE-2024-12-30-884 (payroll close) and recon entry rec\u00B7v3 tying to Workday accrual export hash a3f9\u20262c1. Post-audit true-up JE-2025-01-15-102 reduced the balance to $388,420.00, preserved as ledger\u00B7v21 with full provenance. The assistant returned the state recorded by then, not current GL.",
@@ -98,10 +98,10 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Month-end close",
       human:
-        "What was the reconciliation state for cash account 1000-CASH-01 at March 2025 month-end close?",
+        "What reconciliation state had been recorded for cash account 1000-CASH-01 by March 2025 month-end close?",
       fail: "Account 1000-CASH-01: book $2,884,120.33 vs. bank $2,884,118.91; two outstanding deposits; status in progress in the recon workspace.",
       succeed:
-        "Close snapshot close\u00B7mar2025 @ 2025-03-31T23:59:59-04:00: book $2,881,004.55, bank $2,881,004.55 per recon entry rec\u00B7v9; zero open exceptions; tie-out signed by controller user id ctrl_m_nguyen @ 2025-04-01T01:14Z. Today's $2,884,120.33 reflects April activity, explicitly not returned as March close state.",
+        "Close snapshot close\u00B7mar2025 @ 2025-03-31T23:59:59-04:00: book $2,881,004.55, bank $2,881,004.55 per recon entry rec\u00B7v9; zero open exceptions; tie-out signed by controller user id ctrl_m_nguyen @ 2025-04-01T01:14Z. Today's $2,884,120.33 includes April activity recorded after the close snapshot, so it is not returned for the March cutoff.",
       version: "close\u00B7mar2025",
       Icon: Calendar,
       failTitle: "Today's book vs. bank, frozen close snapshot missing",

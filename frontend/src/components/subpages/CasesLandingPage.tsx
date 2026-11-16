@@ -29,7 +29,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Case intelligence that survives",
   heroHighlight: "filings, investigations, and evolving claims",
   heroDesc:
-    "Legal proceedings and insurance claims depend on timing: what evidence existed at filing, when counsel first learned about a witness, how assessments diverged. Neotoma versions case state so you can reconstruct the record as recorded up to any point in the matter timeline.",
+    "Legal proceedings and insurance claims depend on timing: what evidence had been recorded by the filing, when counsel first learned about a witness, how assessments diverged. Neotoma versions case state so you can reconstruct the record as recorded up to any point in the matter timeline.",
   heroTags: [
     { tag: "case", Icon: Briefcase },
     { tag: "evidence", Icon: PackageSearch },
@@ -67,18 +67,18 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: 'Courts, carriers, and boards do not accept "we have the latest binder."',
   problemCalloutDesc:
-    "Motions turn on what was known when they were filed. Claims turn on investigation milestones. When discovery or SIU asks for the first mention of a witness or the state of the file on a coverage date, you need timestamps and provenance.",
+    "Motions turn on what had been recorded by the time they were filed. Claims turn on investigation milestones. When discovery or SIU asks for the first mention of a witness or what the file had recorded by a coverage date, you need timestamps and provenance.",
   scenarios: [
     {
       category: "Evidence timeline",
       human:
-        "What evidence was available when we filed the motion to compel in Rivera v. Northlake Logistics?",
+        "What evidence had been recorded by the time the motion to compel was filed in Rivera v. Northlake Logistics?",
       fail: "Current evidence list for Rivera v. Northlake Logistics (N.D. Cal. 3:24-cv-01882): depositions (5), expert reports (2), business records (12), correspondence bundle.",
       succeed:
-        "As of filing date 2025-01-22 4:00pm PT (docket entry DE 47), the motion to compel referenced exhibits A\u2013F only: depo transcripts Chen, Okoro, Vance; custodian affidavit; ESI protocol email thread through Jan 18; privilege log v3. Exhibit G (forensic image hash log) was first observed Jan 24, after filing. Snapshot case\u00B7v11 @ 2025-01-22T16:00:00-08:00 matches the clerk's PDF stamp.",
+        "As recorded by the filing cutoff 2025-01-22 4:00pm PT (docket entry DE 47), the matter held exhibits A\u2013F only: depo transcripts Chen, Okoro, Vance; custodian affidavit; ESI protocol email thread through Jan 18; privilege log v3. Exhibit G (forensic image hash log) was first recorded Jan 24, after the cutoff, so it is not part of this answer. Snapshot case\u00B7v11 @ 2025-01-22T16:00:00-08:00 is the record as of that write-time cutoff; compare it with the clerk's PDF stamp.",
       version: "case\u00B7v11",
       Icon: History,
-      failTitle: "Current evidence list, no filing-time slice",
+      failTitle: "Current evidence list, no recorded-by-filing slice",
       failDesc:
         "The assistant listed everything in the matter workspace today, including items added after the motion. Opposing counsel could challenge the record.",
     },

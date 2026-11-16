@@ -206,7 +206,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Deployment state snapshots",
-      desc: "Version every deploy with storage layout, ABI surface, active roles, and invariant coverage at the moment of deploy. Post-incident questions resolve in seconds.",
+      desc: "Version every deploy with storage layout, ABI surface, active roles, and invariant coverage as recorded by the deploy. Post-incident questions resolve in seconds.",
       tags: ["deployment", "temporal", "post_incident"],
       learnMoreHref: "/versioned-history",
     },

@@ -74,15 +74,15 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Clinical decision audit",
       human:
-        "What information was available when the agent recommended switching Mrs. Chen to IV antibiotics at 3:12am on March 8?",
+        "What information had been recorded by 3:12am on March 8, when the agent recommended switching Mrs. Chen to IV antibiotics?",
       fail: "Mrs. Chen is currently on IV ceftriaxone 2g daily, started March 8. Culture results show E. coli sensitive to ceftriaxone.",
       succeed:
-        'At 2025-03-08 03:12 UTC, the clinical agent evaluated: (1) temp 39.4\u00B0C at 02:45 (vitals\u00B7v18), (2) oral amoxicillin started Mar 6 (order\u00B7v3), (3) preliminary urine culture "gram-negative rods" at 01:30 (lab\u00B7v7, final sensitivity not yet available). Agent recommendation: escalate to IV ceftriaxone, confidence 0.87, reasoning linked to sepsis protocol SP-2024.3 \u00A74.2. Attending Dr. Okafor confirmed 03:28. Culture final (E. coli, ceftriaxone sensitive) arrived 11:40, after the decision. Full inputs at encounter\u00B7v18 @ 2025-03-08T03:12.',
+        'As recorded by 2025-03-08 03:12 UTC, the clinical agent evaluated: (1) temp 39.4\u00B0C at 02:45 (vitals\u00B7v18), (2) oral amoxicillin started Mar 6 (order\u00B7v3), (3) preliminary urine culture "gram-negative rods" at 01:30 (lab\u00B7v7, final sensitivity not yet available). Agent recommendation: escalate to IV ceftriaxone, confidence 0.87, reasoning linked to sepsis protocol SP-2024.3 \u00A74.2. Attending Dr. Okafor confirmed 03:28. Culture final (E. coli, ceftriaxone sensitive) arrived 11:40, after the decision. Full inputs at encounter\u00B7v18 @ 2025-03-08T03:12.',
       version: "encounter\u00B7v18",
       Icon: Stethoscope,
       failTitle: "Current treatment confirmed, decision inputs missing",
       failDesc:
-        "The assistant confirmed today's regimen but could not show what the agent knew at 3am. The culture sensitivity that justifies the choice was not available until 8 hours later.",
+        "The assistant confirmed today's regimen but could not show what had been recorded by 3am. The culture sensitivity that justifies the choice was not recorded until 8 hours later.",
     },
     {
       category: "Prior authorization dispute",
@@ -165,7 +165,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: FileText,
       title: "Authorization lifecycle tracking",
-      desc: "Track prior auth requests, approvals, denials, and appeals as a timeline. Prove what authorization status existed when a procedure was performed.",
+      desc: "Track prior auth requests, approvals, denials, and appeals as a timeline. Prove what authorization status had been recorded by the time a procedure was performed.",
       tags: ["authorization", "payer", "billing"],
     },
     {

@@ -73,10 +73,10 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Authorization audit",
       human:
-        "Was the billing agent authorized to initiate the $48K wire transfer to Meridian Labs on March 12?",
+        "Had the billing agent been recorded as authorized to initiate the $48K wire transfer to Meridian Labs by March 12?",
       fail: "The billing agent has permission to initiate wire transfers up to $50K. The transfer to Meridian Labs was within policy.",
       succeed:
-        "On 2025-03-12 at 14:23 UTC, billing-agent evaluated policy pol_wire_v7 (effective Feb 1). Role binding: service-account-billing with scope finance:wire:initiate, limit $50K. Delegation chain: user Jordan Oakes \u2192 orchestrator-agent (session sess_0412) \u2192 billing-agent (session sess_0413). Consent grant consent_wire_032 active since Mar 10, no revocation. Decision: ALLOW. All inputs preserved at auth_decision\u00B7v3.",
+        "As recorded by 2025-03-12 14:23 UTC, billing-agent evaluated policy pol_wire_v7 (recorded Feb 1). Role binding: service-account-billing with scope finance:wire:initiate, limit $50K. Delegation chain: user Jordan Oakes \u2192 orchestrator-agent (session sess_0412) \u2192 billing-agent (session sess_0413). Consent grant consent_wire_032 recorded Mar 10, no revocation recorded. Decision: ALLOW. All inputs preserved at auth_decision\u00B7v3.",
       version: "auth_decision\u00B7v3",
       Icon: ShieldCheck,
       failTitle: "Current policy confirms access, history missing",
@@ -172,7 +172,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: ShieldCheck,
       title: "Versioned policy evaluation records",
-      desc: "Bind each authorization decision to the policy version, role bindings, and scope constraints that produced it. Reconstruct any past decision against its original inputs.",
+      desc: "Bind each authorization decision to the policy version, role bindings, and scope constraints that produced it. Reconstruct any past decision from the inputs recorded with it.",
       tags: ["auth_decision", "policy", "audit"],
     },
     {
@@ -208,7 +208,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Vote,
       title: "DAO governance lineage",
-      desc: "Link every on-chain or agent-executed action to the proposal, vote tally, governance policy version, and quorum state that authorized it. Prove that a treasury transfer, parameter change, or code upgrade followed the DAO's rules at the time the vote closed, not today's rules.",
+      desc: "Link every on-chain or agent-executed action to the proposal, vote tally, governance policy version, and quorum state that authorized it. Prove that a treasury transfer, parameter change, or code upgrade followed the DAO's rules as recorded by the time the vote closed, not today's rules.",
       tags: ["governance_vote", "dao_proposal", "audit"],
     },
   ],

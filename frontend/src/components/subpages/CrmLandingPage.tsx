@@ -1178,7 +1178,7 @@ export function CrmLandingPageBody() {
                       },
                       {
                         label: "Audit",
-                        desc: "Inspect any entity at any version. Diff states between dates. Replay the observation log to reconstruct historical state.",
+                        desc: "Inspect any entity at any version. Diff states as recorded between two timestamps. Replay the observation log to reconstruct past state as recorded.",
                       },
                     ].map((item) => (
                       <li key={item.label} className="flex items-start gap-2.5">

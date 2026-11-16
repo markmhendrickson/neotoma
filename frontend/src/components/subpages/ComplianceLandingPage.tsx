@@ -1035,7 +1035,7 @@ export function ComplianceLandingPageBody() {
                     step: "3",
                     Icon: Brain,
                     title: "Query",
-                    desc: "Your platform queries Neotoma for current state, historical state, or the full observation trail. Every field in every snapshot traces to specific evidence. Regulators get answers, not approximations.",
+                    desc: "Your platform queries Neotoma for current state, state as recorded by a past timestamp, or the full observation trail. Every field in every snapshot traces to specific evidence. Regulators get answers, not approximations.",
                     detail: "Temporal queries, provenance chains, conflict reports.",
                   },
                 ].map(({ step, Icon, title, desc, detail }) => (
@@ -1272,7 +1272,7 @@ export function ComplianceLandingPageBody() {
                     {[
                       "Every vendor risk profile is a versioned entity with full observation history, no silent overwrites",
                       "Conflicting agent assessments surface with both versions preserved until policy or human resolution",
-                      "Temporal queries answer what the system believed on a given date with the exact snapshot, not today&apos;s row",
+                      "Temporal queries answer what the system had recorded by a given timestamp with the exact snapshot, not today&apos;s row",
                       "Each risk field traces to specific screenings, questionnaires, and monitoring events with auditable provenance",
                     ].map((item) => (
                       <li

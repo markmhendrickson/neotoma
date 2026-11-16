@@ -67,10 +67,10 @@ const CONFIG: UseCaseConfig = {
   scenarios: [
     {
       category: "Eligibility audit",
-      human: "Under which policy version was the Rodriguez family's SNAP eligibility determined on November 3?",
+      human: "Which policy version had been recorded as applying to the Rodriguez family's SNAP eligibility determination by November 3?",
       fail: "Rodriguez household SNAP case SC-2024-88712: eligible, benefit amount $487/mo based on current income thresholds.",
       succeed:
-        "Determination det\u00B7v3 on 2024-11-03: evaluated under policy pol_snap_fy2024_q4 (effective Oct 1, 2024). Household income $2,840/mo (wage data from state labor dept received Oct 28, wage\u00B7v2). Household size 4 (verified via cross-match with vital records Oct 15). Income threshold for HH-4 under that policy version: $3,007/mo. Result: ELIGIBLE, benefit $487/mo per allotment table v2024.4. Policy pol_snap_fy2025_q1 (effective Jan 1, 2025) raised the threshold to $3,142, but had not been recorded as applying when the determination was made.",
+        "As recorded by the 2024-11-03 determination, det\u00B7v3 was evaluated under policy pol_snap_fy2024_q4 (recorded Oct 1, 2024). Household income $2,840/mo (wage data from state labor dept received Oct 28, wage\u00B7v2). Household size 4 (verified via cross-match with vital records Oct 15). Income threshold for HH-4 under that policy version: $3,007/mo. Result: ELIGIBLE, benefit $487/mo per allotment table v2024.4. Policy pol_snap_fy2025_q1 (recorded Jan 1, 2025) raised the threshold to $3,142, but had not been recorded as applying when the determination was made.",
       version: "det\u00B7v3",
       Icon: CheckSquare,
       failTitle: "Current eligibility confirmed, policy version unlinked",
@@ -94,7 +94,7 @@ const CONFIG: UseCaseConfig = {
       human: "Why was Mr. Okonkwo's unemployment extension denied on January 12, and what changed since his initial approval?",
       fail: "Mr. Okonkwo unemployment claim UC-2024-55190: extension denied January 12, 2025. Reason: income threshold exceeded.",
       succeed:
-        "Initial approval det\u00B7v1 (Oct 5, 2024): eligible under pol_ui_extended_v3, no reported earnings. Extension review det\u00B7v4 (Jan 12, 2025): cross-match with IRS quarterly data (received Jan 8, income\u00B7v3) showed $4,200 1099 income Q4 2024, exceeding the $3,500 earnings disqualification threshold under pol_ui_extended_v3 \u00A77.2(b). Agent recommendation: DENY extension, confidence 0.94. Reviewer Kim confirmed Jan 12 14:30. Change from initial: no income data existed at Oct 5 determination. Full lineage at case_record\u00B7okonkwo_v4.",
+        "Initial approval det\u00B7v1 (Oct 5, 2024): eligible under pol_ui_extended_v3, no reported earnings. Extension review det\u00B7v4 (Jan 12, 2025): cross-match with IRS quarterly data (received Jan 8, income\u00B7v3) showed $4,200 1099 income Q4 2024, exceeding the $3,500 earnings disqualification threshold under pol_ui_extended_v3 \u00A77.2(b). Agent recommendation: DENY extension, confidence 0.94. Reviewer Kim confirmed Jan 12 14:30. Change from initial: no income data had been recorded by the Oct 5 determination. Full lineage at case_record\u00B7okonkwo_v4.",
       version: "case_record\u00B7okonkwo_v4",
       Icon: History,
       failTitle: "Denial reason given, evidence timeline missing",
@@ -222,7 +222,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How government technology teams use Neotoma as their integrity layer",
     desc:
-      "AI platforms for government agencies automate eligibility screening, cross-agency data reconciliation, and constituent communication for benefits programs. Neotoma versions every evaluation, policy application, and determination so you can reconstruct the evidence and rules that governed each decision.",
+      "AI platforms for government agencies automate eligibility screening, cross-agency data reconciliation, and constituent communication for benefits programs. Neotoma versions every evaluation, policy application, and determination so you can reconstruct the evidence and rules recorded with each decision.",
     featuresHeading: "What government technology teams build",
     features: [
       "Eligibility agents that evaluate multi-program rules (SNAP, Medicaid, TANF) against real-time cross-agency data feeds",

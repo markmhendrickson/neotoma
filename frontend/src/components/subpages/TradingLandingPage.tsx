@@ -31,7 +31,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Trading agent state that survives",
   heroHighlight: "strategy drift, analyst disagreement, and post-trade reconstruction",
   heroDesc:
-    "When multiple specialist agents analyze markets, debate positions, and execute trades autonomously, the decision chain, strategy version, analyst inputs, debate resolution, and risk parameters must be reconstructable after the fact, including the trades the agent chose to pass on. Neotoma versions every trading entity so you can answer what the agent knew, what each analyst recommended, and why the final call was made (or deliberately not made).",
+    "When multiple specialist agents analyze markets, debate positions, and execute trades autonomously, the decision chain, strategy version, analyst inputs, debate resolution, and risk parameters must be reconstructable after the fact, including the trades the agent chose to pass on. Neotoma versions every trading entity so you can answer what the agent had recorded, what each analyst recommended, and why the final call was made (or deliberately not made).",
   heroTags: [
     { tag: "trade_decision", Icon: Scale },
     { tag: "pass_decision", Icon: CircleSlash },
@@ -113,15 +113,15 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Risk state reconstruction",
       human:
-        "Were my risk limits already breached when the liquidation happened at 3:42 AM on April 1?",
+        "Which risk limits had been recorded by 3:42 AM UTC on April 1, when the liquidation completed, and had they been breached?",
       fail: "Your current risk limits are: 15% position limit, 5% drawdown cap, kill switch inactive. No liquidations in the past 24 hours.",
       succeed:
-        "Timeline for Apr 1 risk events: 02:15 UTC drawdown at 3.8% (risk_state·v11, within 5% cap). 02:47 UTC BTC flash crash begins, portfolio drawdown hits 4.9% (risk_state·v12, cap not yet breached). 03:12 UTC drawdown hits 5.1%, kill switch triggered (risk_state·v13). 03:14 UTC kill switch executed: all open positions flagged for closure. 03:42 UTC liquidation of ETH-PERP completed at $3,211 (execution·v8). The kill switch activated 30 minutes before liquidation. Drawdown cap was 5% (set in strategy·v5 on Apr 2, note: this was the pre-tightening 8% cap from strategy·v4 at the time). At 03:42 UTC the effective cap was 8%, not 5%.",
+        "As recorded by 03:42 UTC on Apr 1: 02:15 UTC drawdown at 3.8% (risk_state·v11). 02:47 UTC BTC flash crash begins, portfolio drawdown hits 4.9% (risk_state·v12). 03:12 UTC drawdown hits 5.1%, kill switch triggered (risk_state·v13). 03:14 UTC kill switch executed: all open positions flagged for closure. 03:42 UTC liquidation of ETH-PERP completed at $3,211 (execution·v8). The kill switch activated 30 minutes before liquidation. The drawdown cap recorded at that cutoff is 8% (strategy·v4), so the 5.1% drawdown was not a limit breach. The tightening to a 5% cap (strategy·v5) was recorded on Apr 2, after the cutoff, so it is not part of this answer.",
       version: "risk_state·v13",
       Icon: Shield,
       failTitle: "Current limits reported, event timeline missing",
       failDesc:
-        "Without temporal state, the assistant reports today's 5% cap and misses that the cap was 8% on April 1. The sequence of drawdown escalation, kill switch activation, and liquidation cannot be reconstructed.",
+        "Without temporal state, the assistant reports today's 5% cap and misses the 8% cap that had been recorded by April 1. The sequence of drawdown escalation, kill switch activation, and liquidation cannot be reconstructed.",
     },
     {
       category: "Analyst attribution",

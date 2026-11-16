@@ -60,7 +60,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: CalendarClock,
       title: "No temporal queries",
-      desc: "What was your monthly spending when you decided to change jobs? What were your vitals when you started that new supplement? Your tools show current state, not historical state.",
+      desc: "What had you recorded about your monthly spending by the time you decided to change jobs? What vitals had you recorded by the time you started that new supplement? Your tools show current state, not state as recorded by a past date.",
     },
   ],
   problemCallout:
@@ -156,7 +156,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "Temporal queries on your own life",
-      desc: "Answer 'what was my financial state when I made that decision?' or 'what were my vitals when I started this supplement?' with exact historical snapshots, not today's numbers.",
+      desc: "Answer 'what had I recorded about my finances by the time I made that decision?' or 'what vitals had I recorded by the time I started this supplement?' with exact snapshots as recorded by that point, not today's numbers. Entries you log later about an earlier date are not part of the answer.",
       tags: ["transaction\u00B7v41 @ 2026-02-14", "replay"],
     },
     {
