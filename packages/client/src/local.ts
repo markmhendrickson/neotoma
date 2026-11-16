@@ -11,9 +11,12 @@
  * toward the HTTP transport.
  */
 
+import { executeCorrectRequest, type CorrectRequest } from "./correction.js";
 import {
+  CorrectInput,
   CreateRelationshipsInput,
   CreateRelationshipInput,
+  DeprecatedCorrectInput,
   ListObservationsInput,
   ListTimelineEventsInput,
   NeotomaClientError,
@@ -60,7 +63,7 @@ export interface LocalOperations {
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  correct(input: CorrectInput): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
   executeTool(name: string, args: unknown): Promise<unknown>;
@@ -147,12 +150,12 @@ export class LocalTransport implements NeotomaTransport {
     return ops.createRelationships(input);
   }
 
-  async correct(input: {
-    entity_id: string;
-    corrections: Record<string, unknown>;
-  }): Promise<unknown> {
+  async correct(input: CorrectInput): Promise<unknown>;
+  /** @deprecated Pass one canonical CorrectInput per field. */
+  async correct(input: DeprecatedCorrectInput): Promise<unknown[]>;
+  async correct(input: CorrectRequest): Promise<unknown | unknown[]> {
     const ops = await this.resolveOperations();
-    return ops.correct(input);
+    return executeCorrectRequest(input, (request) => ops.correct(request));
   }
 
   async listEntityTypes(input: { search?: string } = {}): Promise<unknown> {

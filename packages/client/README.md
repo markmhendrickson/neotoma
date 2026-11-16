@@ -30,9 +30,7 @@ const client = new NeotomaClient({
 });
 
 await client.store({
-  entities: [
-    { entity_type: "task", title: "Review plan", due_date: "2026-04-15" },
-  ],
+  entities: [{ entity_type: "task", title: "Review plan", due_date: "2026-04-15" }],
   idempotency_key: "my-hook-2026-04-09-001",
 });
 ```
@@ -54,10 +52,10 @@ const result = await client.retrieveEntities({ entity_type: "task", limit: 10 })
 
 Both transports implement the `NeotomaTransport` interface, so hook plugins can switch between them by config without changing code.
 
-| Transport | When to use | Dependencies |
-|---|---|---|
-| `HttpTransport` | Hook plugin runs in a separate process; remote Neotoma instance; production deployments | Node 18+ (built-in fetch) |
-| `LocalTransport` | Hook plugin bundles Neotoma core; single Node process; avoid HTTP roundtrip | `neotoma` peer dependency |
+| Transport        | When to use                                                                             | Dependencies              |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------- |
+| `HttpTransport`  | Hook plugin runs in a separate process; remote Neotoma instance; production deployments | Node 18+ (built-in fetch) |
+| `LocalTransport` | Hook plugin bundles Neotoma core; single Node process; avoid HTTP roundtrip             | `neotoma` peer dependency |
 
 ## API
 
@@ -71,7 +69,8 @@ The client exposes typed wrappers for the full MCP action catalog:
 - `listTimelineEvents(input)` — timeline events in a window
 - `retrieveRelatedEntities(input)` — graph expansion
 - `createRelationship(input)` — link two existing entities
-- `correct(input)` — supersede a prior observation
+- `correct(input)` — supersede one field with the server's canonical
+  `{ entity_id, entity_type, field, value, idempotency_key }` request
 - `listEntityTypes(input)` — schema-level discovery
 - `getEntityTypeCounts(input)` — per-type cardinality
 - `executeTool(name, args)` — escape hatch for any MCP action
@@ -94,6 +93,85 @@ import { renderTurnReport } from "@neotoma/client/turn_report";
 - `diagnoseTurn(observation)` — runs per-turn invariants (missing user/assistant store, unstored attachments, store-first ordering, Parquet residue) and returns structured `Diagnosis` items with severity and suggested repair actions.
 - `applyRepairs(transport, diagnoses, conversationId, turnId)` — executes the suggested repairs in the same turn and records a `neotoma_repair` summary entity.
 - `renderTurnReport(input)` — formats the mandatory `🧠 Neotoma` section (Created / Updated / Retrieved groups, plus Issues) that agents append to every user-visible reply.
+
+### Corrections
+
+Pass one field per canonical `correct()` call:
+
+```ts
+await client.correct({
+  entity_id: entityId,
+  entity_type: "task",
+  field: "status",
+  value: "done",
+  idempotency_key: "task-status-done",
+});
+```
+
+The deprecated map overload remains until 0.2.0, the next minor release. It requires
+`entity_type`, a nonempty `corrections` map, and a caller-supplied base
+`idempotency_key`. The client applies fields sequentially in sorted order and
+derives keys as `<base>:<field>`:
+
+```ts
+await client.correct({
+  entity_id: entityId,
+  entity_type: "task",
+  corrections: { priority: "high", status: "done" },
+  idempotency_key: "task-update",
+});
+// Sends task-update:priority, then task-update:status.
+```
+
+The base key must be a non-empty, non-whitespace string. Multi-field calls
+are sequential and **not atomic**: earlier fields remain committed if a later
+field fails. With `expected_version` (or the helper's `expectedVersion`), the
+client sends that version for the first field, then uses each successful
+correction's returned `entity_version` for the next field. An intervening
+writer causes a version conflict; the client never drops the precondition or
+forces an overwrite. The error names the fields already committed. Re-read
+the entity, reconcile its current values, then retry only the uncommitted
+fields with a fresh base key and the current entity version. Use the MCP
+`correct_transaction` tool (REST `POST /corrections/transaction`) when all
+fields must succeed or fail together:
+
+```ts
+const { snapshot, observation_count } = await client.retrieveEntitySnapshot({
+  entity_id: entityId,
+});
+await client.executeTool("correct_transaction", {
+  idempotency_key: "task-atomic-update",
+  entities: [
+    {
+      entity_id: entityId,
+      entity_type: "task",
+      expected_observation_count: observation_count,
+      expected_snapshot: { priority: snapshot.priority, status: snapshot.status },
+      changes: [
+        { field: "priority", value: "high" },
+        { field: "status", value: "done" },
+      ],
+    },
+  ],
+});
+```
+
+Over HTTP, `executeTool("correct_transaction", ...)` posts to
+`/corrections/transaction`.
+
+`snapshotOnUpdate()` uses the same canonical shape internally and only sends
+fields whose reviewed values differ from the retrieved snapshot. It now
+requires `entityType` and `idempotencyKey` (the base key; per-field keys are
+derived as `<base>:<field>`):
+
+```ts
+await snapshotOnUpdate(client, {
+  entityId,
+  entityType: "task",
+  corrections: { priority: "high", status: "done" },
+  idempotencyKey: "task-reviewed-update",
+});
+```
 
 ## Related packages
 
