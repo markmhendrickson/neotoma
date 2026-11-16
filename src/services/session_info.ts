@@ -25,6 +25,7 @@ import { normaliseClientNameWithReason } from "../crypto/agent_identity.js";
 import type { AttributionPolicySnapshot } from "./attribution_policy.js";
 import { getAttributionPolicySnapshot } from "./attribution_policy.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /** Attribution block surfaced in the session response. */
 export interface SessionAttributionInfo {
@@ -280,7 +281,7 @@ export function normalizeSessionOrigin(value: string | null | undefined): string
  * host to ground user-visible links in.
  */
 export function resolveConfiguredSessionOrigin(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnv()
 ): string | undefined {
   return normalizeSessionOrigin(env.NEOTOMA_PUBLIC_BASE_URL);
 }

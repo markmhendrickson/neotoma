@@ -29,6 +29,7 @@ import type {
   SandboxReportTransport,
   SubmitSandboxReportArgs,
 } from "./types.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const MAX_DESCRIPTION_CHARS = 8_000;
 
@@ -194,8 +195,8 @@ export class HttpSandboxReportTransport implements SandboxReportTransport {
 }
 
 export function resolveSandboxReportTransport(): SandboxReportTransport {
-  const forwardUrl = process.env.NEOTOMA_SANDBOX_REPORT_FORWARD_URL?.trim();
-  const bearer = process.env.NEOTOMA_SANDBOX_REPORT_FORWARD_BEARER?.trim();
+  const forwardUrl = runtimeEnv().NEOTOMA_SANDBOX_REPORT_FORWARD_URL?.trim();
+  const bearer = runtimeEnv().NEOTOMA_SANDBOX_REPORT_FORWARD_BEARER?.trim();
   if (forwardUrl && bearer) {
     return new HttpSandboxReportTransport(forwardUrl, bearer);
   }

@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { deriveMcpAuthToken, hexToKey, mnemonicToSeed } from "../crypto/key_derivation.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Default lifetime for a KEY-ENTRY gate session — the short window in which a
@@ -171,7 +172,7 @@ export function isOauthKeyCredentialValid(credentials: OAuthKeyCredentials): {
   // deliberately not accepted here: this preflight mints a durable OAuth
   // connection, and a credential being retired must not mint one that
   // outlives its own window.
-  const configuredBearer = (process.env.NEOTOMA_BEARER_TOKEN || "").trim();
+  const configuredBearer = (runtimeEnv().NEOTOMA_BEARER_TOKEN || "").trim();
   if (bearerToken) {
     if (!configuredBearer) {
       return {

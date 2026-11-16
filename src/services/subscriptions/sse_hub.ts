@@ -4,10 +4,11 @@ import { logger } from "../../utils/logger.js";
 import type { SubstrateEvent } from "../../events/types.js";
 import type { SubscriptionRecord } from "./subscription_types.js";
 import { subscriptionMatchesEvent } from "./subscription_types.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const BUFFER_CAP = Math.min(
   10_000,
-  Math.max(100, parseInt(process.env.NEOTOMA_SSE_EVENT_BUFFER ?? "1000", 10) || 1000)
+  Math.max(100, parseInt(runtimeEnv().NEOTOMA_SSE_EVENT_BUFFER ?? "1000", 10) || 1000)
 );
 
 type RingEntry = { id: string; event: SubstrateEvent };

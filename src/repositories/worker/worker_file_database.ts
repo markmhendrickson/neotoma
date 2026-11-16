@@ -63,6 +63,7 @@ import {
   type DbRunResult,
   type DbStatement,
 } from "../db/driver.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -168,6 +169,9 @@ parentPort.on("message", (msg) => {
       process.exit(1);
     } else if (msg.sql === "__hold_for_test__") {
       // Deterministic test-only lifetime barrier; no production path issues it.
+      // This code is serialized into the worker thread, where imports are unavailable; the
+      // worker's own environment is read, not host configuration.
+      // runtime-env-ok
       if (process.env.NODE_ENV !== "test") throw new Error("Worker test barrier unavailable");
       const flags = new Int32Array(msg.params[0]);
       Atomics.store(flags, 0, 1);
@@ -1107,7 +1111,7 @@ export function summarizeQueuedStatements(statements: string[], top = 4): string
 }
 
 function readEnvInt(name: string): number | undefined {
-  const parsed = Number.parseInt(process.env[name] || "", 10);
+  const parsed = Number.parseInt(runtimeEnv()[name] || "", 10);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 

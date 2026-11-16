@@ -1,6 +1,7 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
 import { logger } from "../../utils/logger.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -13,7 +14,7 @@ import { logger } from "../../utils/logger.js";
  */
 export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
   0,
-  Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
+  Number.parseInt(runtimeEnv().NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
 );
 
 function isSqliteBusyError(error: unknown): boolean {

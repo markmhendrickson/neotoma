@@ -8,6 +8,7 @@ import { EventEmitter } from "node:events";
 
 import { logger } from "../utils/logger.js";
 import type { SubstrateEvent } from "./types.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 const CHANNEL = "substrate_event" as const;
 
@@ -60,7 +61,7 @@ class SubstrateEventBus extends EventEmitter {
 
 export const substrateEventBus = new SubstrateEventBus();
 
-if (process.env.NEOTOMA_DEBUG_SUBSTRATE_EVENTS === "1") {
+if (runtimeEnv().NEOTOMA_DEBUG_SUBSTRATE_EVENTS === "1") {
   substrateEventBus.onSubstrateEvent((ev) => {
     logger.debug("[substrate_event]", {
       event_id: ev.event_id,

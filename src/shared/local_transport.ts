@@ -2,11 +2,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { access, mkdir, open } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import http from "node:http";
-import os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import createClient from "openapi-fetch";
 import type { paths } from "./openapi_types.js";
+import { isEmbeddedMode, runtimeEnv, userStateDir } from "../config_embedded.js";
 
 type LocalTransportClient = ReturnType<typeof createClient<paths>>;
 
@@ -38,9 +38,7 @@ function portFromBaseUrl(baseUrl?: string): number | null {
 /** Reads preferred_env from ~/.config/neotoma/config.json. Returns null on any error. */
 function readPreferredEnvFromCliConfig(): "production" | "development" | null {
   try {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-    if (!homeDir) return null;
-    const configPath = join(homeDir, ".config", "neotoma", "config.json");
+    const configPath = join(userStateDir(), "config.json");
     if (!existsSync(configPath)) return null;
     const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as {
       preferred_env?: string;
@@ -69,14 +67,14 @@ function readPreferredEnvFromCliConfig(): "production" | "development" | null {
  * installed Neotoma via npm should never silently hit the development DB.
  */
 export function resolveLocalTransportEnv(baseUrl?: string): "production" | "development" {
-  const explicitEnv = process.env.NEOTOMA_ENV;
+  const explicitEnv = runtimeEnv().NEOTOMA_ENV;
   if (explicitEnv === "production" || explicitEnv === "development") return explicitEnv;
 
-  const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+  const sessionEnv = runtimeEnv().NEOTOMA_SESSION_ENV;
   if (sessionEnv === "prod") return "production";
   if (sessionEnv === "dev") return "development";
 
-  const preferredEnv = process.env.NEOTOMA_CLI_PREFERRED_ENV;
+  const preferredEnv = runtimeEnv().NEOTOMA_CLI_PREFERRED_ENV;
   if (preferredEnv === "prod") return "production";
   if (preferredEnv === "dev") return "development";
 
@@ -89,7 +87,7 @@ export function resolveLocalTransportEnv(baseUrl?: string): "production" | "deve
   // NEOTOMA_TEST_SIMULATE_DIST_BUILD is an internal test hook that allows unit tests to
   // exercise this branch without physically running from a dist/ directory. It MUST NOT
   // be set in production — doing so forces production mode regardless of actual build origin.
-  if (__dirname.includes("/dist/") || process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1")
+  if (__dirname.includes("/dist/") || runtimeEnv().NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1")
     return "production";
 
   // Step 5b: port inference (source checkout only)
@@ -140,6 +138,11 @@ export async function getLocalTransportClient(options: {
   baseUrl?: string;
   fetch?: typeof fetch;
 }): Promise<LocalTransportClient> {
+  if (isEmbeddedMode()) {
+    throw new Error(
+      "The local transport is not available in embedded mode: it starts a separate local API process."
+    );
+  }
   const localBaseUrl = await startLocalTransport(options.baseUrl);
   const headers: Record<string, string> = {};
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
@@ -193,6 +196,8 @@ async function startLocalTransport(baseUrl: string | undefined): Promise<string>
       localApiChild = spawn(process.execPath, [actionsPath], {
         cwd: projectRoot,
         env: {
+          // Standard mode only (getLocalTransportClient refuses in embedded mode); the local
+          // API child needs the host's full environment. runtime-env-ok
           ...process.env,
           NEOTOMA_ENV: env,
           HTTP_PORT: String(port),

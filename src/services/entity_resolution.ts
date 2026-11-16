@@ -13,6 +13,7 @@ import {
   type CanonicalNameRule,
   type SchemaDefinition,
 } from "./schema_registry.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Values that must not be used as an entity's canonical_name. These are
@@ -307,7 +308,7 @@ export function generateEntityId(
  */
 export function entityIdTenantSalt(userId?: string | null): string | undefined {
   if (!userId) return undefined;
-  const override = (process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS ?? "")
+  const override = (runtimeEnv().NEOTOMA_TENANT_SCOPED_ENTITY_IDS ?? "")
     .toString()
     .trim()
     .toLowerCase();

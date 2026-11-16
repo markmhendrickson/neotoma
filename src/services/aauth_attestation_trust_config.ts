@@ -22,6 +22,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { X509Certificate } from "node:crypto";
+import { runtimeEnv } from "../config_embedded.js";
 
 const BUNDLED_APPLE_ROOT_RELATIVE = "config/aauth/apple_attestation_root.pem";
 const BUNDLED_TPM_ROOTS_RELATIVE = "config/aauth/tpm_attestation_roots";
@@ -95,7 +96,7 @@ function buildConfig(): AttestationTrustConfig {
     }
   }
 
-  const operatorPath = process.env.NEOTOMA_AAUTH_ATTESTATION_CA_PATH;
+  const operatorPath = runtimeEnv().NEOTOMA_AAUTH_ATTESTATION_CA_PATH;
   if (operatorPath && operatorPath.trim().length > 0) {
     try {
       const operatorCerts = loadOperatorCAs(operatorPath.trim());
@@ -116,7 +117,7 @@ function buildConfig(): AttestationTrustConfig {
     }
   }
 
-  const aaguidPath = process.env.NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH;
+  const aaguidPath = runtimeEnv().NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH;
   let webauthnAaguidAllowlist: string[] = [];
   if (aaguidPath && aaguidPath.trim().length > 0) {
     try {
@@ -149,7 +150,7 @@ function resolveBundledRootPath(): string {
   // the PEM at `config/aauth/apple_attestation_root.pem` and the server
   // is launched from the repository root. Tests can shim CWD or set
   // NEOTOMA_AAUTH_ATTESTATION_BUNDLED_ROOT_PATH for an absolute override.
-  const override = process.env.NEOTOMA_AAUTH_ATTESTATION_BUNDLED_ROOT_PATH;
+  const override = runtimeEnv().NEOTOMA_AAUTH_ATTESTATION_BUNDLED_ROOT_PATH;
   if (override && override.trim().length > 0) {
     const candidate = override.trim();
     return isAbsolute(candidate) ? candidate : resolve(candidate);
@@ -165,7 +166,7 @@ function resolveBundledRootPath(): string {
  * trusted root is configured.
  */
 function resolveBundledTpmRootsPath(): string | null {
-  const override = process.env.NEOTOMA_AAUTH_TPM_ROOTS_PATH;
+  const override = runtimeEnv().NEOTOMA_AAUTH_TPM_ROOTS_PATH;
   if (override && override.trim().length > 0) {
     const candidate = override.trim();
     const absolute = isAbsolute(candidate) ? candidate : resolve(candidate);

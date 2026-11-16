@@ -49,6 +49,7 @@
 import { X509Certificate, createHash } from "node:crypto";
 
 import type { AttestationFormat } from "./aauth_attestation_verifier.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /** Operational mode for the revocation service. */
 export type RevocationMode = "disabled" | "log_only" | "enforce";
@@ -135,7 +136,7 @@ export interface RevocationFetcher {
  * environment. Unknown values fall back to `disabled` to preserve the
  * v0.10.x posture until operators opt in.
  */
-export function readRevocationMode(env: NodeJS.ProcessEnv = process.env): RevocationMode {
+export function readRevocationMode(env: NodeJS.ProcessEnv = runtimeEnv()): RevocationMode {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_MODE;
   if (raw === undefined || raw === null) return "disabled";
   const normalised = String(raw).trim().toLowerCase();
@@ -150,7 +151,7 @@ export function readRevocationMode(env: NodeJS.ProcessEnv = process.env): Revoca
  * non-finite values reset to the default so a typo cannot disable the
  * cache implicitly.
  */
-export function readCacheTtlMs(env: NodeJS.ProcessEnv = process.env): number {
+export function readCacheTtlMs(env: NodeJS.ProcessEnv = runtimeEnv()): number {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS;
   if (raw === undefined || raw === null || raw === "") {
     return 60 * 60 * 1000;
@@ -165,7 +166,7 @@ export function readCacheTtlMs(env: NodeJS.ProcessEnv = process.env): number {
  * 1500ms. Floors at 100ms so a misconfiguration cannot effectively
  * disable the service.
  */
-export function readTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+export function readTimeoutMs(env: NodeJS.ProcessEnv = runtimeEnv()): number {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_TIMEOUT_MS;
   if (raw === undefined || raw === null || raw === "") return 1500;
   const parsed = Number(raw);
@@ -179,7 +180,7 @@ export function readTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
  * treated as `good` for tier-resolution purposes; when `false`,
  * `unknown` is treated as `revoked` in `enforce` mode.
  */
-export function readFailOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+export function readFailOpen(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN;
   if (raw === undefined || raw === null || raw === "") return true;
   const normalised = String(raw).trim().toLowerCase();
@@ -339,7 +340,7 @@ async function checkAppleRevocation(input: {
   fetcher: RevocationFetcher;
 }): Promise<RevocationOutcome> {
   const endpoint =
-    process.env.NEOTOMA_AAUTH_APPLE_REVOCATION_URL ??
+    runtimeEnv().NEOTOMA_AAUTH_APPLE_REVOCATION_URL ??
     "https://data.appattest.apple.com/v1/revoked-list";
   const serialHex = input.leaf.serialNumber.toLowerCase();
   const body = Buffer.from(JSON.stringify({ serial_numbers: [serialHex] }), "utf8");

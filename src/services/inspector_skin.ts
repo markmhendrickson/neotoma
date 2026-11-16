@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runtimeEnv } from "../config_embedded.js";
 
 export interface ResolvedInspectorSkin {
   /** Stable skin slug, e.g. `sample`. */
@@ -129,7 +130,7 @@ function loadSkinFromPath(filePath: string): ResolvedInspectorSkin | null {
  * unusable (so the Inspector renders the default Neotoma theme).
  */
 export function resolveInspectorSkin(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnv()
 ): ResolvedInspectorSkin | null {
   const explicitPath = (env.NEOTOMA_INSPECTOR_SKIN_CONFIG || "").trim();
   if (explicitPath) {

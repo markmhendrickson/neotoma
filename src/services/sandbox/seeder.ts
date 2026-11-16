@@ -16,6 +16,25 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSandboxPack, DEFAULT_SANDBOX_PACK_ID, type SandboxPack } from "./pack_registry.js";
+import { isEmbeddedMode, runtimeEnv } from "../../config_embedded.js";
+
+/** Fixed system search path for the seed child in embedded mode (no host PATH is inherited). */
+export const EMBEDDED_SEED_PATH = "/usr/local/bin:/usr/bin:/bin";
+
+/**
+ * Environment for the seed script child. Standard mode: the process environment, as before.
+ * Embedded mode: only the explicit map, plus a minimal fixed `PATH` when the map names none,
+ * so the child can still find `node`/`tsx` without inheriting the host environment.
+ * The seed script reads the bearer from `NEOTOMA_SANDBOX_BEARER`, not a flag.
+ */
+export function buildSeedChildEnv(bearer?: string): NodeJS.ProcessEnv {
+  const base = runtimeEnv();
+  return {
+    ...base,
+    ...(isEmbeddedMode() && !base.PATH ? { PATH: EMBEDDED_SEED_PATH } : {}),
+    ...(bearer ? { NEOTOMA_SANDBOX_BEARER: bearer } : {}),
+  };
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -87,11 +106,7 @@ export async function seedForSession(options: SeedForSessionOptions): Promise<bo
   return new Promise<boolean>((resolve) => {
     const child = spawn(command, args, {
       cwd: REPO_ROOT,
-      env: {
-        ...process.env,
-        // The seed script reads the bearer from this env var, not a flag.
-        ...(options.bearer ? { NEOTOMA_SANDBOX_BEARER: options.bearer } : {}),
-      },
+      env: buildSeedChildEnv(options.bearer),
       stdio: "pipe",
     });
 

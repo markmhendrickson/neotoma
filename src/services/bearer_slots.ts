@@ -43,6 +43,7 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export const BEARER_PRIMARY_ENV = "NEOTOMA_BEARER_TOKEN";
 export const BEARER_PREVIOUS_ENV = "NEOTOMA_BEARER_TOKEN_PREVIOUS";
@@ -231,7 +232,7 @@ function logHandoverStatus(status: HandoverStatus, nowMs: number): void {
  * status line is emitted once per distinct configuration.
  */
 export function announceBearerHandoverStatus(
-  env: Env = process.env,
+  env: Env = runtimeEnv(),
   nowMs: number = Date.now()
 ): HandoverStatus {
   const parsed = loadHandover(env, nowMs);
@@ -252,7 +253,7 @@ export function announceBearerHandoverStatus(
  */
 export function matchConfiguredBearer(
   presented: string,
-  env: Env = process.env,
+  env: Env = runtimeEnv(),
   nowMs: number = Date.now()
 ): BearerSlot | null {
   const primary = env[BEARER_PRIMARY_ENV];

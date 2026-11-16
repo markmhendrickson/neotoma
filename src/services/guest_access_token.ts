@@ -12,6 +12,7 @@
 
 import { randomUUID, createHash } from "node:crypto";
 import { db } from "../db.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export interface GuestAccessToken {
   token: string;
@@ -33,7 +34,7 @@ function deriveTokenEntityId(token: string): string {
 }
 
 function getGuestTokenTtlSeconds(): number {
-  const configured = Number.parseInt(process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS ?? "", 10);
+  const configured = Number.parseInt(runtimeEnv().NEOTOMA_GUEST_TOKEN_TTL_SECONDS ?? "", 10);
   return Number.isFinite(configured) && configured > 0
     ? configured
     : DEFAULT_GUEST_TOKEN_TTL_SECONDS;

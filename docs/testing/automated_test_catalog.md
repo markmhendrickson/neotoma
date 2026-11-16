@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **857**
-- Backend and repo Vitest files: **803**
+- Total automated test files: **861**
+- Backend and repo Vitest files: **807**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 241 |
+| Vitest unit tests | 245 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
 | Vitest integration tests | 249 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (241):**
+**Files (245):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -194,6 +194,10 @@ flowchart TD
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
+- `tests/unit/embedded_config.test.ts`
+- `tests/unit/embedded_env_routing.test.ts`
+- `tests/unit/embedded_issues_client.test.ts`
+- `tests/unit/embedded_standard_pins.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
 - `tests/unit/entities_user_type_index.test.ts`
 - `tests/unit/entity_id_tenant_scope.test.ts`

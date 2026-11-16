@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 /**
  * Single source of truth for listener bind-host resolution.
  *
@@ -26,7 +27,7 @@ export const DEFAULT_BIND_HOST = "127.0.0.1";
  */
 export function resolveBindHostFromEnv(
   envVar: string,
-  vars: NodeJS.ProcessEnv = process.env
+  vars: NodeJS.ProcessEnv = runtimeEnv()
 ): string {
   const raw = (vars[envVar] || "").trim();
   return raw.length > 0 ? raw : DEFAULT_BIND_HOST;

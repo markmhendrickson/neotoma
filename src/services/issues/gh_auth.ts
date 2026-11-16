@@ -12,6 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { isEmbeddedMode, runtimeEnv } from "../../config_embedded.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +24,8 @@ const CACHE_TTL_MS = 60_000;
  * Check if the `gh` CLI is installed and accessible.
  */
 export async function isGhInstalled(): Promise<boolean> {
+  // Embedded mode never consults the host's `gh` CLI or its stored credentials.
+  if (isEmbeddedMode()) return false;
   try {
     await execFileAsync("gh", ["--version"]);
     return true;
@@ -35,6 +38,7 @@ export async function isGhInstalled(): Promise<boolean> {
  * Check if the user is authenticated with `gh`.
  */
 export async function isGhAuthenticated(): Promise<boolean> {
+  if (isEmbeddedMode()) return false;
   try {
     const { exitCode } = await execFileAsync("gh", ["auth", "status"]).then(
       () => ({ exitCode: 0 }),
@@ -51,6 +55,7 @@ export async function isGhAuthenticated(): Promise<boolean> {
  * Cached in-process for 60 seconds to avoid repeated subprocess calls.
  */
 export async function getGhToken(): Promise<string | null> {
+  if (isEmbeddedMode()) return null;
   if (cachedToken && Date.now() - cachedAt < CACHE_TTL_MS) {
     return cachedToken;
   }
@@ -73,6 +78,7 @@ export async function getGhToken(): Promise<string | null> {
  * Verify the token works by calling the GitHub API.
  */
 export async function verifyGhAuth(): Promise<{ login: string } | null> {
+  if (isEmbeddedMode()) return null;
   try {
     const { stdout } = await execFileAsync("gh", ["api", "user"]);
     const user = JSON.parse(stdout) as { login: string };
@@ -88,7 +94,7 @@ export async function verifyGhAuth(): Promise<{ login: string } | null> {
  * Returns null if no authentication method is available.
  */
 export async function resolveGitHubToken(): Promise<string | null> {
-  const envToken = process.env.NEOTOMA_ISSUES_GITHUB_TOKEN;
+  const envToken = runtimeEnv().NEOTOMA_ISSUES_GITHUB_TOKEN;
   if (envToken) return envToken;
 
   const ghToken = await getGhToken();

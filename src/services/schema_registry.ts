@@ -34,6 +34,7 @@ import {
   MAX_PATTERNS_PER_CONDITION,
   MAX_PATTERNS_PER_SCHEMA,
 } from "./safe_pattern.js";
+import { isEmbeddedMode, runtimeEnv } from "../config_embedded.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3634,12 +3635,15 @@ export class SchemaRegistryService {
    */
   private exportSnapshotsAsync(): void {
     // Only export if we're in a Node.js environment (not browser)
-    if (typeof process === "undefined" || !process.env) {
+    if (typeof process === "undefined" || !runtimeEnv()) {
       return;
     }
 
+    // Embedded hosts do not run the repository's snapshot export script.
+    if (isEmbeddedMode()) return;
+
     // Skip export in test environments to avoid side effects
-    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    if (runtimeEnv().NODE_ENV === "test" || runtimeEnv().VITEST) {
       return;
     }
 
@@ -3648,7 +3652,7 @@ export class SchemaRegistryService {
     const child = spawn("tsx", [scriptPath], {
       stdio: "ignore", // Suppress output to avoid cluttering logs
       detached: true,
-      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
+      env: { ...runtimeEnv(), NODE_ENV: runtimeEnv().NODE_ENV || "development" },
       // tsx resolves to tsx.cmd on Windows; .cmd needs shell mode
       // (CVE-2024-27980) or spawn throws EINVAL.
       ...WIN_SHELL,
@@ -3661,7 +3665,7 @@ export class SchemaRegistryService {
     child.on("error", (error) => {
       // Silently ignore export errors - schema operations should not fail
       // if snapshot export fails (e.g., in CI/CD or restricted environments)
-      if (process.env.NODE_ENV === "development") {
+      if (runtimeEnv().NODE_ENV === "development") {
         console.warn(`[Schema Registry] Failed to export snapshots: ${error.message}`);
       }
     });

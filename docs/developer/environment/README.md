@@ -22,6 +22,7 @@ This directory contains documentation for managing environment variables in the 
 
 ## Related Documentation
 
+- **[Embedded (in-process) configuration](../embedded_configuration.md)** - Configure Neotoma in code, with no env files, home-directory config or server
 - **Configuration**: `foundation-config.yaml` - Main configuration file
 - **Scripts**: `scripts/sync-env-from-1password.sh` - Sync wrapper script
 - **Foundation Script**: `foundation/scripts/op_sync_env_from_1password.py` - The actual sync script

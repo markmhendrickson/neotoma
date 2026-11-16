@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 /**
  * Operator-managed allowlist for the `operator_attested` AAuth tier.
  *
@@ -102,9 +103,9 @@ export function resetOperatorAllowlistCacheForTests(): void {
 function ensureLoaded(): ParsedAllowlists {
   if (cached) return cached;
   cached = {
-    thumbprints: parseCsvSet(process.env.NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS),
-    issuers: parseCsvSet(process.env.NEOTOMA_OPERATOR_ATTESTED_ISSUERS),
-    issuerSubjects: parseCsvSet(process.env.NEOTOMA_OPERATOR_ATTESTED_SUBS),
+    thumbprints: parseCsvSet(runtimeEnv().NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS),
+    issuers: parseCsvSet(runtimeEnv().NEOTOMA_OPERATOR_ATTESTED_ISSUERS),
+    issuerSubjects: parseCsvSet(runtimeEnv().NEOTOMA_OPERATOR_ATTESTED_SUBS),
   };
   return cached;
 }
