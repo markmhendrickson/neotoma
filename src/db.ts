@@ -1,7 +1,6 @@
 import { logger } from "./utils/logger.js";
-import { getEmbeddedConfig } from "./config_embedded.js";
+import { getEmbeddedConfig, runtimeEnv } from "./config_embedded.js";
 import { createLocalDbClient, LocalDbClient } from "./repositories/sqlite/local_db_adapter.js";
-import { runtimeEnv } from "./config_embedded.js";
 
 export const db: LocalDbClient = createLocalDbClient();
 

@@ -82,28 +82,40 @@ function requireAbsolute(name: string, value: string | undefined, required: bool
 function validateOptionShapes(options: EmbeddedConfigOptions): void {
   const allow = options.allowProcessEnv as unknown;
   if (allow !== undefined) {
-    if (
-      !Array.isArray(allow) ||
-      allow.some((n) => typeof n !== "string" || n.trim() === "" || n !== n.trim())
-    ) {
+    if (!Array.isArray(allow)) {
       throw new EmbeddedConfigError(
         "invalid_option",
-        'Embedded config option "allowProcessEnv" must be an array of non-empty variable names.'
+        'Embedded config option "allowProcessEnv" must be an array of variable names (non-empty, no leading or trailing whitespace).'
+      );
+    }
+    const badIndex = allow.findIndex(
+      (n) => typeof n !== "string" || n.trim() === "" || n !== n.trim()
+    );
+    if (badIndex !== -1) {
+      throw new EmbeddedConfigError(
+        "invalid_option",
+        `Embedded config option "allowProcessEnv" entry at index ${badIndex} is not a valid name: ` +
+          "names must be non-empty strings with no leading or trailing whitespace."
       );
     }
   }
   const explicit = options.env as unknown;
   if (explicit !== undefined) {
     const isPlain = explicit !== null && typeof explicit === "object" && !Array.isArray(explicit);
-    if (
-      !isPlain ||
-      Object.values(explicit as Record<string, unknown>).some(
-        (v) => v !== undefined && typeof v !== "string"
-      )
-    ) {
+    if (!isPlain) {
       throw new EmbeddedConfigError(
         "invalid_option",
         'Embedded config option "env" must be an object whose values are strings.'
+      );
+    }
+    // Name the key only, never its value (the value may be a secret).
+    const badKey = Object.entries(explicit as Record<string, unknown>).find(
+      ([, v]) => v !== undefined && typeof v !== "string"
+    )?.[0];
+    if (badKey !== undefined) {
+      throw new EmbeddedConfigError(
+        "invalid_option",
+        `Embedded config option "env" has a non-string value for key "${badKey}": values must be strings.`
       );
     }
   }

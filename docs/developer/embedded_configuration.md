@@ -26,8 +26,9 @@ await ops.store({ entities: [{ entity_type: "note", title: "hello" }] });
 
 ## What the embedded path guarantees
 
-Each statement below is covered by a test in `tests/unit/embedded_config.test.ts`
-or `tests/unit/embedded_env_routing.test.ts`. The exceptions that apply to a
+Each statement below is covered by a test in `tests/unit/embedded_config.test.ts`,
+`tests/unit/embedded_env_routing.test.ts`, `tests/unit/embedded_issues_client.test.ts`
+or `tests/unit/embedded_standard_pins.test.ts`. The exceptions that apply to a
 statement are listed next to it.
 
 - **No env file is read.** Not the project `.env*` files, not the user-level env
@@ -39,35 +40,59 @@ statement are listed next to it.
   operations run through is read from the explicit configuration instead:
   `config.ts`, plus the attribution policy, entity-type guards, tenant and
   sandbox scoping, schema mode, guest access-policy overrides
-  (`NEOTOMA_ACCESS_POLICY_*`), the logger switches, mirroring, overflow sinks
-  and the remaining tuning variables. A value in `env` takes effect, a host
-  value takes effect only when named in `allowProcessEnv`, and `env` wins when
-  both are given. A test fails if a new direct read of the process environment
-  is added to that code.
+  (`NEOTOMA_ACCESS_POLICY_*`), the logger switches, mirroring, overflow sinks,
+  the API client used by the issue tools and the remaining tuning variables. A
+  value in `env` takes effect, a host value takes effect only when named in
+  `allowProcessEnv`, and `env` wins when both are given. A test fails if a new
+  direct read of the process environment, an alias of it, or a home-directory
+  lookup is added to that code, or if that code imports a CLI-only module.
   _Exceptions:_ the CLI, the stdio proxy, the OpenClaw entry point, the
-  WebSocket bridge, the dev shim and the maintenance migration tool still read
-  the process environment; they are separate programs and are not part of the
-  embedded operations. Child processes started by the embedded code are given
-  the explicit configuration rather than the host environment; no test covers
-  that.
+  WebSocket bridge, the dev shim, the `neotoma/aauth` SDK helper and the
+  maintenance migration tool still read the process environment; they are
+  separate programs and are not part of the embedded operations. Two reviewed
+  sites read it on purpose: a test-only barrier inside worker-thread source
+  (which cannot import), and the start of the local API child process, which
+  embedded mode refuses to start. Child processes started by the embedded code
+  are given the explicit configuration rather than the host environment, except
+  that the sandbox seeder child gets a minimal fixed `PATH`
+  (`/usr/local/bin:/usr/bin:/bin`) when neither `env` nor `allowProcessEnv`
+  provides one, so it can still find `node`. The tests cover that environment,
+  not the spawn itself.
 - **No home-directory file is read.** The small state files that Neotoma keeps
   beside a user's CLI configuration (the access-policy and issues settings in
   `config.json`, the mirror settings, and `bundle_state.json`) are read from and
   written to `dataDir` instead. A conflicting file under a home directory is
   ignored, and the `gh` command-line tool and its stored credentials are not
   consulted: provide a GitHub token through `env`
-  (`NEOTOMA_ISSUES_GITHUB_TOKEN`) if you use the issue tools.
+  (`NEOTOMA_ISSUES_GITHUB_TOKEN`) if you use the issue tools. The key pair that
+  the CLI keeps under the home directory for request signing is not read
+  either: embedded mode signs no request and starts no local transport.
   _Exception:_ if you name `HOME` (or `USERPROFILE`) in `allowProcessEnv`, those
-  files are read from and written to that home directory, as in standard mode.
+  state files are read from and written to that home directory, as in standard
+  mode. The signing key pair is still not read.
+- **Issue tools act only on what you configure.** `submit_issue`,
+  `add_issue_message` and the thread read-through use no built-in remote target.
+  Name a target with `NEOTOMA_ISSUES_TARGET_URL` in `env`, or a GitHub token with
+  `NEOTOMA_ISSUES_GITHUB_TOKEN`. With neither, `submit_issue` and
+  `add_issue_message` refuse with `embedded_issues_not_configured`, the read
+  calls return nothing, and no request is made. With a target, requests go to
+  that target only, unsigned (as an anonymous guest); the host user's CLI key
+  pair, its `config.json` and the host `NEOTOMA_AAUTH_*` and
+  `NEOTOMA_CLI_AAUTH_*` variables are not consulted. AAuth-signed peer sync
+  deliveries are refused for the same reason (shared-secret peers are
+  unaffected).
+  _Exception:_ a signed identity for issue submission is not available in
+  embedded mode. This is a limit of this first slice, not a setting.
 - **No server or daemon is needed.** Operations run in-process.
 - **No network request is made on the default store, retrieve and embedding
   paths.** The tests watch `fetch`, `http.request` and `https.request` while
   storing without an adapter, and check that embedding calls report
-  `embedding_not_configured` when `openaiApiKey` is absent.
+  `embedding_not_configured` when `openaiApiKey` is absent. The issue tools
+  above are watched the same way: no request without a named target.
   _Exception:_ this is not a guarantee about every tool. Tools reachable through
-  `executeTool` that exist to contact another system (issue sync, peer sync,
-  webhooks, mirror pushes) make requests when you configure and call them; the
-  tests do not cover those.
+  `executeTool` that exist to contact another system (GitHub issue sync, peer
+  sync with shared-secret peers, webhooks, mirror pushes) make requests when you
+  configure and call them; the tests do not cover those.
 
 ## Options
 
@@ -79,12 +104,14 @@ statement are listed next to it.
 | `sqlitePath`, `rawStorageDir`, `logsDir`, `eventLogPath` | Optional absolute overrides for individual locations.                                                               |
 | `openaiApiKey`                                           | Optional embeddings adapter, a string.                                                                              |
 | `env`                                                    | Other explicit settings by their usual names, as string values, for example `NEOTOMA_ENCRYPTION_ENABLED`.           |
-| `allowProcessEnv`                                        | Array of host variable names to read. Empty by default.                                                             |
+| `allowProcessEnv`                                        | Array of host variable names to read. Names may not have leading or trailing whitespace. Empty by default.          |
 
 Invalid options throw an `EmbeddedConfigError` with `code: "invalid_option"`:
 a missing or relative path, an unknown `environment`, an `allowProcessEnv` that
-is not an array of non-empty names, an `env` that is not an object of string
-values, or an `openaiApiKey` that is not a string.
+is not an array of names (each non-empty, with no leading or trailing
+whitespace), an `env` that is not an object of string values, or an
+`openaiApiKey` that is not a string. The message names the first offending
+`allowProcessEnv` index or `env` key, never a value.
 
 ## Ordering
 
@@ -121,10 +148,15 @@ Neotoma.
 
 - Lazy loading of optional adapters with a structured "unavailable" error is
   done for embeddings only. Other adapters are not yet loaded lazily.
-- The test that finds direct process-environment reads scans source files; it
-  does not observe every setting at run time. The run-time tests cover the
-  attribution policy, entity-type guards, tenant and sandbox scoping, schema
-  mode, access-policy overrides and the logger switch.
+- Signed issue submission (a host-supplied key location) is not offered in
+  embedded mode.
+- The source scan finds direct process-environment reads, aliases of the process
+  object, home-directory lookups and imports of CLI-only modules from code that
+  embedded operations reach, and it limits reviewed opt-out markers to a fixed
+  list of sites. It scans source files and does not observe every setting at run
+  time. The run-time tests cover the attribution policy, entity-type guards,
+  tenant and sandbox scoping, schema mode, access-policy overrides, the logger
+  switch and the issue tools.
 - The CLI and server startup are unchanged. For the file-based path see the
   [CLI reference](cli_reference.md#configuration-and-storage-paths) and the
   [environment variable documentation](environment/README.md).

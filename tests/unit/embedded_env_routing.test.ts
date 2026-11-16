@@ -390,49 +390,153 @@ describe("embedded mode reads nothing under a home directory", () => {
   });
 });
 
-describe("no raw host-environment reads remain on embedded-reachable code", () => {
-  // Entry points and tools that run only in the CLI or as separate processes, not through
+describe("no raw host-environment or home-directory reads remain on embedded-reachable code", () => {
+  // Entry points and tools that run only in the CLI or as separate programs, not through
   // the embedded operations. Everything else under src/ must read settings through
-  // runtimeEnv() so that embedded mode can supply them.
+  // runtimeEnv() so that embedded mode can supply them. Shared modules that services import
+  // (src/shared/, src/services/) are never listed here.
   const EXEMPT = [
     "src/cli/",
     "src/proxy/",
     "src/maintenance/",
+    "src/sdk/",
     "src/openclaw_entry.ts",
     "src/mcp_ws_bridge.ts",
     "src/mcp_dev_shim.ts",
     "src/index.ts",
     "src/config.ts",
     "src/config_embedded.ts",
-    "src/shared/api_client.ts",
-    "src/shared/local_transport.ts",
   ];
+  // The two modules that implement embedded mode may be imported from anywhere.
+  const MECHANISM = ["src/config.ts", "src/config_embedded.ts"];
+
+  // Reviewed single-line opt-outs, by marker. A new marker anywhere else fails the test.
+  const ALLOWED_MARKERS: Record<string, Record<string, number>> = {
+    "runtime-env-ok": {
+      // Worker-thread source serialised into the worker (no imports there); a test-only barrier.
+      "src/repositories/worker/worker_file_database.ts": 1,
+      // Local API child process, standard mode only (the function refuses in embedded mode).
+      "src/shared/local_transport.ts": 1,
+    },
+    // Standard-mode branches taken only when embedded mode is off (guarded by isEmbeddedMode).
+    "home-read-ok": {
+      "src/services/bundles/state_store.ts": 1,
+      "src/services/canonical_mirror.ts": 1,
+    },
+    // Dynamic imports of a CLI module that sit behind an embedded-mode guard.
+    "embedded-import-ok": {
+      "src/services/issues/neotoma_client.ts": 1,
+      "src/services/sync/sync_webhook_outbound.ts": 1,
+      "src/shared/api_client.ts": 2,
+    },
+  };
+
+  const HOST_ENV_PATTERNS: RegExp[] = [
+    new RegExp("\\bprocess\\s*\\.\\s*" + "env\\b"),
+    new RegExp("\\bprocess\\s*\\[\\s*[\"'`]" + "env[\"'`]\\s*\\]"),
+    // destructuring or aliasing the host process object or its env
+    new RegExp("\\{[^}]*\\benv\\b[^}]*\\}\\s*=\\s*(?:globalThis\\.)?process\\b"),
+    new RegExp("=\\s*(?:globalThis\\.|global\\.)?process\\s*(?:;|,|$)"),
+    new RegExp("\\b(?:globalThis|global)\\s*\\.\\s*process\\b"),
+    new RegExp("from\\s+[\"'](?:node:)?process[\"']"),
+    new RegExp("require\\(\\s*[\"'](?:node:)?process[\"']\\s*\\)"),
+  ];
+  const HOME_PATTERNS: RegExp[] = [/\bhomedir\b/, /\bUSERPROFILE\b/, /\bHOME\b/];
 
   async function walk(dir: string, out: string[]): Promise<void> {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(full, out);
-      else if (entry.name.endsWith(".ts") && !/\.test\.ts$/.test(entry.name)) out.push(full);
+      else if (/\.(ts|tsx|js|mjs|cjs)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name)) {
+        out.push(full);
+      }
     }
   }
 
-  it("finds none outside the exempt entry points", async () => {
+  const isComment = (line: string): boolean => {
+    const t = line.trim();
+    return t.startsWith("//") || t.startsWith("*") || t.startsWith("/*");
+  };
+  const isExempt = (rel: string): boolean => EXEMPT.some((e) => rel.startsWith(e));
+
+  async function sources(): Promise<Array<{ rel: string; lines: string[] }>> {
     const repo = process.cwd();
     const files: string[] = [];
     await walk(path.join(repo, "src"), files);
-    const needle = new RegExp("process" + "\\." + "env");
-    const offenders: string[] = [];
+    const out: Array<{ rel: string; lines: string[] }> = [];
     for (const file of files) {
       const rel = path.relative(repo, file).split(path.sep).join("/");
-      if (rel.includes("__tests__") || EXEMPT.some((e) => rel.startsWith(e))) continue;
-      const lines = (await fs.readFile(file, "utf-8")).split("\n");
+      if (rel.includes("__tests__")) continue;
+      out.push({ rel, lines: (await fs.readFile(file, "utf-8")).split("\n") });
+    }
+    return out;
+  }
+
+  /** A marker on the line itself or the line directly above excuses that line. */
+  const marked = (lines: string[], i: number, marker: string): boolean =>
+    lines[i].includes(marker) || (i > 0 && lines[i - 1].includes(marker));
+
+  it("finds no direct host-environment read or alias outside the exempt entry points", async () => {
+    const offenders: string[] = [];
+    for (const { rel, lines } of await sources()) {
+      if (isExempt(rel)) continue;
       lines.forEach((line, i) => {
-        const t = line.trim();
-        if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return;
-        if (i > 0 && lines[i - 1].includes("runtime-env-ok")) return;
-        if (needle.test(line)) offenders.push(`${rel}:${i + 1}`);
+        if (isComment(line) || marked(lines, i, "runtime-env-ok")) return;
+        if (HOST_ENV_PATTERNS.some((re) => re.test(line))) offenders.push(`${rel}:${i + 1}`);
       });
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("finds no home-directory lookup outside the exempt entry points", async () => {
+    const offenders: string[] = [];
+    for (const { rel, lines } of await sources()) {
+      if (isExempt(rel)) continue;
+      lines.forEach((line, i) => {
+        if (isComment(line) || marked(lines, i, "home-read-ok")) return;
+        if (HOME_PATTERNS.some((re) => re.test(line))) offenders.push(`${rel}:${i + 1}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("no embedded-reachable module imports an exempt module", async () => {
+    const importRe = /(?:from\s+|import\s*\(\s*|import\s+|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g;
+    const offenders: string[] = [];
+    for (const { rel, lines } of await sources()) {
+      if (isExempt(rel)) continue;
+      lines.forEach((line, i) => {
+        if (isComment(line)) return;
+        for (const m of line.matchAll(importRe)) {
+          const target = path
+            .normalize(path.join(path.dirname(rel), m[1]))
+            .split(path.sep)
+            .join("/")
+            .replace(/\.(js|ts)$/, "");
+          const exempt = EXEMPT.filter((e) => !MECHANISM.includes(e)).some((e) =>
+            e.endsWith("/") ? (target + "/").startsWith(e) : target === e.replace(/\.ts$/, "")
+          );
+          if (exempt && !marked(lines, i, "embedded-import-ok")) {
+            offenders.push(`${rel}:${i + 1} imports ${m[1]}`);
+          }
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("every reviewed opt-out marker is at its known site, with the expected count", async () => {
+    const found: Record<string, Record<string, number>> = {};
+    for (const { rel, lines } of await sources()) {
+      for (const line of lines) {
+        for (const marker of Object.keys(ALLOWED_MARKERS)) {
+          if (line.includes(marker)) {
+            found[marker] ??= {};
+            found[marker][rel] = (found[marker][rel] ?? 0) + 1;
+          }
+        }
+      }
+    }
+    expect(found).toEqual(ALLOWED_MARKERS);
   });
 });

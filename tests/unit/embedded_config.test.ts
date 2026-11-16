@@ -271,6 +271,25 @@ describe("embedded instance reuse, retry and option validation", () => {
     expect(config.dataDir).toBe(unusable);
   });
 
+  it("names the offending entry in a validation message (the key or index, never a value)", async () => {
+    const { resolveEmbeddedConfig } = await import("../../src/config_embedded.ts");
+    const dataDir = f.explicitDataDir;
+    expect(() =>
+      resolveEmbeddedConfig({ dataDir, allowProcessEnv: ["OK_NAME", " PADDED"] } as never)
+    ).toThrow(/index 1.*no leading or trailing whitespace/);
+    expect(() =>
+      resolveEmbeddedConfig({ dataDir, allowProcessEnv: ["OK_NAME", ""] } as never)
+    ).toThrow(/index 1/);
+    let message = "";
+    try {
+      resolveEmbeddedConfig({ dataDir, env: { FINE: "x", BAD_KEY: 12345678 } } as never);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('"BAD_KEY"');
+    expect(message).not.toContain("12345678");
+  });
+
   it("rejects malformed allowProcessEnv, env and openaiApiKey with invalid_option", async () => {
     const { resolveEmbeddedConfig, EmbeddedConfigError } =
       await import("../../src/config_embedded.ts");

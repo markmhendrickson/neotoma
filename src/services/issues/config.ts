@@ -10,7 +10,7 @@ import path from "node:path";
 import type { GitHubAuthMethod, IssueReportingMode, IssuesConfig } from "./types.js";
 import { DEFAULT_ISSUES_CONFIG, DEFAULT_ISSUES_TARGET_URL } from "./types.js";
 import { ALLOWED_REPOS_ENV, parseAllowedRepos } from "./repo_allowlist.js";
-import { runtimeEnv, userStateDir } from "../../config_embedded.js";
+import { isEmbeddedMode, runtimeEnv, userStateDir } from "../../config_embedded.js";
 
 function configFilePath(): string {
   return path.join(userStateDir(), "config.json");
@@ -84,8 +84,12 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
     typeof stored.target_url === "string" ? stored.target_url.trim() : stored.target_url;
   const storedTarget =
     typeof storedRaw === "string" && storedRaw.length > 0 ? storedRaw : undefined;
+  // Embedded mode never falls back to the built-in remote target: nothing is forwarded
+  // unless the host named a target in `env` (or in the explicit data directory's config).
   const targetUrl =
-    envTarget !== undefined ? envTarget : (storedTarget ?? DEFAULT_ISSUES_TARGET_URL);
+    envTarget !== undefined
+      ? envTarget
+      : (storedTarget ?? (isEmbeddedMode() ? "" : DEFAULT_ISSUES_TARGET_URL));
   const envAuthorAliasRaw = env.NEOTOMA_ISSUES_AUTHOR_ALIAS?.trim();
   const envAuthorAlias =
     envAuthorAliasRaw && envAuthorAliasRaw.length > 0 ? envAuthorAliasRaw : undefined;

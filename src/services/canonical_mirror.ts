@@ -52,7 +52,7 @@ import {
   type RenderTimelineEventInput,
   type RenderSchemaInput,
 } from "./canonical_markdown.js";
-import { runtimeEnv, userStateDir } from "../config_embedded.js";
+import { isEmbeddedMode, runtimeEnv, userStateDir } from "../config_embedded.js";
 
 // ============================================================================
 // Config
@@ -176,8 +176,23 @@ export interface MirrorConfig {
   profiles?: MirrorProfile[];
 }
 
+/**
+ * Directory of the user-level config file, or null when there is none to use. Standard
+ * mode needs a `HOME`/`USERPROFILE` value (no home variable: no config), as before;
+ * embedded mode uses the explicit data directory.
+ */
+function mirrorConfigDir(): string | null {
+  if (isEmbeddedMode()) return userStateDir();
+  // home-read-ok: standard mode only (embedded mode returned above)
+  const home = runtimeEnv().HOME || runtimeEnv().USERPROFILE;
+  if (!home) return null;
+  return path.join(home, ".config", "neotoma");
+}
+
 function readUserConfig(): Record<string, unknown> | null {
-  const configPath = path.join(userStateDir(), "config.json");
+  const configDir = mirrorConfigDir();
+  if (!configDir) return null;
+  const configPath = path.join(configDir, "config.json");
   try {
     const raw = fsSync.readFileSync(configPath, "utf8");
     return JSON.parse(raw) as Record<string, unknown>;
@@ -187,7 +202,8 @@ function readUserConfig(): Record<string, unknown> | null {
 }
 
 function writeUserConfig(patch: Record<string, unknown>): void {
-  const dir = userStateDir();
+  const dir = mirrorConfigDir();
+  if (!dir) return;
   const configPath = path.join(dir, "config.json");
   fsSync.mkdirSync(dir, { recursive: true });
   let current: Record<string, unknown> = {};

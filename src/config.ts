@@ -127,6 +127,13 @@ function resolveRepoRootFromCliConfig(): string | null {
   }
 }
 
+/** File-location based root (dist/ -> package root, src/ -> repo root). Reads nothing else. */
+function fileLocationRoot(): string {
+  if (__dirname.endsWith("/dist") || __dirname.includes("/dist/")) return join(__dirname, "..");
+  if (__dirname.endsWith("/src") || __dirname.includes("/src/")) return join(__dirname, "..");
+  return __dirname;
+}
+
 function resolveProjectRootFromRuntime(): string {
   if (isNeotomaRepoRoot(process.env.NEOTOMA_PROJECT_ROOT)) {
     return process.env.NEOTOMA_PROJECT_ROOT;
@@ -134,19 +141,9 @@ function resolveProjectRootFromRuntime(): string {
   if (isNeotomaRepoRoot(process.cwd())) return process.cwd();
   const configuredRepoRoot = resolveRepoRootFromCliConfig();
   if (configuredRepoRoot) return configuredRepoRoot;
-  // Fallback to file-location based root (dist/ -> package root, src/ -> repo root).
-  if (__dirname.endsWith("/dist") || __dirname.includes("/dist/")) return join(__dirname, "..");
-  if (__dirname.endsWith("/src") || __dirname.includes("/src/")) return join(__dirname, "..");
-  return __dirname;
+  return fileLocationRoot();
 }
 
-const fileLocationRoot = (): string =>
-  __dirname.endsWith("/dist") ||
-  __dirname.includes("/dist/") ||
-  __dirname.endsWith("/src") ||
-  __dirname.includes("/src/")
-    ? join(__dirname, "..")
-    : __dirname;
 const projectRoot =
   embeddedConfig?.options.projectRoot ??
   (embedded ? fileLocationRoot() : resolveProjectRootFromRuntime());

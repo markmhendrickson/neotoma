@@ -10,7 +10,7 @@ import { listPeersWithSecrets, type PeerConfigRecord } from "./peer_ops.js";
 import { SYNC_ENTITY_TYPE_REFUSED_ERROR_CODE } from "./remote_snapshot_admission.js";
 import type { SyncWebhookPayload } from "./sync_webhook_inbound.js";
 import type { SyncEntitiesPayload } from "./sync_webhook_inbound.js";
-import { runtimeEnv } from "../../config_embedded.js";
+import { isEmbeddedMode, runtimeEnv } from "../../config_embedded.js";
 
 const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000];
 const DELIVERY_TIMESTAMPS = new Map<string, number[]>();
@@ -216,6 +216,13 @@ async function postWithCliAAuth(
     signal: AbortSignal;
   }
 ): Promise<Response> {
+  // The CLI key pair is host state under the home directory, not part of the explicit
+  // embedded configuration, so an AAuth-signed peer delivery is refused in embedded mode
+  // (peers using a shared secret are unaffected).
+  if (isEmbeddedMode()) {
+    throw new Error("aauth_peer_delivery_unavailable_in_embedded_mode");
+  }
+  // embedded-import-ok: standard mode only (guarded by isEmbeddedMode above)
   const { cliSignedFetch } = await import("../../cli/aauth_signer.js");
   return await cliSignedFetch(url, request);
 }
