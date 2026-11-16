@@ -2,10 +2,17 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync, readFileSync } from "fs";
+import { getEmbeddedConfig } from "./config_embedded.js";
+
+// Embedded (in-process) mode: explicit configuration only. No env files, no home-directory
+// config, no writes to the host environment, no implicit reads of it. See src/config_embedded.ts.
+const embeddedConfig = getEmbeddedConfig();
+const embedded = embeddedConfig !== undefined;
+const E: Record<string, string | undefined> = embeddedConfig ? embeddedConfig.env : process.env;
 
 // Use NEOTOMA_ENV only to avoid conflicts when running as MCP in other workspaces
 // (host NODE_ENV would incorrectly override Neotoma's dev/prod choice)
-const env = process.env.NEOTOMA_ENV || "development";
+const env = E.NEOTOMA_ENV || "development";
 
 // Resolve .env file paths relative to this file's location (works when running as MCP)
 // When running as MCP, process.cwd() might be the workspace directory, not the Neotoma project
@@ -133,11 +140,22 @@ function resolveProjectRootFromRuntime(): string {
   return __dirname;
 }
 
-const projectRoot = resolveProjectRootFromRuntime();
+const fileLocationRoot = (): string =>
+  __dirname.endsWith("/dist") ||
+  __dirname.includes("/dist/") ||
+  __dirname.endsWith("/src") ||
+  __dirname.includes("/src/")
+    ? join(__dirname, "..")
+    : __dirname;
+const projectRoot =
+  embeddedConfig?.options.projectRoot ??
+  (embedded ? fileLocationRoot() : resolveProjectRootFromRuntime());
 
 // Load project-local .env first so it takes precedence over ~/.config/neotoma/.env.
 // Use override:true so a worktree .env can pin NEOTOMA_DATA_DIR to a branch-specific path.
-if (env === "production") {
+if (embedded) {
+  // No env files in embedded mode.
+} else if (env === "production") {
   dotenv.config({ path: join(projectRoot, ".env.production"), override: true });
   // Local prod-data dev stacks (`npm run dev:full:prod`) intentionally run with
   // NEOTOMA_ENV=production while still using worktree-local development secrets.
@@ -150,31 +168,26 @@ if (env === "production") {
 }
 
 // Hydrate NEOTOMA_DATA_DIR from ~/.config/neotoma/.env only when no project .env set it.
-hydrateDataDirFromUserEnvConfig();
+if (!embedded) hydrateDataDirFromUserEnvConfig();
 
 function getOpenAIConfig() {
   // Use OPENAI_API_KEY (set by 1Password sync based on ENVIRONMENT variable)
-  return process.env.OPENAI_API_KEY || "";
+  return E.OPENAI_API_KEY || "";
 }
 
 // Default ports: 3080 dev, 3180 prod, 8280 WS (spaced to avoid cascade when prod bumps)
 const defaultHttpPort = env === "production" ? "3180" : "3080";
-const httpPort = parseInt(
-  process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT || defaultHttpPort,
-  10
-);
+const httpPort = parseInt(E.NEOTOMA_HTTP_PORT || E.HTTP_PORT || defaultHttpPort, 10);
 const storageBackend = "local";
-const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot, "data");
+const dataDir = E.NEOTOMA_DATA_DIR || join(projectRoot, "data");
 const rawStorageSubdir = env === "production" ? "sources_prod" : "sources";
 const logsSubdir = env === "production" ? "logs_prod" : "logs";
-const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
+const logsDir = E.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
 // Event log: both envs in data/logs — events.log (dev), events.prod.log (prod)
 const eventLogFileName = env === "production" ? "events.prod.log" : "events.log";
 const eventLogPath =
-  process.env.NEOTOMA_EVENT_LOG_PATH ||
-  (process.env.NEOTOMA_EVENT_LOG_DIR
-    ? join(process.env.NEOTOMA_EVENT_LOG_DIR, eventLogFileName)
-    : null) ||
+  E.NEOTOMA_EVENT_LOG_PATH ||
+  (E.NEOTOMA_EVENT_LOG_DIR ? join(E.NEOTOMA_EVENT_LOG_DIR, eventLogFileName) : null) ||
   join(dataDir, "logs", eventLogFileName);
 
 /**
@@ -226,10 +239,10 @@ function discoverTunnelUrl(httpPort: number, allowAutoDiscovery: boolean): strin
  * format and SQL dialect; a `file:` URL derived from sqlitePath is used
  * unless NEOTOMA_DB_URL points at a remote instance.
  */
-const dbBackend = (process.env.NEOTOMA_DB_BACKEND || "sqlite").toLowerCase();
+const dbBackend = (E.NEOTOMA_DB_BACKEND || "sqlite").toLowerCase();
 if (dbBackend !== "sqlite" && dbBackend !== "libsql") {
   throw new Error(
-    `Invalid NEOTOMA_DB_BACKEND "${process.env.NEOTOMA_DB_BACKEND}": expected "sqlite" or "libsql"`
+    `Invalid NEOTOMA_DB_BACKEND "${E.NEOTOMA_DB_BACKEND}": expected "sqlite" or "libsql"`
   );
 }
 
@@ -324,39 +337,40 @@ export const config = {
   dataDir,
   dbBackend: dbBackend as "sqlite" | "libsql",
   /** Connection URL for non-file backends (e.g. libsql://…, http(s)://… for sqld/Turso). */
-  dbUrl: process.env.NEOTOMA_DB_URL || "",
+  dbUrl: E.NEOTOMA_DB_URL || "",
   /** Auth token for remote libSQL (sqld/Turso) connections. */
-  dbAuthToken: process.env.NEOTOMA_DB_AUTH_TOKEN || "",
+  dbAuthToken: E.NEOTOMA_DB_AUTH_TOKEN || "",
   sqlitePath:
-    process.env.NEOTOMA_SQLITE_PATH ||
-    join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
-  rawStorageDir: process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, rawStorageSubdir),
+    E.NEOTOMA_SQLITE_PATH || join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
+  rawStorageDir: E.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, rawStorageSubdir),
   eventLogPath,
   logsDir,
-  eventLogMirrorEnabled: process.env.NEOTOMA_EVENT_LOG_MIRROR === "true",
+  eventLogMirrorEnabled: E.NEOTOMA_EVENT_LOG_MIRROR === "true",
   // Kept as inert placeholders for backward-compatible call sites while remote storage is removed.
   authServerUrl: "",
   authServiceKey: "",
   openaiApiKey: getOpenAIConfig(),
-  port: parseInt(process.env.NEOTOMA_PORT || process.env.PORT || "3000", 10),
+  port: parseInt(E.NEOTOMA_PORT || E.PORT || "3000", 10),
   httpPort,
   environment: env,
+  embedded,
   tunnelAutoDiscoveryEnabled:
-    env !== "production" ||
-    (process.env.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true",
+    !embedded &&
+    (env !== "production" ||
+      (E.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true"),
   apiBase:
-    process.env.NEOTOMA_HOST_URL ||
+    E.NEOTOMA_HOST_URL ||
     discoverTunnelUrl(
       httpPort,
-      env !== "production" ||
-        (process.env.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true"
+      !embedded &&
+        (env !== "production" ||
+          (E.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true")
     ),
-  mcpTokenEncryptionKey:
-    process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY || process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
+  mcpTokenEncryptionKey: E.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY || E.MCP_TOKEN_ENCRYPTION_KEY || "",
   /** When true, MCP clients receive the compact instruction block (same body as runtime fallback) instead of the full fenced block from docs — for dual-host setups that already load workspace Neotoma rules. */
   mcpCompactInstructions:
-    (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
-    (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "true",
+    (E.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
+    (E.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "true",
   /**
    * When false, MCP `initialize` skips the graph-stored skill lookup entirely
    * and the instructions block is byte-identical to what it was before
@@ -376,10 +390,10 @@ export const config = {
    * silently turning the feature off.
    */
   mcpInstanceSkillHints: !(
-    (process.env.NEOTOMA_MCP_INSTANCE_SKILL_HINTS || "").toLowerCase() === "0" ||
-    (process.env.NEOTOMA_MCP_INSTANCE_SKILL_HINTS || "").toLowerCase() === "false"
+    (E.NEOTOMA_MCP_INSTANCE_SKILL_HINTS || "").toLowerCase() === "0" ||
+    (E.NEOTOMA_MCP_INSTANCE_SKILL_HINTS || "").toLowerCase() === "false"
   ),
-  oauthClientId: process.env.NEOTOMA_OAUTH_CLIENT_ID || "",
+  oauthClientId: E.NEOTOMA_OAUTH_CLIENT_ID || "",
   /**
    * Additional exact callback URLs an operator trusts to receive an authorization
    * code when the authorize request arrives via a tunnel (non-local Host).
@@ -392,36 +406,25 @@ export const config = {
    * Validated at load, fail-closed on the WHOLE list: one malformed entry rejects
    * every entry and fails startup. See parseTrustedCallbackUrls above for why.
    */
-  oauthTrustedCallbackUrls: parseTrustedCallbackUrls(
-    process.env.NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS
-  ),
-  requireKeyForOauth:
-    (process.env.NEOTOMA_REQUIRE_KEY_FOR_OAUTH || "true").toLowerCase() !== "false",
+  oauthTrustedCallbackUrls: parseTrustedCallbackUrls(E.NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS),
+  requireKeyForOauth: (E.NEOTOMA_REQUIRE_KEY_FOR_OAUTH || "true").toLowerCase() !== "false",
   // Encryption settings (local backend)
   encryption: {
-    enabled: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",
-    keyFilePath: process.env.NEOTOMA_KEY_FILE_PATH || "",
-    mnemonic: process.env.NEOTOMA_MNEMONIC || "",
-    mnemonicPassphrase: process.env.NEOTOMA_MNEMONIC_PASSPHRASE || "",
-    logEncryptionEnabled: process.env.NEOTOMA_LOG_ENCRYPTION_ENABLED === "true",
+    enabled: E.NEOTOMA_ENCRYPTION_ENABLED === "true",
+    keyFilePath: E.NEOTOMA_KEY_FILE_PATH || "",
+    mnemonic: E.NEOTOMA_MNEMONIC || "",
+    mnemonicPassphrase: E.NEOTOMA_MNEMONIC_PASSPHRASE || "",
+    logEncryptionEnabled: E.NEOTOMA_LOG_ENCRYPTION_ENABLED === "true",
   },
 
   // Icon generation settings
   iconGeneration: {
-    enabled:
-      (process.env.NEOTOMA_ICON_GENERATION_ENABLED ?? process.env.ICON_GENERATION_ENABLED) !==
-      "false",
+    enabled: (E.NEOTOMA_ICON_GENERATION_ENABLED ?? E.ICON_GENERATION_ENABLED) !== "false",
     confidenceThreshold: parseFloat(
-      process.env.NEOTOMA_ICON_MATCH_CONFIDENCE_THRESHOLD ||
-        process.env.ICON_MATCH_CONFIDENCE_THRESHOLD ||
-        "0.8"
+      E.NEOTOMA_ICON_MATCH_CONFIDENCE_THRESHOLD || E.ICON_MATCH_CONFIDENCE_THRESHOLD || "0.8"
     ),
-    model:
-      process.env.NEOTOMA_ICON_GENERATION_MODEL || process.env.ICON_GENERATION_MODEL || "gpt-4o",
-    cacheTTL: parseInt(
-      process.env.NEOTOMA_ICON_CACHE_TTL || process.env.ICON_CACHE_TTL || "86400",
-      10
-    ),
+    model: E.NEOTOMA_ICON_GENERATION_MODEL || E.ICON_GENERATION_MODEL || "gpt-4o",
+    cacheTTL: parseInt(E.NEOTOMA_ICON_CACHE_TTL || E.ICON_CACHE_TTL || "86400", 10),
   },
 };
 
@@ -432,7 +435,7 @@ export const config = {
 export function logConfigInfo(): void {
   const discovered = (discoverTunnelUrl as any)._discovered;
 
-  if (process.env.NEOTOMA_HOST_URL) {
+  if (E.NEOTOMA_HOST_URL) {
     console.log(`[Config] Using NEOTOMA_HOST_URL from environment: ${config.apiBase}`);
   } else if (!config.tunnelAutoDiscoveryEnabled) {
     console.log(
