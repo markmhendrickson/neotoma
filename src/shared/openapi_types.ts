@@ -8088,6 +8088,10 @@ export interface operations {
                * @default false
                */
               include_deleted?: boolean;
+              /** @description Record-wide as-of cutoff on `observed_at` (ISO 8601): answer as the record stood by T. Same name and meaning as `at` on `/get_entity_snapshot`. Only observations with `observed_at` ≤ this timestamp are visible, so an edge, a metadata value or an entity written after T is not part of the answer. Edge liveness is decided from the visible observations only. Uses write clocks, not event (valid) time. */
+              at?: string;
+              /** @description Record-wide as-of cutoff on `created_at` (ISO 8601): what the record held by T. Same name and meaning as `at_ingested` on `/get_entity_snapshot`. When both `at` and `at_ingested` are supplied, both bounds apply (AND). The response carries an `as_of` echo of the cutoffs applied. Replays observations, so it costs more than a current read. */
+              at_ingested?: string;
               /**
                * @description Optional user_id override (scoped to callers with privilege to query on
                *     behalf of another user). When omitted, the authenticated user is used.
@@ -8449,6 +8453,10 @@ export interface operations {
           max_hops?: number;
           /** @default true */
           include_entities?: boolean;
+          /** @description Record-wide as-of cutoff on `observed_at` (ISO 8601): answer as the record stood by T. Same name and meaning as `at` on `/get_entity_snapshot`. Only observations with `observed_at` ≤ this timestamp are visible, so an edge, a metadata value or an entity written after T is not part of the answer. Edge liveness is decided from the visible observations only. Uses write clocks, not event (valid) time. */
+          at?: string;
+          /** @description Record-wide as-of cutoff on `created_at` (ISO 8601): what the record held by T. Same name and meaning as `at_ingested` on `/get_entity_snapshot`. When both `at` and `at_ingested` are supplied, both bounds apply (AND). The response carries an `as_of` echo of the cutoffs applied. Replays observations, so it costs more than a current read. */
+          at_ingested?: string;
         };
       };
     };

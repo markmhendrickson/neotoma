@@ -14065,6 +14065,14 @@ entitiesCommand
   .option("--relationship-types <types>", "Comma-separated relationship types to filter")
   .option("--max-hops <n>", "Maximum relationship hops (1 = direct, 2 = 2-hop, etc.)", "1")
   .option("--include-entities", "Include full entity snapshots in response", true)
+  .option(
+    "--at <iso>",
+    "As-of cutoff on observed_at (ISO 8601): answer as the record stood by T. Same meaning as the entity snapshot's at"
+  )
+  .option(
+    "--at-ingested <iso>",
+    "As-of cutoff on created_at (ISO 8601): what the record held by T. Same meaning as the entity snapshot's at_ingested"
+  )
   .option("--user-id <userId>", "User ID")
   .action(async (entityId: string, opts) => {
     const outputMode = resolveOutputMode();
@@ -14084,6 +14092,8 @@ entitiesCommand
         relationship_types: relationshipTypes,
         max_hops: Number(opts.maxHops),
         include_entities: opts.includeEntities,
+        ...(opts.at ? { at: opts.at } : {}),
+        ...(opts.atIngested ? { at_ingested: opts.atIngested } : {}),
       },
     });
     if (error) throw new Error("Failed to get related entities");
@@ -14532,6 +14542,14 @@ relationshipsCommand
   .option("--target-entity-id <id>", "Filter by target entity ID")
   .option("--relationship-type <type>", "Filter by relationship type")
   .option("--direction <direction>", "Direction: inbound, outbound, both")
+  .option(
+    "--at <iso>",
+    "As-of cutoff on observed_at (ISO 8601): answer as the record stood by T. Same meaning as the entity snapshot's at"
+  )
+  .option(
+    "--at-ingested <iso>",
+    "As-of cutoff on created_at (ISO 8601): what the record held by T. Same meaning as the entity snapshot's at_ingested"
+  )
   .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
@@ -14544,6 +14562,32 @@ relationshipsCommand
       token,
     });
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
+    if (opts.at || opts.atIngested) {
+      // Record-wide as-of read: served by POST /list_relationships, which
+      // replays relationship observations under the cutoff. It needs at least
+      // one of source, target or relationship type, like the MCP tool.
+      if (!opts.sourceEntityId && !opts.targetEntityId && !opts.relationshipType) {
+        throw new Error(
+          "--at / --at-ingested require at least one of --source-entity-id, --target-entity-id or --relationship-type"
+        );
+      }
+      const { data: asOfData, error: asOfError } = await api.POST("/list_relationships", {
+        body: {
+          ...(opts.sourceEntityId ? { source_entity_id: opts.sourceEntityId } : {}),
+          ...(opts.targetEntityId ? { target_entity_id: opts.targetEntityId } : {}),
+          ...(opts.relationshipType ? { relationship_type: opts.relationshipType } : {}),
+          ...(opts.direction ? { direction: opts.direction } : {}),
+          limit: Number(opts.limit),
+          offset: Number(opts.offset),
+          ...(opts.at ? { at: opts.at } : {}),
+          ...(opts.atIngested ? { at_ingested: opts.atIngested } : {}),
+          ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
+        } as any,
+      });
+      if (asOfError) throw new Error("Failed to list relationships");
+      writeOutput(asOfData, outputMode);
+      return;
+    }
     const { data, error } = await api.GET("/relationships", {
       params: {
         query: {

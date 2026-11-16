@@ -183,6 +183,12 @@ import {
 } from "./services/issues/issue_operations.js";
 import { syncIssuesFromGitHub } from "./services/issues/sync_issues_from_github.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import {
+  asOfEcho,
+  hasAsOfCutoff,
+  listRelationshipsAsOf,
+  retrieveRelatedEntitiesAsOf,
+} from "./services/record_as_of.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -4203,7 +4209,46 @@ export class NeotomaServer {
     const useDirectionalEntityIdPath =
       !parsed.source_entity_id && !parsed.target_entity_id && Boolean(parsed.entity_id);
 
-    if (!useDirectionalEntityIdPath) {
+    // Record-wide as-of read (#2700): same `at` / `at_ingested` write-clock
+    // cutoffs as retrieve_entity_snapshot. Replays relationship observations
+    // instead of reading the materialized (current) snapshot rows.
+    const asOf = { at: parsed.at, at_ingested: parsed.at_ingested };
+    const asOfActive = hasAsOfCutoff(asOf);
+
+    if (asOfActive) {
+      const rows = await listRelationshipsAsOf(
+        {
+          userId,
+          entityId: parsed.entity_id,
+          sourceEntityId: parsed.source_entity_id,
+          targetEntityId: parsed.target_entity_id,
+          direction: normalizedDirection,
+          relationshipType: parsed.relationship_type,
+          includeDeleted: parsed.include_deleted,
+        },
+        asOf
+      );
+      if (useDirectionalEntityIdPath) {
+        // Tag each row with the side it was matched on, as the live path does
+        // (a self-edge matches both sides under direction "both").
+        for (const r of rows) {
+          if (
+            r.source_entity_id === parsed.entity_id &&
+            (normalizedDirection === "outbound" || normalizedDirection === "both")
+          ) {
+            relationships.push(decorate(r, "outbound"));
+          }
+          if (
+            r.target_entity_id === parsed.entity_id &&
+            (normalizedDirection === "inbound" || normalizedDirection === "both")
+          ) {
+            relationships.push(decorate(r, "inbound"));
+          }
+        }
+      } else {
+        relationships.push(...rows.map((r) => decorate(r)));
+      }
+    } else if (!useDirectionalEntityIdPath) {
       let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
 
       // Exclude soft-deleted edges at the DB via the materialized `is_live`
@@ -4304,6 +4349,7 @@ export class NeotomaServer {
       total: relationships.length,
       limit: parsed.limit,
       offset: parsed.offset,
+      ...(asOfActive ? { as_of: asOfEcho(asOf) } : {}),
     });
   }
 
@@ -4678,6 +4724,31 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+
+    // Record-wide as-of read (#2700): edges, endpoint existence and entity
+    // snapshots are all answered as recorded by the cutoff.
+    const asOf = { at: parsed.at, at_ingested: parsed.at_ingested };
+    if (hasAsOfCutoff(asOf)) {
+      const result = await retrieveRelatedEntitiesAsOf(
+        {
+          entityId: parsed.entity_id,
+          userId,
+          relationshipTypes: parsed.relationship_types,
+          direction: parsed.direction,
+          maxHops: parsed.max_hops,
+          includeEntities: parsed.include_entities,
+        },
+        asOf
+      );
+      return this.buildTextResponse({
+        entities: result.entities,
+        relationships: result.relationships,
+        total_entities: result.entities.length,
+        total_relationships: result.relationships.length,
+        hops_traversed: result.hops_traversed,
+        as_of: asOfEcho(asOf),
+      });
+    }
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();

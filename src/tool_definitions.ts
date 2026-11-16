@@ -117,7 +117,7 @@ export function buildToolDefinitions(
       name: "list_relationships",
       description: desc(
         "list_relationships",
-        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Soft-deleted relationships are excluded by default, so a deleted edge will not be re-offered for deletion; pass include_deleted: true to include them for audit. Paginated via limit/offset."
+        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Soft-deleted relationships are excluded by default, so a deleted edge will not be re-offered for deletion; pass include_deleted: true to include them for audit. Paginated via limit/offset. Pass at (observed_at cutoff) and/or at_ingested (created_at cutoff) to list the relationships as the record stood by T, with the same meaning as on retrieve_entity_snapshot: an edge written after T is absent, and liveness is decided from the observations visible at T. The response then carries an as_of echo."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
     },
@@ -384,7 +384,7 @@ export function buildToolDefinitions(
       name: "retrieve_related_entities",
       description: desc(
         "retrieve_related_entities",
-        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal."
+        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal. Pass at and/or at_ingested to answer as the record stood by T (same meaning as on retrieve_entity_snapshot): edges, endpoint entities and entity snapshots written after T are excluded."
       ),
       inputSchema: {
         type: "object",
@@ -414,6 +414,16 @@ export function buildToolDefinitions(
             type: "boolean",
             description: "Whether to include full entity snapshots in response",
             default: true,
+          },
+          at: {
+            type: "string",
+            description:
+              "Record-wide as-of cutoff on observed_at (ISO 8601). Same meaning as 'at' on retrieve_entity_snapshot: edges, endpoint existence and entity snapshots are answered as recorded by T, so anything written after T is excluded.",
+          },
+          at_ingested: {
+            type: "string",
+            description:
+              "Record-wide as-of cutoff on created_at (ISO 8601). Same meaning as 'at_ingested' on retrieve_entity_snapshot. When both are supplied, both bounds apply.",
           },
         },
         required: ["entity_id"],

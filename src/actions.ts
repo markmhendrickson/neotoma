@@ -310,6 +310,12 @@ import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/t
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import {
+  asOfEcho,
+  hasAsOfCutoff,
+  listRelationshipsAsOf,
+  retrieveRelatedEntitiesAsOf,
+} from "./services/record_as_of.js";
 import { isProductionEnvironment } from "./shared/environment.js";
 import { isLoopbackHost, resolveBindHostFromEnv } from "./shared/bind_host.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
@@ -11250,6 +11256,8 @@ app.post("/list_relationships", async (req, res) => {
     limit = 100,
     offset = 0,
     include_deleted = false,
+    at,
+    at_ingested,
   } = parsed.data;
 
   try {
@@ -11257,6 +11265,33 @@ app.post("/list_relationships", async (req, res) => {
     // their records. See docs/security/advisories/2026-05-21-relationship-
     // endpoint-tenant-isolation.md for context.
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
+    // Record-wide as-of read (#2700): same `at` / `at_ingested` write-clock
+    // cutoffs as the single-entity snapshot. Replays relationship observations
+    // instead of reading the materialized (current) snapshot rows.
+    if (hasAsOfCutoff({ at, at_ingested })) {
+      const all = await listRelationshipsAsOf(
+        {
+          userId,
+          entityId: entity_id,
+          sourceEntityId: source_entity_id,
+          targetEntityId: target_entity_id,
+          direction: direction as any,
+          relationshipType: relationship_type,
+          includeDeleted: include_deleted,
+        },
+        { at, at_ingested }
+      );
+      const page = all.slice(offset, offset + limit);
+      return res.json({
+        relationships: page,
+        total: all.length,
+        total_count: all.length,
+        limit,
+        offset,
+        as_of: asOfEcho({ at, at_ingested }),
+      });
+    }
 
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
@@ -11479,8 +11514,31 @@ app.post("/retrieve_related_entities", async (req, res) => {
       direction = "both",
       max_hops = 1,
       include_entities = true,
+      at,
+      at_ingested,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
+
+    // Record-wide as-of read (#2700): edges, endpoint existence and entity
+    // snapshots are all answered as recorded by the cutoff.
+    if (hasAsOfCutoff({ at, at_ingested })) {
+      const result = await retrieveRelatedEntitiesAsOf(
+        {
+          entityId: entity_id,
+          userId,
+          relationshipTypes: relationship_types,
+          direction,
+          maxHops: max_hops,
+          includeEntities: include_entities,
+        },
+        { at, at_ingested }
+      );
+      return res.json({
+        relationships: result.relationships,
+        entities: result.entities,
+        as_of: asOfEcho({ at, at_ingested }),
+      });
+    }
 
     // Breadth-first traversal up to max_hops. Mirrors the MCP handler
     // (server.ts retrieveRelatedEntities): a visited set provides cycle
