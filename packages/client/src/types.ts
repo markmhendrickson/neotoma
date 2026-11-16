@@ -122,6 +122,38 @@ export interface RetrieveRelatedEntitiesInput {
   include_entities?: boolean;
 }
 
+/** Canonical single-field correction request accepted by the server. */
+export interface CorrectInput {
+  entity_id: string;
+  entity_type: string;
+  field: string;
+  value: unknown;
+  idempotency_key: string;
+  user_id?: string;
+  expected_version?: string;
+  overwrite?: boolean;
+}
+
+/**
+ * Legacy map-shaped correction request.
+ *
+ * @deprecated Pass one {@link CorrectInput}. This adapter remains for one more
+ * release (the next minor release). It accepts a map with exactly one entry
+ * and sends it as a canonical single-field request using the caller's
+ * `idempotency_key` unchanged. A map with more than one field is refused
+ * before any request is sent; use `correct_transaction` for atomic
+ * multi-field updates.
+ */
+export interface DeprecatedCorrectInput {
+  entity_id: string;
+  entity_type: string;
+  corrections: Record<string, unknown>;
+  idempotency_key: string;
+  user_id?: string;
+  expected_version?: string;
+  overwrite?: boolean;
+}
+
 /**
  * The transport-level interface every client implementation satisfies.
  *
@@ -139,7 +171,9 @@ export interface NeotomaTransport {
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  correct(input: CorrectInput): Promise<unknown>;
+  /** @deprecated Pass one canonical {@link CorrectInput}. A map with more than one field is refused. */
+  correct(input: DeprecatedCorrectInput): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
   executeTool(name: string, args: unknown): Promise<unknown>;

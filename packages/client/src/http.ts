@@ -10,9 +10,12 @@
  * keeps the hook process decoupled from the Neotoma server lifecycle.
  */
 
+import { executeCorrectRequest, type CorrectRequest } from "./correction.js";
 import {
+  CorrectInput,
   CreateRelationshipsInput,
   CreateRelationshipInput,
+  DeprecatedCorrectInput,
   ListObservationsInput,
   ListTimelineEventsInput,
   NeotomaClientError,
@@ -44,6 +47,15 @@ export interface HttpTransportOptions {
 }
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3080";
+
+/**
+ * `correct_transaction` is the only MCP tool whose POST route differs from
+ * `/<tool_name>` that this client maps. Mappings for other tools are tracked
+ * separately and are deliberately not listed here.
+ */
+const TOOL_ROUTES: Readonly<Record<string, string>> = {
+  correct_transaction: "/corrections/transaction",
+};
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class HttpTransport implements NeotomaTransport {
@@ -150,11 +162,11 @@ export class HttpTransport implements NeotomaTransport {
     return this.post("/create_relationships", input);
   }
 
-  async correct(input: {
-    entity_id: string;
-    corrections: Record<string, unknown>;
-  }): Promise<unknown> {
-    return this.post("/correct", input);
+  async correct(input: CorrectInput): Promise<unknown>;
+  /** @deprecated Pass one canonical CorrectInput. A map with more than one field is refused. */
+  async correct(input: DeprecatedCorrectInput): Promise<unknown>;
+  async correct(input: CorrectRequest): Promise<unknown> {
+    return executeCorrectRequest(input, (request) => this.post("/correct", request));
   }
 
   async listEntityTypes(input: { search?: string } = {}): Promise<unknown> {
@@ -167,11 +179,14 @@ export class HttpTransport implements NeotomaTransport {
 
   /**
    * Escape hatch for hook plugins that need to call an MCP action not yet
-   * exposed as a typed method. Maps tool names to REST endpoints using a
-   * best-effort convention (tool name with underscores → `/tool_name`).
+   * exposed as a typed method. Maps tool names to REST endpoints: known
+   * exceptions come from `TOOL_ROUTES` (currently only `correct_transaction`);
+   * every other name uses the convention `/<tool_name>`.
    */
   async executeTool(name: string, args: unknown): Promise<unknown> {
-    const path = `/${name}`;
+    const path = Object.prototype.hasOwnProperty.call(TOOL_ROUTES, name)
+      ? TOOL_ROUTES[name]
+      : `/${name}`;
     return this.post(path, args);
   }
 
