@@ -26,7 +26,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Diligence memory that survives",
   heroHighlight: "weeks of agents, conflicting findings, and IC votes",
   heroDesc:
-    "Diligence runs for weeks across financial, legal, and technical workstreams. Neotoma versions every finding and assessment so you can reconstruct what the team believed at any decision point, not just what the latest memo says.",
+    "Diligence runs for weeks across financial, legal, and technical workstreams. Neotoma versions every finding and assessment so you can reconstruct what the team had recorded by any decision, not just what the latest memo says.",
   heroTags: [
     { tag: "target company", Icon: Building2 },
     { tag: "finding", Icon: FileSearch },
@@ -42,7 +42,7 @@ const CONFIG: UseCaseConfig = {
   problemCards: [
     {
       Icon: History,
-      title: "No vote-time reconstruction",
+      title: "No reconstruction of what was recorded by the vote",
       desc: "Partners ask what the file showed when the IC approved the $180M term sheet. The workspace only returns today's memo, mixing post-vote remediation with pre-vote risk.",
     },
     {
@@ -64,7 +64,7 @@ const CONFIG: UseCaseConfig = {
   problemCallout:
     "A billion-dollar go/no-go deserves a timestamped evidence graph, not a slide deck export.",
   problemCalloutDesc:
-    "Neotoma preserves every observation, supersession, and relationship across diligence agents. You can diff belief between any two dates, list red flags as they existed on a given Monday, and bind IC materials to the exact entity versions that were live when the vote closed.",
+    "Neotoma preserves every observation, supersession, and relationship across diligence agents. You can diff belief between any two dates, list red flags as recorded by a given Monday, and bind IC materials to the exact entity versions recorded by the time the vote closed.",
   scenarios: [
     {
       category: "Investment committee readiness",
@@ -72,12 +72,12 @@ const CONFIG: UseCaseConfig = {
         "What had we recorded about Horizon Semiconductor by the time the IC voted yes on April 17, 2025?",
       fail: "Horizon Semiconductor: ARR $94M (management case), gross margin 61%, top-3 customer concentration 28%, legal clean, proceed to docs.",
       succeed:
-        "IC vote Apr 17, 2025 4:12pm PT (deal\u00B7v9 snapshot): ARR case $94M with diligence-agent range $88\u2013102M; gross margin 61% per FP&A model v3 (Mar 28). Customer concentration 34% in legal-agent finding fin\u00B7v6 (Apr 2), not yet reconciled with sales-agent 28% figure from Mar 22. One open P1 red flag (supply sole-source) documented in red_flag\u00B7v4, accepted with board-level mitigation plan attached. Post-vote work (May 1\u20139) is excluded from this snapshot.",
+        "IC vote Apr 17, 2025 4:12pm PT (deal\u00B7v9 snapshot): ARR case $94M with diligence-agent range $88\u2013102M; gross margin 61% per FP&A model v3 (Mar 28). Customer concentration 34% in legal-agent finding fin\u00B7v6 (Apr 2), not yet reconciled with sales-agent 28% figure from Mar 22. One open P1 red flag (supply sole-source) documented in red_flag\u00B7v4, accepted with board-level mitigation plan attached. Post-vote work (May 1\u20139) had not been recorded by then, so it is not in this snapshot.",
       version: "deal\u00B7v9 @ 2025-04-17T16:12:00-07:00",
       Icon: Gavel,
-      failTitle: "Current diligence memo, not vote-time state",
+      failTitle: "Current diligence memo, not the state recorded by the vote",
       failDesc:
-        "The assistant blended May remediation into the answer, understating concentration and hiding an open red flag that existed at the vote.",
+        "The assistant blended May remediation into the answer, understating concentration and hiding an open red flag that had been recorded by the vote.",
     },
     {
       category: "Conflicting findings",
@@ -107,7 +107,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       category: "Historical reconstruction",
-      human: "What was our working view of target company Cobalt Rail's net debt on March 3, 2025?",
+      human: "What was our recorded working view of target company Cobalt Rail's net debt as recorded by March 3, 2025?",
       fail: "Cobalt Rail net debt $127M (cash $41M, gross debt $168M) per latest model.",
       succeed:
         "As recorded by 2025-03-03 close of business: net debt $134M (cash $38M, gross debt $172M) per FP&A snapshot target\u00B7v14 @ 2025-03-03, includes $6M revolver draw disclosed Mar 1. The $127M figure appears first in target\u00B7v16 (Mar 9) after receivables true-up. The answer as recorded by that date uses target\u00B7v14, not current target\u00B7v18.",
@@ -147,11 +147,11 @@ const CONFIG: UseCaseConfig = {
   capTitle: "Capabilities for buy-side, sell-side, and vendor diligence",
   capSubtitle: "What you can ship",
   capDesc:
-    "Model the entities your process already names, then add integrity guarantees that generic RAG and note apps cannot: contradiction preservation, red flag lifecycles, and vote-time replay.",
+    "Model the entities your process already names, then add integrity guarantees that generic RAG and note apps cannot: contradiction preservation, red flag lifecycles, and replay of what was recorded by the vote.",
   capabilities: [
     {
       Icon: Target,
-      title: "Vote- and signing-time snapshots",
+      title: "Snapshots as recorded by the vote and signing",
       desc: 'Bind IC decks, fairness opinions, and disclosure schedules to exact versions of target and deal entities. Answer "what had we recorded when?" without reconstructing Slack exports.',
       tags: ["deal", "target", "snapshot"],
     },
@@ -182,7 +182,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "Financial and risk fields as recorded",
-      desc: "Replay net debt, margin cases, and concentration metrics as recorded by any close date. Critical for purchase price mechanics and earn-out disputes.",
+      desc: "Replay net debt, margin cases, and concentration metrics as recorded up to any close date. Critical for purchase price mechanics and earn-out disputes.",
       tags: ["target", "temporal", "PPA"],
     },
   ],
@@ -227,7 +227,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How due diligence teams use Neotoma as their integrity layer",
     desc:
-      "AI-powered M&A diligence platforms orchestrate financial, legal, and technical agents for buy-side and strategic acquirers. Neotoma versions every finding, assessment, and red flag so you can reconstruct what the team believed at any decision point, not just what the latest memo says.",
+      "AI-powered M&A diligence platforms orchestrate financial, legal, and technical agents for buy-side and strategic acquirers. Neotoma versions every finding, assessment, and red flag so you can reconstruct what the team had recorded by any decision, not just what the latest memo says.",
     featuresHeading: "What due diligence teams build",
     features: [
       "Parallel agents that ingest data rooms, model synergies, and surface red flags across simultaneous processes",
@@ -236,7 +236,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every agent- or analyst-generated finding and assessment",
-      "Vote-time and signing-time snapshots so materials match the exact entity versions in effect",
+      "Snapshots as recorded by the vote and by signing, so materials match the exact entity versions recorded by then",
       "Full red flag timelines including cleared issues with mitigation evidence",
       "Contradiction preservation when agents disagree, with timestamps and source links",
     ],

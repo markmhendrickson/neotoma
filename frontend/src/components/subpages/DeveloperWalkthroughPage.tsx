@@ -437,7 +437,7 @@ obs_c8e6b2f4...                 2026-04-07T11:30:00Z    agent:chatgpt-session-7d
           { label: "No silent mutation", desc: "Every change appends a versioned observation. You always know what the previous state was." },
           { label: "Full provenance", desc: "Every observation records who authored it, when, and from which tool and session." },
           { label: "Relationship graph", desc: "Entities link to each other. Tasks connect to the contacts and decisions they reference." },
-          { label: "Replayable history", desc: "The observation log reconstructs any past state. Debug by replaying, not by guessing." },
+          { label: "Replayable history", desc: "The observation log reconstructs any past state as recorded. Debug by replaying, not by guessing." },
         ].map((item) => (
           <li key={item.label} className="text-[15px] leading-7 flex items-start gap-2">
             <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">

@@ -43,7 +43,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Clock,
       title: "No rule-version binding",
-      desc: "Eligibility systems apply current rules to all queries. When policy changed on January 1, cases decided in December cannot be re-evaluated against the rules in effect at decision time.",
+      desc: "Eligibility systems apply current rules to all queries. When policy changed on January 1, cases decided in December cannot be re-evaluated against the rules recorded with each decision.",
     },
     {
       Icon: Link2,
@@ -70,7 +70,7 @@ const CONFIG: UseCaseConfig = {
       human: "Under which policy version was the Rodriguez family's SNAP eligibility determined on November 3?",
       fail: "Rodriguez household SNAP case SC-2024-88712: eligible, benefit amount $487/mo based on current income thresholds.",
       succeed:
-        "Determination det\u00B7v3 on 2024-11-03: evaluated under policy pol_snap_fy2024_q4 (effective Oct 1, 2024). Household income $2,840/mo (wage data from state labor dept received Oct 28, wage\u00B7v2). Household size 4 (verified via cross-match with vital records Oct 15). Income threshold for HH-4 under that policy version: $3,007/mo. Result: ELIGIBLE, benefit $487/mo per allotment table v2024.4. Policy pol_snap_fy2025_q1 (effective Jan 1, 2025) raised the threshold to $3,142, but was not in effect at determination time.",
+        "Determination det\u00B7v3 on 2024-11-03: evaluated under policy pol_snap_fy2024_q4 (effective Oct 1, 2024). Household income $2,840/mo (wage data from state labor dept received Oct 28, wage\u00B7v2). Household size 4 (verified via cross-match with vital records Oct 15). Income threshold for HH-4 under that policy version: $3,007/mo. Result: ELIGIBLE, benefit $487/mo per allotment table v2024.4. Policy pol_snap_fy2025_q1 (effective Jan 1, 2025) raised the threshold to $3,142, but had not been recorded as applying when the determination was made.",
       version: "det\u00B7v3",
       Icon: CheckSquare,
       failTitle: "Current eligibility confirmed, policy version unlinked",
@@ -79,7 +79,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       category: "Permit decision reconstruction",
-      human: "What environmental data was available when the county approved the Riverside industrial permit on August 15?",
+      human: "What environmental data had we recorded by the time the county approved the Riverside industrial permit on August 15?",
       fail: "Riverside industrial permit PER-2024-3301: approved August 15, 2024. Current environmental assessment: satisfactory.",
       succeed:
         "Permit decision det\u00B7riverside_v2 on 2024-08-15: evaluated against: (1) Phase I ESA submitted Jul 22 (env_assessment\u00B7v1, no recognized environmental conditions). (2) Air quality index for zone 4: 68 (AQI reading Jul 30, env_data\u00B7v3). (3) Stormwater plan rev B filed Aug 1 (plan\u00B7v2). Phase II ESA (env_assessment\u00B7v3, flagging soil contamination in parcel NW quadrant) was submitted Sep 12, after approval. Zoning variance ZV-2024-018 referenced in approval was still under the pre-amendment code \u00A714.3.2.",
@@ -129,7 +129,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project determination state through time",
-      desc: "Link each decision to the policy version and evidence records available at determination time. Reconstruct what was known on any date without mixing pre- and post-decision data.",
+      desc: "Link each decision to the policy version and evidence records as recorded by determination time. Reconstruct what was known on any date without mixing pre- and post-decision data.",
       detail: "Temporal queries return the state as recorded by the cutoff time, not the latest case file update.",
     },
     {
@@ -147,7 +147,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: CheckSquare,
       title: "Policy-version-bound determinations",
-      desc: "Bind each eligibility or permit decision to the exact policy version, threshold table, and regulatory guidance in effect at decision time. Reconstruct any past determination against its original rules.",
+      desc: "Bind each eligibility or permit decision to the exact policy version, threshold table, and regulatory guidance recorded with it. Reconstruct any past determination against the rules it was bound to as recorded.",
       tags: ["determination", "policy", "audit"],
     },
     {
@@ -212,7 +212,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest determination state per entity, or reconstruct state as recorded by any timestamp relevant to an appeal, audit, or legislative review.",
+      desc: "Project the latest determination state per entity, or reconstruct state as recorded up to any timestamp relevant to an appeal, audit, or legislative review.",
     },
     {
       label: "Serve agents & reviewers",
@@ -231,7 +231,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every cross-agency data receipt, agent evaluation, and reviewer decision",
-      "Temporal snapshots so appeals reference the policy version and evidence available at determination time",
+      "Temporal snapshots so appeals reference the policy version and evidence as recorded by determination time",
       "Relationship integrity between applicants, case records, agency data sources, and determination outcomes",
       "Audit-oriented exports that trace decisions from rule version through evidence inputs to final outcome",
     ],

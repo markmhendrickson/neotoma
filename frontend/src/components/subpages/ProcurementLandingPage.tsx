@@ -66,7 +66,7 @@ const CONFIG: UseCaseConfig = {
   problemCallout:
     'Public sector and enterprise procurement do not accept "we picked the best vendor" without evidence.',
   problemCalloutDesc:
-    "Bid protests, SOX-style controls, and AI-driven sourcing all need the same thing: competing offers, specification versions, and approvals frozen at decision time. Neotoma preserves that graph so agents and humans can explain awards without rebuilding folders.",
+    "Bid protests, SOX-style controls, and AI-driven sourcing all need the same thing: competing offers, specification versions, and approvals as recorded by decision time. Neotoma preserves that graph so agents and humans can explain awards without rebuilding folders.",
   scenarios: [
     {
       category: "Bid comparison",
@@ -84,7 +84,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Specification drift",
       human:
-        "What spec version was PO-2025-4418 for Apex Components based on when it was approved?",
+        "What spec version had been recorded for PO-2025-4418 for Apex Components by the time it was approved?",
       fail: "Current specification for custom bracket assembly: Rev D (effective Apr 2, 2025), torque test 45 N\u00B7m, coating Class III.",
       succeed:
         "PO-2025-4418 was approved Mar 21, 2025 against specification\u00B7v6 (Rev B): torque test 40 N\u00B7m, coating Class II. Rev C and Rev D landed Apr 2 and Apr 18 respectively; purchase_order\u00B7v4 observation binds lines 3\u20136 to spec\u00B7v6, not spec\u00B7v9. Drift vs. current Rev D is explicit in the graph.",
@@ -92,7 +92,7 @@ const CONFIG: UseCaseConfig = {
       Icon: FileStack,
       failTitle: "Current spec returned, PO lineage to approval-time revision missing",
       failDesc:
-        "Without PO-to-spec edges at approval time, the assistant answered with today's Rev D and would misstate contractual requirements during a supplier dispute.",
+        "Without PO-to-spec edges recorded by approval, the assistant answered with today's Rev D and would misstate contractual requirements during a supplier dispute.",
     },
     {
       category: "Supplier risk change",
@@ -137,7 +137,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Link awards to bids, specs, and risk timelines",
       desc: "Bind approvals to the exact bid rows and specification revision the approver saw. Supplier risk observations stack over time so mid-contract flags are visible next to open POs.",
-      detail: "Temporal queries return decision-time state, not the last upload in the P2P tool.",
+      detail: "Temporal queries return state as recorded by the decision, not the last upload in the P2P tool.",
     },
     {
       Icon: Search,
@@ -161,7 +161,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: FileStack,
       title: "Specification lineage on PO lines",
-      desc: "Tie each purchase order line to the spec revision effective at approval; surface drift when engineering releases a new rev after award.",
+      desc: "Tie each purchase order line to the spec revision recorded by approval; surface drift when engineering releases a new rev after award.",
       tags: ["specification", "purchase order", "drift"],
     },
     {
@@ -230,7 +230,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How procurement teams use Neotoma as their integrity layer",
     desc:
-      "AI procurement intelligence platforms for enterprise sourcing automate RFP assembly, supplier comparison, and bid scoring across global categories. Neotoma versions every score, specification change, and approval so you can reconstruct award decisions at any audit point.",
+      "AI procurement intelligence platforms for enterprise sourcing automate RFP assembly, supplier comparison, and bid scoring across global categories. Neotoma versions every score, specification change, and approval so you can reconstruct award decisions as recorded up to any audit date.",
     featuresHeading: "What procurement teams build",
     features: [
       "Autonomous RFP drafting with clause libraries synced to live specification entities",
@@ -239,7 +239,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every model-generated score and human override",
-      "Temporal snapshots so award answers reference March's bids, not June's folder",
+      "Temporal snapshots so award answers reference the bids as recorded by March, not June's folder",
       "Relationship integrity between bids, specs, POs, and multi-stage approvals",
       "Audit-oriented exports suitable for public-sector and enterprise control testing",
     ],

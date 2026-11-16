@@ -39,7 +39,7 @@ const GAP_ROWS: GapRow[] = [
     observabilityDesc:
       "Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.",
     stateIntegrityDesc:
-      "Reconstruct the composed entity state as recorded by any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was recorded.",
+      "Reconstruct the composed entity state as recorded up to any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was recorded.",
     Icon: Clock,
   },
   {
@@ -152,7 +152,7 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
     observabilityCovers:
       "Log clause edits, reviews, and signatures with versions and timestamps",
     stateIntegrityGap:
-      "Reconstruct obligations and terms as they existed on signing day, including which change came from which writer and how conflicts were reduced",
+      "Reconstruct obligations and terms as recorded by signing day, including which change came from which writer and how conflicts were reduced",
     accent: "text-indigo-600 dark:text-indigo-400",
   },
   {
@@ -361,7 +361,7 @@ export function BuildVsBuyPageBody() {
               <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               Observability shows you what happened. State integrity tells you
-              what was recorded: the composed entity state as recorded by any moment, with
+              what was recorded: the composed entity state as recorded up to any moment, with
               deterministic reconstruction guarantees-what you need when agents
               must not contradict themselves across sessions and tools without
               you re-typing context every time. The second problem does not reduce
@@ -382,7 +382,7 @@ export function BuildVsBuyPageBody() {
                   history, and conflict resolution, is a qualitatively different
                   problem from saving files. The same gap exists between logging
                   what your agents did and knowing the composed state of your
-                  entities as recorded by any point in time.
+                  entities as recorded up to any point in time.
                 </p>
               </div>
             </div>
@@ -657,7 +657,7 @@ export function BuildVsBuyPageBody() {
                 </p>
                 <ul className="list-none pl-0 space-y-2.5">
                   {[
-                    "Deterministic reconstruction of entity state as recorded by any historical point",
+                    "Deterministic reconstruction of entity state as recorded up to any historical point",
                     "Multi-writer conflict resolution with guaranteed consistency",
                     "Every decision bound to the exact policy version and context that produced it",
                     "Provenance chains traversable from outcome back to origin",

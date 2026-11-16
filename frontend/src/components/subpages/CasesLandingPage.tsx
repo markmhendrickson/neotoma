@@ -29,7 +29,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Case intelligence that survives",
   heroHighlight: "filings, investigations, and evolving claims",
   heroDesc:
-    "Legal proceedings and insurance claims depend on timing: what evidence existed at filing, when counsel first learned about a witness, how assessments diverged. Neotoma versions case state so you can reconstruct the record as recorded by any point in the matter timeline.",
+    "Legal proceedings and insurance claims depend on timing: what evidence existed at filing, when counsel first learned about a witness, how assessments diverged. Neotoma versions case state so you can reconstruct the record as recorded up to any point in the matter timeline.",
   heroTags: [
     { tag: "case", Icon: Briefcase },
     { tag: "evidence", Icon: PackageSearch },
@@ -42,7 +42,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "cases",
   problemTitle: "Matter tools store documents; they do not preserve evidentiary time",
   problemDesc:
-    'Cases advance through motions, discovery, expert reports, and carrier investigations. Exhibits get re-labeled, analysts revise opinions, and strategy memos overwrite earlier drafts. Without snapshots as recorded by a date, "what was in the record on March 4?" becomes a scavenger hunt through drives and email.',
+    'Cases advance through motions, discovery, expert reports, and carrier investigations. Exhibits get re-labeled, analysts revise opinions, and strategy memos overwrite earlier drafts. Without snapshots as recorded by a date, "what had been recorded in the file by March 4?" becomes a scavenger hunt through drives and email.',
   problemCards: [
     {
       Icon: Clock,
@@ -118,7 +118,7 @@ const CONFIG: UseCaseConfig = {
       Icon: CalendarClock,
       failTitle: "Current posture returned for historical date",
       failDesc:
-        "Board decks and coverage letters often need the strategy as it stood on a specific day. Mixing today's settlement band with last quarter's claim position misstates risk.",
+        "Board decks and coverage letters often need the strategy as recorded by a specific day. Mixing today's settlement band with last quarter's claim position misstates risk.",
     },
   ],
   outcomeTitle: "From static binders to explainable case state",
@@ -137,7 +137,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project matter state through time",
-      desc: "Link evidence to docket events and coverage milestones. Reconstruct exhibit sets as recorded by any filing date, hearing, or reserve meeting without rebuilding folders by hand.",
+      desc: "Link evidence to docket events and coverage milestones. Reconstruct exhibit sets as recorded up to any filing date, hearing, or reserve meeting without rebuilding folders by hand.",
       detail:
         "Temporal queries return the state as recorded by the cutoff time, not the last sync from the DMS.",
     },
@@ -175,7 +175,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: CalendarClock,
       title: "Case posture as recorded",
-      desc: "Reconstruct strategy, authority, and open issues as recorded by any date relevant to mediation, coverage, or board reporting.",
+      desc: "Reconstruct strategy, authority, and open issues as recorded up to any date relevant to mediation, coverage, or board reporting.",
       tags: ["case", "strategy", "as-of"],
     },
     {
@@ -222,7 +222,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest authoritative view, or reconstruct state as recorded by any timestamp relevant to a motion, hearing, or coverage date.",
+      desc: "Project the latest authoritative view, or reconstruct state as recorded up to any timestamp relevant to a motion, hearing, or coverage date.",
     },
     {
       label: "Serve agents & reviewers",
@@ -232,7 +232,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How case management teams use Neotoma as their integrity layer",
     desc:
-      "AI litigation and claims platforms unify docket data, discovery, and strategy analytics across complex commercial and insurance defense teams. Neotoma versions every exhibit, assessment, and analyst output so you can reconstruct case state as recorded by any filing date or mediation prep point.",
+      "AI litigation and claims platforms unify docket data, discovery, and strategy analytics across complex commercial and insurance defense teams. Neotoma versions every exhibit, assessment, and analyst output so you can reconstruct case state as recorded up to any filing date or mediation prep point.",
     featuresHeading: "What case management teams build",
     features: [
       "Matter agents that summarize posture across parallel cases and coverage towers",

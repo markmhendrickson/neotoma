@@ -108,11 +108,11 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Temporal state",
       human:
-        "What were the payment terms for the Sterling Logistics order form on February 15, 2025?",
+        "What payment terms had we recorded for the Sterling Logistics order form by February 15, 2025?",
       fail: "Sterling Logistics order form: payment net-30, 1.5% monthly late fee, cap on late fees at 5% of invoice.",
       succeed:
-        "As of 2025-02-15, Sterling order form OF-884 showed net-60 and no late-fee cap (clause 3.2 per contract\u00B7v7 snapshot). Amendment No. 2 (effective Feb 28) moved to net-30 and introduced the 1.5%/5% cap language you see today in contract\u00B7v9. The assistant returned the historical snapshot, not the post-amendment text.",
-      version: "contract\u00B7v7 @ 2025-02-15",
+        "As recorded by 2025-02-15, Sterling order form OF-884 showed net-60 and no late-fee cap (clause 3.2 per contract\u00B7v7 snapshot). Amendment No. 2 (effective Feb 28) moved to net-30 and introduced the 1.5%/5% cap language you see today in contract\u00B7v9. The assistant returned the historical snapshot, not the post-amendment text.",
+      version: "contract\u00B7v7 recorded by 2025-02-15",
       Icon: History,
       failTitle: "Current terms returned for a historical question",
       failDesc:
@@ -219,7 +219,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest state per entity, or reconstruct state as recorded by any timestamp relevant to reporting or litigation.",
+      desc: "Project the latest state per entity, or reconstruct state as recorded up to any timestamp relevant to reporting or litigation.",
     },
     {
       label: "Serve agents & auditors",
@@ -229,7 +229,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How contract intelligence teams use Neotoma as their integrity layer",
     desc:
-      "AI-native contract platforms automate review, redlining, and obligation tracking for global procurement teams. Neotoma versions every clause change, amendment, and approval so you can reconstruct contract state as recorded by any close date or audit point.",
+      "AI-native contract platforms automate review, redlining, and obligation tracking for global procurement teams. Neotoma versions every clause change, amendment, and approval so you can reconstruct contract state as recorded up to any close date or audit point.",
     featuresHeading: "What contract intelligence teams build",
     features: [
       "Parallel drafting and risk agents that propose clause edits across hundreds of active MSAs",

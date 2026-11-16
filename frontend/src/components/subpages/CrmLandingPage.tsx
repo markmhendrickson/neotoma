@@ -1099,7 +1099,7 @@ export function CrmLandingPageBody() {
                   {
                     Icon: RotateCcw,
                     title: "Replayable account history",
-                    desc: "Reconstruct the state of any account, pipeline, or relationship as recorded by any point in time. Useful for QBRs, forecasting audits, and compliance reviews.",
+                    desc: "Reconstruct the state of any account, pipeline, or relationship as recorded up to any point in time. Useful for QBRs, forecasting audits, and compliance reviews.",
                     tags: ["account\u00B7v9", "snapshot\u00B7replay"],
                   },
                   {
@@ -1226,7 +1226,7 @@ export function CrmLandingPageBody() {
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                   AI relationship intelligence platforms surface warm intros, track deal diligence,
                   and flag commitment windows. Neotoma versions every contact, deal stage, and
-                  relationship signal so you can reconstruct pipeline state as recorded by any prior date.
+                  relationship signal so you can reconstruct pipeline state as recorded up to any prior date.
                 </p>
               </div>
 
@@ -1268,7 +1268,7 @@ export function CrmLandingPageBody() {
                       "Every contact, deal, and commitment is a versioned entity with full observation history",
                       "Intro recommendations trace to specific connections and threads with auditable provenance",
                       "Deal stage transitions are schema-validated: no skipping diligence, no silent field overwrites",
-                      "Pipeline state is replayable: reconstruct any commitment or snapshot as recorded by any prior date",
+                      "Pipeline state is replayable: reconstruct any commitment or snapshot as recorded up to any prior date",
                     ].map((item) => (
                       <li
                         key={item}

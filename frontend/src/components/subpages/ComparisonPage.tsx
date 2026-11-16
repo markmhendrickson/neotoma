@@ -205,7 +205,7 @@ const NEOTOMA_VS_MEM0: Omit<ComparisonPageProps, "mdxShell"> = {
   competitorDescription:
     "Mem0 stores memories as text chunks with vector embeddings. It retrieves relevant context by semantic similarity search. Memory is optimized for prompt augmentation: finding relevant past context to inject into the current conversation.",
   neotomaDescription:
-    "Neotoma stores structured observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Memory is optimized for state integrity: knowing the exact composed state of an entity as recorded by any point in time.",
+    "Neotoma stores structured observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Memory is optimized for state integrity: knowing the exact composed state of an entity as recorded up to any point in time.",
   whenToUse: {
     competitor:
       "You need semantic retrieval to inject relevant past context into prompts. Your primary concern is making conversations feel continuous, and approximate recall is sufficient.",
@@ -290,7 +290,7 @@ const NEOTOMA_VS_RAG: Omit<ComparisonPageProps, "mdxShell"> = {
     competitor:
       "You need to augment LLM prompts with relevant context from a document corpus. Approximate retrieval is sufficient, and you don't need to reconstruct historical entity state.",
     neotoma:
-      "You need to know the exact state of an entity as recorded by any past moment, resolve conflicts between multiple writers deterministically, enforce schemas, or provide auditable provenance chains.",
+      "You need to know the exact state of an entity as recorded up to any past moment, resolve conflicts between multiple writers deterministically, enforce schemas, or provide auditable provenance chains.",
   },
   faqItems: [
     {
@@ -330,7 +330,7 @@ const NEOTOMA_VS_PLATFORM_MEMORY: Omit<ComparisonPageProps, "mdxShell"> = {
   competitorDescription:
     "Platform memory is controlled by the model provider. Conversation-level memory may remember preferences, summaries, or user details inside that product, but the storage model is opaque. File-based primitives like the Claude Memory Tool give agents CRUD access to a /memories directory, but there is no schema validation, no append-only guarantee, no entity resolution, and no field-level provenance. Users typically cannot inspect lineage, replay state transitions, or export a deterministic observation log.",
   neotomaDescription:
-    "Neotoma stores append-only structured observations with deterministic reducers, schema validation, and provenance. Memory remains user-controlled, cross-tool, and reconstructable as recorded by any point in time. It can run alongside both conversation memory and the Memory Tool via MCP.",
+    "Neotoma stores append-only structured observations with deterministic reducers, schema validation, and provenance. Memory remains user-controlled, cross-tool, and reconstructable as recorded up to any point in time. It can run alongside both conversation memory and the Memory Tool via MCP.",
   whenToUse: {
     competitor:
       "You want the fastest possible setup inside a single AI product, you are using the Memory Tool as a lightweight scratchpad, and convenience matters more than portability, versioning, or auditability.",

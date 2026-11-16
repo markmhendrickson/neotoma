@@ -52,7 +52,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: AlertTriangle,
       title: "Silent constraint changes",
-      desc: "Port delays, carrier rate updates, and weather advisories change the constraint landscape. Decisions made before the update cannot be evaluated against the constraints that existed at decision time.",
+      desc: "Port delays, carrier rate updates, and weather advisories change the constraint landscape. Decisions made before the update cannot be evaluated against the constraints as recorded by decision time.",
     },
     {
       Icon: GitCompare,
@@ -74,14 +74,14 @@ const CONFIG: UseCaseConfig = {
       Icon: Route,
       failTitle: "Current carrier assignment visible, selection rationale missing",
       failDesc:
-        "Air capacity opened up 2.5 hours later. Without the constraint snapshot at decision time, the ops review would incorrectly conclude the agent ignored a cheaper air option that was not actually available.",
+        "Air capacity opened up 2.5 hours later. Without the constraint snapshot as recorded by decision time, the ops review would incorrectly conclude the agent ignored a cheaper air option that was not actually available.",
     },
     {
       category: "Inventory commitment dispute",
       human: "Did we actually have the 500 units of SKU-4401 available when we committed them to the Vertex order at 2pm?",
       fail: "SKU-4401 current inventory: 312 units available. Vertex order ORD-2025-91002: 500 units allocated.",
       succeed:
-        "At 2025-03-12 14:00 UTC, inventory snapshot inv\u00B7sku4401_v8 showed: on-hand 820, allocated 290, available-to-promise 530. Fulfillment agent committed 500 units (allocation\u00B7v3). Between 14:00 and 16:00, two other orders consumed 218 units (allocation\u00B7v4, v5), dropping ATP to 312 (inv\u00B7sku4401_v11). The commitment was valid at decision time. Current deficit is from subsequent allocations, not an over-commit. Full inventory timeline at inv\u00B7sku4401_v8 through v11.",
+        "As recorded by 2025-03-12 14:00 UTC, inventory snapshot inv\u00B7sku4401_v8 showed: on-hand 820, allocated 290, available-to-promise 530. Fulfillment agent committed 500 units (allocation\u00B7v3). Between 14:00 and 16:00, two other orders consumed 218 units (allocation\u00B7v4, v5), dropping ATP to 312 (inv\u00B7sku4401_v11). The commitment was made against the availability recorded at that time. Current deficit is from subsequent allocations, not an over-commit. Full inventory timeline at inv\u00B7sku4401_v8 through v11.",
       version: "inv\u00B7sku4401_v8 @ 14:00",
       Icon: Warehouse,
       failTitle: "Current inventory shows shortfall, commitment validity unclear",
@@ -128,7 +128,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project logistics state through time",
-      desc: "Link routing decisions to the carrier capacity, rates, and inventory positions available at decision time. Reconstruct the constraint landscape as recorded for any past moment.",
+      desc: "Link routing decisions to the carrier capacity, rates, and inventory positions as recorded by decision time. Reconstruct the constraint landscape as recorded for any past moment.",
       detail: "Temporal queries return the state as recorded by the cutoff time, not the latest TMS sync.",
     },
     {
@@ -211,7 +211,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest logistics state per entity, or reconstruct state as recorded by any timestamp relevant to a delay investigation, dispute, or optimization review.",
+      desc: "Project the latest logistics state per entity, or reconstruct state as recorded up to any timestamp relevant to a delay investigation, dispute, or optimization review.",
     },
     {
       label: "Serve agents & analysts",
@@ -221,7 +221,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How logistics teams use Neotoma as their integrity layer",
     desc:
-      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state as recorded at any decision point.",
+      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state as recorded up to any decision.",
     featuresHeading: "What logistics teams build",
     features: [
       "Routing agents that evaluate carrier capacity, rates, and transit times across ground, air, and ocean in real time",

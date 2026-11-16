@@ -58,7 +58,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: TimerOff,
       title: "No consent timeline",
-      desc: "Consent grants and revocations overwrite state. You cannot prove what permissions were active on a specific date or trace the sequence of grant, modification, and revocation.",
+      desc: "Consent grants and revocations overwrite state. You cannot prove what permissions had been recorded as active by a specific date or trace the sequence of grant, modification, and revocation.",
     },
     {
       Icon: Link2,
@@ -81,7 +81,7 @@ const CONFIG: UseCaseConfig = {
       Icon: ShieldCheck,
       failTitle: "Current policy confirms access, history missing",
       failDesc:
-        "The assistant checked today's policy and confirmed the agent has the right permission level. It could not show which policy version was in effect on March 12, who delegated authority, or whether the consent grant was active at the time.",
+        "The assistant checked today's policy and confirmed the agent has the right permission level. It could not show which policy version had been recorded as applying by March 12, who delegated authority, or whether the consent grant had been recorded as active by then.",
     },
     {
       category: "Consent lifecycle",
@@ -120,7 +120,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Share2,
       failTitle: "Access level confirmed, delegation path unknown",
       failDesc:
-        "The assistant confirmed the agent has access but could not trace how authority was delegated from the human admin through the orchestrator to the deployment agent, or whether the delegation was still valid at execution time.",
+        "The assistant confirmed the agent has access but could not trace how authority was delegated from the human admin through the orchestrator to the deployment agent, or whether the delegation had been recorded as valid by execution time.",
     },
     {
       category: "DAO governance reconstruction",
@@ -152,7 +152,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Clock,
       title: "Project authorization state through time",
-      desc: "Consent timelines, policy versions, and delegation chains are queryable as recorded by any point in time. Ask what permissions had been recorded for an agent by a specific date and get the exact policy inputs.",
+      desc: "Consent timelines, policy versions, and delegation chains are queryable as recorded up to any point in time. Ask what permissions had been recorded for an agent by a specific date and get the exact policy inputs.",
       detail:
         "Temporal queries return the state as recorded by the cutoff time, not the latest policy.",
     },
@@ -178,7 +178,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: UserCheck,
       title: "Consent lifecycle tracking",
-      desc: "Track grants, scope modifications, and revocations as a timeline. Prove what permissions were active on any date and identify the last action taken under a given consent.",
+      desc: "Track grants, scope modifications, and revocations as a timeline. Show what permissions had been recorded as active up to any date and identify the last action taken under a given consent.",
       tags: ["consent_grant", "timeline", "compliance"],
     },
     {
@@ -244,7 +244,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest authorization state per entity, or reconstruct state as recorded by any timestamp relevant to incident response or audit.",
+      desc: "Project the latest authorization state per entity, or reconstruct state as recorded up to any timestamp relevant to incident response or audit.",
     },
     {
       label: "Serve agents & auditors",
@@ -254,7 +254,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How agent authorization teams use Neotoma as their integrity layer",
     desc:
-      "Production agent authorization surfaces need durable records of which agents are bound to which subjects, under what scopes, when consent changed, and how offboarding revokes authority. Neotoma versions every binding, delegation, and policy evaluation so you can reconstruct authorization state as recorded by any point in time.",
+      "Production agent authorization surfaces need durable records of which agents are bound to which subjects, under what scopes, when consent changed, and how offboarding revokes authority. Neotoma versions every binding, delegation, and policy evaluation so you can reconstruct authorization state as recorded up to any point in time.",
     featuresHeading: "What agent authorization teams build",
     features: [
       "Bind software agents to subjects with explicit scopes (payments, PII, infra changes) instead of ad hoc API keys",
@@ -263,7 +263,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every binding change, consent edge, delegation hop, and policy evaluation the stack emits",
-      'Temporal snapshots so "was this agent allowed to act then?" uses the consent and policy state in effect at that moment',
+      'Temporal snapshots so "was this agent allowed to act then?" uses the consent and policy state as recorded by that moment',
       "Relationship integrity between human identity, consent records, agent sessions, and downstream actions",
       "Audit-oriented exports that trace authority from the subject through each delegation hop to the acting agent",
     ],

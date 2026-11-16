@@ -36,6 +36,13 @@ import { FUNCTIONALITY_MATRIX } from "../../frontend/src/site/site_data.js";
 
 import { getOpenApiInputSchemaOrThrow } from "../../src/shared/openapi_schema.js";
 import { buildToolDefinitions } from "../../src/tool_definitions.js";
+import {
+  ACCEPTED_WRITE_TIME_PHRASES,
+  findEventTimeOffenders,
+  NOT_EXCUSED_BY_NEARBY_WORDS,
+  SEEDED_EVENT_TIME_PHRASES,
+  WRITE_TIME_CONTEXT,
+} from "../helpers/temporal_wording_patterns.js";
 
 const root = process.cwd();
 const read = (rel: string) => readFileSync(join(root, rel), "utf8");
@@ -225,43 +232,6 @@ describe("public copy never promises event-time (valid-time) answers", () => {
 
   const files = COPY_ROOTS.flatMap(walk).sort();
 
-  /** Phrases that say or imply the cutoff returns state as it was true at an event date. */
-  const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
-    [
-      "at any (historical|past|prior) moment, timestamp, date or point",
-      /\bat any (?:(?:historical|past|prior|given|specific) )?(?:timestamp|moment|date|point in time|point in (?:their|the) \w+ timeline|point in a case timeline|point)\b/gi,
-    ],
-    ["state (valid) at/on/as of a date", /\bstate (?:valid )?(?:at|as of) |\bstate on (?:[A-Z]|\d)/g],
-    ["what was true", /\bwhat (?:was|were) (?:\w+ )?true\b|\bwhat was known at (?:any|decision)/gi],
-    ["time travel", /\btime[- ]travel/gi],
-    [
-      "as-of date/timestamp/view/query/answer",
-      /\bas[- ]of (?:any |a |the |and |snapshots?|date|timestamp|time|view|quer|answer|reconstruction|state)|\bany as-of\b|\bas-of\b(?=["' ]*[,.;)])/gi,
-    ],
-    ["point-in-time", /\bpoint[- ]in[- ]time\b/gi],
-    ["when we signed", /\bwhen we signed\b/gi],
-    [
-      "what did we know on <date>",
-      /\bwhat did we know [^.?'"]{0,60}\b(?:on|by) [A-Z][a-z]+ \d/g,
-    ],
-    ["on/at any calendar, close, filing, audit or prior date", /\b(?:on|at|as of) any (?:calendar |historical |close |prior |filing |audit |regulatory )+date\b/gi],
-    ["valid at / event time", /\bvalid (?:at|on) the as-of|\bevent[- ]time\b/gi],
-    ["award-time truth/views", /\baward-time (?:truth|views?)\b/gi],
-    ["Spanish: qu\u00e9 era cierto / en cualquier momento pasado", /qu[\u00e9e] era cierto|punto en el tiempo|viaje en el tiempo/gi],
-  ];
-
-  /** Wording that is correct under write time. */
-  const WRITE_TIME_CONTEXT = /recorded|registrad|asserted|stored/i;
-
-  /** Reviewed lines where the match is not a temporal-query claim. */
-  const ALLOWLIST: RegExp[] = [
-    // Not a temporal-query claim: a backup instruction, and the definition of an observation.
-    /copy aside at any point/i,
-    /statement about an entity at a point in time/i,
-  ];
-
-  const collapse = (text: string) => text.replace(/\s+/g, " ");
-
   it("scans a non-trivial set of copy files, including Spanish and docs", () => {
     expect(files.length).toBeGreaterThan(200);
     expect(files).toContain("frontend/src/components/subpages/TradingLandingPage.tsx");
@@ -270,56 +240,51 @@ describe("public copy never promises event-time (valid-time) answers", () => {
     expect(files).toContain("docs/site/pages/en/faq.md");
   });
 
-  it("the pattern set fires on each event-time phrase it exists to catch", () => {
-    const seeded = [
-      "at any historical timestamp",
-      "what was the diagnosis at any historical moment",
-      "what were the terms when we signed?",
-      "Reconstruct exhibit sets as of any filing date",
-      "for any as-of timestamp",
-      "Risk state time travel",
-      "what was true then",
-      "reconstruct award-time and as-of views",
-      "As of 2025-03-03 close of business ... Point-in-time answer",
-      "reconstruct state at any timestamp",
-      "what did we know about NovaPay on February 15?",
-      "reconstruct belief at IC vote, signing, or any regulatory as-of date",
-    ];
-    for (const phrase of seeded) {
-      const hit = EVENT_TIME_PATTERNS.some(([, re]) => {
-        re.lastIndex = 0;
-        return re.test(phrase);
-      });
-      expect(hit, `pattern set must catch: ${phrase}`).toBe(true);
+  it("the pattern set fires on every event-time phrase reviewers quoted", () => {
+    for (const phrase of SEEDED_EVENT_TIME_PHRASES) {
+      expect(findEventTimeOffenders(phrase).length, `pattern set must catch: ${phrase}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("write-time wording is accepted", () => {
+    for (const phrase of ACCEPTED_WRITE_TIME_PHRASES) {
+      expect(findEventTimeOffenders(phrase), `must accept: ${phrase}`).toEqual([]);
+    }
+  });
+
+  it("a nearby unrelated 'stored' or 'recorded' in another clause cannot excuse an event-time promise", () => {
+    for (const phrase of NOT_EXCUSED_BY_NEARBY_WORDS) {
+      expect(findEventTimeOffenders(phrase).length, `must still flag: ${phrase}`).toBeGreaterThan(0);
     }
   });
 
   it("no copy file promises event-time (valid-time) answers", () => {
     const offenders: string[] = [];
     for (const file of files) {
-      const text = collapse(read(file));
-      for (const [label, re] of EVENT_TIME_PATTERNS) {
-        re.lastIndex = 0;
-        for (const m of text.matchAll(re)) {
-          const start = m.index ?? 0;
-          const context = text.slice(Math.max(0, start - 60), start + m[0].length + 30);
-          if (WRITE_TIME_CONTEXT.test(context)) continue;
-          if (ALLOWLIST.some((a) => a.test(context))) continue;
-          offenders.push(`${file} [${label}]: ...${context}...`);
-        }
+      for (const o of findEventTimeOffenders(read(file))) {
+        offenders.push(`${file} [${o.label}]: ...${o.context}...`);
       }
     }
     expect(offenders, offenders.join("\n")).toEqual([]);
   });
 
-  it("landing pages that show temporal features state the recorded-by semantics", () => {
-    const landing = files.filter((f) => /subpages\/\w+LandingPage\.tsx$/.test(f));
-    expect(landing.length).toBeGreaterThanOrEqual(12);
-    for (const page of landing) {
-      const text = read(page);
-      if (/Temporal snapshots so/.test(text)) {
-        expect(text, `${page}: states the recorded-by semantics`).toMatch(/recorded by|as recorded|had been recorded/);
+  it("every 'Temporal snapshots so ...' guarantee bullet itself states write-time semantics", () => {
+    const bullets: Array<{ file: string; line: string }> = [];
+    for (const file of files) {
+      if (!/\.tsx?$/.test(file)) continue;
+      for (const line of read(file).split("\n")) {
+        if (/Temporal snapshots so/.test(line)) bullets.push({ file, line: line.trim() });
       }
+    }
+    expect(bullets.length).toBeGreaterThanOrEqual(8);
+    expect(bullets.map((b) => b.file)).toContain(
+      "frontend/src/components/subpages/TradingLandingPage.tsx"
+    );
+    expect(bullets.map((b) => b.file)).toContain(
+      "frontend/src/components/subpages/agent_auth_landing_body.tsx"
+    );
+    for (const { file, line } of bullets) {
+      expect(line, `${file}: bullet must state recorded-by semantics`).toMatch(WRITE_TIME_CONTEXT);
     }
   });
 });

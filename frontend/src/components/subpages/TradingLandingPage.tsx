@@ -44,7 +44,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "trading",
   problemTitle: "Trading agents log outcomes but not the reasoning chain that produced them",
   problemDesc:
-    "Autonomous trading systems make high-stakes decisions every minute. Multiple analysts evaluate signals, structured debates synthesize views, and a portfolio manager commits capital. Current systems log the trade but not the full decision context: which analysts disagreed, what the strategy said at the time, or what risk limits were active when the position opened.",
+    "Autonomous trading systems make high-stakes decisions every minute. Multiple analysts evaluate signals, structured debates synthesize views, and a portfolio manager commits capital. Current systems log the trade but not the full decision context: which analysts disagreed, what the strategy had recorded at the time, or which risk limits had been recorded by the time the position opened.",
   problemCards: [
     {
       Icon: Clock,
@@ -82,7 +82,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Scale,
       failTitle: "Current strategy cited, historical reasoning missing",
       failDesc:
-        "The assistant used today's strategy and market view to explain a trade made under different conditions. The actual analyst scores, debate outcome, and risk parameters at trade time are unavailable.",
+        "The assistant used today's strategy and market view to explain a trade made under different conditions. The actual analyst scores, debate outcome, and risk parameters as recorded by trade time are unavailable.",
     },
     {
       category: "Pass decision audit",
@@ -153,7 +153,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Clock,
       title: "Project trading state through time",
-      desc: "Strategy versions, risk parameters, and portfolio compositions are queryable as recorded by any point in time. Ask what risk limits had been recorded for the agent by 3 AM and get the exact parameters, not today's configuration.",
+      desc: "Strategy versions, risk parameters, and portfolio compositions are queryable as recorded up to any point in time. Ask what risk limits had been recorded for the agent by 3 AM and get the exact parameters, not today's configuration.",
       detail:
         "Temporal queries return the state as recorded by the cutoff time, not the latest strategy update.",
     },
@@ -191,7 +191,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Shield,
       title: "Risk state history",
-      desc: "Reconstruct position limits, drawdown caps, kill switch status, and spending caps as recorded by any timestamp. Verify what constraints had been recorded when a market event occurred.",
+      desc: "Reconstruct position limits, drawdown caps, kill switch status, and spending caps as recorded up to any timestamp. Verify what constraints had been recorded when a market event occurred.",
       tags: ["risk_state", "temporal", "compliance"],
     },
     {
@@ -203,7 +203,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: LineChart,
       title: "Portfolio state snapshots",
-      desc: "Version portfolio composition, exposure by chain and asset, and unrealized P&L as recorded by any timestamp. Compare pre- and post-rebalance states with full provenance.",
+      desc: "Version portfolio composition, exposure by chain and asset, and unrealized P&L as recorded up to any timestamp. Compare pre- and post-rebalance states with full provenance.",
       tags: ["portfolio_snapshot", "temporal", "audit"],
     },
     {
@@ -245,7 +245,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest state per entity, or reconstruct state as recorded by any timestamp relevant to post-trade analysis, risk audit, or strategy review.",
+      desc: "Project the latest state per entity, or reconstruct state as recorded up to any timestamp relevant to post-trade analysis, risk audit, or strategy review.",
     },
     {
       label: "Serve agents & users",
@@ -255,16 +255,16 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How autonomous trading platforms use Neotoma as their integrity layer",
     desc:
-      "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade as recorded by any point in time.",
+      "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade as recorded up to any point in time.",
     featuresHeading: "What trading teams build",
     features: [
       "Multi-analyst reasoning chains with versioned assessments, confidence scores, and debate resolutions linked to every trade decision, including the pass decisions the agent made and why",
       "Strategy evolution tracking that attributes returns to specific parameter versions and agent adaptations over time",
-      "Risk state timelines that prove what limits, caps, and kill switch states were active during any market event",
+      "Risk state timelines that show which limits, caps, and kill switch states had been recorded by the time of any market event",
     ],
     guarantees: [
       "Immutable observations for every analyst assessment, debate outcome, PM decision, and execution event",
-      "Temporal snapshots so post-trade analysis uses the strategy, risk state, and market data in effect at trade time, not current values",
+      "Temporal snapshots so post-trade analysis uses the strategy, risk state, and market data as recorded by trade time, not current values",
       "Relationship integrity between strategies, analyst outputs, debates, decisions, executions, and portfolio states",
       "Audit-oriented exports that trace reasoning from market signal through analyst debate to final execution",
     ],

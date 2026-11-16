@@ -1248,7 +1248,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/versioned-history": {
     title: "Versioned History | Neotoma",
     description:
-      "Every entity change creates a new version. Earlier states are preserved and accessible as recorded by any point in time.",
+      "Every entity change creates a new version. Earlier states are preserved and accessible as recorded up to any point in time.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1810,7 +1810,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "What is the difference between observability and state integrity?",
         answer:
-          "Observability shows what happened: events, logs, traces. State integrity proves what was recorded: the deterministic composed entity state as recorded by any moment, with multi-writer conflict resolution and version-bound provenance.",
+          "Observability shows what happened: events, logs, traces. State integrity proves what was recorded: the deterministic composed entity state as recorded up to any moment, with multi-writer conflict resolution and version-bound provenance.",
       },
       {
         question: "Is observability enough for my agent system?",
@@ -2224,7 +2224,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/primitives/interpretations": {
     title: "Interpretations | Primitive Record Type | Neotoma",
     description:
-      "Interpretations are versioned, audited extraction attempts that turn a source into structured observations. interpretation_config records the model, prompt, and schema version active at run start.",
+      "Interpretations are versioned, audited extraction attempts that turn a source into structured observations. interpretation_config records the model, prompt, and schema version used for the run.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

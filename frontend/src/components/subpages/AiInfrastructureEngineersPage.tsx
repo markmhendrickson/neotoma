@@ -183,7 +183,7 @@ export function AiInfrastructureEngineersPageBody() {
           body: (
             <p>
               Every record links back to where it came from. Replay the timeline
-              to any historical state. Diff versions to see what changed and
+              to any state as recorded. Diff versions to see what changed and
               when.
             </p>
           ),

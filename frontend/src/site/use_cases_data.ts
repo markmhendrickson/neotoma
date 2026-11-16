@@ -66,7 +66,7 @@ export const USE_CASES: UseCaseCard[] = [
     title: "Contract lifecycle management",
     tagline: "Version control for every clause, amendment, and obligation",
     entityExamples: ["contract", "clause", "amendment", "obligation"],
-    thenQuestion: "What terms had we recorded when we signed? What changed in amendment 3?",
+    thenQuestion: "What terms had been recorded by signing? What changed in amendment 3?",
     accent: "text-indigo-600 dark:text-indigo-400",
     accentBg: "bg-indigo-500/5",
     accentBorder: "border-indigo-500/20",

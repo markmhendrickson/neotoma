@@ -165,13 +165,13 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: MessageSquare,
       title: "Interaction-level answer tracing",
-      desc: "Bind each agent response to the ticket state and policy version at the time of the interaction. Trace contradictory answers to the specific inputs each agent evaluated.",
+      desc: "Bind each agent response to the ticket state and policy version as recorded by the time of the interaction. Trace contradictory answers to the specific inputs each agent evaluated.",
       tags: ["interaction", "policy", "consistency"],
     },
     {
       Icon: History,
       title: "Ticket state as recorded",
-      desc: "Answer what the ticket showed as recorded by any moment: priority, assignment, open interactions, and customer sentiment. Essential for CSAT root cause analysis.",
+      desc: "Answer what the ticket showed as recorded up to any moment: priority, assignment, open interactions, and customer sentiment. Essential for CSAT root cause analysis.",
       tags: ["ticket", "temporal", "reporting"],
     },
     {
@@ -212,7 +212,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest ticket state per entity, or reconstruct state as recorded by any timestamp relevant to an SLA review, CSAT investigation, or escalation debrief.",
+      desc: "Project the latest ticket state per entity, or reconstruct state as recorded up to any timestamp relevant to an SLA review, CSAT investigation, or escalation debrief.",
     },
     {
       label: "Serve agents & ops leads",
@@ -222,7 +222,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How customer operations teams use Neotoma as their integrity layer",
     desc:
-      "AI-native customer operations platforms automate triage, routing, and multi-channel resolution for SaaS and e-commerce support teams. Neotoma versions every routing decision, priority change, and interaction so you can reconstruct support state as recorded by any SLA audit or CSAT investigation point.",
+      "AI-native customer operations platforms automate triage, routing, and multi-channel resolution for SaaS and e-commerce support teams. Neotoma versions every routing decision, priority change, and interaction so you can reconstruct support state as recorded up to any SLA audit or CSAT investigation point.",
     featuresHeading: "What customer operations teams build",
     features: [
       "Triage agents that classify and route tickets across billing, technical, and account queues with real-time queue balancing",

@@ -243,7 +243,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project current state or reconstruct what the agent knew, checked, and skipped as recorded by any historical timestamp.",
+      desc: "Project current state or reconstruct what the agent knew, checked, and skipped as recorded up to any historical timestamp.",
     },
     {
       label: "Serve agents, reviewers, and security",

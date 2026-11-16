@@ -132,7 +132,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     },
     {
       left: "Was the invoice from Acme Corp paid?",
-      fail: "Unpaid as of Feb 2.",
+      fail: "Unpaid (last seen Feb 2).",
       succeed: "Paid Feb 14 via Wise transfer.",
       version: "transaction·v3",
     },
@@ -366,7 +366,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
         { label: "Memory Graph", sub: "entities \u00b7 relationships \u00b7 timeline" },
       ],
       operations: ["record", "reduce", "relate"] as const,
-      replayHint: "\u21bb replay \u00b7 inspect any past state",
+      replayHint: "\u21bb replay \u00b7 inspect any recorded state",
     },
   },
   cliDemo: {

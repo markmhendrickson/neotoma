@@ -47,7 +47,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: CalendarOff,
       title: "No close-date snapshots",
-      desc: "Close packages export PDFs and spreadsheets that drift the next morning. Teams cannot query the reconciliation grid as it stood on Mar 31 at 11:59pm ET.",
+      desc: "Close packages export PDFs and spreadsheets that drift the next morning. Teams cannot query the reconciliation grid as recorded by Mar 31 at 11:59pm ET.",
     },
     {
       Icon: RefreshCw,
@@ -158,7 +158,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: ShieldCheck,
       title: "Balances as recorded by audit date",
-      desc: "Reconstruct liabilities, accruals, and cash positions as recorded by any calendar date with ledger and account snapshots tied to journal and recon observations.",
+      desc: "Reconstruct liabilities, accruals, and cash positions as recorded up to any calendar date with ledger and account snapshots tied to journal and recon observations.",
       tags: ["ledger", "audit", "temporal"],
     },
     {
@@ -234,7 +234,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How financial operations teams use Neotoma as their integrity layer",
     desc:
-      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state as recorded by any audit date.",
+      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state as recorded up to any audit date.",
     featuresHeading: "What financial operations teams build",
     features: [
       "Continuous bank-to-ledger matching with agent-proposed categorization across thousands of daily transactions",
@@ -243,13 +243,13 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every feed ingest, match decision, and agent-generated journal proposal",
-      "Temporal snapshots so audit-date and month-end answers match attested close, not today's workspace",
+      "Temporal snapshots so audit-date and month-end answers match the close as recorded by that date, not today's workspace",
       "Relationship integrity between transactions, invoices, reconciliation entries, and GL lines",
       "Audit-oriented exports that list versions, conflicts, and lineage in one graph",
     ],
     generalizesTitle: "If you run agent-assisted close and recon, you share the same risk surface",
     generalizesDesc:
-      "Any team blending bank feeds, ERP, and autonomous matching or categorization needs the same guarantees: no silent recon overwrites, no orphan adjustments, and no guessing which snapshot was live on Dec 31. Neotoma generalizes the pattern to your stack.",
+      "Any team blending bank feeds, ERP, and autonomous matching or categorization needs the same guarantees: no silent recon overwrites, no orphan adjustments, and no guessing which snapshot had been recorded by Dec 31. Neotoma generalizes the pattern to your stack.",
   },
   ctaHeadline: "Ship finance agents that can defend",
   ctaHighlight: "every balance they explain",

@@ -43,7 +43,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "portfolio",
   problemTitle: 'Portfolio systems optimize for "now"; IC and LPs ask for the record by a date',
   problemDesc:
-    "Valuations refresh, cap tables rebalance, and board decks contradict market data. Follow-on decisions need the mark that justified the wire. LP reporting and fund audits need the portfolio exactly as it stood on quarter end, not reconstructed from email attachments.",
+    "Valuations refresh, cap tables rebalance, and board decks contradict market data. Follow-on decisions need the mark that justified the wire. LP reporting and fund audits need the portfolio exactly as recorded by quarter end, not reconstructed from email attachments.",
   problemCards: [
     {
       Icon: History,
@@ -87,15 +87,15 @@ const CONFIG: UseCaseConfig = {
     {
       category: "LP reporting",
       human:
-        "For Aurora Capital Partners II's Q2 2025 quarterly letter, what was our fully diluted ownership and cost basis in CloudVector as of June 30, 2025?",
+        "For Aurora Capital Partners II's Q2 2025 quarterly letter, what had we recorded for our fully diluted ownership and cost basis in CloudVector by June 30, 2025?",
       fail: "CloudVector: 17.1% fully diluted, $11.4M cost basis. Reflects the July 8, 2025 SAFE conversion and updated option pool.",
       succeed:
-        "As of 2025-06-30 23:59 UTC (portfolio_state\u00B7q2-2025): 18.4% FD, $12.1M invested basis, last mark 1.35x per valuation memo VAL-CV-2025-Q2. July SAFE and pool refresh are separate observations after the quarter close, excluded from this snapshot per LP reporting policy.",
+        "As recorded by 2025-06-30 23:59 UTC (portfolio_state\u00B7q2-2025): 18.4% FD, $12.1M invested basis, last mark 1.35x per valuation memo VAL-CV-2025-Q2. The July SAFE and pool refresh were written after that cutoff, so they are not in this snapshot.",
       version: "portfolio_state\u00B7q2-2025",
       Icon: PieChart,
       failTitle: "Today's cap table substituted for quarter end",
       failDesc:
-        "LPs and the fund admin expect the June 30 picture. Surfacing July dilution makes IRR and ownership tables wrong for the signed quarterly.",
+        "LPs and the fund admin expect the picture recorded by June 30. Surfacing July dilution makes IRR and ownership tables wrong for the signed quarterly.",
     },
     {
       category: "Milestone tracking",
@@ -223,7 +223,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project latest state for monitoring, or reconstruct portfolio and company views as recorded by any timestamp IC, LP, or audit requires.",
+      desc: "Project latest state for monitoring, or reconstruct portfolio and company views as recorded up to any timestamp IC, LP, or audit requires.",
     },
     {
       label: "Serve partners & agents",
@@ -233,7 +233,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How portfolio intelligence teams use Neotoma as their integrity layer",
     desc:
-      "AI portfolio intelligence platforms for venture capital unify marks, milestones, and LP-ready narratives across funds and portfolio companies. Neotoma versions every valuation, board signal, and cap-table event so you can reconstruct portfolio state as recorded by any quarter close or wire date.",
+      "AI portfolio intelligence platforms for venture capital unify marks, milestones, and LP-ready narratives across funds and portfolio companies. Neotoma versions every valuation, board signal, and cap-table event so you can reconstruct portfolio state as recorded up to any quarter close or wire date.",
     featuresHeading: "What portfolio intelligence teams build",
     features: [
       "Natural-language portfolio Q&A across IC history, board packs, and cap-table events",

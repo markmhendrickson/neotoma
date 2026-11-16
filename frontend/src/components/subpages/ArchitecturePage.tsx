@@ -93,7 +93,7 @@ const GUARANTEES = [
   {
     name: "Timeline replay",
     detail:
-      "Reconstruct entity state as recorded by any past point. Diff versions. Audit what changed and why.",
+      "Reconstruct entity state as recorded up to any past point. Diff versions. Audit what changed and why.",
   },
   {
     name: "Schema-bound storage",

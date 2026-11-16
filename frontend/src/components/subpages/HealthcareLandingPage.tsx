@@ -47,7 +47,7 @@ const CONFIG: UseCaseConfig = {
   problemCards: [
     {
       Icon: Clock,
-      title: "No decision-time reconstruction",
+      title: "No reconstruction of what was recorded by the decision",
       desc: "The EHR shows current vitals and active orders. It cannot reconstruct which labs and notes were available when the night-shift agent recommended a dosage change at 3am.",
     },
     {
@@ -87,7 +87,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Prior authorization dispute",
       human:
-        "What was the authorization status for Mr. Reeves' cardiac MRI when it was performed on February 20?",
+        "What authorization status had we recorded for Mr. Reeves' cardiac MRI by the time it was performed on February 20?",
       fail: "Mr. Reeves' cardiac MRI (order ORD-8891) has prior auth status: denied. Appeal submitted February 25.",
       succeed:
         "As recorded by 2025-02-20 10:00 (procedure start), auth\u00B7v4 showed status APPROVED (auto-approved Feb 18 via payer portal, ref PA-2025-44102). Denial auth\u00B7v6 posted Feb 22 after retrospective review. Appeal filed Feb 25 (auth\u00B7v7). The procedure was performed under a valid approval. Timeline: requested Feb 16 \u2192 approved Feb 18 \u2192 performed Feb 20 \u2192 retro-denied Feb 22 \u2192 appeal Feb 25. Snapshot auth\u00B7v4 @ 2025-02-20 shows the approval as recorded by procedure time.",
@@ -95,7 +95,7 @@ const CONFIG: UseCaseConfig = {
       Icon: FileText,
       failTitle: "Current denial status returned for a historical question",
       failDesc:
-        "Billing sees the denial and assumes the procedure lacked authorization. The temporal record shows it was approved when performed, which is the fact that matters for the appeal.",
+        "Billing sees the denial and assumes the procedure lacked authorization. The temporal record shows the approval had been recorded by the time of the procedure, which is the fact that matters for the appeal.",
     },
     {
       category: "Care plan evolution",
@@ -113,7 +113,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Handoff reconstruction",
       human:
-        "What was communicated during the 7pm shift handoff for bed 12 in the ICU on March 15?",
+        "What had been recorded about the 7pm shift handoff for bed 12 in the ICU by March 15?",
       fail: "Bed 12 ICU: patient Davis, 68M, post-CABG day 2, hemodynamically stable, on heparin drip.",
       succeed:
         "Handoff snapshot encounter\u00B7davis_icu @ 2025-03-15T19:00: outgoing RN Martinez flagged: (1) heparin drip adjusted 16:30 from 1200 to 1400 units/hr after PTT 42 (target 60\u201380), (2) chest tube output 180mL over 4hr (trending down from 320mL prior shift), (3) family meeting scheduled Mar 16 09:00 per Dr. Nakamura. Agent-generated summary included all 3 items plus pending AM labs. Incoming RN acknowledged 19:08. Subsequent PTT at 22:00 was 58 (lab\u00B7v9). No items from this handoff were in the prior shift's note.",
@@ -159,7 +159,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Stethoscope,
       title: "Clinical decision reconstruction",
-      desc: "Bind agent and clinician decisions to the labs, vitals, and notes available at decision time. Reconstruct the inputs for any order, recommendation, or escalation.",
+      desc: "Bind agent and clinician decisions to the labs, vitals, and notes as recorded by decision time. Reconstruct the inputs for any order, recommendation, or escalation.",
       tags: ["encounter", "decision", "audit"],
     },
     {
@@ -183,7 +183,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "Patient state as recorded",
-      desc: "Answer what the diagnosis, medication list, and active orders were as recorded by any historical moment. Essential for quality reviews, incident investigations, and payer disputes.",
+      desc: "Answer what the diagnosis, medication list, and active orders were as recorded up to any historical moment. Essential for quality reviews, incident investigations, and payer disputes.",
       tags: ["patient", "temporal", "reporting"],
     },
     {
@@ -224,7 +224,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest clinical state per entity, or reconstruct state as recorded by any timestamp relevant to a quality review, audit, or dispute.",
+      desc: "Project the latest clinical state per entity, or reconstruct state as recorded up to any timestamp relevant to a quality review, audit, or dispute.",
     },
     {
       label: "Serve agents & reviewers",
@@ -243,7 +243,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every clinical input, agent recommendation, and authorization state change",
-      'Temporal snapshots so "what was recorded at decision time" uses the chart state as recorded by that moment, not the latest update',
+      'Temporal snapshots so "what had been recorded by the decision" uses the chart state as recorded by that moment, not the latest update',
       "Relationship integrity between patients, encounters, care plans, and authorization records",
       "Audit-oriented exports that trace clinical decisions from triggering observation through agent recommendation to clinician action",
     ],

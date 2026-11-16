@@ -259,7 +259,7 @@ export function MemoryGuaranteesPageBody() {
             to: "/replayable-timeline",
             icon: Waypoints,
             title: "Replayable timeline",
-            desc: "Full observation sequence can be replayed to reconstruct state as recorded by any write-time checkpoint.",
+            desc: "Full observation sequence can be replayed to reconstruct state as recorded up to any write-time checkpoint.",
           },
           {
             to: "/auditable-change-log",

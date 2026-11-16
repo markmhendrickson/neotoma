@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **852**
-- Backend and repo Vitest files: **798**
+- Total automated test files: **855**
+- Backend and repo Vitest files: **801**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,9 +72,9 @@ flowchart TD
 | Vitest unit tests | 240 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 246 |
-| Vitest CLI tests | 96 |
-| Vitest contract tests | 30 |
+| Vitest integration tests | 247 |
+| Vitest CLI tests | 97 |
+| Vitest contract tests | 31 |
 | Vitest security tests | 26 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -511,7 +511,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (246):**
+**Files (247):**
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
@@ -745,6 +745,7 @@ flowchart TD
 - `tests/integration/sync_remote_governance_admission.test.ts`
 - `tests/integration/sync_remote_snapshot_type_guard.test.ts`
 - `tests/integration/sync_webhook_inbound.test.ts`
+- `tests/integration/temporal_natural_surface_acceptance.test.ts`
 - `tests/integration/transcription_contract.test.ts`
 - `tests/integration/transport_parity_store_snapshot_auth.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
@@ -764,7 +765,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (96):**
+**Files (97):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_aauth_bearer.test.ts`
@@ -848,6 +849,7 @@ flowchart TD
 - `tests/cli/request_atomic_transaction.test.ts`
 - `tests/cli/request_conditional_store.test.ts`
 - `tests/cli/request_guest_subscription.test.ts`
+- `tests/cli/request_snapshot_temporal_cutoff.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/schemas_force_flag.test.ts`
@@ -867,7 +869,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (30):**
+**Files (31):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -893,6 +895,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/snapshot_temporal_cutoff_wording.test.ts`
 - `tests/contract/store_marker_unconfirmed.test.ts`
 - `tests/contract/store_plan_mode_response_schema.test.ts`
 - `tests/contract/sync_issues_contract.test.ts`
