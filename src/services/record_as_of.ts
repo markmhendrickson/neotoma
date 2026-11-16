@@ -21,15 +21,24 @@
  *   over the visible observations, never read from the materialized
  *   `relationship_snapshots` row (which always reflects "now").
  * - An entity exists as of T when its as-of snapshot has at least one visible
- *   observation, exactly the per-entity rule. Edges to an entity that does not
- *   exist as of T are excluded and not traversed.
+ *   observation, exactly the per-entity rule.
+ * - ONE rule for both reads: an edge is visible as of T only if the edge AND both
+ *   of its endpoints are visible as of T. `listRelationshipsAsOf` applies it, and
+ *   the related-entities traversal is built on `listRelationshipsAsOf`, so the two
+ *   reads cannot disagree about an edge at the same cutoff. This includes the
+ *   anchor entity: asking about an entity that did not exist as of T returns no
+ *   edges.
+ * - The cutoff predicate and timestamp validator are the per-entity read's own
+ *   (`isObservationVisibleAsOf`, `validateAsOfCutoffs` in
+ *   entity_snapshot_at_time.ts); nothing here re-implements them.
  *
- * Event (valid) time is out of scope; that is #2034.
+ * `at` is a write-time cutoff ("the state as recorded by T, by observed time"),
+ * not event (valid) time; event time is out of scope (#2034).
  *
  * Cost: like the per-entity read, this replays observations rather than reading
- * a stored historical snapshot. List reads scan the matching edge observations;
- * traversal does one as-of entity replay per distinct entity it touches (memoized
- * per call).
+ * a stored historical snapshot. The cutoff is applied in memory after fetching
+ * every matching edge observation. Lists replay one entity per distinct endpoint
+ * (memoized per call); traversal issues one list query per frontier node per side.
  */
 
 import { db } from "../db.js";
@@ -37,54 +46,42 @@ import { relationshipReducer } from "../reducers/relationship_reducer.js";
 import { isRelationshipLive } from "./relationships.js";
 import {
   computeEntitySnapshotAtTime,
+  hasAsOfCutoff,
+  isObservationVisibleAsOf,
+  validateAsOfCutoffs,
+  type AsOfCutoffs,
   type EntitySnapshotAtTimeResult,
 } from "./entity_snapshot_at_time.js";
 
-export interface AsOfCutoffs {
-  /** Upper bound on `observed_at` (ISO 8601). */
-  at?: string;
-  /** Upper bound on `created_at` (ISO 8601). */
-  at_ingested?: string;
-}
-
-export function hasAsOfCutoff(cutoffs: AsOfCutoffs): boolean {
-  return Boolean(cutoffs.at || cutoffs.at_ingested);
-}
-
-/**
- * Validate cutoff timestamps before touching the database. Same error wording
- * as the per-entity read so callers see one message across surfaces.
- */
-export function validateAsOfCutoffs(cutoffs: AsOfCutoffs): void {
-  if (cutoffs.at && isNaN(new Date(cutoffs.at).getTime())) {
-    throw new Error(`Invalid timestamp format for 'at': ${cutoffs.at}. Expected ISO 8601 format.`);
-  }
-  if (cutoffs.at_ingested && isNaN(new Date(cutoffs.at_ingested).getTime())) {
-    throw new Error(
-      `Invalid timestamp format for 'at_ingested': ${cutoffs.at_ingested}. Expected ISO 8601 format.`
-    );
-  }
-}
+export { hasAsOfCutoff, validateAsOfCutoffs };
+export type { AsOfCutoffs };
 
 /** The `as_of` echo attached to as-of responses, so a reader can see the cutoff applied. */
 export function asOfEcho(cutoffs: AsOfCutoffs): { at: string | null; at_ingested: string | null } {
   return { at: cutoffs.at ?? null, at_ingested: cutoffs.at_ingested ?? null };
 }
 
-function visibleAsOf(
-  obs: { observed_at?: string | null; created_at?: string | null },
-  cutoffs: AsOfCutoffs
-): boolean {
-  if (cutoffs.at) {
-    const observed = Date.parse((obs.observed_at ?? obs.created_at) as string);
-    if (!Number.isFinite(observed) || observed > Date.parse(cutoffs.at)) return false;
-  }
-  if (cutoffs.at_ingested) {
-    const created = Date.parse((obs.created_at ?? obs.observed_at) as string);
-    if (!Number.isFinite(created) || created > Date.parse(cutoffs.at_ingested)) return false;
-  }
-  return true;
+/**
+ * Per-call memoized "does this entity exist as of T" check. An entity exists
+ * when its as-of snapshot has at least one visible observation; an entity that
+ * is absent, owned by someone else, or deleted at T does not.
+ */
+export function createAsOfEntityLookup(userId: string, cutoffs: AsOfCutoffs) {
+  const memo = new Map<string, EntitySnapshotAtTimeResult | null>();
+  const snapshotAsOf = async (id: string): Promise<EntitySnapshotAtTimeResult | null> => {
+    if (!memo.has(id)) {
+      memo.set(id, await computeEntitySnapshotAtTime(id, userId, cutoffs.at, cutoffs.at_ingested));
+    }
+    return memo.get(id) ?? null;
+  };
+  const existsAsOf = async (id: string): Promise<boolean> => {
+    const snap = await snapshotAsOf(id);
+    return Boolean(snap && snap.observation_count > 0);
+  };
+  return { snapshotAsOf, existsAsOf };
 }
+
+export type AsOfEntityLookup = ReturnType<typeof createAsOfEntityLookup>;
 
 export interface RelationshipAsOfFilter {
   userId: string;
@@ -114,13 +111,15 @@ export interface RelationshipAsOfRow {
 }
 
 /**
- * Reconstruct relationship snapshot rows as recorded by the cutoff. Returns the
- * rows sorted like the live list reads: `last_observation_at` DESC, then
+ * Reconstruct relationship snapshot rows as recorded by the cutoff: the edge must
+ * have a visible observation, be live (unless `includeDeleted`), and both
+ * endpoints must exist as of T. Returns the rows sorted like the live list reads: `last_observation_at` DESC, then
  * `relationship_key` ASC. Not paginated; callers slice.
  */
 export async function listRelationshipsAsOf(
   filter: RelationshipAsOfFilter,
-  cutoffs: AsOfCutoffs
+  cutoffs: AsOfCutoffs,
+  lookup: AsOfEntityLookup = createAsOfEntityLookup(filter.userId, cutoffs)
 ): Promise<RelationshipAsOfRow[]> {
   validateAsOfCutoffs(cutoffs);
 
@@ -155,7 +154,7 @@ export async function listRelationshipsAsOf(
 
   const byKey = new Map<string, any[]>();
   for (const obs of (data ?? []) as any[]) {
-    if (!visibleAsOf(obs, cutoffs)) continue;
+    if (!isObservationVisibleAsOf(obs, cutoffs)) continue;
     const list = byKey.get(obs.relationship_key);
     if (list) list.push(obs);
     else byKey.set(obs.relationship_key, [obs]);
@@ -165,6 +164,14 @@ export async function listRelationshipsAsOf(
   for (const [key, observations] of byKey.entries()) {
     const live = isRelationshipLive(observations);
     if (!live && !filter.includeDeleted) continue;
+    // One visibility rule: the edge and both endpoints must exist as of T.
+    const first = observations[0];
+    if (
+      !(await lookup.existsAsOf(first.source_entity_id)) ||
+      !(await lookup.existsAsOf(first.target_entity_id))
+    ) {
+      continue;
+    }
     const snap = await relationshipReducer.computeSnapshot(key, observations);
     rows.push({
       relationship_key: snap.relationship_key,
@@ -213,9 +220,10 @@ export interface RelatedEntitiesAsOfResult {
 
 /**
  * Breadth-first as-of traversal with the same shape and ordering as the live
- * `retrieve_related_entities` read. Differences are only the as-of ones:
- * edges come from visible observations, endpoints must exist as of T, and
- * entity snapshots are the as-of replays.
+ * `retrieve_related_entities` read. Differences are only the as-of ones: edges
+ * come from `listRelationshipsAsOf` (so the edge and both endpoints must be
+ * visible as of T) and entity snapshots are the as-of replays. `maxHops` is not
+ * capped, as in the live read; each hop costs one list query per frontier node.
  */
 export async function retrieveRelatedEntitiesAsOf(
   params: RelatedEntitiesAsOfParams,
@@ -223,20 +231,7 @@ export async function retrieveRelatedEntitiesAsOf(
 ): Promise<RelatedEntitiesAsOfResult> {
   validateAsOfCutoffs(cutoffs);
 
-  const existence = new Map<string, EntitySnapshotAtTimeResult | null>();
-  const snapshotAsOf = async (id: string): Promise<EntitySnapshotAtTimeResult | null> => {
-    if (!existence.has(id)) {
-      existence.set(
-        id,
-        await computeEntitySnapshotAtTime(id, params.userId, cutoffs.at, cutoffs.at_ingested)
-      );
-    }
-    return existence.get(id) ?? null;
-  };
-  const existsAsOf = async (id: string): Promise<boolean> => {
-    const snap = await snapshotAsOf(id);
-    return Boolean(snap && snap.observation_count > 0);
-  };
+  const lookup = createAsOfEntityLookup(params.userId, cutoffs);
 
   const visited = new Set<string>([params.entityId]);
   const relatedIds = new Set<string>();
@@ -259,13 +254,13 @@ export async function retrieveRelatedEntitiesAsOf(
               direction: side,
               relationshipTypes: params.relationshipTypes,
             },
-            cutoffs
+            cutoffs,
+            lookup
           )
         ).sort((a, b) => (a.relationship_key < b.relationship_key ? -1 : 1));
 
         for (const rel of rows) {
           const otherId = side === "outbound" ? rel.target_entity_id : rel.source_entity_id;
-          if (!(await existsAsOf(otherId))) continue;
           // Like the live read, an edge reached from both of its ends is listed
           // once per end it was reached from.
           relationships.push(rel);
@@ -297,7 +292,7 @@ export async function retrieveRelatedEntitiesAsOf(
     }
     entities = [];
     for (const entity of (data ?? []) as any[]) {
-      const snap = await snapshotAsOf(entity.id);
+      const snap = await lookup.snapshotAsOf(entity.id);
       if (!snap || snap.observation_count === 0) continue;
       entities.push({
         ...entity,

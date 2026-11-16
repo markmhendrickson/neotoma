@@ -19,7 +19,7 @@ Applies to `neotoma@0.29.1`. Every entry has a tracking issue.
 
 **Reads and export**
 
-- [As-of reads are per entity](#as-of-reads-are-per-entity)
+- [As-of reads cover only some reads](#as-of-reads-cover-only-some-reads)
 - [Export carries current state only](#export-carries-current-state-only)
 - [Not every read says whether its answer is complete](#not-every-read-says-whether-its-answer-is-complete)
 
@@ -97,11 +97,11 @@ Applies to `neotoma@0.29.1`. Every entry has a tracking issue.
 
 ## Reads and export
 
-### As-of reads are per entity
+### As-of reads cover only some reads
 
-**What you will observe.** `retrieve_entity_snapshot` reads one entity as of a past time, with `at` (event time) and `at_ingested` (ingestion time). It is the only MCP tool that takes an as-of time, so there is no as-of query across the whole record: `retrieve_entities` and the other list and search tools return current state only.
+**What you will observe.** Three MCP reads take an as-of time, both cutoffs being write time ("the state as recorded by T", not event time): `retrieve_entity_snapshot` for one entity, `list_relationships`, and `retrieve_related_entities`, with `at` (cutoff on `observed_at`) and `at_ingested` (cutoff on `created_at`). On the two relationship reads an edge is visible as of T only if the edge and both of its entities are. There is still no as-of query across the rest of the record: `retrieve_entities` (lists, counts, search ranking, sorting), `list_timeline_events`, `retrieve_graph_neighborhood` and `GET /relationships` return current state only.
 
-**Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at`.
+**Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at` or `at_ingested`.
 
 **Tracking.** [#2700](https://github.com/markmhendrickson/neotoma/issues/2700)
 

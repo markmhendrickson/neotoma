@@ -288,6 +288,15 @@ jobs:
       - name: Run abandoned-abort containment regressions (#2483)
         run: npx vitest run --no-file-parallelism tests/integration/unhandled_abandoned_abort_containment.test.ts
 
+      # #2700 record-wide as-of reads. The test drives list_relationships and
+      # retrieve_related_entities over MCP, REST and the built CLI under the
+      # at / at_ingested cutoffs. It lives under tests/integration, which
+      # test:unit excludes, so without this step dropping the cutoff from any of
+      # the three surfaces would merge green. This lane already builds the
+      # server, so the CLI cases find dist/cli/index.js.
+      - name: Run record-wide as-of read regressions (#2700)
+        run: npx vitest run --no-file-parallelism tests/integration/record_wide_as_of.test.ts
+
       - name: Run schema-lookup scope-mismatch regression (#2454)
         run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
 

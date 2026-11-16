@@ -8088,9 +8088,9 @@ export interface operations {
                * @default false
                */
               include_deleted?: boolean;
-              /** @description Record-wide as-of cutoff on `observed_at` (ISO 8601): answer as the record stood by T. Same name and meaning as `at` on `/get_entity_snapshot`. Only observations with `observed_at` ≤ this timestamp are visible, so an edge, a metadata value or an entity written after T is not part of the answer. Edge liveness is decided from the visible observations only. Uses write clocks, not event (valid) time. */
+              /** @description Write-time cutoff on `observed_at` (ISO 8601), not event (valid) time: the state as recorded by T. Same name and meaning as `at` on `/get_entity_snapshot`. Only observations with `observed_at` ≤ this timestamp are visible, so an edge, a metadata value or an entity written after T is not part of the answer. An edge is visible as of T only if the edge and both of its endpoint entities are. Edge liveness is decided from the visible observations only, so an edge soft-deleted after T is live as of T. */
               at?: string;
-              /** @description Record-wide as-of cutoff on `created_at` (ISO 8601): what the record held by T. Same name and meaning as `at_ingested` on `/get_entity_snapshot`. When both `at` and `at_ingested` are supplied, both bounds apply (AND). The response carries an `as_of` echo of the cutoffs applied. Replays observations, so it costs more than a current read. */
+              /** @description Write-time cutoff on `created_at` (ISO 8601): what the record held by T. Same name and meaning as `at_ingested` on `/get_entity_snapshot`. Also excludes backfills: observations written after T are not visible even if their `observed_at` is earlier (use `at` alone to include them). When both `at` and `at_ingested` are supplied, both bounds apply (AND). The response carries an `as_of` echo of the cutoffs applied. Replays observations in memory, so it costs more than a current read. */
               at_ingested?: string;
               /**
                * @description Optional user_id override (scoped to callers with privilege to query on
@@ -8132,6 +8132,11 @@ export interface operations {
             limit?: number;
             /** @description Echo of the requested `offset`. */
             offset?: number;
+            /** @description Echo of the as-of cutoffs applied. Present only when `at` or `at_ingested` was supplied; each is the timestamp given, or null when that cutoff was not supplied. */
+            as_of?: {
+              at?: string | null;
+              at_ingested?: string | null;
+            };
           };
         };
       };
@@ -8453,9 +8458,9 @@ export interface operations {
           max_hops?: number;
           /** @default true */
           include_entities?: boolean;
-          /** @description Record-wide as-of cutoff on `observed_at` (ISO 8601): answer as the record stood by T. Same name and meaning as `at` on `/get_entity_snapshot`. Only observations with `observed_at` ≤ this timestamp are visible, so an edge, a metadata value or an entity written after T is not part of the answer. Edge liveness is decided from the visible observations only. Uses write clocks, not event (valid) time. */
+          /** @description Write-time cutoff on `observed_at` (ISO 8601), not event (valid) time: the state as recorded by T. Same name and meaning as `at` on `/get_entity_snapshot`. Only observations with `observed_at` ≤ this timestamp are visible, so an edge, a metadata value or an entity written after T is not part of the answer. An edge is visible as of T only if the edge and both of its endpoint entities are. Edge liveness is decided from the visible observations only, so an edge soft-deleted after T is live as of T. */
           at?: string;
-          /** @description Record-wide as-of cutoff on `created_at` (ISO 8601): what the record held by T. Same name and meaning as `at_ingested` on `/get_entity_snapshot`. When both `at` and `at_ingested` are supplied, both bounds apply (AND). The response carries an `as_of` echo of the cutoffs applied. Replays observations, so it costs more than a current read. */
+          /** @description Write-time cutoff on `created_at` (ISO 8601): what the record held by T. Same name and meaning as `at_ingested` on `/get_entity_snapshot`. Also excludes backfills: observations written after T are not visible even if their `observed_at` is earlier (use `at` alone to include them). When both `at` and `at_ingested` are supplied, both bounds apply (AND). The response carries an `as_of` echo of the cutoffs applied. Replays observations in memory, so it costs more than a current read. */
           at_ingested?: string;
         };
       };
@@ -8468,6 +8473,12 @@ export interface operations {
         };
         content: {
           "application/json": {
+            /** @description Echo of the as-of cutoffs applied. Present only when `at` or `at_ingested` was supplied; each is the timestamp given, or null when that cutoff was not supplied. */
+            as_of?: {
+              at?: string | null;
+              at_ingested?: string | null;
+            };
+          } & {
             [key: string]: unknown;
           };
         };

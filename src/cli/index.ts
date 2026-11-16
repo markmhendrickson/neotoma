@@ -1475,6 +1475,49 @@ function cliApiError(error: unknown): Error {
 }
 
 /**
+ * #2700: an as-of request that fails validation answers 400 with the generic
+ * "Invalid request payload." and carries the reason (which cutoff, which format)
+ * in `details.issues[].message`. Surface those so the user sees the flag and the
+ * expected format; anything else goes through `cliApiError` unchanged.
+ */
+function asOfApiError(error: unknown): Error {
+  const issues = (error as { details?: { issues?: unknown } } | null)?.details?.issues;
+  const reasons = Array.isArray(issues)
+    ? issues
+        .map((issue) => (issue as { message?: unknown } | null)?.message)
+        .filter((m): m is string => typeof m === "string" && m.length > 0)
+    : [];
+  if (reasons.length === 0) return cliApiError(error);
+  return new Error(`${formatApiError(error)} ${reasons.join(" ")}`);
+}
+
+/**
+ * #2700: `--at` / `--at-ingested` are as-of cutoffs. An empty value must be an
+ * error, never a silent current read, so this checks presence (not truthiness)
+ * and names the flag. Format errors are left to the server, whose 400 reason
+ * (flag name and expected format) is surfaced through `cliApiError`.
+ */
+function resolveAsOfFlags(opts: { at?: string; atIngested?: string }): {
+  at?: string;
+  at_ingested?: string;
+} {
+  const out: { at?: string; at_ingested?: string } = {};
+  for (const [flag, key, value] of [
+    ["--at", "at", opts.at],
+    ["--at-ingested", "at_ingested", opts.atIngested],
+  ] as const) {
+    if (value === undefined) continue;
+    if (value.trim() === "") {
+      throw new Error(
+        `${flag} needs a timestamp in ISO 8601 format (for example 2026-01-01T00:00:00Z)`
+      );
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+/**
  * #2228: the `/me` payload separates "who you are" (`email`) from "whose
  * graph you operate on" (`user_id`). Under shared-graph mode those describe
  * different people, so the CLI must not let a bare `user_id` read as the
@@ -14067,11 +14110,11 @@ entitiesCommand
   .option("--include-entities", "Include full entity snapshots in response", true)
   .option(
     "--at <iso>",
-    "As-of cutoff on observed_at (ISO 8601): answer as the record stood by T. Same meaning as the entity snapshot's at"
+    "As-of cutoff on observed_at (ISO 8601), a write-time cutoff: the state as recorded by T, not event time. Same meaning as the entity snapshot's at"
   )
   .option(
     "--at-ingested <iso>",
-    "As-of cutoff on created_at (ISO 8601): what the record held by T. Same meaning as the entity snapshot's at_ingested"
+    "As-of cutoff on created_at (ISO 8601), a write-time cutoff. Adds to --at by also excluding backfills: observations written after T even when their observed time is earlier. Same meaning as the entity snapshot's at_ingested"
   )
   .option("--user-id <userId>", "User ID")
   .action(async (entityId: string, opts) => {
@@ -14085,6 +14128,8 @@ entitiesCommand
     const relationshipTypes = opts.relationshipTypes
       ? opts.relationshipTypes.split(",")
       : undefined;
+    const asOfFlags = resolveAsOfFlags(opts);
+    const asOfRequested = Object.keys(asOfFlags).length > 0;
     const { data, error } = await api.POST("/retrieve_related_entities", {
       body: {
         entity_id: entityId,
@@ -14092,11 +14137,12 @@ entitiesCommand
         relationship_types: relationshipTypes,
         max_hops: Number(opts.maxHops),
         include_entities: opts.includeEntities,
-        ...(opts.at ? { at: opts.at } : {}),
-        ...(opts.atIngested ? { at_ingested: opts.atIngested } : {}),
+        ...asOfFlags,
       },
     });
-    if (error) throw new Error("Failed to get related entities");
+    if (error) {
+      throw asOfRequested ? asOfApiError(error) : new Error("Failed to get related entities");
+    }
     writeOutput(data, outputMode);
   });
 
@@ -14544,11 +14590,11 @@ relationshipsCommand
   .option("--direction <direction>", "Direction: inbound, outbound, both")
   .option(
     "--at <iso>",
-    "As-of cutoff on observed_at (ISO 8601): answer as the record stood by T. Same meaning as the entity snapshot's at"
+    "As-of cutoff on observed_at (ISO 8601), a write-time cutoff: the state as recorded by T, not event time. Same meaning as the entity snapshot's at Requires --source-entity-id, --target-entity-id or --relationship-type (the as-of read is served by the filtered list read; a plain list needs none)."
   )
   .option(
     "--at-ingested <iso>",
-    "As-of cutoff on created_at (ISO 8601): what the record held by T. Same meaning as the entity snapshot's at_ingested"
+    "As-of cutoff on created_at (ISO 8601), a write-time cutoff. Adds to --at by also excluding backfills: observations written after T even when their observed time is earlier. Same meaning as the entity snapshot's at_ingested Requires --source-entity-id, --target-entity-id or --relationship-type (the as-of read is served by the filtered list read; a plain list needs none)."
   )
   .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
@@ -14562,7 +14608,8 @@ relationshipsCommand
       token,
     });
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
-    if (opts.at || opts.atIngested) {
+    const asOfFlags = resolveAsOfFlags(opts);
+    if (Object.keys(asOfFlags).length > 0) {
       // Record-wide as-of read: served by POST /list_relationships, which
       // replays relationship observations under the cutoff. It needs at least
       // one of source, target or relationship type, like the MCP tool.
@@ -14579,12 +14626,11 @@ relationshipsCommand
           ...(opts.direction ? { direction: opts.direction } : {}),
           limit: Number(opts.limit),
           offset: Number(opts.offset),
-          ...(opts.at ? { at: opts.at } : {}),
-          ...(opts.atIngested ? { at_ingested: opts.atIngested } : {}),
+          ...asOfFlags,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
         } as any,
       });
-      if (asOfError) throw new Error("Failed to list relationships");
+      if (asOfError) throw asOfApiError(asOfError);
       writeOutput(asOfData, outputMode);
       return;
     }
