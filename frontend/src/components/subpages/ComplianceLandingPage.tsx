@@ -78,7 +78,7 @@ const COMPLIANCE_SCENARIOS = [
       "As recorded by Feb 15: NovaPay risk score was 4.7 (elevated), flagged by screening agent on Feb 12 for adverse media. Diligence agent issued questionnaire Feb 13, response pending. Status: under review. The score was later reduced to 2.1 on Mar 3 after remediation evidence submitted.",
     version: "vendor\u00B7v18 @ 2025-02-15",
     category: "Temporal state queries",
-    failTitle: "Current state returned, not historical state",
+    failTitle: "Current state returned, not state as recorded by then",
     failDesc:
       "The AI returned today's risk score (2.1, approved) for a question about February 15, when the record by then showed the vendor flagged at 4.7 and under active review. Without temporal state queries, the system cannot distinguish what is recorded now from what had been recorded by then, a critical failure for regulatory reporting.",
   },
@@ -1178,7 +1178,7 @@ export function ComplianceLandingPageBody() {
                       },
                       {
                         label: "Serve",
-                        desc: "Your platform queries current or historical state via MCP, REST API, or CLI. Every response carries version metadata and a provenance chain.",
+                        desc: "Your platform queries current state, or state as recorded up to a time, via MCP, REST API, or CLI. Every response carries version metadata and a provenance chain.",
                       },
                       {
                         label: "Govern",

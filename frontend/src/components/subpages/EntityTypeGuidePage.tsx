@@ -275,7 +275,7 @@ list_timeline_events({
     label: "Contracts",
     singularLabel: "contract",
     intro:
-      "Agreements, clauses, and amendments - reconstructable on any date. Contracts in Neotoma capture the full lifecycle: initial terms, amendments, renewals, and terminations, each timestamped and attributed.",
+      "Agreements, clauses, and amendments - reconstructable as recorded up to any date. Contracts in Neotoma capture the full lifecycle: initial terms, amendments, renewals, and terminations, each timestamped and attributed.",
     verticalHref: "/contracts",
     verticalLabel: "Contracts",
     storeFields: [

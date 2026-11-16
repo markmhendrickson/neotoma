@@ -237,7 +237,7 @@ const CONFIG: UseCaseConfig = {
     features: [
       "Matter agents that summarize posture across parallel cases and coverage towers",
       "Continuous ingestion of filings, transcripts, and carrier correspondence",
-      'Partner-facing "state of the file on date X" experiences for mediation prep',
+      'Partner-facing "state of the file as recorded by date X" experiences for mediation prep',
     ],
     guarantees: [
       "Immutable observations for every exhibit version and analyst output",

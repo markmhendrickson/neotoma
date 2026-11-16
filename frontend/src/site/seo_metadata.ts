@@ -1260,7 +1260,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/replayable-timeline": {
     title: "Replayable Timeline | Neotoma",
     description:
-      "Replay the full sequence of observations and state changes to reconstruct any historical entity state.",
+      "Replay the full sequence of observations and state changes to reconstruct entity state as recorded up to any timestamp.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1575,7 +1575,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/government": {
     title: "Neotoma for Public Sector | Versioned Policy State and Determination Provenance",
     description:
-      "Reconstruct which policy version and evidence governed a government decision on any date. Neotoma provides versioned eligibility determinations, inter-agency data provenance, and rule-bound decision state.",
+      "Reconstruct which policy version and evidence had been recorded for a government decision by any date. Neotoma provides versioned eligibility determinations, inter-agency data provenance, and rule-bound decision state.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1619,7 +1619,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/agent-auth": {
     title: "Neotoma for Agent Authorization | Versioned Policy State and Delegation Provenance",
     description:
-      "Reconstruct who authorized what, when, and under which policy state. Neotoma provides versioned authorization decisions, consent timelines, and delegation chain provenance for production agent systems.",
+      "Reconstruct who authorized what, as recorded up to any timestamp, and under which policy state. Neotoma provides versioned authorization decisions, consent timelines, and delegation chain provenance for production agent systems.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -2141,7 +2141,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/types/contracts": {
     title: "Contracts Guide | Store & Retrieve Agreements, Clauses, Amendments | Neotoma",
     description:
-      "How to store and retrieve contracts in Neotoma. CLI, MCP, and API examples for agreements, clauses, amendments - reconstructable terms on any date.",
+      "How to store and retrieve contracts in Neotoma. CLI, MCP, and API examples for agreements, clauses, amendments - terms reconstructable as recorded up to any date.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

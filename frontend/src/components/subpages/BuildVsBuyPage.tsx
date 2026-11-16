@@ -35,7 +35,7 @@ interface GapRow {
 
 const GAP_ROWS: GapRow[] = [
   {
-    capability: "Knowing historical state",
+    capability: "Knowing state as recorded by a past time",
     observabilityDesc:
       "Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.",
     stateIntegrityDesc:
@@ -61,7 +61,7 @@ const GAP_ROWS: GapRow[] = [
   {
     capability: "Version-bound decisions",
     observabilityDesc:
-      "Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.",
+      "Log which policy or rule version applied to each decision, recorded with it. Query by policy ID to find affected decisions. Build reports on policy coverage.",
     stateIntegrityDesc:
       "Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context recorded with it. Counterfactual queries are supported.",
     Icon: Shield,
@@ -143,7 +143,7 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
     observabilityCovers:
       "Record ingest events, file uploads, and reconciliation checks with correlation IDs",
     stateIntegrityGap:
-      "What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable",
+      "What your agents had recorded as settled financial truth by a given date, with every observation that fed the snapshot traceable",
     accent: "text-teal-600 dark:text-teal-400",
   },
   {
@@ -161,7 +161,7 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
     observabilityCovers:
       "Store decision logs and rationale snippets as unstructured events or documents",
     stateIntegrityGap:
-      "Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had then-not the notebook file as it reads today",
+      "Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had recorded-not the notebook file as it reads today",
     accent: "text-violet-600 dark:text-violet-400",
   },
   {

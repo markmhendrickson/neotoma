@@ -90,6 +90,9 @@ export const EVENT_TIME_PATTERNS: Array<[string, RegExp]> = [
     /\bas (?:it|they|that) (?:existed|stood|was|were) (?:at|on|as of|during|when|by)\b|\bagainst (?:its|their) original (?:rules|polic|inputs)/gi,
   ],
   ["point-in-time", /\bpoint[- ]in[- ]time\b/gi],
+  ["state of the <file|record|case> on|at|as of date X", /\bstate of (?:the |a |an )?[a-z-]+ (?:on|at|as of) (?:date|day|the date|a date) ?[A-Z]?\b/gi],
+  ["<had|knew|saw|believed> then / back then", /\b(?:had|knew|saw|believed|held|treated) then\b|\bback then\b/gi],
+  ["any historical <entity|snapshot> state", /\b(?:any|a) historical (?:entity )?state\b(?! as recorded)/gi],
   ["when we signed", /\bwhen we signed\b/gi],
   [
     "what did we know on <date>",
@@ -132,10 +135,19 @@ const DET = "(?:a|an|the|that|this|each|any|every|our|my|your|its|their)";
 const PARTICIPLE =
   "(?:made|taken|filed|approved|signed|decided|executed|performed|sent|run|ran|done|given|held|issued|submitted|built|written|shipped|[a-z]{3,}ed)";
 const EVENT_NOUN =
-  "(?:decision|filing|approval|incident|trade|vote|signing|failure|determination|recommendation|transfer|deploy(?:ment)?|audit|close|closing|review|call|meeting|purchase|order|claim|refund|diagnosis|dosage|award|hire|launch|release|merge|payment|liquidation|breach|outage|event|transaction|action|interaction|visit|submission|settlement|handoff|escalation|investigation|inspection|run|ruling|verdict|loan|sale|procedure|treatment|allocation|commitment|prescription|shipment|assessment|evaluation|authorization|enrollment|onboarding|diagnos[ie]s)";
+  "(?:decision|filing|approval|incident|trade|vote|signing|failure|determination|recommendation|transfer|deploy(?:ment)?|audit|close|closing|review|call|meeting|purchase|order|claim|refund|diagnosis|dosage|award|hire|launch|release|merge|payment|liquidation|breach|outage|event|transaction|action|interaction|visit|submission|settlement|handoff|escalation|investigation|inspection|run|ruling|verdict|loan|sale|procedure|treatment|allocation|commitment|prescription|shipment|assessment|evaluation|authorization|enrollment|onboarding|selection|appointment|admission|discharge|registration|renewal|termination|signature|disbursement|adjudication|activation|acceptance|rejection|sign-off|diagnos[ie]s)";
 const WHEN_EVENT = `\\bwhen ${DET} (?:[\\w'-]+ ){0,5}?${EVENT_NOUN} (?:was|were|is|are|had been) (?:[\\w-]+ )?${PARTICIPLE}\\b`;
 const NOT_EVENT_PREFIX =
   "(?!(?:write|read|real|run|query|ingest|ingestion|wall|clock|build|compile|load|response|turn|session|insert|store|observation|first|full|part|any|some|over|life|long|short|each|one|two|lead|down|up|cycle|peak|off|on)-time)";
+
+// Round 4: "on / for / at any|a given|a specific|a past date|day|point|moment".
+// The promise vocabulary here also covers "reconstructable", "treated", "governed"
+// and similar, because those lines carry the promise without a query verb.
+const PROMISE_ANY =
+  `(?:${PROMISE.slice(3, -1)}|reconstructable|reconstruction|treated|treat|governed|settled|believed|applied|held|terms|state)`;
+const ANY_DATE =
+  "(?:any|a given|a specific|a particular|a past|an arbitrary|a chosen|every|each)(?: (?:past|given|specific|historical|calendar|prior))? (?:[a-z-]+ )?(?:date|day|moment|point(?: in time)?|instant|timestamp)";
+const ON_ANY_DATE = `(?:on|for|at|as of) ${ANY_DATE}\\b`;
 
 export const CATCH_ALL_PATTERNS: Array<[string, RegExp]> = [
   [
@@ -169,6 +181,14 @@ export const CATCH_ALL_PATTERNS: Array<[string, RegExp]> = [
     "catch-all: promise verb ... at|by <event noun> (event, not a time)",
     new RegExp(`\\b${PROMISE}\\b${CLAUSE}{0,100}?\\b(?:at|during) (?:${DET} )?(?:[a-z-]+ )?${EVENT_NOUN}\\b`, "gi"),
   ],
+  [
+    "catch-all: promise verb ... on|for|at any|a given|a specific|a past date|day|point|moment",
+    new RegExp(`\\b${PROMISE_ANY}\\b${CLAUSE}{0,140}?\\b${ON_ANY_DATE}`, "gi"),
+  ],
+  [
+    "catch-all: on|for|at any|a given|a specific|a past date|day|point|moment ... promise verb",
+    new RegExp(`\\b${ON_ANY_DATE}${CLAUSE}{0,100}?\\b${PROMISE_ANY}\\b`, "gi"),
+  ],
 ];
 
 /**
@@ -193,6 +213,17 @@ export const CATCH_ALL_SEEDS: string[] = [
   "reconstruct what the agent knew at the time of failure.",
   "Answer what was known when the claim was filed.",
   "Prove what was known as of the vote.",
+  // Round 4 review quotes
+  "Neotoma versions clause-level state so you can answer what the terms were on any date and what changed in each amendment.",
+  "Neotoma versions every entity so you can reconstruct which policy and evidence governed a decision on any date.",
+  "Reconstruct what was known on any date without mixing pre- and post-decision data.",
+  "Reconstruct which policy version and evidence governed a government decision on any date.",
+  "agreements, clauses, amendments - reconstructable terms on any date.",
+  "Agreements, clauses, and amendments - reconstructable on any date.",
+  "What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable",
+  "Neotoma versions every sourcing entity so you can reconstruct the competing offers at selection, the spec the approval referenced",
+  "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state was at each transfer point requires temporal data the TMS does not retain.",
+  "Reconstruct fully diluted ownership and last approved mark for any close date the fund names.",
 ];
 
 /** Promise-free or write-time lines the catch-all must NOT flag. */
@@ -206,6 +237,10 @@ export const CATCH_ALL_ACCEPTED: string[] = [
   "Optional similarity search is available when an embedding provider is configured.",
   "operators can see when a field was introduced, deprecated, or restored.",
   "Write-time cutoffs return what had been recorded by a time.",
+  "Reconstruct state as recorded up to any date.",
+  "Answer what the terms had been recorded as by a given date.",
+  "Show what had been recorded for the agent as of any date.",
+  "Reconstruct what had been recorded by any past moment.",
 ];
 
 /**
@@ -355,6 +390,21 @@ export const SEEDED_EVENT_TIME_PHRASES: string[] = [
   "Know exactly what was known when the decision was made",
   "Reconstruct what the system knew when a routing or fulfillment decision was made.",
   "Evidence timelines & filing-time slices",
+  // Round 4 review quotes
+  "Neotoma versions clause-level state so you can answer what the terms were on any date and what changed in each amendment.",
+  "Neotoma versions every entity so you can reconstruct which policy and evidence governed a decision on any date.",
+  "Reconstruct what was known on any date without mixing pre- and post-decision data.",
+  "Reconstruct which policy version and evidence governed a government decision on any date.",
+  "agreements, clauses, amendments - reconstructable terms on any date.",
+  "Agreements, clauses, and amendments - reconstructable on any date.",
+  "What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable",
+  "Neotoma versions every sourcing entity so you can reconstruct the competing offers at selection, the spec the approval referenced",
+  "reconstruct the exact policy for a claim for any past date",
+  "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state was at each transfer point requires temporal data the TMS does not retain.",
+  "Reconstruct fully diluted ownership and last approved mark for any close date the fund names.",
+  "Partner-facing \"state of the file on date X\" experiences for mediation prep",
+  "Replay the full sequence of observations and state changes to reconstruct any historical entity state.",
+  "Bind rationale to versioned entity state so \"why we chose X\" replays with the same facts the agent had then-not the notebook",
 ];
 
 /**
@@ -386,6 +436,11 @@ export const ACCEPTED_WRITE_TIME_PHRASES: string[] = [
   "Know exactly what had been recorded by the time the decision was made",
   "Evidence timelines & recorded-by-filing snapshots",
   "Reconstruct what the system had recorded by the time a routing or fulfillment decision was made.",
+  // Round 4 accepted forms
+  "reconstruct state as recorded up to any date",
+  "Reconstruct what had been recorded by any date without mixing in records written after the decision.",
+  "terms reconstructable as recorded up to any date",
+  "the competing offers as recorded by selection",
 ];
 
 /**

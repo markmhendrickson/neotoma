@@ -77,7 +77,7 @@ const CONFIG: UseCaseConfig = {
         "What was Northstar Analytics's last board-approved pre-money valuation when Meridian Growth Fund IV approved the $4.2M follow-on on August 14, 2024?",
       fail: "Northstar Analytics: last mark $210M post (Nov 2025 comp refresh); fully diluted cap table reflects the Oct 2025 secondaries block.",
       succeed:
-        "IC memo Aug 14, 2024 (Meridian Growth Fund IV): follow-on $4.2M on $118M post, implied pre-money $113.8M per valuation obs linked to investment meridian_ns_series_b_plus\u00B7v3 and portfolio_co\u00B7v14 snapshot @ 2024-08-14. Nov 2025 mark is a separate observation; the assistant returned the figure recorded by then that backed the wire, not today's comp.",
+        "IC memo Aug 14, 2024 (Meridian Growth Fund IV): follow-on $4.2M on $118M post, implied pre-money $113.8M per valuation obs linked to investment meridian_ns_series_b_plus\u00B7v3 and portfolio_co\u00B7v14 recorded by 2024-08-14. Nov 2025 mark is a separate observation; the assistant returned the figure recorded by then that backed the wire, not today's comp.",
       version: "portfolio_co\u00B7v14",
       Icon: DollarSign,
       failTitle: "Current mark returned, follow-on context missing",
@@ -139,7 +139,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project ownership and marks through time",
-      desc: "Cap table events, follow-on wires, and valuation memos chain with supersession where appropriate. Reconstruct fully diluted ownership and last approved mark for any close date the fund names.",
+      desc: "Cap table events, follow-on wires, and valuation memos chain with supersession where appropriate. Reconstruct fully diluted ownership and last approved mark as recorded by any close date the fund names.",
       detail: "Temporal queries return the state as recorded by the cutoff time, not the last ETL run.",
     },
     {

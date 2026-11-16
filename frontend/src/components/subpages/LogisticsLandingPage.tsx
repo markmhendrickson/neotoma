@@ -57,7 +57,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: GitCompare,
       title: "Multi-carrier reconciliation gaps",
-      desc: "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state was at each transfer point requires temporal data the TMS does not retain.",
+      desc: "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state had been recorded as at each transfer point requires temporal data the TMS does not retain.",
     },
   ],
   problemCallout: "\"Why did we route it that way?\" requires the constraint state as recorded at decision time, not today's dashboard.",

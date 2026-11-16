@@ -26,7 +26,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Government decision state that survives",
   heroHighlight: "policy updates, eligibility changes, and inter-agency workflows",
   heroDesc:
-    "Eligibility determinations, permit decisions, and benefits adjudications depend on rules that change quarterly and data that arrives from multiple agencies. Neotoma versions every entity so you can reconstruct which policy and evidence governed a decision on any date.",
+    "Eligibility determinations, permit decisions, and benefits adjudications depend on rules that change quarterly and data that arrives from multiple agencies. Neotoma versions every entity so you can reconstruct which policy and evidence had been recorded for a decision by any date.",
   heroTags: [
     { tag: "determination", Icon: CheckSquare },
     { tag: "policy_version", Icon: FileText },
@@ -129,7 +129,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project determination state through time",
-      desc: "Link each decision to the policy version and evidence records as recorded by determination time. Reconstruct what was known on any date without mixing pre- and post-decision data.",
+      desc: "Link each decision to the policy version and evidence records as recorded by determination time. Reconstruct what had been recorded by any date without mixing in records written after the decision.",
       detail: "Temporal queries return the state as recorded by the cutoff time, not the latest case file update.",
     },
     {

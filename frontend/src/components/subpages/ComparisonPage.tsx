@@ -335,7 +335,7 @@ const NEOTOMA_VS_PLATFORM_MEMORY: Omit<ComparisonPageProps, "mdxShell"> = {
     competitor:
       "You want the fastest possible setup inside a single AI product, you are using the Memory Tool as a lightweight scratchpad, and convenience matters more than portability, versioning, or auditability.",
     neotoma:
-      "You need memory that survives tool changes, supports exact historical reconstruction, exposes provenance, and gives multiple agents a shared state layer with formal guarantees.",
+      "You need memory that survives tool changes, supports exact reconstruction of state as recorded, exposes provenance, and gives multiple agents a shared state layer with formal guarantees.",
   },
   faqItems: [
     {

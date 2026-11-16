@@ -28,7 +28,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Procurement truth that survives",
   heroHighlight: "sourcing rounds, spec churn, and multi-agent bids",
   heroDesc:
-    "Bids, specs, and approvals live in different systems and rot after award. Neotoma versions every sourcing entity so you can reconstruct the competing offers at selection, the spec the approval referenced, and how supplier risk has moved since onboarding.",
+    "Bids, specs, and approvals live in different systems and rot after award. Neotoma versions every sourcing entity so you can reconstruct the competing offers as recorded by selection, the spec the approval referenced, and how supplier risk has moved since onboarding.",
   heroTags: [
     { tag: "supplier", Icon: Building2 },
     { tag: "purchase order", Icon: ClipboardList },

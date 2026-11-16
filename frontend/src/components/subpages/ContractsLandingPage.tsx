@@ -28,7 +28,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Contract intelligence that survives",
   heroHighlight: "negotiation, amendments, and multi-agent edits",
   heroDesc:
-    "Contracts accumulate redlines, amendments, and multi-party approvals. Neotoma versions clause-level state so you can answer what the terms were on any date and what changed in each amendment.",
+    "Contracts accumulate redlines, amendments, and multi-party approvals. Neotoma versions clause-level state so you can answer what the terms had been recorded as by any date and what changed in each amendment.",
   heroTags: [
     { tag: "contract", Icon: FileText },
     { tag: "clause", Icon: ListChecks },
