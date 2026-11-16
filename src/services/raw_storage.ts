@@ -12,6 +12,7 @@ import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { claimRawStoreKey } from "./store_mutation_authority.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -145,9 +146,9 @@ export async function storeRawContent(options: RawStorageOptions): Promise<RawSt
   // So the skip is now opt-out rather than automatic. A test that asserts on
   // stored bytes sets NEOTOMA_TEST_REAL_STORAGE=1 and gets the real path,
   // bucket and all. Non-test processes are unaffected: they always upload.
-  const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  const isTestEnv = runtimeEnv().NODE_ENV === "test" || runtimeEnv().VITEST === "true";
   const forceRealStorage = /^(1|true|yes|on)$/i.test(
-    (process.env.NEOTOMA_TEST_REAL_STORAGE ?? "").trim()
+    (runtimeEnv().NEOTOMA_TEST_REAL_STORAGE ?? "").trim()
   );
   const shouldUpload = !isTestEnv || forceRealStorage;
 

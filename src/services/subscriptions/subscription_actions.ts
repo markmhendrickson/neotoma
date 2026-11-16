@@ -13,9 +13,10 @@ import { parseSubscriptionSnapshot } from "./subscription_types.js";
 import { checkWebhookUrlAllowed } from "./webhook_delivery.js";
 import { createCorrection } from "../correction.js";
 import { db } from "../../db.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 const MAX_SUBSCRIPTIONS_PER_USER =
-  parseInt(process.env.NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER ?? "50", 10) || 50;
+  parseInt(runtimeEnv().NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER ?? "50", 10) || 50;
 
 export interface SubscribeInput {
   entity_types?: string[];

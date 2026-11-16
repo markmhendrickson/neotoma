@@ -11,6 +11,7 @@
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { runtimeEnv } from "../config_embedded.js";
 
 export interface OverflowReceipt {
   overflowed: true;
@@ -38,7 +39,7 @@ export function writeToOverflowSink(
   payload: unknown,
   reason?: string
 ): OverflowReceipt | OverflowSinkError {
-  const sinkEnv = process.env.NEOTOMA_OVERFLOW_SINK;
+  const sinkEnv = runtimeEnv().NEOTOMA_OVERFLOW_SINK;
   if (!sinkEnv) {
     return {
       error: "OVERFLOW_SINK_NOT_CONFIGURED",

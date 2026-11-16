@@ -152,7 +152,7 @@ neotoma entities list --type company --json
 ```
 
 ## Configuration and storage
-The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`. To reconfigure the data directory and optionally copy/merge existing DB files into the new location, run `neotoma storage set-data-dir <dir>`. The CLI may show an update-available notice to stderr when a newer npm version exists; disable with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`.
+The CLI stores configuration locally. To use Neotoma from a host application without env files or a server, see [Embedded configuration](embedded_configuration.md). See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`. To reconfigure the data directory and optionally copy/merge existing DB files into the new location, run `neotoma storage set-data-dir <dir>`. The CLI may show an update-available notice to stderr when a newer npm version exists; disable with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`.
 
 ## Diagrams
 

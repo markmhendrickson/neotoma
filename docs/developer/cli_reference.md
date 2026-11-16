@@ -1185,6 +1185,8 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
 
 ## Configuration and storage paths
 
+To embed Neotoma in a host application with explicit configuration instead of these files, see [Embedded configuration](embedded_configuration.md).
+
 The CLI stores configuration in:
 
 - `~/.config/neotoma/config.json`

@@ -1,4 +1,5 @@
 import { logger } from "./utils/logger.js";
+import { getEmbeddedConfig, runtimeEnv } from "./config_embedded.js";
 import { createLocalDbClient, LocalDbClient } from "./repositories/sqlite/local_db_adapter.js";
 
 export const db: LocalDbClient = createLocalDbClient();
@@ -11,7 +12,10 @@ export async function initDatabase(): Promise<void> {
   // Run migrations before initializing database
   // Note: Migrations are skipped in MCP mode to avoid stdout pollution
   // Apply migrations manually via: npm run migrate
-  const skipMigrations = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
+  // Embedded mode skips the migration script, which loads env files; the local schema is
+  // created on first connection regardless.
+  const skipMigrations =
+    runtimeEnv().NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1" || getEmbeddedConfig() !== undefined;
 
   if (!skipMigrations) {
     try {

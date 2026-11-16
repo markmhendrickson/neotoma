@@ -12,6 +12,7 @@ import fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { logger } from "./logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /** Relative to Neotoma `projectRoot`; directory is `.gitignore`d as `.dev-serve/`. */
 export const LOCAL_HTTP_PORT_FILE_SEGMENTS = [".dev-serve", "local_http_port"] as const;
@@ -60,7 +61,7 @@ export function writeLocalHttpPortFile(
   // NEOTOMA_ENV=production so it uses the prod DB) write to `local_http_port_dev`
   // instead of `local_http_port_prod`. Without this override both servers write
   // to the same file and whichever binds last wins.
-  const explicitWriteProfile = process.env.NEOTOMA_LOCAL_PORT_DISK_PROFILE?.trim().toLowerCase();
+  const explicitWriteProfile = runtimeEnv().NEOTOMA_LOCAL_PORT_DISK_PROFILE?.trim().toLowerCase();
   const profile: LocalHttpPortDiskProfile =
     explicitWriteProfile === "dev" || explicitWriteProfile === "prod"
       ? explicitWriteProfile
@@ -97,13 +98,13 @@ export function writeLocalHttpPortFile(
  * - **dev**: `local_http_port_dev`, then legacy `local_http_port`
  */
 export async function readLocalHttpPortFromFile(projectRoot: string): Promise<number | null> {
-  const explicit = process.env.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE?.trim().toLowerCase();
+  const explicit = runtimeEnv().NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE?.trim().toLowerCase();
   const profile: LocalHttpPortDiskProfile =
     explicit === "prod"
       ? "prod"
       : explicit === "dev"
         ? "dev"
-        : neotomaEnvironmentToDiskProfile(process.env.NEOTOMA_ENV || "development");
+        : neotomaEnvironmentToDiskProfile(runtimeEnv().NEOTOMA_ENV || "development");
 
   const paths: string[] =
     profile === "prod"

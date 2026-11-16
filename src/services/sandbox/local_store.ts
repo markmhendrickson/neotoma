@@ -15,6 +15,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { SandboxReportReason, SandboxReportStatus } from "./types.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 export interface LocalSandboxReportRecord {
   id: string;
@@ -45,8 +46,8 @@ interface StoreShape {
 export function resolveSandboxReportStorePath(dataDir?: string): string {
   const base =
     dataDir ??
-    process.env.NEOTOMA_SANDBOX_REPORT_STORE_PATH ??
-    process.env.NEOTOMA_DATA_DIR ??
+    runtimeEnv().NEOTOMA_SANDBOX_REPORT_STORE_PATH ??
+    runtimeEnv().NEOTOMA_DATA_DIR ??
     "./data";
   return path.join(base, "sandbox_reports", "records.json");
 }

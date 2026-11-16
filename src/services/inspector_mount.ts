@@ -18,6 +18,7 @@ import {
   resolveInspectorSkin,
   type ResolvedInspectorSkin,
 } from "./inspector_skin.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 const DEFAULT_BASE_PATH = "/inspector";
 
@@ -67,7 +68,7 @@ export function resolveBundledInspectorDir(): string | null {
  *
  * Precedence: DISABLE > PUBLIC_INSPECTOR_URL > STATIC_DIR > bundled fallback.
  */
-export function resolveInspectorMount(env: NodeJS.ProcessEnv = process.env): InspectorMountConfig {
+export function resolveInspectorMount(env: NodeJS.ProcessEnv = runtimeEnv()): InspectorMountConfig {
   const basePath = (
     (env.NEOTOMA_INSPECTOR_BASE_PATH || DEFAULT_BASE_PATH).trim() || DEFAULT_BASE_PATH
   ).replace(/\/$/, "");
@@ -219,7 +220,7 @@ function resolveLiveInspectorStaticDir(currentDir: string): string {
 
 export function installInspectorMount(
   app: express.Application,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnv(),
   logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const cfg = resolveInspectorMount(env);
@@ -423,7 +424,7 @@ export function installInspectorMount(
  */
 export function installInspectorRootStaticAssets(
   app: express.Application,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnv(),
   logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const bundledDir = resolveBundledInspectorDir();
@@ -662,7 +663,7 @@ function makeInspectorSpaShellMiddleware(
  */
 export function installInspectorSpaShellEarly(
   app: express.Application,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnv(),
   logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const bundledDir = resolveBundledInspectorDir();
@@ -679,7 +680,7 @@ export function installInspectorSpaShellEarly(
 
 export function installInspectorSpaFallback(
   app: express.Application,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = runtimeEnv(),
   logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const bundledDir = resolveBundledInspectorDir();
@@ -703,7 +704,7 @@ export function installInspectorSpaFallback(
  */
 export function resolveInspectorLandingUrl(
   base: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnv()
 ): string | null {
   const cfg = resolveInspectorMount(env);
   if (cfg.kind === "disabled") return null;

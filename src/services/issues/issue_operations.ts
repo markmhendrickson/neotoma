@@ -43,6 +43,7 @@ import {
 import { repoSlugsEqual } from "../../shared/repo_slug.js";
 import { decodeOverEscapedBody } from "./body_newline_decode.js";
 import { loadIssuesConfig } from "./config.js";
+import { assertEmbeddedIssuesConfigured } from "./embedded_guard.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
 import { runRedactionGuard } from "./redaction_guard.js";
 import {
@@ -928,6 +929,7 @@ export async function submitIssue(
   params = { ...params, body: decodeOverEscapedBody(params.body) };
 
   const config = await loadIssuesConfig();
+  assertEmbeddedIssuesConfigured(config);
   const now = new Date().toISOString();
   const visibility = params.visibility ?? "public";
   const toolingLabels = github.mergeNeotomaToolingIssueLabels(params.labels);
@@ -1185,6 +1187,7 @@ export async function addIssueMessage(
   params = { ...params, body: decodeOverEscapedBody(params.body) };
 
   const config = await loadIssuesConfig();
+  assertEmbeddedIssuesConfigured(config);
   const resolved = await resolveIssueRow(ops, params, config);
   const {
     issue_entity_id: issueEntityId,

@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 /**
  * Readiness probe backing `GET /ready`.
  *
@@ -53,7 +54,7 @@ export interface ReadinessResult {
  */
 export const DEFAULT_READY_DB_TIMEOUT_MS = 20_000;
 
-export function resolveReadyTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+export function resolveReadyTimeoutMs(env: NodeJS.ProcessEnv = runtimeEnv()): number {
   const parsed = Number.parseInt(env.NEOTOMA_READY_DB_TIMEOUT_MS || "", 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_READY_DB_TIMEOUT_MS;
   // Floor at 1s: a sub-second bound would fail against a healthy instance

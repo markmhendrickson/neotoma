@@ -34,6 +34,7 @@ import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_en
 import { lookupGrantForIdentity, recordMatch, type AgentGrant } from "./agent_grants.js";
 import { GRANT_KEY_PIN_DOC } from "./agent_capabilities.js";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export type { AAuthAdmissionContext, AAuthAdmissionReason };
 
@@ -70,7 +71,7 @@ export async function admitFromAAuthContext(
     return { admitted: false, reason: "not_signed" };
   }
 
-  if (process.env.NEOTOMA_AAUTH_ADMISSION_DISABLED === "1") {
+  if (runtimeEnv().NEOTOMA_AAUTH_ADMISSION_DISABLED === "1") {
     return { admitted: false, reason: "aauth_disabled" };
   }
 

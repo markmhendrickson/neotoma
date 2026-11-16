@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 /**
  * Default sandbox-mode pin for test/eval/playwright harnesses.
  *
@@ -11,6 +12,6 @@
  *
  * Callers that already set `NEOTOMA_FORCE_MODE` keep their explicit value.
  */
-export function resolveHarnessForceMode(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveHarnessForceMode(env: NodeJS.ProcessEnv = runtimeEnv()): string {
   return env.NEOTOMA_FORCE_MODE ?? "refuse";
 }
