@@ -68,7 +68,7 @@ export function NeotomaWithIronClawPageBody() {
             "IronClaw workspace files are useful working memory; Neotoma adds durable structured state",
             "Facts stored from IronClaw become queryable from every other MCP client",
             "Entity resolution keeps contacts, tasks, decisions, and relationships unified across tools",
-            "Versioned observations let you reconstruct what the agent knew at decision time",
+            "Versioned observations let you reconstruct what the agent had recorded by decision time",
           ].map((item) => (
             <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
               <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>

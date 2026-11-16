@@ -83,7 +83,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_snapshot",
       description: desc(
         "retrieve_entity_snapshot",
-        "Retrieve the current snapshot of an entity with provenance information. Supports point-in-time / as-of reconstruction (the state as recorded by T, not event time) via 'at' (write-time cutoff: filters on observed_at) and 'at_ingested' (write-time cutoff: filters on created_at, prevents look-ahead from backfilled observations). When both are supplied, both bounds are applied. list_relationships and retrieve_related_entities accept the same cutoffs."
+        "Retrieve the current snapshot of an entity with provenance information. Optional historical cutoffs: 'at' filters observations on observed_at, which public store and correct stamp with the server clock at write time, so it answers 'what had been asserted by T', not 'what was true in the world at T'; 'at_ingested' filters on created_at (row-insertion time), which prevents look-ahead from backfilled observations. When both are supplied, both bounds are applied. Domain date fields such as measured_at are ordinary fields, not a time axis; native valid-time queries are not supported. list_relationships and retrieve_related_entities accept the same cutoffs."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
     },

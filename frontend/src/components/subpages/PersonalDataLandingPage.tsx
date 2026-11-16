@@ -60,7 +60,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: CalendarClock,
       title: "No temporal queries",
-      desc: "What was your monthly spending when you decided to change jobs? What were your vitals when you started that new supplement? Your tools show current state, not historical state.",
+      desc: "What had you recorded about your monthly spending by the time you decided to change jobs? What vitals had you recorded by the time you started that new supplement? Your tools show current state, not state as recorded by a past date.",
     },
   ],
   problemCallout:
@@ -82,15 +82,15 @@ const CONFIG: UseCaseConfig = {
     },
     {
       category: "Financial awareness",
-      human: "What was my monthly spending rate when I decided to buy the car in February?",
+      human: "What had I recorded as my monthly spending rate by the time I decided to buy the car in February?",
       fail: "I don't have your financial data. You could check your banking app for February spending.",
       succeed:
-        "As of Feb 14 (decision date per goal\u00B7v8): trailing 3-month average spend was $4,280/mo. Largest categories: rent $1,850, groceries $620, dining $410. Savings rate: 28% of post-tax income. Cash reserve: $18,400 (4.3 months expenses). The car purchase ($22,500 on Feb 16, transaction\u00B7v41) reduced reserve to 0.9 months, flagged by budget agent Feb 17.",
+        "As recorded by Feb 14 (decision date per goal\u00B7v8): trailing 3-month average spend was $4,280/mo. Largest categories: rent $1,850, groceries $620, dining $410. Savings rate: 28% of post-tax income. Cash reserve: $18,400 (4.3 months expenses). The car purchase ($22,500 on Feb 16, transaction\u00B7v41) reduced reserve to 0.9 months, flagged by budget agent Feb 17.",
       version: "transaction\u00B7v41 @ 2026-02-14",
       Icon: Wallet,
-      failTitle: "Cannot reconstruct your financial state at decision time",
+      failTitle: "Cannot reconstruct your finances as recorded by the decision",
       failDesc:
-        "Your banking app shows current balances. It cannot tell you what your spending rate, savings ratio, and cash reserve looked like on the day you committed to a major purchase.",
+        "Your banking app shows current balances. It cannot tell you what your spending rate, savings ratio, and cash reserve looked like in your records on the day you committed to a major purchase.",
     },
     {
       category: "Health correlations",
@@ -156,7 +156,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: History,
       title: "Temporal queries on your own life",
-      desc: "Answer 'what was my financial state when I made that decision?' or 'what were my vitals when I started this supplement?' with exact historical snapshots, not today's numbers.",
+      desc: "Answer 'what had I recorded about my finances by the time I made that decision?' or 'what vitals had I recorded by the time I started this supplement?' with exact snapshots as recorded by that point, not today's numbers. Entries you log later about an earlier date are not part of the answer.",
       tags: ["transaction\u00B7v41 @ 2026-02-14", "replay"],
     },
     {
@@ -213,7 +213,7 @@ const CONFIG: UseCaseConfig = {
     guarantees: [
       "Every workout set, transaction, and health reading is a versioned entity with full observation history",
       "Entity resolution across tools so the same concept in different agents resolves to one entity",
-      "Temporal queries answer 'what was my state on date X?' with the exact snapshot from that date",
+      "Temporal queries answer 'what had been recorded about me by date X?' with the exact snapshot as recorded by then",
       "Cross-domain queries correlate sleep with training, spending with habits, goals with outcomes",
     ],
     generalizesTitle: "Your data, your memory, your agents",

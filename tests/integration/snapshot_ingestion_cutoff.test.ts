@@ -398,7 +398,7 @@ describe("retrieve_entity_snapshot — offline/HTTP path honours at_ingested (#1
     expect(empty!.snapshot).toEqual({});
   });
 
-  it("computeEntitySnapshotAtTime: at (event-time) excludes future-observed observations", async () => {
+  it("computeEntitySnapshotAtTime: at (observed_at) excludes later assertions", async () => {
     const entityId = `ent_test_1819_at_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     tracker.trackEntity(entityId);
     const sourceId = await insertSource("at");

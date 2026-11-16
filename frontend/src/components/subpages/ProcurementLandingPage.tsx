@@ -28,7 +28,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Procurement truth that survives",
   heroHighlight: "sourcing rounds, spec churn, and multi-agent bids",
   heroDesc:
-    "Bids, specs, and approvals live in different systems and rot after award. Neotoma versions every sourcing entity so you can reconstruct the competing offers at selection, the spec the approval referenced, and how supplier risk has moved since onboarding.",
+    "Bids, specs, and approvals live in different systems and rot after award. Neotoma versions every sourcing entity so you can reconstruct the competing offers as recorded by selection, the spec the approval referenced, and how supplier risk has moved since onboarding.",
   heroTags: [
     { tag: "supplier", Icon: Building2 },
     { tag: "purchase order", Icon: ClipboardList },
@@ -38,7 +38,7 @@ const CONFIG: UseCaseConfig = {
   ],
   heroFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "SOC 2 compatible"],
   analyticsPrefix: "procurement",
-  problemTitle: "P2P and sourcing tools store artifacts; they do not preserve award-time truth",
+  problemTitle: "P2P and sourcing tools store artifacts; they do not preserve the record as written by the award",
   problemDesc:
     'Suppliers change risk profiles mid-contract. Specs drift between engineering releases and PO line items. Bid tabs rot in spreadsheets. Approvals collapse to "approved" in workflow logs. Without temporal snapshots, "what did we actually select and why?" becomes a reconstruction project.',
   problemCards: [
@@ -66,15 +66,15 @@ const CONFIG: UseCaseConfig = {
   problemCallout:
     'Public sector and enterprise procurement do not accept "we picked the best vendor" without evidence.',
   problemCalloutDesc:
-    "Bid protests, SOX-style controls, and AI-driven sourcing all need the same thing: competing offers, specification versions, and approvals frozen at decision time. Neotoma preserves that graph so agents and humans can explain awards without rebuilding folders.",
+    "Bid protests, SOX-style controls, and AI-driven sourcing all need the same thing: competing offers, specification versions, and approvals as recorded by decision time. Neotoma preserves that graph so agents and humans can explain awards without rebuilding folders.",
   scenarios: [
     {
       category: "Bid comparison",
       human:
-        "What were the competing bids when we selected Meridian Steel for the Q2 structural steel package, and what spec did the approval reference?",
+        "What competing bids had been recorded by the time we selected Meridian Steel for the Q2 structural steel package, and what spec did the approval reference?",
       fail: "Meridian Steel was awarded the structural steel package at $1,184,000 with 14-week delivery; approval status: completed.",
       succeed:
-        "At award snapshot 2025-03-18 16:02 UTC: (1) Meridian Steel bid\u00B7v3, $1,184,000, score 87.4, submitted Mar 12 9:41am; (2) Harbor Forge bid\u00B7v2, $1,205,500, score 82.1, Mar 11 4:18pm; (3) Summit Alloys bid\u00B7v4, $1,098,000, score 78.6 (penalized for 18-week lead), Mar 13 11:05am. Approval approval\u00B7v5 linked specification\u00B7v7 (Rev C, hash a3f9\u20262c1) and explicitly cited Exhibit B tensile requirements, not today's Rev D.",
+        "As recorded by the award snapshot 2025-03-18 16:02 UTC: (1) Meridian Steel bid\u00B7v3, $1,184,000, score 87.4, submitted Mar 12 9:41am; (2) Harbor Forge bid\u00B7v2, $1,205,500, score 82.1, Mar 11 4:18pm; (3) Summit Alloys bid\u00B7v4, $1,098,000, score 78.6 (penalized for 18-week lead), Mar 13 11:05am. Approval approval\u00B7v5 linked specification\u00B7v7 (Rev C, hash a3f9\u20262c1) and explicitly cited Exhibit B tensile requirements, not today's Rev D.",
       version: "award\u00B7snapshot\u00B72025-03-18",
       Icon: BarChart3,
       failTitle: "Winner only, competing bids and spec context missing",
@@ -84,7 +84,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Specification drift",
       human:
-        "What spec version was PO-2025-4418 for Apex Components based on when it was approved?",
+        "What spec version had been recorded for PO-2025-4418 for Apex Components by the time it was approved?",
       fail: "Current specification for custom bracket assembly: Rev D (effective Apr 2, 2025), torque test 45 N\u00B7m, coating Class III.",
       succeed:
         "PO-2025-4418 was approved Mar 21, 2025 against specification\u00B7v6 (Rev B): torque test 40 N\u00B7m, coating Class II. Rev C and Rev D landed Apr 2 and Apr 18 respectively; purchase_order\u00B7v4 observation binds lines 3\u20136 to spec\u00B7v6, not spec\u00B7v9. Drift vs. current Rev D is explicit in the graph.",
@@ -92,7 +92,7 @@ const CONFIG: UseCaseConfig = {
       Icon: FileStack,
       failTitle: "Current spec returned, PO lineage to approval-time revision missing",
       failDesc:
-        "Without PO-to-spec edges at approval time, the assistant answered with today's Rev D and would misstate contractual requirements during a supplier dispute.",
+        "Without PO-to-spec edges recorded by approval, the assistant answered with today's Rev D and would misstate contractual requirements during a supplier dispute.",
     },
     {
       category: "Supplier risk change",
@@ -131,13 +131,13 @@ const CONFIG: UseCaseConfig = {
       title: "Ingest every sourcing touch as an observation",
       desc: "RFP responses, score models, spec releases, PO amendments, and agent-generated comparisons become structured observations on supplier, bid, specification, purchase order, and approval entities.",
       detail:
-        "Immutable history by default. Award-time snapshots are computed, not recreated from email attachments.",
+        "Immutable history by default. Snapshots as recorded at award time are computed, not recreated from email attachments.",
     },
     {
       Icon: Layers,
       title: "Link awards to bids, specs, and risk timelines",
       desc: "Bind approvals to the exact bid rows and specification revision the approver saw. Supplier risk observations stack over time so mid-contract flags are visible next to open POs.",
-      detail: "Temporal queries return decision-time state, not the last upload in the P2P tool.",
+      detail: "Temporal queries return state as recorded by the decision, not the last upload in the P2P tool.",
     },
     {
       Icon: Search,
@@ -154,14 +154,14 @@ const CONFIG: UseCaseConfig = {
   capabilities: [
     {
       Icon: Gavel,
-      title: "Award-time bid reconstruction",
-      desc: "Replay competing offers with scores, timestamps, and evaluator notes as they existed at selection. Not just the contracted winner's PDF.",
+      title: "Bid reconstruction as recorded at award",
+      desc: "Replay competing offers with scores, timestamps, and evaluator notes as recorded at selection. Not just the contracted winner's PDF.",
       tags: ["bid", "supplier", "award"],
     },
     {
       Icon: FileStack,
       title: "Specification lineage on PO lines",
-      desc: "Tie each purchase order line to the spec revision effective at approval; surface drift when engineering releases a new rev after award.",
+      desc: "Tie each purchase order line to the spec revision recorded by approval; surface drift when engineering releases a new rev after award.",
       tags: ["specification", "purchase order", "drift"],
     },
     {
@@ -220,7 +220,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project current state per entity, or reconstruct award-time and as-of views for protests, audits, and dispute response.",
+      desc: "Project current state per entity, or reconstruct views as recorded at award time or by any later date for protests, audits, and dispute response.",
     },
     {
       label: "Serve agents & reviewers",
@@ -230,7 +230,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How procurement teams use Neotoma as their integrity layer",
     desc:
-      "AI procurement intelligence platforms for enterprise sourcing automate RFP assembly, supplier comparison, and bid scoring across global categories. Neotoma versions every score, specification change, and approval so you can reconstruct award decisions at any audit point.",
+      "AI procurement intelligence platforms for enterprise sourcing automate RFP assembly, supplier comparison, and bid scoring across global categories. Neotoma versions every score, specification change, and approval so you can reconstruct award decisions as recorded up to any audit date.",
     featuresHeading: "What procurement teams build",
     features: [
       "Autonomous RFP drafting with clause libraries synced to live specification entities",
@@ -239,7 +239,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every model-generated score and human override",
-      "Temporal snapshots so award answers reference March's bids, not June's folder",
+      "Temporal snapshots so award answers reference the bids as recorded by March, not June's folder",
       "Relationship integrity between bids, specs, POs, and multi-stage approvals",
       "Audit-oriented exports suitable for public-sector and enterprise control testing",
     ],

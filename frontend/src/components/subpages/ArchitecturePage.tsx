@@ -93,7 +93,7 @@ const GUARANTEES = [
   {
     name: "Timeline replay",
     detail:
-      "Reconstruct entity state at any past point. Diff versions. Audit what changed and why.",
+      "Reconstruct entity state as recorded up to any past point. Diff versions. Audit what changed and why.",
   },
   {
     name: "Schema-bound storage",
@@ -432,7 +432,7 @@ export function ArchitecturePage() {
         </table>
       </TableScrollWrapper>
       <p className="text-[14px] leading-6 text-muted-foreground mt-4">
-        These enable: immutable audit trail and time-travel queries, cryptographic integrity,
+        These enable: immutable audit trail and queries over recorded history, cryptographic integrity,
         event-sourced history, entity resolution across documents and agent data, timeline
         generation, structured ingestion via MCP/CLI/API, and persistent memory without
         context-window limits.

@@ -25,7 +25,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Supply chain state that survives",
   heroHighlight: "re-routing, constraint changes, and multi-carrier coordination",
   heroDesc:
-    "Shipments change route mid-transit, inventory levels shift between warehouse checks, and carrier commitments update hourly. Neotoma versions every logistics entity so you can reconstruct what the system knew when a routing or fulfillment decision was made.",
+    "Shipments change route mid-transit, inventory levels shift between warehouse checks, and carrier commitments update hourly. Neotoma versions every logistics entity so you can reconstruct what the system had recorded by the time a routing or fulfillment decision was made.",
   heroTags: [
     { tag: "shipment", Icon: Package },
     { tag: "route_decision", Icon: Route },
@@ -52,17 +52,17 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: AlertTriangle,
       title: "Silent constraint changes",
-      desc: "Port delays, carrier rate updates, and weather advisories change the constraint landscape. Decisions made before the update cannot be evaluated against the constraints that existed at decision time.",
+      desc: "Port delays, carrier rate updates, and weather advisories change the constraint landscape. Decisions made before the update cannot be evaluated against the constraints as recorded by decision time.",
     },
     {
       Icon: GitCompare,
       title: "Multi-carrier reconciliation gaps",
-      desc: "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state was at each transfer point requires temporal data the TMS does not retain.",
+      desc: "Shipments split across carriers or modes. When a delivery is late, reconstructing which leg failed and what the handoff state had been recorded as at each transfer point requires temporal data the TMS does not retain.",
     },
   ],
-  problemCallout: "\"Why did we route it that way?\" requires the constraint state at decision time, not today's dashboard.",
+  problemCallout: "\"Why did we route it that way?\" requires the constraint state as recorded at decision time, not today's dashboard.",
   problemCalloutDesc:
-    "Customer claims, carrier disputes, and ops retrospectives all ask the same question: what did the system know when the decision was made? Showing current rates and transit times after the fact does not explain a routing choice made under different constraints 48 hours ago.",
+    "Customer claims, carrier disputes, and ops retrospectives all ask the same question: what had the system recorded by the time the decision was made? Showing current rates and transit times after the fact does not explain a routing choice made under different constraints 48 hours ago.",
   scenarios: [
     {
       category: "Routing decision audit",
@@ -74,14 +74,14 @@ const CONFIG: UseCaseConfig = {
       Icon: Route,
       failTitle: "Current carrier assignment visible, selection rationale missing",
       failDesc:
-        "Air capacity opened up 2.5 hours later. Without the constraint snapshot at decision time, the ops review would incorrectly conclude the agent ignored a cheaper air option that was not actually available.",
+        "Air capacity opened up 2.5 hours later. Without the constraint snapshot as recorded by decision time, the ops review would incorrectly conclude the agent ignored a cheaper air option that was not actually available.",
     },
     {
       category: "Inventory commitment dispute",
-      human: "Did we actually have the 500 units of SKU-4401 available when we committed them to the Vertex order at 2pm?",
+      human: "What availability had been recorded for the 500 units of SKU-4401 by 2pm, when they were committed to the Vertex order?",
       fail: "SKU-4401 current inventory: 312 units available. Vertex order ORD-2025-91002: 500 units allocated.",
       succeed:
-        "At 2025-03-12 14:00 UTC, inventory snapshot inv\u00B7sku4401_v8 showed: on-hand 820, allocated 290, available-to-promise 530. Fulfillment agent committed 500 units (allocation\u00B7v3). Between 14:00 and 16:00, two other orders consumed 218 units (allocation\u00B7v4, v5), dropping ATP to 312 (inv\u00B7sku4401_v11). The commitment was valid at decision time. Current deficit is from subsequent allocations, not an over-commit. Full inventory timeline at inv\u00B7sku4401_v8 through v11.",
+        "As recorded by 2025-03-12 14:00 UTC, inventory snapshot inv\u00B7sku4401_v8 showed: on-hand 820, allocated 290, available-to-promise 530. Fulfillment agent committed 500 units (allocation\u00B7v3). Between 14:00 and 16:00, two other orders consumed 218 units (allocation\u00B7v4, v5), dropping ATP to 312 (inv\u00B7sku4401_v11). The commitment was made against the availability recorded at that time. Current deficit is from subsequent allocations, not an over-commit. Full inventory timeline at inv\u00B7sku4401_v8 through v11.",
       version: "inv\u00B7sku4401_v8 @ 14:00",
       Icon: Warehouse,
       failTitle: "Current inventory shows shortfall, commitment validity unclear",
@@ -128,14 +128,14 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project logistics state through time",
-      desc: "Link routing decisions to the carrier capacity, rates, and inventory positions available at decision time. Reconstruct the constraint landscape for any past moment.",
-      detail: "Temporal queries return the state valid at the as-of timestamp, not the latest TMS sync.",
+      desc: "Link routing decisions to the carrier capacity, rates, and inventory positions as recorded by decision time. Reconstruct the constraint landscape as recorded for any past moment.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest TMS sync.",
     },
     {
       Icon: Route,
       title: "Let agents and ops teams answer with provenance",
       desc: "Routing agents, inventory planners, and ops analysts query the same versioned graph. Responses cite constraint snapshots, carrier commitments, and decision timestamps.",
-      detail: "Built for carrier disputes, delay investigations, and routing optimization: what was known, what was available, and why.",
+      detail: "Built for carrier disputes, delay investigations, and routing optimization: what had been recorded, what was recorded as available, and why.",
     },
   ],
   capTitle: "Capabilities built for logistics integrity and operational replay",
@@ -146,13 +146,13 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Route,
       title: "Routing decision provenance",
-      desc: "Bind each routing choice to the carrier rates, capacity, transit times, and SLA constraints the agent evaluated. Explain any past routing decision against its original inputs.",
+      desc: "Bind each routing choice to the carrier rates, capacity, transit times, and SLA constraints the agent evaluated. Explain any past routing decision from the inputs recorded with it.",
       tags: ["route_decision", "carrier", "audit"],
     },
     {
       Icon: Warehouse,
       title: "Inventory position timelines",
-      desc: "Track available-to-promise at every allocation and commit point. Prove what inventory was available when a fulfillment decision was made, separate from the current balance.",
+      desc: "Track available-to-promise positions as recorded for each allocation and commit. Show what inventory had been recorded as available by the time a fulfillment decision was made, separate from the current balance.",
       tags: ["inventory_snapshot", "ATP", "temporal"],
     },
     {
@@ -211,7 +211,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest logistics state per entity, or reconstruct historical state for any timestamp relevant to a delay investigation, dispute, or optimization review.",
+      desc: "Project the latest logistics state per entity, or reconstruct state as recorded up to any timestamp relevant to a delay investigation, dispute, or optimization review.",
     },
     {
       label: "Serve agents & analysts",
@@ -221,7 +221,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How logistics teams use Neotoma as their integrity layer",
     desc:
-      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state at any decision point.",
+      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state as recorded up to any decision.",
     featuresHeading: "What logistics teams build",
     features: [
       "Routing agents that evaluate carrier capacity, rates, and transit times across ground, air, and ocean in real time",
@@ -230,13 +230,13 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every carrier poll, inventory position, and routing decision",
-      "Temporal snapshots so delay investigations and disputes reference the constraint state at decision time",
+      "Temporal snapshots so delay investigations and disputes reference the constraint state as recorded at decision time",
       "Relationship integrity between orders, shipments, routing decisions, and carrier commitments",
       "Audit-oriented exports that trace any delivery from order through allocation, routing, and each shipment leg",
     ],
     generalizesTitle: "If agents make routing and fulfillment decisions, you need reconstructable logistics state",
     generalizesDesc:
-      "Any team running logistics agents for carrier selection, inventory allocation, or shipment coordination faces the same requirement: explain why a decision was made with the constraints that existed at the time. Neotoma generalizes the pattern to your supply chain stack.",
+      "Any team running logistics agents for carrier selection, inventory allocation, or shipment coordination faces the same requirement: explain why a decision was made with the constraints recorded by the time of the decision. Neotoma generalizes the pattern to your supply chain stack.",
   },
   ctaHeadline: "Ship logistics agents that can explain",
   ctaHighlight: "every routing and fulfillment decision",

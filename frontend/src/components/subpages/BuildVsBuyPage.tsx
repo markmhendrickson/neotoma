@@ -35,11 +35,11 @@ interface GapRow {
 
 const GAP_ROWS: GapRow[] = [
   {
-    capability: "Knowing historical state",
+    capability: "Knowing state as recorded by a past time",
     observabilityDesc:
       "Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.",
     stateIntegrityDesc:
-      "Reconstruct the composed entity state at any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was true.",
+      "Reconstruct the composed entity state as recorded up to any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was recorded.",
     Icon: Clock,
   },
   {
@@ -55,15 +55,15 @@ const GAP_ROWS: GapRow[] = [
     observabilityDesc:
       "Trace requests across services with correlation IDs. See the path a decision took through your system. Build dashboards showing delegation and approval patterns.",
     stateIntegrityDesc:
-      "Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version at that moment. Prove the chain is complete.",
+      "Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version recorded with it. Prove the chain is complete.",
     Icon: Network,
   },
   {
     capability: "Version-bound decisions",
     observabilityDesc:
-      "Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.",
+      "Log which policy or rule version applied to each decision, recorded with it. Query by policy ID to find affected decisions. Build reports on policy coverage.",
     stateIntegrityDesc:
-      "Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context that governed it. Counterfactual queries are supported.",
+      "Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context recorded with it. Counterfactual queries are supported.",
     Icon: Shield,
   },
   {
@@ -88,9 +88,9 @@ const ASSESSMENT_ITEMS: AssessmentItem[] = [
       "Chat agents, cron jobs, CLI scripts, or services all touch the same contact, task, or ledger row. Logging each write is not the same as a single deterministic snapshot everyone reads-especially when tools disagree.",
   },
   {
-    question: "You need the composed state at a specific point in time",
+    question: "You need the composed state as recorded by a specific point in time",
     detail:
-      "Not only which events fired, but what was true: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
+      "Not only which events fired, but what was recorded: the full derived state from every observation recorded up to that cutoff. That is how you answer “what had the stack recorded by last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
   },
   {
     question: "Rules or context change while entities have active state",
@@ -105,7 +105,7 @@ const ASSESSMENT_ITEMS: AssessmentItem[] = [
   {
     question: "Explanation requires the full input context, not a summary",
     detail:
-      "Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution at that moment-not a terse log line or today’s live row.",
+      "Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution as recorded with the run, not a terse log line or today’s live row.",
   },
 ];
 
@@ -143,7 +143,7 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
     observabilityCovers:
       "Record ingest events, file uploads, and reconciliation checks with correlation IDs",
     stateIntegrityGap:
-      "What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable",
+      "What your agents had recorded as settled financial truth by a given date, with every observation that fed the snapshot traceable",
     accent: "text-teal-600 dark:text-teal-400",
   },
   {
@@ -152,7 +152,7 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
     observabilityCovers:
       "Log clause edits, reviews, and signatures with versions and timestamps",
     stateIntegrityGap:
-      "Reconstruct obligations and terms as they existed on signing day, including which change came from which writer and how conflicts were reduced",
+      "Reconstruct obligations and terms as recorded by signing day, including which change came from which writer and how conflicts were reduced",
     accent: "text-indigo-600 dark:text-indigo-400",
   },
   {
@@ -161,7 +161,7 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
     observabilityCovers:
       "Store decision logs and rationale snippets as unstructured events or documents",
     stateIntegrityGap:
-      "Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had then-not the notebook file as it reads today",
+      "Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had recorded-not the notebook file as it reads today",
     accent: "text-violet-600 dark:text-violet-400",
   },
   {
@@ -361,7 +361,7 @@ export function BuildVsBuyPageBody() {
               <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               Observability shows you what happened. State integrity tells you
-              what was true: the composed entity state at any moment, with
+              what was recorded: the composed entity state as recorded up to any moment, with
               deterministic reconstruction guarantees-what you need when agents
               must not contradict themselves across sessions and tools without
               you re-typing context every time. The second problem does not reduce
@@ -382,7 +382,7 @@ export function BuildVsBuyPageBody() {
                   history, and conflict resolution, is a qualitatively different
                   problem from saving files. The same gap exists between logging
                   what your agents did and knowing the composed state of your
-                  entities at any point in time.
+                  entities as recorded up to any point in time.
                 </p>
               </div>
             </div>
@@ -621,7 +621,7 @@ export function BuildVsBuyPageBody() {
               <h2 id="observability-tells-you-what-happened" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 Observability tells you what happened.{" "}
                 <span className="text-muted-foreground">
-                  State integrity proves what was true.
+                  State integrity proves what was recorded.
                 </span>
               </h2>
             </div>
@@ -657,7 +657,7 @@ export function BuildVsBuyPageBody() {
                 </p>
                 <ul className="list-none pl-0 space-y-2.5">
                   {[
-                    "Deterministic reconstruction of entity state at any historical point",
+                    "Deterministic reconstruction of entity state as recorded up to any historical point",
                     "Multi-writer conflict resolution with guaranteed consistency",
                     "Every decision bound to the exact policy version and context that produced it",
                     "Provenance chains traversable from outcome back to origin",

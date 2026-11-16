@@ -103,7 +103,7 @@ export const WHAT_TO_STORE_PAGE_EN: WhatToStorePageStrings = {
   introStrong: "does this fact benefit from being versioned, auditable, and reproducible?",
   introP1AfterStrong: "",
   introP2:
-    "If an agent or user would later need to recall a fact, verify when it changed, trace why a decision was made, or reconstruct state at a point in time: it belongs in Neotoma.",
+    "If an agent or user would later need to recall a fact, verify when it changed, trace why a decision was made, or reconstruct state as recorded by a point in time: it belongs in Neotoma.",
   sectionAgentsTitle: "Agents store for you",
   agentsP1BeforeCursor: "You do not need to decide what to store or call any APIs yourself. When Neotoma runs with an agent in ",
   agentsP1AfterCursor: ", ",
@@ -281,7 +281,7 @@ export const WHAT_TO_STORE_PAGE_ES: Partial<WhatToStorePageStrings> = {
     "\u00bfeste hecho se beneficia de estar versionado, ser auditable y reproducible?",
   introP1AfterStrong: "",
   introP2:
-    "Si un agente o usuario necesitar\u00e1 recordar un hecho, verificar cu\u00e1ndo cambi\u00f3, rastrear por qu\u00e9 se tom\u00f3 una decisi\u00f3n o reconstruir el estado en un momento dado: pertenece a Neotoma.",
+    "Si un agente o usuario necesitar\u00e1 recordar un hecho, verificar cu\u00e1ndo cambi\u00f3, rastrear por qu\u00e9 se tom\u00f3 una decisi\u00f3n o reconstruir el estado registrado hasta un momento dado: pertenece a Neotoma.",
   sectionAgentsTitle: "Los agentes almacenan por ti",
   agentsP1BeforeCursor:
     "No necesitas decidir qu\u00e9 almacenar ni llamar t\u00fa mismo a las APIs. Cuando Neotoma se ejecuta con un agente en ",

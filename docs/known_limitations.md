@@ -99,11 +99,11 @@ Applies to `neotoma@0.29.1`. Every entry has a tracking issue.
 
 ### As-of reads cover only some reads
 
-**What you will observe.** Three MCP reads take an as-of time, both cutoffs being write time ("the state as recorded by T", not event time): `retrieve_entity_snapshot` for one entity, `list_relationships`, and `retrieve_related_entities`, with `at` (cutoff on `observed_at`) and `at_ingested` (cutoff on `created_at`). On the two relationship reads an edge is visible as of T only if the edge and both of its entities are. There is still no as-of query across the rest of the record: `retrieve_entities` (lists, counts, search ranking, sorting), `list_timeline_events`, `retrieve_graph_neighborhood` and `GET /relationships` return current state only.
+**What you will observe.** Three MCP reads take a historical cutoff: `retrieve_entity_snapshot` for one entity, `list_relationships`, and `retrieve_related_entities`. Both cutoffs are write clocks, so they return the state as recorded by T. `at` filters `observed_at`, which public `store` and `correct` stamp from the server clock when they write the observation; `at_ingested` filters the row-insertion clock in `created_at`. Neither cutoff is valid time: domain dates such as `measured_at` and `date` are ordinary fields, and Neotoma does not yet represent valid-time intervals. On the two relationship reads an edge is visible at cutoff T only if the edge and both of its entities are. There is still no historical cutoff across the rest of the record: `retrieve_entities` (lists, counts, search ranking, sorting), `list_timeline_events`, `retrieve_graph_neighborhood` and `GET /relationships` return current state only.
 
-**Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at` or `at_ingested`.
+**Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at` or `at_ingested`. For domain-time questions, store the relevant dates as fields and apply the date or interval logic in the consuming application.
 
-**Tracking.** [#2700](https://github.com/markmhendrickson/neotoma/issues/2700)
+**Tracking.** [#2700](https://github.com/markmhendrickson/neotoma/issues/2700) for record-wide as-of reads; [#2034](https://github.com/markmhendrickson/neotoma/issues/2034) for valid-time intervals.
 
 ### Export carries current state only
 

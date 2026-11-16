@@ -173,7 +173,7 @@ export const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
         id: "deterministic",
         heading: "Deterministic by construction",
         body:
-          "Same observations + same schema + same reducer config ⇒ same snapshot, byte-for-byte (modulo computed_at). Re-running the reducer never randomly changes a field. This is what lets Neotoma replay historical state, audit truth, and detect non-determinism in custom reducers.",
+          "Same observations + same schema + same reducer config ⇒ same snapshot, byte-for-byte (modulo computed_at). Re-running the reducer never randomly changes a field. This is what lets Neotoma replay state as recorded, audit truth, and detect non-determinism in custom reducers.",
       },
       {
         id: "provenance-map",
@@ -344,7 +344,7 @@ export const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
         id: "config-not-replay",
         heading: "interpretation_config is an audit log, not a replay contract",
         body:
-          "interpretation_config captures the model, prompt, extractor type, and schema version active at run start. Re-running with the same config can produce different outputs because LLM weights drift, network conditions affect tokenisation, and tools the extractor calls may themselves be non-deterministic. What Neotoma guarantees is that whichever output happened is permanently linked to the config that produced it.",
+          "interpretation_config captures the model, prompt, extractor type, and schema version used for the run. Re-running with the same config can produce different outputs because LLM weights drift, network conditions affect tokenisation, and tools the extractor calls may themselves be non-deterministic. What Neotoma guarantees is that whichever output happened is permanently linked to the config that produced it.",
       },
       {
         id: "state-machine",
@@ -425,7 +425,7 @@ export const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
         id: "three-layer",
         heading: "The three-layer truth model",
         body:
-          "Source carries raw bytes. Interpretation carries the audit trail of how those bytes were read. Observations carry granular facts that link back to both. Snapshots are deterministically composed from all observations for an entity by the reducer. This separation is what lets Neotoma reinterpret without rewriting history and replay snapshots at any point in time.",
+          "Source carries raw bytes. Interpretation carries the audit trail of how those bytes were read. Observations carry granular facts that link back to both. Snapshots are deterministically composed from all observations for an entity by the reducer. This separation is what lets Neotoma reinterpret without rewriting history and replay snapshots as recorded up to any point in time.",
       },
       {
         id: "immutability",
