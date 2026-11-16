@@ -303,13 +303,17 @@ describe("Observation Ingestion Service - Integration", () => {
   });
 
   describe("User ID Handling", () => {
-    it("should handle null user_id", async () => {
-      // Seed schema
+    // A null owner is not a supported input. `runInterpretation` types
+    // `userId: string`, the lifecycle authority types `LifecycleTarget.user_id:
+    // string`, and the lifecycle cutover refuses any entity without an owner
+    // (`if (!target.user_id ...) refuse()` in entity_lifecycle_storage.ts). Owner
+    // lookups are `user_id = ?`, which never matches NULL, so acquisition for a
+    // null-owner entity is refused with ERR_ENTITY_LIFECYCLE_ACQUISITION.
+    it("should refuse null user_id with the lifecycle acquisition error", async () => {
       await seedTestSchema(server, testEntityType, {
         title: { type: "string", required: false },
       });
 
-      // Create source with null user_id
       const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
@@ -326,10 +330,7 @@ describe("Observation Ingestion Service - Integration", () => {
         console.warn("Skipping test - source table not available");
         return;
       }
-
-      if (source) {
-        createdSourceIds.push(source.id);
-      }
+      createdSourceIds.push(source.id);
 
       const config: InterpretationConfig = {
         provider: "test",
@@ -339,24 +340,16 @@ describe("Observation Ingestion Service - Integration", () => {
         code_version: "1.0.0",
       };
 
-      const extractedData = [
-        { entity_type: testEntityType, title: "Test" },
-      ];
-
-      // Should succeed with null user_id
-      const result = await runInterpretation({
-        userId: null as any,
-        sourceId: source!.id,
-        extractedData,
-        config,
-      });
-
-      expect(result.observationsCreated).toBeGreaterThanOrEqual(0);
-
-      for (const entity of result.entities) {
-        createdEntityIds.push(entity.entityId);
-        createdObservationIds.push(entity.observationId);
-      }
+      await expect(
+        runInterpretation({
+          userId: null as any,
+          sourceId: source.id,
+          extractedData: [{ entity_type: testEntityType, title: "Test" }],
+          config,
+        })
+      ).rejects.toThrow(
+        "Failed to create observation: Entity lifecycle authority acquisition is incomplete or inconsistent"
+      );
     });
   });
 });
