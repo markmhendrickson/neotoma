@@ -5,7 +5,14 @@ import type { EntityFallbackReason, EntityReadTrace } from "../shared/entity_rea
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { generateEmbedding, type EmbeddingAcquisitionTrace } from "../embeddings.js";
-import { searchLocalEntityEmbeddings } from "./local_entity_embedding.js";
+import {
+  describeLocalSemanticUnavailableReason,
+  localSemanticSearchUnavailableReason,
+  searchLocalEntityEmbeddings,
+  type LocalSemanticUnavailableReason,
+} from "./local_entity_embedding.js";
+
+const warnedUnavailableReasons = new Set<LocalSemanticUnavailableReason>();
 
 export interface SemanticSearchEntitiesOptions {
   searchText: string;
@@ -46,6 +53,25 @@ export async function semanticSearchEntities(
     limit,
     offset,
   } = options;
+
+  // Without a vector backend an embedding can be neither stored nor searched,
+  // so skip the provider call and let the caller use its lexical fallback.
+  const unavailable = await localSemanticSearchUnavailableReason();
+  if (unavailable) {
+    if (!warnedUnavailableReasons.has(unavailable)) {
+      warnedUnavailableReasons.add(unavailable);
+      logger.warn(
+        `[entity_semantic_search] semantic search skipped: ${describeLocalSemanticUnavailableReason(unavailable)}; using lexical fallback`
+      );
+    }
+    options.readTrace?.reasons.add("semantic_backend_unavailable");
+    // Same vocabulary as searchLocalEntityEmbeddings for a missing vector backend.
+    return {
+      entityIds: [],
+      total: 0,
+      fallbackReason: config.openaiApiKey ? "unknown" : "not_configured",
+    };
+  }
 
   const embeddingTrace: EmbeddingAcquisitionTrace = {};
   const queryEmbedding = await generateEmbedding(searchText, embeddingTrace);
