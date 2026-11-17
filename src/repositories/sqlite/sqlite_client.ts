@@ -851,6 +851,17 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_user_type ON entity_snapshots(user_id, entity_type, entity_id)"
       )
       .run();
+    // The instance-policy lookup (services/instance_policy.ts
+    // getInstancePolicyResult) reads entity_snapshots by entity_type alone:
+    // the policy is instance-wide by design and takes no user id, so the
+    // (user_id, entity_type) index above cannot serve it. Without this index
+    // that lookup was a full SCAN of every snapshot row on every MCP
+    // initialize and on every policy-enforced write.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_type ON entity_snapshots(entity_type)"
+      )
+      .run();
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
