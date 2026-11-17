@@ -17,8 +17,10 @@ import {
   buildEntityTypeFilterTokens,
   textTokensForEntityMatch,
   buildEntityLexicalSearchText,
+  buildEntityLexicalSearchTextFromNormalized,
   normalizeSearchText,
   matchesSearchTokens,
+  matchesNormalizedTokens,
 } from "./entity_handlers.js";
 
 describe("ENTITY_TYPE_KEYWORD_BOOST", () => {
@@ -211,5 +213,45 @@ describe("matchesSearchTokens", () => {
   it("returns false for an empty token list", () => {
     // Empty token list cannot match — caller should special-case this.
     expect(matchesSearchTokens("anything", [])).toBe(false);
+  });
+});
+
+describe("buildEntityLexicalSearchTextFromNormalized", () => {
+  it("equals buildEntityLexicalSearchText for the same inputs", () => {
+    const cases: Array<[string, unknown, string | undefined]> = [
+      ["Plan: Ship v0.14.0", { status: "active" }, undefined],
+      ["", { title: "Truth-Layer design" }, "extra_key extra_value"],
+      ["Name", null, undefined],
+      ["", null, ""],
+      ["Budget", "plain string snapshot", "k v"],
+    ];
+    for (const [canonical, snapshot, fragments] of cases) {
+      const snapshotText =
+        typeof snapshot === "string" ? snapshot : snapshot == null ? "" : JSON.stringify(snapshot);
+      expect(
+        buildEntityLexicalSearchTextFromNormalized(
+          normalizeSearchText(canonical),
+          normalizeSearchText(snapshotText),
+          fragments
+        )
+      ).toBe(buildEntityLexicalSearchText(canonical, snapshot, fragments));
+    }
+  });
+});
+
+describe("matchesNormalizedTokens", () => {
+  it("matches every token against already-normalized text", () => {
+    expect(matchesNormalizedTokens("truth layer design", ["truth", "design"])).toBe(true);
+    expect(matchesNormalizedTokens("truth layer design", ["truth", "missing"])).toBe(false);
+  });
+
+  it("does not clean the text again", () => {
+    // Raw punctuation is left as-is, unlike matchesSearchTokens.
+    expect(matchesNormalizedTokens("Truth-Layer", ["truth"])).toBe(false);
+    expect(matchesSearchTokens("Truth-Layer", ["truth"])).toBe(true);
+  });
+
+  it("returns false for an empty token list", () => {
+    expect(matchesNormalizedTokens("anything", [])).toBe(false);
   });
 });
