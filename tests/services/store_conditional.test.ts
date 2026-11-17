@@ -11,10 +11,30 @@ import path from "node:path";
 import { config } from "../../src/config.js";
 import { computeContentHash } from "../../src/services/raw_storage.js";
 import { generateEmbedding } from "../../src/embeddings.js";
+import { workerBackendSimulation } from "../helpers/worker_backend_simulation.js";
 vi.mock("../../src/embeddings.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../src/embeddings.js")>()),
   generateEmbedding: vi.fn(async () => null),
 }));
+vi.mock("../../src/repositories/db/connection.js", async (importOriginal) => {
+  const { simulatedConnectionModule } = await import("../helpers/worker_backend_simulation.js");
+  return simulatedConnectionModule(
+    await importOriginal<typeof import("../../src/repositories/db/connection.js")>()
+  );
+});
+// The embedding tests below assume a vector backend exists, but this test
+// database's driver cannot load sqlite-vec. Keep that premise explicit; under
+// the worker simulation the real availability check runs unchanged.
+vi.mock("../../src/services/local_entity_embedding.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../src/services/local_entity_embedding.js")>();
+  const { workerBackendSimulation } = await import("../helpers/worker_backend_simulation.js");
+  return {
+    ...actual,
+    isLocalSemanticSearchAvailable: async () =>
+      workerBackendSimulation.active ? actual.isLocalSemanticSearchAvailable() : true,
+  };
+});
 const owner = "test-conditional-native-store";
 const schema = {
   id: "test-conditional-native-schema",
@@ -412,6 +432,18 @@ describe("native conditional store effects", () => {
     await storeConditionalStructured(request());
     expect(await counts()).toEqual(before);
     expect(vi.mocked(generateEmbedding).mock.calls.length).toBe(calls);
+  });
+  it("makes no embedding call after commit when the worker backend has no vector extension", async () => {
+    vi.mocked(generateEmbedding).mockClear();
+    workerBackendSimulation.active = true;
+    try {
+      const applied = await storeConditionalStructured(request());
+      expect(applied.operation_receipt.status).toBe("applied");
+      expect(generateEmbedding).not.toHaveBeenCalled();
+      expect(applied.postcommit_notifications).not.toMatchObject({ status: "uncertain" });
+    } finally {
+      workerBackendSimulation.active = false;
+    }
   });
   it("replays the immutable original after schema drift and a later winning correction", async () => {
     const original = await storeConditionalStructured(request());
