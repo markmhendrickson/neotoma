@@ -104,6 +104,9 @@ export function registerEntitySearchTextCases(
       });
       const rows = await expectNullOrFresh(userId);
       expect(rows.find((r) => r.entity_id === id)?.search_text).toBe(await freshText(id));
+      // Internal cache: never surfaced through query-builder reads.
+      const viaBuilder = await db.from("entity_snapshots").select("*").eq("entity_id", id).single();
+      expect(viaBuilder.data).not.toHaveProperty("search_text");
     });
 
     it("correct, merge and split keep every row NULL or fresh", async () => {

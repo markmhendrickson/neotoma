@@ -253,6 +253,10 @@ function sleep(ms: number): Promise<void> {
 
 export function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
+  // entity_snapshots.search_text is an internal search cache: keep it out of
+  // every query-builder read (API responses, exports, mirrors). Lexical search
+  // reads it with its own statement.
+  if (table === "entity_snapshots") delete result.search_text;
   const booleanColumns = BOOLEAN_COLUMNS[table];
   if (booleanColumns) {
     for (const column of booleanColumns) {
