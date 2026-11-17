@@ -23,6 +23,7 @@ import { admitFromAAuthContext } from "../services/aauth_admission.js";
 import { getAAuthContextFromRequest } from "./aauth_verify.js";
 import { getRequestContext, runWithRequestContext } from "../services/request_context.js";
 import type { AAuthAdmissionContext } from "../services/protected_entity_types.js";
+import { logger } from "../utils/logger.js";
 
 /** Skip admission lookups on cheap public discovery endpoints. */
 const PUBLIC_DISCOVERY_PREFIXES: ReadonlyArray<string> = ["/.well-known/", "/health", "/ready"];
@@ -97,12 +98,18 @@ export function aauthAdmission(): RequestHandler {
         );
       })
       .catch((err) => {
-        // Admission lookup is best-effort. On failure, mark the request
-        // as unmatched and keep flowing — route gates will still apply
-        // and reject when no other auth was supplied.
+        // Admission lookup is best-effort. On failure, refuse admission
+        // under `lookup_failed` and keep flowing — route gates still
+        // reject when no other auth was supplied, answering a retryable
+        // 503 rather than a missing-credential 401.
+        logger.warn("aauth_admission lookup failed", {
+          reason: "lookup_failed",
+          err: err instanceof Error ? err.message : String(err),
+          thumbprint_prefix: ctx.thumbprint?.slice(0, 12),
+        });
         const fallback: AAuthAdmissionContext = {
           admitted: false,
-          reason: "no_match",
+          reason: "lookup_failed",
         };
         stampAdmission(req, fallback);
         const outer = getRequestContext();

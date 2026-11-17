@@ -5,7 +5,7 @@
  *
  *   - null / unverified context → `not_signed`
  *   - admission disabled via env → `aauth_disabled`
- *   - lookup error → `no_match`
+ *   - lookup error → `lookup_failed` (distinct from a genuine no-match)
  *   - no grant matched → `no_match`
  *   - only a grant without a key pin matched the claims → `grant_key_unbound`
  *   - matched grant in `suspended` / `revoked` state → corresponding
@@ -89,11 +89,12 @@ describe("admitFromAAuthContext", () => {
     expect(findMock).not.toHaveBeenCalled();
   });
 
-  it("returns `no_match` when the grant lookup throws", async () => {
+  it("returns `lookup_failed` (not admitted) when the grant lookup throws", async () => {
     findMock.mockRejectedValueOnce(new Error("db unavailable"));
     const result = await admitFromAAuthContext(VERIFIED_CTX);
-    expect(result.admitted).toBe(false);
-    expect(result.reason).toBe("no_match");
+    expect(result).toEqual({ admitted: false, reason: "lookup_failed" });
+    expect(result.user_id).toBeUndefined();
+    expect(recordMock).not.toHaveBeenCalled();
   });
 
   it("returns `no_match` when no grant matches the identity", async () => {

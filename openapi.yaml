@@ -1544,6 +1544,7 @@ components:
                 - admitted
                 - no_grants_for_user
                 - no_match
+                - lookup_failed
                 - grant_key_unbound
                 - grant_revoked
                 - grant_suspended
@@ -4127,6 +4128,24 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "503":
+          description: |
+            The request carried a verified AAuth signature and no Bearer token, but the
+            server could not look up the agent's grant (a transient server error). Sent
+            with a `Retry-After` header; retry the request unchanged. A JSON-RPC POST gets
+            a JSON-RPC error `-32001` with `error.data.error_code` `ADMISSION_UNAVAILABLE`;
+            any other request gets the `ErrorEnvelope` with `error_code`
+            `ADMISSION_UNAVAILABLE`.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/McpJsonRpcResponse"
+                  - $ref: "#/components/schemas/ErrorEnvelope"
 
   /mcp/oauth/initiate:
     post:
@@ -5107,6 +5126,18 @@ paths:
           $ref: "#/components/responses/GuestTokenScope"
         "404":
           description: Entity not found or not a rendered_page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "503":
+          description: |
+            `ADMISSION_UNAVAILABLE`: the request carried a verified AAuth signature and no
+            Bearer token, but the server could not look up the agent's grant. Sent with a
+            `Retry-After` header; retry the request unchanged.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema: { type: integer }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }

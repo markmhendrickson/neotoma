@@ -211,6 +211,11 @@ const CEILING_REASON_MAP: Record<Exclude<AAuthAdmissionReason, "admitted">, "den
   // is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY governs.
   no_match: "none",
   no_grants_for_user: "none",
+  // The grant lookup itself failed (a transient server error). Until this
+  // reason existed the failure was reported as `no_match`; it keeps that
+  // classification so this change alters no capability decision. Route
+  // gates still refuse the unauthenticated request (as a retryable 503).
+  lookup_failed: "none",
   strict_rejected: "none",
   aauth_disabled: "none",
   not_signed: "none",
