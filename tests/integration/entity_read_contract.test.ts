@@ -5,6 +5,7 @@ import { mkdir, access } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { app } from "../../src/actions.js";
+import { config } from "../../src/config.js";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import * as attachmentResolution from "../../src/services/attachment_resolution.js";
@@ -26,6 +27,22 @@ vi.mock("openai", () => ({
     };
   },
 }));
+
+// The test database cannot load sqlite-vec, so semantic search would return
+// before the embedding call. Report a vector backend available by default so the
+// provider-failure path is exercised; the no-backend case opts back into the real check.
+const vectorBackend = vi.hoisted(() => ({ reportAvailable: true }));
+vi.mock("../../src/services/local_entity_embedding.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../src/services/local_entity_embedding.js")>();
+  return {
+    ...actual,
+    localSemanticSearchUnavailableReason: async () =>
+      vectorBackend.reportAvailable ? null : actual.localSemanticSearchUnavailableReason(),
+    isLocalSemanticSearchAvailable: async () =>
+      vectorBackend.reportAvailable ? true : actual.isLocalSemanticSearchAvailable(),
+  };
+});
 
 const entityType = "read_contract_probe_" + randomUUID().replaceAll("-", "");
 const ids = Array.from({ length: 3 }, (_, i) => "ent_" + entityType + "_" + i);
@@ -864,6 +881,25 @@ it("actual unavailable embedding fallback declares its reason and never certifie
   expect(result.read_contract.coverage.kind).toBe("lexical_candidates");
   expect(result.read_contract.coverage.scope_exhausted).toBeNull();
   expect(result.read_contract.applied_scope.ordering.field).toBe("search_rank");
+});
+it("missing vector backend skips the embedding call and declares its own fallback reason", async () => {
+  vectorBackend.reportAvailable = false;
+  try {
+    const result = await queryEntitiesWithCount({
+      userId,
+      entityType,
+      search: "Synthetic item",
+      limit: 100,
+    });
+    expect(result.entities).toHaveLength(3);
+    expect(result.search_mode).toBe("lexical_fallback");
+    expect(result.read_contract.mode.fallback_reason).toBe(
+      config.openaiApiKey ? "unknown" : "not_configured"
+    );
+    expect(result.read_contract.coverage.scope_exhausted).toBeNull();
+  } finally {
+    vectorBackend.reportAvailable = true;
+  }
 });
 it("non-keyset ordering never turns a short page into whole-scope absence", async () => {
   const result = await queryEntitiesWithCount({

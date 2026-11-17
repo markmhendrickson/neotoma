@@ -8,7 +8,10 @@ import {
   type EmbeddingAcquisitionTrace,
 } from "../embeddings.js";
 import { db } from "../db.js";
-import { storeLocalEntityEmbedding } from "./local_entity_embedding.js";
+import {
+  isLocalSemanticSearchAvailable,
+  storeLocalEntityEmbedding,
+} from "./local_entity_embedding.js";
 import { getDb } from "../repositories/db/connection.js";
 
 export interface EntitySnapshotRowForEmbedding {
@@ -53,8 +56,12 @@ export async function prepareEntitySnapshotWithEmbedding(
   canonicalName?: string | null,
   trace?: EmbeddingAcquisitionTrace
 ): Promise<EntitySnapshotRowWithEmbedding> {
-  // Generate embedding for both pgvector and local (sqlite-vec)
-  // Skip only when OPENAI_API_KEY is not configured
+  // Generate embedding for both pgvector and local (sqlite-vec). Skip when
+  // OPENAI_API_KEY is not configured, or when the local backend has no vector
+  // extension to store the result in.
+  if (config.storageBackend === "local" && !(await isLocalSemanticSearchAvailable())) {
+    return { ...snapshotRow, embedding: null };
+  }
   const name = canonicalName ?? (await fetchCanonicalName(snapshotRow.entity_id));
   const effectiveName = name ?? snapshotRow.entity_id;
 
@@ -103,6 +110,7 @@ export async function refreshEntitySnapshotEmbeddingAfterCommit(
   entityId: string,
   userId: string
 ): Promise<void> {
+  if (config.storageBackend === "local" && !(await isLocalSemanticSearchAvailable())) return;
   const before = await db
     .from("entity_snapshots")
     .select("*")
