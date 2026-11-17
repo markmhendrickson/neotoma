@@ -181,9 +181,17 @@ type LexicalMatch = {
 export { normalizeSearchText };
 
 export function matchesSearchTokens(searchableText: string, searchTokens: string[]): boolean {
+  return matchesNormalizedTokens(normalizeSearchText(searchableText), searchTokens);
+}
+
+/**
+ * Same as `matchesSearchTokens` for text that is already normalized (e.g. the
+ * haystack from `buildEntityLexicalSearchTextFromNormalized`), so the hot
+ * lexical-search loop does not clean each entity's text a second time.
+ */
+export function matchesNormalizedTokens(normalizedText: string, searchTokens: string[]): boolean {
   if (searchTokens.length === 0) return false;
-  const normalized = normalizeSearchText(searchableText);
-  return searchTokens.every((token) => normalized.includes(token));
+  return searchTokens.every((token) => normalizedText.includes(token));
 }
 
 /** True when a token matches entity_type exactly or as a conventional plural (plans → plan). */
@@ -382,8 +390,23 @@ export function buildEntityLexicalSearchText(
   snapshot: unknown,
   rawFragmentText?: string
 ): string {
-  const normalizedCanonical = normalizeSearchText(canonicalName);
-  const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshot));
+  return buildEntityLexicalSearchTextFromNormalized(
+    normalizeSearchText(canonicalName),
+    normalizeSearchText(stringifySnapshot(snapshot)),
+    rawFragmentText
+  );
+}
+
+/**
+ * Variant of `buildEntityLexicalSearchText` that takes canonical_name and
+ * snapshot text already normalized, so callers that also score against those
+ * parts stringify and clean each snapshot once.
+ */
+export function buildEntityLexicalSearchTextFromNormalized(
+  normalizedCanonical: string,
+  normalizedSnapshot: string,
+  rawFragmentText?: string
+): string {
   const normalizedFragments = normalizeSearchText(rawFragmentText ?? "");
   return `${normalizedCanonical} ${normalizedSnapshot} ${normalizedFragments}`.trim();
 }
@@ -569,9 +592,9 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     const snapshot = snapshotMap.get(entity.id);
     const normalizedCanonical = normalizeSearchText(entity.canonical_name);
     const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshot));
-    const searchableText = buildEntityLexicalSearchText(
-      entity.canonical_name,
-      snapshot,
+    const searchableText = buildEntityLexicalSearchTextFromNormalized(
+      normalizedCanonical,
+      normalizedSnapshot,
       fragmentTextByEntityId.get(entity.id)
     );
     const textTokens = textTokensForEntityMatch(searchTokens, entity.entity_type, typeFilterTokens);
@@ -584,7 +607,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
       searchableText,
       textTokens,
     });
-    if (matchesSearchTokens(searchableText, textTokens)) {
+    if (matchesNormalizedTokens(searchableText, textTokens)) {
       let score = 0;
       if (normalizedCanonical.includes(normalizedSearch)) {
         score += 300;
