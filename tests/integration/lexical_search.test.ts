@@ -15,6 +15,7 @@ describe("Lexical retrieval fallback", () => {
 
   async function cleanupEntities() {
     if (testEntityIds.length === 0) return;
+    await db.from("raw_fragments").delete().in("entity_id", testEntityIds);
     await db.from("entity_snapshots").delete().in("entity_id", testEntityIds);
     await db.from("entities").delete().in("id", testEntityIds);
     testEntityIds.length = 0;
@@ -457,6 +458,73 @@ describe("Lexical retrieval fallback", () => {
     expect(ids).toContain(canonicalFirstId);
     expect(ids).toContain(snapshotFirstId);
     expect(ids.indexOf(canonicalFirstId)).toBeLessThan(ids.indexOf(snapshotFirstId));
+  });
+
+  it("object-valued raw_fragment is searchable", async () => {
+    const entityId = `ent_lex_obj_fragment_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "research_report",
+      canonicalName: "doc_obj_fragment",
+      snapshot: { title: "Untitled" },
+    });
+    await serviceRoleClient.from("raw_fragments").insert({
+      id: `frag_lex_obj_${Date.now()}`,
+      entity_id: entityId,
+      user_id: testUserId,
+      entity_type: "research_report",
+      fragment_key: "details",
+      fragment_value: { venue: "Quartzhollow Annex", floor: 3 },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "quartzhollow annex",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+  });
+
+  it("yields to the event loop at least 3 times while scanning 2,000 candidates", async () => {
+    const runId = Date.now();
+    const bulkEntities = Array.from({ length: 2000 }, (_, index) => ({
+      id: `ent_lex_yield_${runId}_${String(index).padStart(4, "0")}`,
+      user_id: testUserId,
+      entity_type: "research_report",
+      canonical_name: `yield_doc_${String(index).padStart(4, "0")}`,
+    }));
+    await serviceRoleClient.from("entities").insert(bulkEntities);
+    for (const entity of bulkEntities) {
+      testEntityIds.push(entity.id);
+    }
+
+    // Count event-loop turns that run while the search is in flight. A scan
+    // that never yields lets at most one turn through; one that yields every
+    // 500 candidates lets a turn through at each yield.
+    let turns = 0;
+    let searching = true;
+    const tick = () => {
+      if (!searching) return;
+      turns += 1;
+      setImmediate(tick);
+    };
+    const searchPromise = queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "yield doc 1999",
+      limit: 25,
+      offset: 0,
+    });
+    setImmediate(tick);
+    const result = await searchPromise.finally(() => {
+      searching = false;
+    });
+
+    expect(turns).toBeGreaterThanOrEqual(3);
+    expect(result.entities[0]?.entity_id).toBe(bulkEntities[1999].id);
   });
 });
 

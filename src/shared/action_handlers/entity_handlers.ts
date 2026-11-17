@@ -411,6 +411,34 @@ export function buildEntityLexicalSearchTextFromNormalized(
   return `${normalizedCanonical} ${normalizedSnapshot} ${normalizedFragments}`.trim();
 }
 
+/**
+ * Text form of a raw_fragments value for the lexical haystack. The db adapter
+ * parses JSON columns, so object and array values arrive as objects; serialise
+ * them so their content is searchable rather than "[object Object]".
+ */
+function rawFragmentValueText(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "object") {
+    return stringifySnapshot(value);
+  }
+  return String(value);
+}
+
+/**
+ * Candidates scored between event-loop yields during lexical search, so one
+ * large scan cannot hold the main event loop for seconds.
+ */
+export const LEXICAL_SEARCH_YIELD_INTERVAL = 500;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 async function loadRawFragmentTextByEntityId(entityIds: string[]): Promise<Map<string, string>> {
   const fragmentTextByEntityId = new Map<string, string>();
   if (entityIds.length === 0) {
@@ -432,12 +460,12 @@ async function loadRawFragmentTextByEntityId(entityIds: string[]): Promise<Map<s
     for (const row of (data ?? []) as Array<{
       entity_id: string | null;
       fragment_key: string;
-      fragment_value: string | null;
+      fragment_value: unknown;
     }>) {
       if (!row.entity_id) {
         continue;
       }
-      const piece = `${row.fragment_key} ${row.fragment_value ?? ""}`.trim();
+      const piece = `${row.fragment_key} ${rawFragmentValueText(row.fragment_value)}`.trim();
       if (!piece) {
         continue;
       }
@@ -581,11 +609,16 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 
   const candidates: Candidate[] = [];
   const lexicalMatches: LexicalMatch[] = [];
+  let scanned = 0;
   for (const entity of entities as Array<{
     id: string;
     canonical_name: string;
     entity_type: string;
   }>) {
+    scanned += 1;
+    if (scanned % LEXICAL_SEARCH_YIELD_INTERVAL === 0) {
+      await yieldToEventLoop();
+    }
     if (excludeBookkeeping && BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type)) {
       continue;
     }
@@ -653,7 +686,12 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
         2,
         Math.ceil(meaningfulTokens.length * PARTIAL_MATCH_MIN_OVERLAP_RATIO)
       );
+      let partialScanned = 0;
       for (const candidate of candidates) {
+        partialScanned += 1;
+        if (partialScanned % LEXICAL_SEARCH_YIELD_INTERVAL === 0) {
+          await yieldToEventLoop();
+        }
         const conceptMatch = conceptTypeHints.has(candidate.entity_type);
         let overlap = 0;
         for (const token of meaningfulTokens) {
