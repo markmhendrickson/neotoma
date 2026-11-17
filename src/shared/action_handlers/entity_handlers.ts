@@ -507,7 +507,7 @@ async function loadLexicalCandidateRows(
   return rows;
 }
 
-async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Promise<{
+export async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Promise<{
   entityIds: string[];
   total: number;
   strategies: Set<SearchStrategy>;
