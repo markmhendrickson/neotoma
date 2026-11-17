@@ -3549,6 +3549,7 @@ export interface components {
           | "admitted"
           | "no_grants_for_user"
           | "no_match"
+          | "lookup_failed"
           | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
@@ -5524,6 +5525,26 @@ export interface operations {
           "application/json": components["schemas"]["McpJsonRpcResponse"];
         };
       };
+      /**
+       * @description The request carried a verified AAuth signature and no Bearer token, but the
+       *     server could not look up the agent's grant (a transient server error). Sent
+       *     with a `Retry-After` header; retry the request unchanged. A JSON-RPC POST gets
+       *     a JSON-RPC error `-32001` with `error.data.error_code` `ADMISSION_UNAVAILABLE`;
+       *     any other request gets the `ErrorEnvelope` with `error_code`
+       *     `ADMISSION_UNAVAILABLE`.
+       */
+      503: {
+        headers: {
+          /** @description Seconds to wait before retrying. */
+          "Retry-After"?: number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["McpJsonRpcResponse"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   mcpOAuthInitiate: {
@@ -6485,6 +6506,21 @@ export interface operations {
       /** @description Entity not found or not a rendered_page */
       404: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `ADMISSION_UNAVAILABLE`: the request carried a verified AAuth signature and no
+       *     Bearer token, but the server could not look up the agent's grant. Sent with a
+       *     `Retry-After` header; retry the request unchanged.
+       */
+      503: {
+        headers: {
+          /** @description Seconds to wait before retrying. */
+          "Retry-After"?: number;
           [name: string]: unknown;
         };
         content: {

@@ -1,6 +1,6 @@
 /**
- * Regression guard: an ownerless (null userId) interpretation is refused
- * before anything is written.
+ * Regression guard: an ownerless interpretation (null, undefined, empty or
+ * whitespace-only userId) is refused before anything is written.
  *
  * The refusal surfaces as "Failed to create observation: Entity lifecycle
  * authority acquisition is incomplete or inconsistent". That message used to
@@ -14,7 +14,6 @@ import { randomUUID } from "node:crypto";
 import { db } from "../../src/db.js";
 import { runInterpretation } from "../../src/services/interpretation.js";
 import type { InterpretationConfig } from "../../src/services/interpretation.js";
-import { cleanupTestEntityType } from "../helpers/test_schema_helpers.js";
 
 const ENTITY_TYPE = "ownerless_refusal_regression_test";
 
@@ -90,6 +89,10 @@ describe("ownerless interpretation refusal leaves no rows", () => {
     sourceId = await insertOwnerlessSource();
   });
 
+  // A refused run writes nothing, so the row deletes below only matter if the
+  // refusal regresses: they keep leftovers from one case out of the next
+  // case's entity-type counts. The source and schema rows are this test's own
+  // seed data and are always removed.
   afterEach(async () => {
     await db.from("raw_fragments").delete().eq("source_id", sourceId);
     await db.from("interpretations").delete().eq("source_id", sourceId);
@@ -97,41 +100,47 @@ describe("ownerless interpretation refusal leaves no rows", () => {
     await db.from("entity_snapshots").delete().eq("entity_type", ENTITY_TYPE);
     await db.from("entities").delete().eq("entity_type", ENTITY_TYPE);
     await db.from("sources").delete().eq("id", sourceId);
-    await cleanupTestEntityType(ENTITY_TYPE, "00000000-0000-0000-0000-000000000000");
+    await db.from("schema_registry").delete().eq("entity_type", ENTITY_TYPE);
   });
 
-  it("refuses a null userId and writes no interpretation, entity, observation, fragment or snapshot", async () => {
-    await expect(
-      runInterpretation({
-        userId: null as unknown as string,
-        sourceId,
-        // `undeclared_extra` would become a raw_fragment if the call got that far.
-        extractedData: [
-          { entity_type: ENTITY_TYPE, title: "Ownerless", undeclared_extra: "x" },
-        ],
-        config: CONFIG,
-      })
-    ).rejects.toThrow(
-      "Failed to create observation: Entity lifecycle authority acquisition is incomplete or inconsistent"
-    );
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["empty", ""],
+    ["whitespace-only", "   "],
+  ])(
+    "refuses a %s userId and writes no interpretation, entity, observation, fragment or snapshot",
+    async (_label, userId) => {
+      await expect(
+        runInterpretation({
+          userId: userId as unknown as string,
+          sourceId,
+          // `undeclared_extra` would become a raw_fragment if the call got that far.
+          extractedData: [{ entity_type: ENTITY_TYPE, title: "Ownerless", undeclared_extra: "x" }],
+          config: CONFIG,
+        })
+      ).rejects.toThrow(
+        "Failed to create observation: Entity lifecycle authority acquisition is incomplete or inconsistent"
+      );
 
-    const remaining = {
-      interpretations: await countBySource("interpretations", sourceId),
-      observations: await countBySource("observations", sourceId),
-      raw_fragments: await countBySource("raw_fragments", sourceId),
-      timeline_events: await countBySource("timeline_events", sourceId),
-      relationship_observations: await countBySource("relationship_observations", sourceId),
-      entities: await countEntities(),
-      entity_snapshots: await countByEntityType("entity_snapshots"),
-    };
-    expect(remaining).toEqual({
-      interpretations: 0,
-      observations: 0,
-      raw_fragments: 0,
-      timeline_events: 0,
-      relationship_observations: 0,
-      entities: 0,
-      entity_snapshots: 0,
-    });
-  });
+      const remaining = {
+        interpretations: await countBySource("interpretations", sourceId),
+        observations: await countBySource("observations", sourceId),
+        raw_fragments: await countBySource("raw_fragments", sourceId),
+        timeline_events: await countBySource("timeline_events", sourceId),
+        relationship_observations: await countBySource("relationship_observations", sourceId),
+        entities: await countEntities(),
+        entity_snapshots: await countByEntityType("entity_snapshots"),
+      };
+      expect(remaining).toEqual({
+        interpretations: 0,
+        observations: 0,
+        raw_fragments: 0,
+        timeline_events: 0,
+        relationship_observations: 0,
+        entities: 0,
+        entity_snapshots: 0,
+      });
+    }
+  );
 });

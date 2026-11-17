@@ -8,19 +8,26 @@
  *   - the in-memory cache invalidation primitives so admission picks
  *     up revocation across processes within at most one TTL cycle.
  *
- * DB-backed flows (create, list, setStatus, recordMatch) are exercised
- * end-to-end in `tests/integration/agent_grants_routes.test.ts` and
+ * `recordMatch` runs against the local store at the end of this file. Other
+ * DB-backed flows (create, list, setStatus) are exercised end-to-end in
+ * `tests/integration/agent_grants_routes.test.ts` and
  * `tests/integration/aauth_admission.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runWithRequestContext } from "../../src/services/request_context.js";
+import { logger } from "../../src/utils/logger.js";
 import {
   AgentGrantStatusTransitionError,
   AgentGrantValidationError,
   assertAgentGrantFieldValid,
   clearGrantCacheForTests,
   clearMatchDebounceForTests,
+  createGrant,
+  getGrant,
   invalidateGrantCache,
+  recordMatch,
   validateCapabilities,
   type AgentGrant,
 } from "../../src/services/agent_grants.js";
@@ -366,5 +373,79 @@ describe("assertAgentGrantFieldValid — pre-persist guard", () => {
     expect(() => assertAgentGrantFieldValid("agent_grant", "label", "   ")).toThrow(
       AgentGrantValidationError
     );
+  });
+});
+
+/**
+ * recordMatch runs on the real local store. The admission service calls it
+ * from inside the admitted agent's request context, so these tests do the
+ * same: an AAuth identity plus an admitted grant whose capabilities do not
+ * cover `agent_grant`.
+ */
+describe("recordMatch — server-attributed last_used_at write", () => {
+  function runAsAdmittedAgent<T>(grant: AgentGrant, fn: () => Promise<T>): Promise<T> {
+    return runWithRequestContext(
+      {
+        agentIdentity: {
+          sub: "agent:synthetic-recorder",
+          iss: "https://agent.example.test",
+          thumbprint: "synthetic-thumbprint",
+          tier: "software",
+        },
+        attributionDecision: null,
+        aauthAdmission: {
+          admitted: true,
+          reason: "admitted",
+          user_id: grant.user_id,
+          grant_id: grant.grant_id,
+          agent_label: grant.label,
+          capabilities: [{ op: "retrieve", entity_types: ["task"] }],
+        },
+      },
+      fn
+    ) as Promise<T>;
+  }
+
+  it("recordMatch inside an admitted agent context without agent_grant capabilities updates last_used_at", async () => {
+    const userId = randomUUID();
+    const grant = await createGrant(userId, {
+      label: "Synthetic recorder",
+      match_sub: `agent:synthetic-${randomUUID()}`,
+      match_iss: "https://agent.example.test",
+      capabilities: [{ op: "retrieve", entity_types: ["task"] }],
+    });
+    expect(grant.last_used_at ?? null).toBeNull();
+
+    await runAsAdmittedAgent(grant, () => recordMatch(grant));
+
+    const refreshed = await getGrant(userId, grant.grant_id);
+    expect(refreshed?.last_used_at).toEqual(expect.any(String));
+    expect(Number.isNaN(Date.parse(refreshed!.last_used_at!))).toBe(false);
+  });
+
+  it("a failed recordMatch does not retry within the same day", async () => {
+    // An instance that rejects anonymous writes refuses the server-attributed
+    // correction, so every attempt fails. Grant id is fresh, so no replay.
+    vi.stubEnv("NEOTOMA_ATTRIBUTION_POLICY", "reject");
+    const missing: AgentGrant = {
+      grant_id: `ent_${randomUUID().replace(/-/g, "").slice(0, 24)}`,
+      user_id: randomUUID(),
+      label: "Missing grant",
+      capabilities: [],
+      status: "active",
+    } as unknown as AgentGrant;
+    const warn = vi.spyOn(logger, "warn");
+    try {
+      await runAsAdmittedAgent(missing, () => recordMatch(missing));
+      await runAsAdmittedAgent(missing, () => recordMatch(missing));
+      await runAsAdmittedAgent(missing, () => recordMatch(missing));
+      const failures = warn.mock.calls.filter(
+        (call) => typeof call[0] === "string" && call[0].includes("recordMatch failed")
+      );
+      expect(failures).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });
