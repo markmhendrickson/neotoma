@@ -194,6 +194,7 @@ describe("POST /mcp when the agent-grant lookup fails", () => {
       error?: { code?: number; data?: { error_code?: string } };
       id?: unknown;
     };
+    expect(body.error?.code).toBe(-32001);
     expect(body.error?.data?.error_code).toBe("ADMISSION_UNAVAILABLE");
     expect(body.id).toBe(1);
   });

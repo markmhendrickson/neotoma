@@ -2306,7 +2306,7 @@ app.all("/mcp", async (req, res) => {
           return res.status(503).json({
             jsonrpc: "2.0",
             error: {
-              code: -32002,
+              code: -32001,
               message: ADMISSION_UNAVAILABLE_MESSAGE,
               data: { error_code: "ADMISSION_UNAVAILABLE" },
             },
