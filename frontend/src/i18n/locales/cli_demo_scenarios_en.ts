@@ -36,10 +36,10 @@ export const CLI_DEMO_CLI_SCENARIOS_EN: HomeCliDemoTerminalScenario[] = [
     label: "Replay & debug",
     steps: [
       {
-        comment: "Pipeline run #47 gave wrong output \u2014 what did the agent believe?",
+        comment: "Pipeline run #47 gave wrong output \u2014 what had been recorded by the time it ran?",
         command: "neotoma replay --entity acme-corp --at 2025-03-15T14:30:00",
         output: [
-          "State at 2025-03-15 14:30:00:",
+          "State as recorded by 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
           "  primary_contact: james@acme.com",
@@ -102,11 +102,11 @@ export const CLI_DEMO_AGENTIC_SCENARIOS_EN: HomeCliDemoTerminalScenario[] = [
     label: "Replay & debug",
     steps: [
       {
-        comment: "Pipeline gave wrong output \u2014 agent inspects state at that time",
+        comment: "Pipeline gave wrong output \u2014 agent inspects what had been recorded by that time",
         command:
           'retrieve_entity_snapshot({ identifier: "acme-corp", at: "2025-03-15T14:30:00" })',
         output: [
-          "State at 2025-03-15 14:30:00:",
+          "State as recorded by 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
           "  primary_contact: james@acme.com",
@@ -172,11 +172,11 @@ export const CLI_DEMO_API_SCENARIOS_EN: HomeCliDemoTerminalScenario[] = [
     label: "Replay & debug",
     steps: [
       {
-        comment: "Retrieve entity state at a specific point in time",
+        comment: "Retrieve entity state as recorded by a point in time (write time)",
         command:
           'curl -s "localhost:3080/entities/acme-corp/snapshot?at=2025-03-15T14:30:00"',
         output: [
-          "State at 2025-03-15 14:30:00:",
+          "State as recorded by 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
           "  primary_contact: james@acme.com",
@@ -256,14 +256,14 @@ export const CLI_DEMO_CHAT_SCENARIOS_EN: HomeCliDemoChatScenario[] = [
       {
         role: "user",
         content:
-          "Pipeline run #47 gave wrong results for Acme Corp. What did the agent see at that point?",
+          "Pipeline run #47 gave wrong results for Acme Corp. What had been recorded about Acme Corp by the time it ran?",
       },
       {
         role: "tool",
         content: "",
         toolName: "retrieve_entity_snapshot",
         toolLines: [
-          "State at 2025-03-15 14:30:00:",
+          "State as recorded by 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
         ],
@@ -271,7 +271,7 @@ export const CLI_DEMO_CHAT_SCENARIOS_EN: HomeCliDemoChatScenario[] = [
       {
         role: "assistant",
         content:
-          "At the time of run #47, Acme Corp was still an active client with $48K revenue.",
+          "As recorded by the time of run #47, Acme Corp was still an active client with $48K revenue.",
       },
       { role: "divider", content: "ChatGPT" },
       {

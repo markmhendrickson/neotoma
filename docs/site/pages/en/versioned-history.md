@@ -9,7 +9,7 @@ nav_order: 51
 ---
 
 Every change creates a new version instead of overwriting prior state. Earlier snapshots remain
-queryable, so you can answer what the system believed at any point.
+queryable, so you can answer what the system had recorded by any point.
 
 ## Before vs after
 

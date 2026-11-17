@@ -53,7 +53,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: RefreshCw,
       title: "Silent priority changes",
-      desc: "Priority and SLA tier update in place. When a VIP flag was added at 2pm but the response missed the 1-hour window, there is no record of when the priority actually changed.",
+      desc: "Priority and SLA tier update in place. When a VIP flag was added at 2pm but the response missed the 1-hour window, there is no record of when the change was written.",
     },
     {
       Icon: GitCompare,
@@ -130,7 +130,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project support state through time",
       desc: "Link routing decisions to queue state and customer signals. Trace escalations back to failed resolution attempts. Reconstruct SLA timelines against actual priority change timestamps.",
-      detail: "Temporal queries return the state valid at the as-of timestamp, not the latest ticket update.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the latest ticket update.",
     },
     {
       Icon: Headphones,
@@ -165,13 +165,13 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: MessageSquare,
       title: "Interaction-level answer tracing",
-      desc: "Bind each agent response to the ticket state and policy version at the time of the interaction. Trace contradictory answers to the specific inputs each agent evaluated.",
+      desc: "Bind each agent response to the ticket state and policy version as recorded by the time of the interaction. Trace contradictory answers to the specific inputs each agent evaluated.",
       tags: ["interaction", "policy", "consistency"],
     },
     {
       Icon: History,
-      title: "Point-in-time ticket state",
-      desc: "Answer what the ticket showed at any moment: priority, assignment, open interactions, and customer sentiment. Essential for CSAT root cause analysis.",
+      title: "Ticket state as recorded",
+      desc: "Answer what the ticket showed as recorded up to any moment: priority, assignment, open interactions, and customer sentiment. Essential for CSAT root cause analysis.",
       tags: ["ticket", "temporal", "reporting"],
     },
     {
@@ -212,7 +212,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest ticket state per entity, or reconstruct historical state for any timestamp relevant to an SLA review, CSAT investigation, or escalation debrief.",
+      desc: "Project the latest ticket state per entity, or reconstruct state as recorded up to any timestamp relevant to an SLA review, CSAT investigation, or escalation debrief.",
     },
     {
       label: "Serve agents & ops leads",
@@ -222,7 +222,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How customer operations teams use Neotoma as their integrity layer",
     desc:
-      "AI-native customer operations platforms automate triage, routing, and multi-channel resolution for SaaS and e-commerce support teams. Neotoma versions every routing decision, priority change, and interaction so you can reconstruct support state at any SLA audit or CSAT investigation point.",
+      "AI-native customer operations platforms automate triage, routing, and multi-channel resolution for SaaS and e-commerce support teams. Neotoma versions every routing decision, priority change, and interaction so you can reconstruct support state as recorded up to any SLA audit or CSAT investigation point.",
     featuresHeading: "What customer operations teams build",
     features: [
       "Triage agents that classify and route tickets across billing, technical, and account queues with real-time queue balancing",
@@ -231,7 +231,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every routing decision, priority change, and agent interaction",
-      "Temporal snapshots so SLA audits and CSAT investigations reference the ticket state at the time in question",
+      "Temporal snapshots so SLA audits and CSAT investigations reference the ticket state as recorded by the time in question",
       "Relationship integrity between customers, tickets, interactions, and escalation chains",
       "Audit-oriented exports that trace the full resolution path from first contact through every handoff to closure",
     ],

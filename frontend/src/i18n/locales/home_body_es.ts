@@ -372,7 +372,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
         { label: "Grafo de memoria", sub: "entidades \u00b7 relaciones \u00b7 l\u00ednea temporal" },
       ],
       operations: ["registrar", "reducir", "relacionar"] as const,
-      replayHint: "\u21bb reproducir \u00b7 inspecciona cualquier estado pasado",
+      replayHint: "\u21bb reproducir \u00b7 inspecciona cualquier estado registrado",
     },
   },
   cliDemo: {

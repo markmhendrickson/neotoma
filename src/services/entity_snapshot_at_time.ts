@@ -8,9 +8,11 @@
  *
  * Semantics
  * ---------
- * - `at`          — upper bound on `observed_at`. A write-time cutoff: "the state as
- *                   recorded by T, by observed time", not event (valid) time.
- * - `at_ingested` — upper bound on `created_at` (ingestion time). "What did we KNOW by T?"
+ * - `at`          — upper bound on `observed_at` (assertion time for public writes):
+ *                   the state as recorded by T, not valid time.
+ * - `at_ingested` — upper bound on `created_at` (row-insertion time).
+ * - Public store/correct stamp these clocks during the write; they need not match.
+ *   Domain date fields are ordinary data, not a valid-time axis.
  * - When both are supplied, both bounds are applied (AND), giving the most
  *   conservative "knowledge-as-of" view and preventing look-ahead leaks from
  *   backfilled / late-arriving observations.
@@ -113,7 +115,7 @@ export function isObservationVisibleAsOf(
  *
  * @param entityId   - The entity to retrieve.
  * @param userId     - Scope reads to this user (required; prevents cross-user reads).
- * @param at         - Optional upper bound on observed_at (ISO 8601), a write-time cutoff.
+ * @param at         - Optional `observed_at` upper bound (ISO 8601); assertion time, not valid time.
  * @param atIngested - Optional ingestion-time upper bound (ISO 8601).
  *
  * @returns

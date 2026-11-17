@@ -1248,7 +1248,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/versioned-history": {
     title: "Versioned History | Neotoma",
     description:
-      "Every entity change creates a new version. Earlier states are preserved and accessible at any point in time.",
+      "Every entity change creates a new version. Earlier states are preserved and accessible as recorded up to any point in time.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1260,7 +1260,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/replayable-timeline": {
     title: "Replayable Timeline | Neotoma",
     description:
-      "Replay the full sequence of observations and state changes to reconstruct any historical entity state.",
+      "Replay the full sequence of observations and state changes to reconstruct entity state as recorded up to any timestamp.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1509,7 +1509,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/diligence": {
     title: "Neotoma for Due Diligence | State Integrity for M&A and Investment Diligence",
     description:
-      "Know exactly what was known when the decision was made. Neotoma provides versioned findings, conflict detection between diligence agents, and temporal state queries for investment committees and regulators.",
+      "Know exactly what had been recorded by the time the decision was made. Neotoma provides versioned findings, conflict detection between diligence agents, and temporal state queries for investment committees and regulators.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1531,7 +1531,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/cases": {
     title: "Neotoma for Case Management | State Integrity for Legal and Investigation Cases",
     description:
-      "Reconstruct what was known at any point in a case timeline. Neotoma provides versioned evidence, temporal state queries for litigation, and auditable provenance for every filing and assessment.",
+      "Reconstruct what had been recorded by any point in a case timeline. Neotoma provides versioned evidence, temporal state queries for litigation, and auditable provenance for every filing and assessment.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1542,7 +1542,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/financial-ops": {
     title: "Neotoma for Financial Ops | State Integrity for Reconciliation and Audit",
     description:
-      "Deterministic state for every ledger entry, reconciliation, and month-end close. Neotoma provides point-in-time snapshots for SOX compliance, audit verification, and transaction provenance.",
+      "Deterministic state for every ledger entry, reconciliation, and month-end close. Neotoma provides snapshots as recorded by a date for SOX compliance, audit verification, and transaction provenance.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1564,7 +1564,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/healthcare": {
     title: "Neotoma for Healthcare | Versioned Clinical State and Decision Provenance",
     description:
-      "Reconstruct what was known about a patient at any point in their care timeline. Neotoma provides versioned clinical decisions, authorization lifecycles, and care plan lineage for healthcare operations.",
+      "Reconstruct what had been recorded about a patient by any point in their care timeline. Neotoma provides versioned clinical decisions, authorization lifecycles, and care plan lineage for healthcare operations.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1575,7 +1575,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/government": {
     title: "Neotoma for Public Sector | Versioned Policy State and Determination Provenance",
     description:
-      "Reconstruct which policy version and evidence governed a government decision on any date. Neotoma provides versioned eligibility determinations, inter-agency data provenance, and rule-bound decision state.",
+      "Reconstruct which policy version and evidence had been recorded for a government decision by any date. Neotoma provides versioned eligibility determinations, inter-agency data provenance, and rule-bound decision state.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1597,7 +1597,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/logistics": {
     title: "Neotoma for Logistics | Versioned Routing State and Constraint Provenance",
     description:
-      "Reconstruct what the system knew when a routing or fulfillment decision was made. Neotoma provides versioned routing decisions, inventory position timelines, and carrier constraint snapshots for supply chain operations.",
+      "Reconstruct what the system had recorded by the time a routing or fulfillment decision was made. Neotoma provides versioned routing decisions, inventory position timelines, and carrier constraint snapshots for supply chain operations.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1619,7 +1619,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/agent-auth": {
     title: "Neotoma for Agent Authorization | Versioned Policy State and Delegation Provenance",
     description:
-      "Reconstruct who authorized what, when, and under which policy state. Neotoma provides versioned authorization decisions, consent timelines, and delegation chain provenance for production agent systems.",
+      "Reconstruct who authorized what, as recorded up to any timestamp, and under which policy state. Neotoma provides versioned authorization decisions, consent timelines, and delegation chain provenance for production agent systems.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1630,7 +1630,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/trading": {
     title: "Neotoma for Autonomous Trading | Reconstructable Decision State for Trading Agents",
     description:
-      "Version control for every analyst assessment, debate resolution, and trade decision. Neotoma provides strategy version history, risk state time travel, and analyst attribution for multi-agent trading systems.",
+      "Version control for every analyst assessment, debate resolution, and trade decision. Neotoma provides strategy version history, risk state history, and analyst attribution for multi-agent trading systems.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1805,12 +1805,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "When do I need a state integrity layer instead of observability?",
         answer:
-          "When multiple writers update the same entities, you need the composed state at a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context.",
+          "When multiple writers update the same entities, you need the composed state as recorded by a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context.",
       },
       {
         question: "What is the difference between observability and state integrity?",
         answer:
-          "Observability shows what happened: events, logs, traces. State integrity proves what was true: the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance.",
+          "Observability shows what happened: events, logs, traces. State integrity proves what was recorded: the deterministic composed entity state as recorded up to any moment, with multi-writer conflict resolution and version-bound provenance.",
       },
       {
         question: "Is observability enough for my agent system?",
@@ -2066,7 +2066,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "Why can't I just use markdown files for agent memory?",
         answer:
-          "Markdown files conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state at a past moment without building significant application logic on top.",
+          "Markdown files conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state as recorded at a past moment without building significant application logic on top.",
       },
       {
         question: "Can git replace versioned history?",
@@ -2141,7 +2141,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/types/contracts": {
     title: "Contracts Guide | Store & Retrieve Agreements, Clauses, Amendments | Neotoma",
     description:
-      "How to store and retrieve contracts in Neotoma. CLI, MCP, and API examples for agreements, clauses, amendments - reconstructable terms on any date.",
+      "How to store and retrieve contracts in Neotoma. CLI, MCP, and API examples for agreements, clauses, amendments - terms reconstructable as recorded up to any date.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -2224,7 +2224,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/primitives/interpretations": {
     title: "Interpretations | Primitive Record Type | Neotoma",
     description:
-      "Interpretations are versioned, audited extraction attempts that turn a source into structured observations. interpretation_config records the model, prompt, and schema version active at run start.",
+      "Interpretations are versioned, audited extraction attempts that turn a source into structured observations. interpretation_config records the model, prompt, and schema version used for the run.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

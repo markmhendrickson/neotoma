@@ -35,7 +35,7 @@ export const ARCHITECTURE_PAGE_EN: ArchitecturePageStrings = {
   invariantP1:
     "Memory evolves deterministically. Given the same observations, Neotoma produces the same entity snapshots. Every state change is versioned with full provenance. Nothing mutates silently; nothing overwrites implicitly.",
   invariantP2:
-    "This means you can inspect any entity at any point in time, diff two versions, and replay the full sequence of changes that produced the current state.",
+    "This means you can inspect any entity as recorded up to any point in time, diff two versions, and replay the full sequence of changes that produced the current state.",
 };
 
 export const ARCHITECTURE_PAGE_ES: Partial<ArchitecturePageStrings> = {
@@ -59,5 +59,5 @@ export const ARCHITECTURE_PAGE_ES: Partial<ArchitecturePageStrings> = {
   invariantP1:
     "La memoria evoluciona de forma determinista. Con las mismas observaciones, Neotoma produce los mismos snapshots de entidad. Cada cambio de estado queda versionado con procedencia completa. Nada muta en silencio; nada sobrescribe de forma impl\u00edcita.",
   invariantP2:
-    "Esto significa que puedes inspeccionar cualquier entidad en cualquier momento, comparar dos versiones y reproducir la secuencia completa de cambios que produjo el estado actual.",
+    "Esto significa que puedes inspeccionar cualquier entidad tal como estaba registrada en cualquier momento, comparar dos versiones y reproducir la secuencia completa de cambios que produjo el estado actual.",
 };
