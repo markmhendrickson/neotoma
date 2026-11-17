@@ -32,6 +32,14 @@ import {
 // for back-compat) so the schema registry can use the same function without an
 // import cycle. See src/shared/search_normalization.ts.
 import { normalizeSearchText } from "../search_normalization.js";
+// Haystack builders live in a shared module so the snapshot writers that fill
+// entity_snapshots.search_text build exactly the text search builds.
+import {
+  buildEntityLexicalSearchText,
+  buildEntityLexicalSearchTextFromNormalized,
+  loadRawFragmentTextByEntityId,
+  stringifySnapshot,
+} from "../entity_search_text.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -179,6 +187,7 @@ type LexicalMatch = {
 // Re-export the shared normalizer (imported above) so existing references to
 // `normalizeSearchText` from this module keep resolving (#1572).
 export { normalizeSearchText };
+export { buildEntityLexicalSearchText, buildEntityLexicalSearchTextFromNormalized };
 
 export function matchesSearchTokens(searchableText: string, searchTokens: string[]): boolean {
   return matchesNormalizedTokens(normalizeSearchText(searchableText), searchTokens);
@@ -370,64 +379,8 @@ function compareSearchRank(
   return ai - bi;
 }
 
-function stringifySnapshot(snapshot: unknown): string {
-  if (typeof snapshot === "string") {
-    return snapshot;
-  }
-  if (snapshot == null) {
-    return "";
-  }
-  try {
-    return JSON.stringify(snapshot);
-  } catch {
-    return "";
-  }
-}
 
-/** Canonical lexical haystack: canonical_name + snapshot + optional raw_fragments text. */
-export function buildEntityLexicalSearchText(
-  canonicalName: string,
-  snapshot: unknown,
-  rawFragmentText?: string
-): string {
-  return buildEntityLexicalSearchTextFromNormalized(
-    normalizeSearchText(canonicalName),
-    normalizeSearchText(stringifySnapshot(snapshot)),
-    rawFragmentText
-  );
-}
 
-/**
- * Variant of `buildEntityLexicalSearchText` that takes canonical_name and
- * snapshot text already normalized, so callers that also score against those
- * parts stringify and clean each snapshot once.
- */
-export function buildEntityLexicalSearchTextFromNormalized(
-  normalizedCanonical: string,
-  normalizedSnapshot: string,
-  rawFragmentText?: string
-): string {
-  const normalizedFragments = normalizeSearchText(rawFragmentText ?? "");
-  return `${normalizedCanonical} ${normalizedSnapshot} ${normalizedFragments}`.trim();
-}
-
-/**
- * Text form of a raw_fragments value for the lexical haystack. The db adapter
- * parses JSON columns, so object and array values arrive as objects; serialise
- * them so their content is searchable rather than "[object Object]".
- */
-function rawFragmentValueText(value: unknown): string {
-  if (value == null) {
-    return "";
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "object") {
-    return stringifySnapshot(value);
-  }
-  return String(value);
-}
 
 /**
  * Candidates scored between event-loop yields during lexical search, so one
@@ -439,43 +392,6 @@ function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-async function loadRawFragmentTextByEntityId(entityIds: string[]): Promise<Map<string, string>> {
-  const fragmentTextByEntityId = new Map<string, string>();
-  if (entityIds.length === 0) {
-    return fragmentTextByEntityId;
-  }
-
-  const chunkSize = 500;
-  for (let i = 0; i < entityIds.length; i += chunkSize) {
-    const chunk = entityIds.slice(i, i + chunkSize);
-    const { data, error } = await db
-      .from("raw_fragments")
-      .select("entity_id, fragment_key, fragment_value")
-      .in("entity_id", chunk);
-
-    if (error) {
-      throw new Error(`Failed lexical raw_fragments query: ${error.message}`);
-    }
-
-    for (const row of (data ?? []) as Array<{
-      entity_id: string | null;
-      fragment_key: string;
-      fragment_value: unknown;
-    }>) {
-      if (!row.entity_id) {
-        continue;
-      }
-      const piece = `${row.fragment_key} ${rawFragmentValueText(row.fragment_value)}`.trim();
-      if (!piece) {
-        continue;
-      }
-      const existing = fragmentTextByEntityId.get(row.entity_id);
-      fragmentTextByEntityId.set(row.entity_id, existing ? `${existing} ${piece}` : piece);
-    }
-  }
-
-  return fragmentTextByEntityId;
-}
 
 /**
  * Non-strict retrieval strategies that can contribute to a search result set.
