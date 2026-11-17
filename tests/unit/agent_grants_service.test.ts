@@ -8,8 +8,9 @@
  *   - the in-memory cache invalidation primitives so admission picks
  *     up revocation across processes within at most one TTL cycle.
  *
- * DB-backed flows (create, list, setStatus, recordMatch) are exercised
- * end-to-end in `tests/integration/agent_grants_routes.test.ts` and
+ * `recordMatch` runs against the local store at the end of this file. Other
+ * DB-backed flows (create, list, setStatus) are exercised end-to-end in
+ * `tests/integration/agent_grants_routes.test.ts` and
  * `tests/integration/aauth_admission.test.ts`.
  */
 
