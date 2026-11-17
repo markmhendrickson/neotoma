@@ -485,6 +485,67 @@ async function addColumnIfMissing(
 }
 
 /**
+ * `entity_snapshots.search_text`: the entity's normalized lexical haystack
+ * (canonical_name + snapshot + raw fragment text), filled at write time by
+ * `refreshEntitySearchText` in local_db_adapter.ts.
+ *
+ * Rule: NULL means "build it the old way". Every trigger below only ever sets
+ * the column back to NULL when an input of the text changes, so a write path
+ * that does not refresh it makes search slower, never wrong. Each trigger body
+ * is one UPDATE keyed on the primary key; it touches no row that must exist, so
+ * it cannot make the triggering write fail.
+ *
+ * No default and no index: adding a nullable column and creating triggers are
+ * metadata-only and take milliseconds on a large table (no backfill here).
+ * IF NOT EXISTS never rewrites a trigger: a body change needs a new name or a
+ * DROP TRIGGER IF EXISTS first.
+ */
+async function ensureEntitySearchTextColumn(db: DbConnection): Promise<void> {
+  await addColumnIfMissing(db, "entity_snapshots", "search_text", "TEXT");
+  const clear = "UPDATE entity_snapshots SET search_text = NULL";
+  const triggers: Array<[string, string, string]> = [
+    [
+      "entity_search_text_fragment_insert",
+      "AFTER INSERT ON raw_fragments",
+      `${clear} WHERE entity_id = NEW.entity_id AND search_text IS NOT NULL;`,
+    ],
+    [
+      "entity_search_text_fragment_update",
+      "AFTER UPDATE ON raw_fragments",
+      `${clear} WHERE entity_id IN (OLD.entity_id, NEW.entity_id) AND search_text IS NOT NULL;`,
+    ],
+    [
+      "entity_search_text_fragment_delete",
+      "AFTER DELETE ON raw_fragments",
+      `${clear} WHERE entity_id = OLD.entity_id AND search_text IS NOT NULL;`,
+    ],
+    [
+      // A direct snapshot / canonical_name write that does not also set the
+      // column (INSERT OR REPLACE already leaves an omitted column NULL).
+      "entity_search_text_snapshot_update",
+      "AFTER UPDATE OF snapshot, canonical_name ON entity_snapshots " +
+        "WHEN NEW.search_text IS OLD.search_text AND NEW.search_text IS NOT NULL",
+      `${clear} WHERE entity_id = NEW.entity_id;`,
+    ],
+    [
+      "entity_search_text_entity_rename",
+      "AFTER UPDATE OF canonical_name ON entities",
+      `${clear} WHERE entity_id = NEW.id AND search_text IS NOT NULL;`,
+    ],
+    [
+      // The db adapter's entities upsert is INSERT OR REPLACE, which changes
+      // canonical_name without firing an UPDATE trigger.
+      "entity_search_text_entity_insert",
+      "AFTER INSERT ON entities",
+      `${clear} WHERE entity_id = NEW.id AND search_text IS NOT NULL;`,
+    ],
+  ];
+  for (const [name, when, body] of triggers) {
+    await db.prepare(`CREATE TRIGGER IF NOT EXISTS ${name} ${when} BEGIN ${body} END`).run();
+  }
+}
+
+/**
  * Create an index, logging only when it is actually built. On a large existing
  * table the first build blocks the single connection (and so all writes) until it
  * finishes, so the operator needs a visible start and end line. Silent when the
@@ -657,6 +718,7 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+    await ensureEntitySearchTextColumn(db);
     await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
