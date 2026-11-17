@@ -42,6 +42,7 @@ import { config } from "../config.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 import { emitStoreWriteEvents } from "../events/substrate_store_emit.js";
 import { runtimeEnv } from "../config_embedded.js";
+import { EntityLifecycleAcquisitionError } from "./entity_lifecycle_authority.js";
 
 export interface InterpretationConfig {
   provider: string;
@@ -439,6 +440,16 @@ export async function runInterpretation(
 ): Promise<InterpretationResult> {
   enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
   const { userId, sourceId, extractedData, config, idempotencyKey } = options;
+
+  // An ownerless observation cannot acquire lifecycle authority, so the
+  // snapshot recompute after the observation insert would refuse it. Refuse
+  // here, before the interpretation, entity and observation rows are written,
+  // so a refused call leaves nothing behind. Same message as that refusal.
+  if (typeof userId !== "string" || userId.trim() === "") {
+    throw new Error(
+      `Failed to create observation: ${new EntityLifecycleAcquisitionError().message}`
+    );
+  }
 
   // Validate that the source exists before creating an interpretation
   const { data: sourceCheck, error: sourceCheckError } = await db

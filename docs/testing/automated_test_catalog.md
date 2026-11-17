@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **865**
-- Backend and repo Vitest files: **811**
+- Total automated test files: **866**
+- Backend and repo Vitest files: **812**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 245 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 251 |
+| Vitest integration tests | 252 |
 | Vitest CLI tests | 98 |
 | Vitest contract tests | 31 |
 | Vitest security tests | 26 |
@@ -516,7 +516,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (251):**
+**Files (252):**
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
@@ -623,6 +623,7 @@ flowchart TD
 - `tests/integration/instance_skills_initialize_effect.test.ts`
 - `tests/integration/interpretation_fragment_ordering.test.ts`
 - `tests/integration/interpretation_no_schema_fallback.test.ts`
+- `tests/integration/interpretation_ownerless_refusal.test.ts`
 - `tests/integration/interpretation_store.test.ts`
 - `tests/integration/issue_207_list_timeline_events_unknown_type.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
