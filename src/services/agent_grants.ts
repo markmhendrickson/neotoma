@@ -42,10 +42,7 @@ import { db } from "../db.js";
 import { queryEntities, getEntityWithProvenance } from "./entity_queries.js";
 import { logger } from "../utils/logger.js";
 import { runWithRequestContext } from "./request_context.js";
-import {
-  type AgentCapabilityEntry,
-  type AgentCapabilityOp,
-} from "./agent_capabilities.js";
+import { type AgentCapabilityEntry, type AgentCapabilityOp } from "./agent_capabilities.js";
 
 export type AgentGrantStatus = "active" | "suspended" | "revoked";
 
