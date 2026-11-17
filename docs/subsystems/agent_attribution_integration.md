@@ -256,6 +256,7 @@ never broader.
 | `admitted`             | Active grant matched. AAuth alone is sufficient on this request.           |
 | `no_grants_for_user`   | The owner user has no grants at all yet (Inspector → Agent grants → New).  |
 | `no_match`             | This identity does not match any of the user's grants.                     |
+| `lookup_failed`        | The grant lookup failed (a transient server error), so the identity could not be checked. The request is not admitted; without a Bearer token it is answered `503 ADMISSION_UNAVAILABLE` with `Retry-After` and can be retried unchanged. |
 | `grant_key_unbound`    | Identity's `sub` / `iss` match a grant that pins no `match_thumbprint`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is pinned, even when Bearer/OAuth authenticates the request. See [Pin a key to an existing grant](./agent_capabilities.md#pin-a-key-to-an-existing-grant). |
 | `grant_revoked`        | The signing key is pinned (`match_thumbprint`) to a grant whose status is `revoked`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is restored to `active`, even when Bearer/OAuth authenticates the request. |
 | `grant_suspended`      | The signing key is pinned (`match_thumbprint`) to a grant whose status is `suspended`. Same refusal as `grant_revoked`, until the grant is restored to `active`. |

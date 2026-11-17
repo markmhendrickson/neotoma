@@ -2299,6 +2299,22 @@ app.all("/mcp", async (req, res) => {
     // Fix: Changed from (!sessionId && !hasAuth) to (!hasAuth) to ensure 401 on first protected call
     // even if Cursor establishes a session first (via GET for SSE)
     if (!hasAuth) {
+      // Signed request whose grant lookup failed: refused, but retryable.
+      if (isAdmissionLookupFailure(req)) {
+        res.setHeader("Retry-After", String(ADMISSION_UNAVAILABLE_RETRY_AFTER_SECONDS));
+        if (req.method === "POST" && req.body && typeof req.body === "object") {
+          return res.status(503).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32002,
+              message: ADMISSION_UNAVAILABLE_MESSAGE,
+              data: { error_code: "ADMISSION_UNAVAILABLE" },
+            },
+            id: req.body?.id ?? null,
+          });
+        }
+        return sendAdmissionUnavailable(res);
+      }
       const wwwAuthHeader = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`;
       res.setHeader("WWW-Authenticate", wwwAuthHeader);
       const unauthMessage = config.requireKeyForOauth
@@ -2752,6 +2768,31 @@ function sendError(
   details?: Record<string, unknown>
 ): express.Response {
   return res.status(status).json(buildErrorEnvelope(errorCode, message, details));
+}
+
+/** Seconds a caller should wait before retrying after `ADMISSION_UNAVAILABLE`. */
+const ADMISSION_UNAVAILABLE_RETRY_AFTER_SECONDS = 3;
+const ADMISSION_UNAVAILABLE_MESSAGE =
+  "The agent identity on this request could not be checked right now. " +
+  "Retry the request unchanged.";
+
+/**
+ * True when the request carried a verified AAuth signature whose grant
+ * lookup failed (a transient server-side error, not a missing grant) and
+ * no Bearer token. Such a request stays refused, but the route gate
+ * answers a retryable 503 instead of a "Missing Bearer token" 401.
+ */
+function isAdmissionLookupFailure(req: express.Request): boolean {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) return false;
+  return getAAuthAdmissionFromRequest(req)?.reason === "lookup_failed";
+}
+
+function sendAdmissionUnavailable(res: express.Response): express.Response {
+  res.setHeader("Retry-After", String(ADMISSION_UNAVAILABLE_RETRY_AFTER_SECONDS));
+  return sendError(res, 503, "ADMISSION_UNAVAILABLE", ADMISSION_UNAVAILABLE_MESSAGE, {
+    retry_after_seconds: ADMISSION_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  });
 }
 
 type ZodValidationIssueLike = {
@@ -4985,6 +5026,9 @@ app.use(async (req, res, next) => {
       // A guest token was presented on a route that does not accept it.
       return sendError(res, 401, GUEST_TOKEN_INVALID_CODE, GUEST_TOKEN_INVALID_MESSAGE);
     }
+    // A signed request whose grant lookup failed is still refused, but as
+    // a retryable 503: the credential may be fine, the check was not run.
+    if (isAdmissionLookupFailure(req)) return sendAdmissionUnavailable(res);
     // Plan ent_b4958d038bd41e8694fe0aef Phase 5: surface sandbox availability
     // in the 401 envelope so UIs can replace the hard "Missing Bearer token"
     // error with a sandbox-session onboarding affordance when one is live.
@@ -5905,6 +5949,7 @@ app.get("/entities/:id/html", async (req, res) => {
       return handleApiError(req, res, error, "Failed to render entity HTML");
     }
     if (error instanceof Error && error.message.includes("Not authenticated")) {
+      if (isAdmissionLookupFailure(req)) return sendAdmissionUnavailable(res);
       return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
         hint: "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. Create a grant via Inspector → Agents → Grants.",
         sandbox: { available: false },

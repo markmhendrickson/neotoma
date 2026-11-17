@@ -573,6 +573,7 @@ describe("agent_capabilities", () => {
       "admitted",
       "no_grants_for_user",
       "no_match",
+      "lookup_failed",
       "grant_key_unbound",
       "grant_revoked",
       "grant_suspended",
@@ -586,8 +587,11 @@ describe("agent_capabilities", () => {
     // Reasons that mean "no grant asserts anything about this identity" —
     // the signature is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY
     // governs these. Every reason NOT in this list must map to deny.
+    // `lookup_failed` keeps the `no_match` classification it had before it
+    // was split out, so the split changes no capability decision.
     const PERMISSIVE_REASONS = new Set([
       "no_match",
+      "lookup_failed",
       "no_grants_for_user",
       "strict_rejected",
       "aauth_disabled",

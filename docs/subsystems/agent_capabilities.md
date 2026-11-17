@@ -373,6 +373,11 @@ Admission resolves the verified identity to at most one grant:
      pin the signing key (the key resolves to no owner),
    - `grant_key_unbound` when a grant without a thumbprint pin matched
      `sub` / `iss`,
+   - `lookup_failed` when the grant lookup itself failed (a transient
+     server error). The request is refused; with no Bearer token the
+     route answers `503 ADMISSION_UNAVAILABLE` with `Retry-After`, and
+     the caller can retry unchanged. Capability decisions treat it like
+     `no_match`,
    - `no_match` otherwise.
 
 ### One owner per key
