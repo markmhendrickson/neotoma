@@ -359,7 +359,7 @@ After the installation aha, agents can deepen engagement with these mechanisms. 
 
 | Mechanism | Description | Example |
 | --- | --- | --- |
-| **Time-travel queries** | Extend the timeline backward or forward | "What changed with Acme over the last 90 days?" |
+| **Recorded-history queries** | Extend the timeline backward or forward, or read a snapshot as recorded by a write-time cutoff (`at`; not valid time) | "What changed with Acme over the last 90 days?" |
 | **Decision extraction** | Surface commitments and promises from sources | "3 commitments detected: pricing revision, scope agreement, delivery date" |
 | **Cross-source synthesis** | Connect the same entity across file types | "Acme pricing appears in meeting notes and ChatGPT export" |
 | **Missing-context alerts** | Identify gaps in the timeline | "Contract references 'Jan 5 call' but no meeting notes from that date found" |

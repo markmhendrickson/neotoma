@@ -12,7 +12,7 @@ Individuals interact with dozens of AI tools — fitness trackers, financial app
 
 ## Key question
 
-> "How has my bench press progressed, and what was my spending rate when I bought the car?"
+> "How has my bench press progressed, and what spending rate had I recorded when I bought the car?"
 
 ## Data sources
 

@@ -68,7 +68,7 @@ The `serverInfo.version` field in the MCP `initialize` response now reports the 
 
 `docs/developer/mcp/instructions.md` changed in multiple places (shipped to every connected MCP client on server upgrade):
 
-1. **`retrieve_entity_snapshot` tool reference updated** — the `at` / `at_ingested` parameter distinction is now described: `at` is event-time cutoff ("what had happened by T"), `at_ingested` is ingestion-time cutoff ("what did we know by T"). Agents should use both parameters when they need the most conservative view.
+1. **`retrieve_entity_snapshot` tool reference updated** — the `at` / `at_ingested` parameter distinction is now described: `at` is event-time cutoff ("what had happened by T"), `at_ingested` is ingestion-time cutoff ("what did we know by T"). Agents should use both parameters when they need the most conservative view. _Correction: `at` filters write time (`observed_at`), not event time; see [As-of reads are per entity and use write clocks](../../../known_limitations.md) for the corrected wording._
 2. **`npm_check_update` update-check rule updated** — agents are now instructed to pass `include_capability_delta: true` when the session needs to enumerate newly available MCP tools after an upgrade, and to omit the flag when only the version check matters (to avoid unnecessary manifest I/O).
 3. **`register_schema` conflict-resolution config and `as_of` on `retrieve_entity_snapshot` now named on the tool surface** (#1785) — `register_schema` description explicitly names per-field conflict resolution via `reducer_config` and that `source_priority` only takes effect under `highest_priority`; `retrieve_entity_snapshot` description adds the `as-of` synonym for findability. Description-only; no behavior change.
 

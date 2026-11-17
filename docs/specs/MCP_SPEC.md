@@ -1035,7 +1035,7 @@ list_entity_types({ keyword: "date" });
 **Use Cases:**
 
 - Get current state of an [entity](../vocabulary/canonical_terms.md#entity) (company, person, invoice)
-- **Historical state (primary):** Get [entity](../vocabulary/canonical_terms.md#entity) state at any point in time by filtering [observations](../vocabulary/canonical_terms.md#observation) up to a timestamp and recomputing [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot). This enables tracking how [entities](../vocabulary/canonical_terms.md#entity) evolved as new [observations](../vocabulary/canonical_terms.md#observation) arrived.
+- **Historical state (primary):** Get [entity](../vocabulary/canonical_terms.md#entity) state as recorded by a cutoff: filter [observations](../vocabulary/canonical_terms.md#observation) written by a timestamp (`at`, on `observed_at`, stamped from the server clock at write time) and recompute the [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot). `at_ingested` filters row-insertion time (`created_at`) the same way, and both bounds apply when both are set. This enables tracking how [entities](../vocabulary/canonical_terms.md#entity) evolved as new [observations](../vocabulary/canonical_terms.md#observation) arrived. Both cutoffs are write time, not event or valid time: a fact written after the cutoff is excluded even when it describes an earlier date, and native valid-time queries are not supported ([#2034](https://github.com/markmhendrickson/neotoma/issues/2034), `docs/known_limitations.md`).
 - Trace which [source](../vocabulary/canonical_terms.md#source) contributed to current truth
 - Track how multiple sources were merged over time
 
@@ -1044,7 +1044,8 @@ list_entity_types({ keyword: "date" });
 ```typescript
 {
   entity_id: string; // Required: Entity ID (hash-based)
-  at?: string; // Optional: ISO 8601 timestamp to get historical snapshot state
+  at?: string; // Optional: ISO 8601 cutoff on observed_at (write time); returns the snapshot as recorded by then
+  at_ingested?: string; // Optional: ISO 8601 cutoff on created_at (row-insertion time); ANDed with `at` when both are set
   format?: "markdown" | "json"; // Optional: text response format (default: markdown)
 }
 ```

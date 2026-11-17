@@ -8,7 +8,7 @@ This section maps Neotoma to April Dunford’s five core positioning choices plu
 |-----------|----------------|
 | **Competitive alternatives** | Homebrew SQLite/Postgres, git + markdown stacks, flat JSON/YAML, one-off agent memory implementations, and VC-funded retrieval memory (Mem0, Zep, LangChain-style patterns). Provider-native chat memory is a parallel alternative for conversation-only use cases. See §7.4. |
 | **Unique attributes** | Privacy-first user-controlled architecture; deterministic, schema-first extraction with hash-based IDs and reproducible state; cross-tool MCP access; versioned observations with field-level provenance and immutability guarantees. See §7.2. |
-| **Value themes** | Two primary themes: (1) **Tax removal** — stop being the human sync layer; subsumes continuity (one memory across tools) and sovereignty (your data, your control). (2) **State integrity** — prove your agent isn't operating on bad data; subsumes accountability (reconstruct what an agent knew at decision time). All copy should clearly serve one of these two themes. Pain-forward phrasing in §7.3. |
+| **Value themes** | Two primary themes: (1) **Tax removal** — stop being the human sync layer; subsumes continuity (one memory across tools) and sovereignty (your data, your control). (2) **State integrity** — prove your agent isn't operating on bad data; subsumes accountability (reconstruct what an agent had recorded by decision time). All copy should clearly serve one of these two themes. Pain-forward phrasing in §7.3. |
 | **Best-fit customers** | One archetype — the **personal agentic OS builder/operator** — in three operational modes: debugging infrastructure, building pipelines, operating across tools. Not three separate personas. **"Power user" is retired** as a buyer term (it names both the core ICP and an explicit non-target in live docs) and **"indie hacker" is a narrower subsegment, not a synonym**; see [`../icp/README.md`](../icp/README.md) for the canonical statement, the synonym mapping, and the open ICP questions. See `docs/icp/primary_icp.md`. Evaluator context in §7.5 (agents with tool use “get it” faster than search-only evals). |
 | **Market category** | **The system of record for AI agents** — single category noun, with the definite article, on every surface (decided 2026-08-21, superseding "shared governed state layer" and retiring the other ten nouns the positioning audit counted: state layer, agent memory, deterministic memory, memory system, memory graph, memory infrastructure, truth layer, truth engine, substrate, Rosetta Stone, DPME). The category is an **authority claim**, not a mechanism claim — see [`core_identity.md`](core_identity.md). Rationale: legible to technical buyers at near-zero education tax, and it makes **correctness rather than recall** the category criterion, which is the criterion Neotoma can win on. "Cross-tool memory for AI agents" is retired as a category frame: it names the retrieval category and invites comparison against retrieval-memory vendors on recall. |
 | **Relevant trends** | Proliferation of LLM apps that need private data + feedback loops; localhost / private-environment agents; agent evaluation and AEO as a discovery path (§7.1, §7.5). |
@@ -87,7 +87,7 @@ These features are valuable but not defensible alone (competitors are developing
 - **Multi-modal ingestion:** PDFs, images, OCR, agent interactions
 - **Full provenance:** Every field traces to source (document or agent interaction)
 - **Immutability:** Truth never changes; immutable audit trail with cryptographic integrity
-- **Event-sourced history:** Complete event log enables historical replay and time-travel queries
+- **Event-sourced history:** Complete event log enables historical replay and snapshot reads as recorded by a write-time cutoff (`at`, not valid time)
 - **Cryptographic integrity:** Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 - **Type-stable graph:** No orphans, no cycles, typed edges
 **Strategic Positioning:** Neotoma combines defensible differentiators (privacy-first, deterministic, cross-platform) with feature capabilities (entity resolution, timelines, dual-path ingestion). Competitors can replicate features but cannot pursue the same architectural choices due to structural constraints.
@@ -127,8 +127,8 @@ Not "schema-first field extraction with deterministic, explainable results." The
 **Cross-platform MCP → "One memory across all your AI tools."**
 Not "cross-platform access via MCP integration." The felt experience is continuity: store a contact in Claude Code, query it from Cursor, update it from ChatGPT. You stop being the human sync layer between tools.
 
-**Versioned history → "What did your agent know at decision time?"**
-Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct exactly what the agent believed when it made the call. This trigger question is the most powerful single framing for the personal agentic OS use case.
+**Versioned history → "What had your agent recorded by decision time?"**
+Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct what the agent had recorded by the time it made the call (state as recorded by a write-time cutoff; a fact written afterward is not in it). This trigger question is the most powerful single framing for the personal agentic OS use case.
 
 **Schema constraints → "No garbage in, no garbage out."**
 Not "entities conform to defined types and validation rules." The felt experience is reliability: your agent's contact records actually have email addresses and phone numbers, not free-text blobs that drift into nonsense across sessions.
@@ -186,7 +186,7 @@ Neotoma's substrate-level event emission (`philosophy.md` §5.9) closes this gap
 
 Three categories increasingly overlap in market vocabulary with "agent memory." Each serves a distinct purpose and provides different guarantees. Neotoma's positioning depends on drawing clear boundaries without dismissing the value of adjacent approaches.
 
-**Structured memory (Neotoma)** — Canonical truth that must be deterministic and auditable. Schema-first entities with hash-based IDs, versioned observations, field-level provenance, and cross-tool access via MCP. The guarantee: same inputs produce same state, every time. Temporal queries reconstruct what an agent knew at any moment. Every fact traces to its source.
+**Structured memory (Neotoma)** — Canonical truth that must be deterministic and auditable. Schema-first entities with hash-based IDs, versioned observations, field-level provenance, and cross-tool access via MCP. The guarantee: same inputs produce same state, every time. Temporal queries reconstruct what an agent had recorded by any write-time cutoff. Every fact traces to its source.
 
 *Best for:* Persistent state across sessions and tools; agent decisions that need to be reconstructed; multi-agent systems that need shared canonical state; workflows where silent corruption or stale data has concrete costs.
 
@@ -212,7 +212,7 @@ A competitive vocabulary for explaining Neotoma's architectural position relativ
 
 **The two planes:**
 
-- **Data plane** — The surface that stores, serves, and signals canonical state. Neotoma occupies this plane. Reads are deterministic, writes are versioned, and every fact traces to its source. The data plane answers: *what is true right now, and what was true at any point in the past?*
+- **Data plane** — The surface that stores, serves, and signals canonical state. Neotoma occupies this plane. Reads are deterministic, writes are versioned, and every fact traces to its source. The data plane answers: *what is true right now, and what had been recorded by any past write-time cutoff?*
 
 - **Action plane** — The surface that performs side effects in external systems. MCP action servers (Gmail send, Slack post, calendar create, code execution) occupy this plane. Actions consume state from the data plane and produce effects in the world. The action plane answers: *what should happen, given what is true?*
 
@@ -264,7 +264,7 @@ The chronic tax creates latent demand. The acute crisis creates urgency. Both ar
 
 The problem is not memory retrieval. The problem is **state integrity over time**.
 
-Neotoma provides deterministic, versioned, schema-bound state with full provenance — which enables reconstruction of what the agent believed at decision time.
+Neotoma provides deterministic, versioned, schema-bound state with full provenance — which enables reconstruction of what the agent had recorded by decision time.
 
 ### What Neotoma guarantees (and does not)
 
@@ -305,9 +305,9 @@ Expansion:
 
 Observability tools (Langfuse, LangSmith, Helicone) answer: *"What happened?"*
 
-Neotoma answers: *"What was true (composed state) when it happened?"*
+Neotoma answers: *"What had been recorded (composed state) by then?"*
 
-The distinction: observability records events, logs, and traces. State integrity proves the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance. See `/build-vs-buy` for the full framework.
+The distinction: observability records events, logs, and traces. State integrity proves the deterministic composed entity state as recorded by any write-time cutoff, with multi-writer conflict resolution and version-bound provenance. See `/build-vs-buy` for the full framework.
 
 ### Messaging principles
 
@@ -318,7 +318,7 @@ The distinction: observability records events, logs, and traces. State integrity
 
 ### Messaging anchors
 
-**Primary:** *Neotoma lets you reconstruct what your agent knew at decision time — with deterministic, versioned state.*
+**Primary:** *Neotoma lets you reconstruct what your agent had recorded by decision time — with deterministic, versioned state.*
 
 **Supporting:** *Stop being the sync layer. Prove what your agent knew.*
 
@@ -347,9 +347,9 @@ Consolidated inventory of short-form phrases. Use for hero copy, subheadlines, C
 | "CI/CD for agent state." | Evaluator (Tycho Onnasch) | Infra engineers, HN, technical blog |
 | "Most memory tools help agents retrieve information. None of them can prove it hasn't been silently corrupted." | Hero curiosity gap | Below-fold, long-form |
 | "Same input, same state, every time." | Differentiator translation | Guarantee claims, architecture page |
-| "What did your agent know at decision time?" | Differentiator translation | Accountability framing, blog, demos |
+| "What had your agent recorded by decision time?" | Differentiator translation | Accountability framing, blog, demos |
 | "No garbage in, no garbage out." | Differentiator translation | Schema/validation audiences |
-| "Observability tells you what happened. State integrity proves what was true." | Build-vs-buy page | Technical positioning, comparison pages |
+| "Observability tells you what happened. State integrity proves what was recorded." | Build-vs-buy page | Technical positioning, comparison pages |
 
 **Category framing (what Neotoma is):**
 

@@ -18,7 +18,7 @@ Curating *before* you store is the anti-pattern — you'd be doing manually, and
 
 Neotoma stores any structured fact that benefits from deterministic state evolution, versioning, and provenance. The deciding question is not "is this personal data?" but **"does this fact benefit from being versioned, auditable, and reproducible?"**
 
-If an agent or user would later need to recall a fact, verify when it changed, trace why a decision was made, or reconstruct state at a point in time: it belongs in Neotoma.
+If an agent or user would later need to recall a fact, verify when it changed, trace why a decision was made, or reconstruct state as recorded by a write-time cutoff: it belongs in Neotoma.
 
 ## Agents store for you
 
@@ -139,7 +139,7 @@ When deciding whether to store something, apply this test:
 
 1. **Recallability** — Would an agent or user need this fact again in a future session?
 2. **Auditability** — Would someone need to know when this fact was recorded or how it changed?
-3. **Reproducibility** — Would reconstructing state at a past point in time require this fact?
+3. **Reproducibility** — Would reconstructing state as recorded by a past cutoff require this fact?
 4. **Relationship value** — Does this fact connect to other entities in useful ways (people, tasks, events)?
 
 If any answer is yes, store it. If all are no, skip it.

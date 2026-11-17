@@ -58,7 +58,7 @@ None of these is the category. Led with, each one invites a mechanism comparison
 
    By making operations idempotent and verifiable, Neotoma creates objective (non-gameable) results—a verifiable domain for personal data that enables reliable, consistent results LLMs can depend on.
 3. **Cross-Platform:** Works with all AI tools via MCP (ChatGPT, Claude, Cursor), not platform-locked
-4. **Immutable Audit Trail:** Every change permanently recorded with full provenance; event-sourced architecture enables historical replay and time-travel queries
+4. **Immutable Audit Trail:** Every change permanently recorded with full provenance; event-sourced architecture enables historical replay and snapshot reads as recorded by a write-time cutoff (`at`, not valid time)
 5. **Cryptographic Integrity:** Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 These architectural choices are defensible because competitors (model providers, OS providers, startups) cannot pursue them due to structural constraints (business model conflicts, architectural constraints, platform lock-in revenue models). See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
 

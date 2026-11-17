@@ -128,7 +128,7 @@ See [`docs/subsystems/reducer.md`](./reducer.md) for merge-strategy details and 
 
 > Same observations + same schema + same `reducer_config` ⇒ same snapshot, byte-for-byte (modulo `computed_at`).
 
-This is what lets Neotoma replay state at any point in time, audit historical truth, and detect non-determinism in custom reducers. See [`docs/architecture/determinism.md`](../architecture/determinism.md).
+This is what lets Neotoma replay state as recorded by any write-time cutoff, audit the recorded history, and detect non-determinism in custom reducers. See [`docs/architecture/determinism.md`](../architecture/determinism.md).
 
 ## 4. The Provenance Map
 
