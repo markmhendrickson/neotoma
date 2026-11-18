@@ -121,6 +121,18 @@ export class OAuthKeySessionStore {
     return bound ? { ...bound } : undefined;
   }
 
+  /**
+   * End a session now: remove its expiry and its bound identity together, so
+   * the token stops validating and stops resolving a user. Returns whether a
+   * session was present. Used by sign-out and by a failed sign-in.
+   */
+  revoke(token: string | undefined): boolean {
+    if (!token) return false;
+    const existed = this.sessions.delete(token);
+    this.boundUsers.delete(token);
+    return existed;
+  }
+
   cleanup(nowMs: number = Date.now()): void {
     for (const [token, expiresAt] of this.sessions.entries()) {
       if (expiresAt <= nowMs) {

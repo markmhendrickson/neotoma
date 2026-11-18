@@ -2014,6 +2014,31 @@ export function setOAuthKeySessionCookie(
 }
 
 /**
+ * End the caller's OAuth key-session, if any: revoke it in the server-side
+ * store (so the token and any bound identity stop resolving) and tell the
+ * browser to drop the cookie. The clear uses the same name, path and flags the
+ * cookie was issued with, or browsers keep the original. Used by sign-out and
+ * by a failed sign-in, so a failed attempt never leaves an earlier session live.
+ */
+export function endOAuthKeySession(req: express.Request, res: express.Response): boolean {
+  const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
+  const ended = oauthKeySessions.revoke(token);
+  const forwardedProto =
+    ((req.headers["x-forwarded-proto"] || req.headers["X-Forwarded-Proto"]) as string | undefined)
+      ?.split(",")[0]
+      ?.trim()
+      ?.toLowerCase() || "";
+  const secure = req.secure || req.protocol === "https" || forwardedProto === "https";
+  res.clearCookie(OAUTH_KEY_SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/mcp/oauth",
+  });
+  return ended;
+}
+
+/**
  * Resolve the GRAPH SCOPE user_id a Google-verified session (if any) mapped to
  * this request — the user_id whose graph is read and written. Under
  * shared-graph mode this is the shared owner, not the signer; use
@@ -3281,6 +3306,9 @@ app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (r
           });
 
   if (!result.ok) {
+    // A failed sign-in ends any session this browser already holds, rather
+    // than leaving it valid behind the error page.
+    endOAuthKeySession(req, res);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     const retryHref = `/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`;
     return res.status(401).send(
@@ -3296,6 +3324,28 @@ app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (r
 
   setOAuthKeySessionCookie(req, res);
   return res.redirect(nextPath);
+});
+
+/**
+ * Sign out: end the OAuth key-session on the server and clear its cookie.
+ * POST only, so a plain link or image load cannot sign someone out; the
+ * cookie's SameSite=Lax already keeps it off cross-site POSTs. Idempotent: a
+ * request with no session, or an already-ended one, still gets the cookie
+ * cleared and the same response.
+ */
+app.post("/mcp/oauth/sign-out", (req, res) => {
+  endOAuthKeySession(req, res);
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.status(200).send(
+    renderOauthPage({
+      title: "Signed out",
+      subtitle: "Your session on this server has ended.",
+      contentHtml: `<div class="actions">
+          <a class="btn-link secondary" href="/mcp/oauth/key-auth">Sign in again</a>
+        </div>`,
+    })
+  );
 });
 
 /**
@@ -3332,6 +3382,9 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
   const nonceParam = (req.query.state as string | undefined)?.trim();
 
   const failWith = (subtitle: string) => {
+    // Same rule as the key/mnemonic/bearer form: a failed sign-in ends any
+    // session this browser already holds.
+    endOAuthKeySession(req, res);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(401).send(
       renderOauthPage({

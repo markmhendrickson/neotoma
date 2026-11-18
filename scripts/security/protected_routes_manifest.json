@@ -944,6 +944,19 @@
       ]
     },
     {
+      "path": "/mcp/oauth/sign-out",
+      "method": "POST",
+      "operation_id": "mcpOAuthSignOut",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/mcp/oauth/status",
       "method": "GET",
       "operation_id": "mcpOAuthStatus",

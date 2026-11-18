@@ -4539,6 +4539,22 @@ paths:
         "302":
           description: Redirect after key auth
 
+  /mcp/oauth/sign-out:
+    post:
+      summary: End the OAuth key-session and clear its cookie
+      description: >-
+        Revokes the caller's OAuth key-session (set by key-auth or Google
+        sign-in) on the server and clears the neotoma_oauth_key_session cookie.
+        Idempotent: a request with no session, or an already-ended one, still
+        receives the cleared cookie and the same response.
+      operationId: mcpOAuthSignOut
+      responses:
+        "200":
+          description: Signed-out HTML page; the response clears the session cookie
+          content:
+            text/html:
+              schema: { type: string }
+
   /mcp/oauth/local-login:
     get:
       summary: Local login for development (auto-creates dev user)
