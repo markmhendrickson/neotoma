@@ -16,6 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  isOutboundHostGuardEnabled,
   isPrivateOrLoopbackHostname,
   isPublicFetchUrlAllowed,
 } from "../../src/services/net/private_host_guard.js";
@@ -25,6 +26,7 @@ import {
 } from "../../src/services/subscriptions/webhook_delivery.js";
 
 const HOSTED = "NEOTOMA_HOSTED_MODE";
+const BIND = "NEOTOMA_HTTP_HOST";
 
 describe("isPrivateOrLoopbackHostname", () => {
   it("rejects loopback, RFC1918, and link-local hosts", () => {
@@ -160,12 +162,76 @@ describe("isPublicFetchUrlAllowed (hosted mode)", () => {
 });
 
 describe("isPublicFetchUrlAllowed (self-hosted)", () => {
+  let prevBind: string | undefined;
   beforeEach(() => {
+    prevBind = process.env[BIND];
     delete process.env[HOSTED];
+    delete process.env[BIND];
+  });
+  afterEach(() => {
+    if (prevBind === undefined) delete process.env[BIND];
+    else process.env[BIND] = prevBind;
   });
 
   it("permits loopback when not in hosted mode", () => {
     // A single-user self-host legitimately points webhooks at its own machine.
+    expect(isPublicFetchUrlAllowed("http://127.0.0.1:9000/hook")).toBe(true);
+  });
+});
+
+describe("isOutboundHostGuardEnabled follows the bind host when the flag is unset", () => {
+  it("is on when the listener binds beyond loopback", () => {
+    for (const host of ["0.0.0.0", "::", "10.0.0.5", "192.168.1.20"]) {
+      expect(isOutboundHostGuardEnabled({ [BIND]: host }), host).toBe(true);
+    }
+  });
+
+  it("is off for a loopback-only bind, including the default", () => {
+    expect(isOutboundHostGuardEnabled({})).toBe(false);
+    expect(isOutboundHostGuardEnabled({ [BIND]: "" })).toBe(false);
+    for (const host of ["127.0.0.1", "localhost", "::1"]) {
+      expect(isOutboundHostGuardEnabled({ [BIND]: host }), host).toBe(false);
+    }
+  });
+
+  it("an explicit on value turns the guard on for a loopback bind", () => {
+    for (const v of ["1", "true", "YES"]) {
+      expect(isOutboundHostGuardEnabled({ [HOSTED]: v, [BIND]: "127.0.0.1" }), v).toBe(true);
+    }
+  });
+
+  it("an explicit off value turns the guard off for a non-loopback bind", () => {
+    for (const v of ["0", "false", "no", "OFF"]) {
+      expect(isOutboundHostGuardEnabled({ [HOSTED]: v, [BIND]: "0.0.0.0" }), v).toBe(false);
+    }
+  });
+
+  it("an unrecognized flag value turns the guard on", () => {
+    expect(isOutboundHostGuardEnabled({ [HOSTED]: "enabled", [BIND]: "127.0.0.1" })).toBe(true);
+  });
+});
+
+describe("isPublicFetchUrlAllowed on a server bound beyond loopback", () => {
+  let prevBind: string | undefined;
+  beforeEach(() => {
+    prevBind = process.env[BIND];
+    delete process.env[HOSTED];
+    process.env[BIND] = "0.0.0.0";
+  });
+  afterEach(() => {
+    delete process.env[HOSTED];
+    if (prevBind === undefined) delete process.env[BIND];
+    else process.env[BIND] = prevBind;
+  });
+
+  it("refuses private and loopback targets with the flag unset", () => {
+    expect(isPublicFetchUrlAllowed("http://127.0.0.1:9000/hook")).toBe(false);
+    expect(isPublicFetchUrlAllowed("http://169.254.169.254/latest")).toBe(false);
+    expect(isPublicFetchUrlAllowed("https://example.com/hook")).toBe(true);
+  });
+
+  it("permits private targets when the flag explicitly turns the guard off", () => {
+    process.env[HOSTED] = "0";
     expect(isPublicFetchUrlAllowed("http://127.0.0.1:9000/hook")).toBe(true);
   });
 });
