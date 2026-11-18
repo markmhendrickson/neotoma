@@ -1,4 +1,5 @@
 import { runtimeEnv } from "../../config_embedded.js";
+import { isLoopbackHost, resolveBindHostFromEnv } from "../../shared/bind_host.js";
 /**
  * Shared SSRF guard: detect private / loopback / link-local hostnames so remote
  * fetches (peer sync inbound, repo-discovery manifest fetch, guest-token
@@ -12,9 +13,46 @@ import { runtimeEnv } from "../../config_embedded.js";
  * (`NEOTOMA_HOSTED_MODE`).
  */
 
-/** True when `NEOTOMA_HOSTED_MODE` opts the process into multi-tenant SSRF hardening. */
+/**
+ * True when the private-host guard applies to caller-supplied outbound URLs.
+ *
+ * The rule, in order:
+ *
+ * 1. `NEOTOMA_HOSTED_MODE` set to `1` / `true` / `yes` turns the guard on.
+ * 2. `NEOTOMA_HOSTED_MODE` set to `0` / `false` / `no` / `off` turns it off.
+ *    This is the explicit local-development override: an operator who binds
+ *    beyond loopback (for example a LAN or container test setup) and still
+ *    needs webhooks or peers on private addresses opts out by name.
+ * 3. Any other non-empty value turns the guard on, so a mistyped value never
+ *    leaves the server unguarded.
+ * 4. Unset or empty: the guard follows the HTTP listener's bind host
+ *    (`NEOTOMA_HTTP_HOST`, resolved by the same `resolveBindHostFromEnv` the
+ *    listener uses). A loopback-only bind (the default `127.0.0.1`,
+ *    `localhost`, `::1`) leaves the guard off, matching single-user self-host
+ *    behaviour; any other bind host (`0.0.0.0`, a LAN address, `::`) means the
+ *    server is reachable from other machines and turns the guard on.
+ *
+ * The explicit flag therefore only ever makes the guard stricter than the
+ * bind-derived default, except for the named off values in rule 2.
+ */
+export function isOutboundHostGuardEnabled(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
+  const raw = (env.NEOTOMA_HOSTED_MODE ?? "").trim();
+  if (raw.length > 0) {
+    if (/^(1|true|yes)$/i.test(raw)) return true;
+    if (/^(0|false|no|off)$/i.test(raw)) return false;
+    return true;
+  }
+  return !isLoopbackHost(resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env));
+}
+
+/**
+ * True when the outbound host guard is in force. Kept under its original name
+ * so existing importers keep working; see {@link isOutboundHostGuardEnabled}
+ * for the rule (the explicit `NEOTOMA_HOSTED_MODE` flag, otherwise the bind
+ * host).
+ */
 export function isHostedMode(): boolean {
-  return /^(1|true|yes)$/i.test(runtimeEnv().NEOTOMA_HOSTED_MODE ?? "");
+  return isOutboundHostGuardEnabled();
 }
 
 /**
@@ -101,11 +139,12 @@ export function isPrivateOrLoopbackHostname(hostname: string): boolean {
  * the parse-plus-check here keeps every sink on one implementation rather than
  * each re-deriving the hostname.
  *
- * SECURITY: the check is enforced under hosted/multi-tenant mode
- * ({@link isHostedMode}), where a caller is not the host operator and must not
- * be able to aim the server at its own infrastructure. Self-hosted single-user
- * installs legitimately point webhooks and peers at loopback, so the guard is
- * not applied there.
+ * SECURITY: the check is enforced whenever {@link isOutboundHostGuardEnabled}
+ * is true: hosted mode set explicitly, or a listener bound beyond loopback,
+ * where a caller is not necessarily the host operator and must not be able to
+ * aim the server at its own infrastructure. A loopback-only single-user
+ * install legitimately points webhooks and peers at loopback, so the guard is
+ * not applied there unless the flag turns it on.
  */
 export function isPublicFetchUrlAllowed(urlStr: string): boolean {
   let parsed: URL;
@@ -140,7 +179,7 @@ const MAX_GUARDED_REDIRECTS = 5;
  * reachable, and a redirect to a disallowed target is refused rather than
  * followed.
  *
- * Under self-hosted (non-hosted) mode this behaves exactly like a plain
+ * When the guard is off (loopback-only bind, flag unset) this behaves exactly like a plain
  * `fetch` with automatic redirects: `isPublicFetchUrlAllowed` always returns
  * true there, so every hop passes and is fetched, matching prior behavior
  * for the single-user case this guard was never meant to restrict.
