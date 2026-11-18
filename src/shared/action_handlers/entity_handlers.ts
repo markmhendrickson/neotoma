@@ -630,9 +630,7 @@ export async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParam
         await yieldToEventLoop();
       }
       const normalizedCanonical = normalizeSearchText(entity.canonical_name);
-      const normalizedSnapshot = normalizeSearchText(
-        stringifySnapshot(snapshotMap.get(entity.id))
-      );
+      const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshotMap.get(entity.id)));
       const candidate: Candidate = {
         id: entity.id,
         canonical_name: entity.canonical_name,
