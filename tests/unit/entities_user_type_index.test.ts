@@ -154,7 +154,8 @@ describe.each(drivers)("entities indexes (%s driver)", (_name, make) => {
         .map((r) => r.name)
         .sort();
     const built = await names();
-    expect(built).toHaveLength(4);
+    // Four user-scoped indexes plus idx_entities_type_name (the store path's type and name lookups).
+    expect(built).toHaveLength(5);
     for (const name of built) await db.prepare(`DROP INDEX ${name}`).run();
     expect(await names()).toEqual([]);
     await ensureSchema(db);
