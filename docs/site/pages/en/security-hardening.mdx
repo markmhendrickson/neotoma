@@ -107,7 +107,7 @@ These knobs do **not** affect authenticated abuse: a `software` / `hardware` AAu
 
 ## Peer-sync hostname enforcement
 
-`NEOTOMA_HOSTED_MODE=1` enables an inbound check on `POST /sync/webhook`: any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, the `localhost` family) is rejected. Single-tenant self-hosted operators normally leave it unset; hosted control planes MUST set it. See <MdxI18nLink to="/peer-sync" className="text-foreground underline underline-offset-2 hover:no-underline">peer sync</MdxI18nLink> for the full inbound flow.
+The outbound host guard applies an inbound check on `POST /sync/webhook`: any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, the `localhost` family) is rejected. When `NEOTOMA_HOSTED_MODE` is unset, the guard follows the HTTP bind host: it is off for a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) and on for any other `NEOTOMA_HTTP_HOST` (for example `0.0.0.0`). `NEOTOMA_HOSTED_MODE=1` (or `true` / `yes`) forces it on; `0` / `false` / `no` / `off` turns it off explicitly for local development; any other value turns it on. Loopback-only single-tenant installs normally leave the flag unset; hosted control planes SHOULD set it to `1`. See <MdxI18nLink to="/peer-sync" className="text-foreground underline underline-offset-2 hover:no-underline">peer sync</MdxI18nLink> for the full inbound flow.
 
 ## Inspector auth bypass advisory
 
@@ -117,7 +117,7 @@ For the May 2026 Inspector auth-bypass that motivated the loopback rewrite, see 
 
 <ul className="list-none pl-0 space-y-2 mb-6">
   <li className="text-[15px] leading-7 text-muted-foreground">
-    Set <code>NEOTOMA_HOSTED_MODE=1</code> on hosted / multi-tenant instances.
+    Set <code>NEOTOMA_HOSTED_MODE=1</code> on hosted / multi-tenant instances (the guard is already on whenever <code>NEOTOMA_HTTP_HOST</code> is not loopback).
   </li>
   <li className="text-[15px] leading-7 text-muted-foreground">
     Set <code>MCP_PROXY_FAIL_CLOSED=1</code> on AAuth-signed hosted MCP proxies.

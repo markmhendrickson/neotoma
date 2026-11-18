@@ -161,7 +161,7 @@ An AAuth-signed request that resolves to an **active** `agent_grant` authenticat
 
 ### Inbound peer-sync hostname enforcement
 
-When `NEOTOMA_HOSTED_MODE=1`, `sync_webhook_inbound` rejects any `sender_peer_url` whose hostname is private, loopback, or link-local. See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) `## Concepts`. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback interface.
+When the outbound host guard is on, `sync_webhook_inbound` rejects any `sender_peer_url` whose hostname is private, loopback, or link-local. See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) `## Concepts`. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback interface. When `NEOTOMA_HOSTED_MODE` is unset, the guard follows the HTTP bind host: it is off for a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) and on for any other `NEOTOMA_HTTP_HOST` (for example `0.0.0.0`). `NEOTOMA_HOSTED_MODE=1` (or `true` / `yes`) forces it on; `0` / `false` / `no` / `off` turns it off explicitly for local development; any other value turns it on.
 
 ## Index of evidence
 
