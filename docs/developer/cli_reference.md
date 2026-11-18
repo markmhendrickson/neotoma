@@ -1080,6 +1080,10 @@ Fleet-general write-integrity tooling built on the canonical snapshot layer. `sn
   - `--auto-fix`: Also recompute stale snapshots in place.
 - `neotoma snapshots request`: Request snapshot recomputation for stale snapshots.
   - `--dry-run`: Check only; do not recompute.
+- `neotoma snapshots search-text-backfill`: Fill the stored lexical search text (`entity_snapshots.search_text`) for rows that have none, against the local database. Runs in batches inside short write transactions, pauses between batches to hold a target rate, backs off after a slow batch, and stops after two consecutive batches slower than the stop threshold. Safe to stop with Ctrl-C and re-run; a second run changes nothing. Prints one progress line per batch and a summary with the remaining NULL count.
+  - `--batch-size <n>`, `--rows-per-second <n>`, `--slow-batch-ms <n>`, `--stop-batch-ms <n>`: override the matching `NEOTOMA_SEARCH_TEXT_BACKFILL_*` settings (defaults 50 rows per batch, 50 rows per second, 1000 ms, 10000 ms; batch size is capped at 200). A batch slower than the slow threshold pauses `NEOTOMA_SEARCH_TEXT_BACKFILL_SLOW_PAUSE_FACTOR` (default 10) times its duration.
+  - The HTTP server runs the same backfill in the background after it starts listening when `NEOTOMA_SEARCH_TEXT_BACKFILL=1`. The switch is off by default.
+
 - `neotoma snapshots export`: Export entity snapshots as fleet-neutral JSON (schema_version `0.1.0`) with per-field provenance, an `observation_source` histogram, and an `attribution_fingerprint` roll-up per entity.
   - `--entity-types <csv>`: Restrict to comma-separated entity types (e.g. `agent_task,agent_attempt`).
   - `--agent-sub <sub>`: Restrict to a single AAuth `agent_sub`.
