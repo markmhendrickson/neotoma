@@ -191,7 +191,11 @@ describe("OAuth key-session sign-out and failed sign-in", () => {
 
     const reply = await request(app, "POST", "/mcp/oauth/key-auth", {
       cookie: token,
-      form: { credential_mode: "bearer", bearer_token: "wrong-value", next: "/mcp/oauth/authorize" },
+      form: {
+        credential_mode: "bearer",
+        bearer_token: "wrong-value",
+        next: "/mcp/oauth/authorize",
+      },
     });
     expect(reply.status).toBe(401);
     expectCookieCleared(reply);
