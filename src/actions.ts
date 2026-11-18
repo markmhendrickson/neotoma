@@ -4088,6 +4088,29 @@ function stampUserPrincipal(req: express.Request, userId: string): void {
   };
 }
 
+/**
+ * Records that the request signed in as the local dev user through the
+ * loopback no-token path (no Authorization header). `getAuthenticatedUserId`
+ * honours a caller-supplied `user_id` only for requests carrying this mark
+ * (or when `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1`). Every token-based path
+ * leaves it unset.
+ */
+function markLocalNoTokenSignIn(req: express.Request): void {
+  (req as express.Request & { localNoTokenSignIn?: boolean }).localNoTokenSignIn = true;
+}
+
+/**
+ * Whether a caller-supplied `user_id` may replace the local dev user for this
+ * request: only for a loopback request that signed in without a token, outside
+ * production, unless `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` is set.
+ */
+function devUserIdOverrideAllowed(req: express.Request): boolean {
+  if (runtimeEnv().NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE === "1") return true;
+  const localNoToken =
+    (req as express.Request & { localNoTokenSignIn?: boolean }).localNoTokenSignIn === true;
+  return localNoToken && !isProductionEnvironment();
+}
+
 function stampGuestPrincipal(req: express.Request, principal: GuestPrincipal): void {
   (req as express.Request & { principal?: RoutePrincipal }).principal = principal;
 }
@@ -4393,6 +4416,7 @@ async function resolveRoutePrincipal(
       // Stamp the principal so a later `getAuthenticatedUserId` in the handler
       // resolves the same local user without re-tripping the missing-Bearer gate.
       stampUserPrincipal(req, userId);
+      if (!_localSandboxActive) markLocalNoTokenSignIn(req);
       return { kind: "user", userId };
     }
 
@@ -4941,6 +4965,7 @@ app.use(async (req, res, next) => {
     }
     const devUser = await ensureLocalDevUser();
     stampUserPrincipal(req, devUser.id);
+    markLocalNoTokenSignIn(req);
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
     );
@@ -5029,6 +5054,7 @@ app.use(async (req, res, next) => {
         }
         const devUser = await ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
+        markLocalNoTokenSignIn(req);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
         );
@@ -5331,12 +5357,16 @@ export async function getAuthenticatedUserId(
           `user_id parameter (${providedUserId}) does not match admitted AAuth user (${authenticatedUserId}); grants only resolve to their owner`
         );
       }
-      // When authenticated as local dev user, allow body/query user_id override for CLI tests and dev flows.
-      // The sandbox public user is intentionally excluded so public sandbox
-      // callers cannot pivot into other users' data by spoofing user_id.
+      // When authenticated as the local dev user through the loopback no-token
+      // path (outside production), allow a body/query user_id override for CLI
+      // tests and dev flows. Token-based sign-ins that resolve to the dev user
+      // (static bearer, key-derived token, OAuth sessions) do not get it unless
+      // NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1. The sandbox public user is
+      // excluded so public sandbox callers stay on their own user.
       if (
         authenticatedUserId === LOCAL_DEV_USER_ID &&
-        authenticatedUserId !== SANDBOX_PUBLIC_USER_ID
+        authenticatedUserId !== SANDBOX_PUBLIC_USER_ID &&
+        devUserIdOverrideAllowed(req)
       ) {
         return providedUserId;
       }
