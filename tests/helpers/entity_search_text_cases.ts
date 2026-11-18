@@ -7,7 +7,7 @@
  * text the old way") or exactly the text search would build right now.
  */
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -86,6 +86,34 @@ async function searchTextOf(entityId: string): Promise<string | null> {
     .get(entityId)) as { search_text: string | null } | undefined;
   return row ? row.search_text : null;
 }
+
+/**
+ * Run `action` with the shared connection's `prepare` wrapped by `intercept`.
+ * `intercept` sees each SQL string and the original `prepare`, so it can run a
+ * concurrent write before a statement, or throw, on that same connection.
+ */
+async function withPrepareIntercept<T>(
+  intercept: (sql: string, original: DbDatabase["prepare"]) => void,
+  action: () => Promise<T>
+): Promise<T> {
+  const conn = (await getDb()) as DbDatabase & { prepare: DbDatabase["prepare"] };
+  const original = conn.prepare.bind(conn);
+  const hadOwn = Object.prototype.hasOwnProperty.call(conn, "prepare");
+  const previous = conn.prepare;
+  conn.prepare = ((sql: string) => {
+    intercept(sql, original);
+    return original(sql);
+  }) as DbDatabase["prepare"];
+  try {
+    return await action();
+  } finally {
+    if (hadOwn) conn.prepare = previous;
+    else delete (conn as { prepare?: unknown }).prepare;
+  }
+}
+
+const GUARDED_UPDATE = "UPDATE entity_snapshots SET search_text = ?";
+const FILL_HEAD_SELECT = "SELECT s.snapshot AS snapshot, e.canonical_name AS canonical_name";
 
 export function registerEntitySearchTextCases(
   backend: "sqlite" | "libsql",
@@ -219,6 +247,99 @@ export function registerEntitySearchTextCases(
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
+    });
+    it("a raw fragment written between the fill's read and its guarded UPDATE leaves the column NULL", async () => {
+      const userId = randomUUID();
+      const id = await storeOne(userId, NOTE, { title: "Synthetic race fragment base" });
+      expect(await searchTextOf(id)).not.toBeNull();
+      let fired = 0;
+      const pendingWrites: Array<Promise<unknown>> = [];
+      const second = await withPrepareIntercept(
+        (sql, original) => {
+          if (!sql.startsWith(GUARDED_UPDATE)) return;
+          fired++;
+          // Concurrent writer, queued on the same connection ahead of every
+          // guarded UPDATE, so no fill in this store sees its own inputs unchanged.
+          pendingWrites.push(
+            original(
+              "INSERT INTO raw_fragments (id, entity_id, entity_type, fragment_key, fragment_value, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+            ).run(randomUUID(), id, NOTE, "race_key_" + fired, '"race value"', userId)
+          );
+        },
+        () => storeOne(userId, NOTE, { title: "Synthetic race fragment base", extra: "x" })
+      );
+      await Promise.all(pendingWrites);
+      expect(second).toBe(id);
+      expect(fired).toBeGreaterThan(0);
+      expect(await searchTextOf(id)).toBeNull();
+      // Control: the same store without a concurrent writer fills the column.
+      await storeOne(userId, NOTE, { title: "Synthetic race fragment base", extra: "z" });
+      expect(await searchTextOf(id)).toBe(await freshText(id));
+    });
+
+    it("a rename between the fill's read and its guarded UPDATE leaves the column NULL", async () => {
+      const userId = randomUUID();
+      const id = await storeOne(userId, NOTE, { title: "Synthetic race rename base" });
+      expect(await searchTextOf(id)).not.toBeNull();
+      let fired = 0;
+      const pendingWrites: Array<Promise<unknown>> = [];
+      await withPrepareIntercept(
+        (sql, original) => {
+          if (!sql.startsWith(GUARDED_UPDATE)) return;
+          fired++;
+          pendingWrites.push(
+            original("UPDATE entities SET canonical_name = ? WHERE id = ?").run(
+              "synthetic raced name " + fired,
+              id
+            )
+          );
+        },
+        () => storeOne(userId, NOTE, { title: "Synthetic race rename base", extra: "y" })
+      );
+      await Promise.all(pendingWrites);
+      expect(fired).toBeGreaterThan(0);
+      expect(await searchTextOf(id)).toBeNull();
+    });
+
+    it("with column encryption on, a snapshot write leaves the column NULL", async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), "neotoma-search-text-key-"));
+      const keyFile = path.join(dir, "synthetic.key");
+      writeFileSync(keyFile, "cd".repeat(32), { mode: 0o600 });
+      const saved = { ...config.encryption };
+      config.encryption.enabled = true;
+      config.encryption.keyFilePath = keyFile;
+      try {
+        const userId = randomUUID();
+        const id = await storeOne(userId, NOTE, { title: "Synthetic encrypted note" });
+        expect(await searchTextOf(id)).toBeNull();
+      } finally {
+        Object.assign(config.encryption, saved);
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("a failing fill leaves the column NULL and the snapshot write still succeeds", async () => {
+      const userId = randomUUID();
+      let failed = 0;
+      const id = await withPrepareIntercept(
+        (sql) => {
+          if (sql.startsWith(FILL_HEAD_SELECT)) {
+            failed++;
+            throw new Error("synthetic fill failure");
+          }
+        },
+        () => storeOne(userId, NOTE, { title: "Synthetic failing fill" })
+      );
+      expect(failed).toBeGreaterThan(0);
+      expect(await searchTextOf(id)).toBeNull();
+      const snapshot = await db
+        .from("entity_snapshots")
+        .select("snapshot")
+        .eq("entity_id", id)
+        .single();
+      expect(JSON.stringify((snapshot.data as { snapshot: unknown }).snapshot)).toContain(
+        "Synthetic failing fill"
+      );
     });
   });
 }
