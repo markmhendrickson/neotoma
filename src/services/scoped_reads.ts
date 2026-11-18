@@ -97,10 +97,7 @@ export async function filterOwnedEntityIds(
 ): Promise<Set<string>> {
   const unique = Array.from(new Set(entityIds.filter(Boolean)));
   if (unique.length === 0) return new Set();
-  const { data, error } = await db
-    .from("entities")
-    .select("id, user_id")
-    .in("id", unique);
+  const { data, error } = await db.from("entities").select("id, user_id").in("id", unique);
   if (error) {
     throw new Error(`Failed to look up entities: ${error.message}`);
   }
