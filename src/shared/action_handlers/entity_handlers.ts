@@ -379,9 +379,6 @@ function compareSearchRank(
   return ai - bi;
 }
 
-
-
-
 /**
  * Candidates scored between event-loop yields during lexical search, so one
  * large scan cannot hold the main event loop for seconds.
@@ -391,7 +388,6 @@ export const LEXICAL_SEARCH_YIELD_INTERVAL = 500;
 function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
-
 
 /**
  * Non-strict retrieval strategies that can contribute to a search result set.
