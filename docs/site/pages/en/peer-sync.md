@@ -78,7 +78,7 @@ Use peer sync when:
 
 - `NEOTOMA_PUBLIC_BASE_URL` — public base URL of this API (no trailing slash). Used as `sender_peer_url` on outbound sync so the peer can fetch entity snapshots back.
 - `NEOTOMA_LOCAL_PEER_ID` — stable id this instance presents as `sender_peer_id`. Must match the value the peer recorded as their `peer_id` for you.
-- `NEOTOMA_HOSTED_MODE=1` — operator opt-in for hosted / multi-tenant deployments. When set, the inbound webhook handler rejects any `sender_peer_url` whose host is a private, loopback, or link-local address or a local name. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback.
+- `NEOTOMA_HOSTED_MODE` — controls the outbound host guard for hosted / multi-tenant deployments. When `NEOTOMA_HOSTED_MODE` is unset, the guard follows the HTTP bind host: it is off for a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) and on for any other `NEOTOMA_HTTP_HOST` (for example `0.0.0.0`). A non-loopback bind always enforces, whatever `NEOTOMA_HOSTED_MODE` says. The flag can only force enforcement on for a loopback bind: `1` / `true` / `yes` (or any unrecognised value) turns it on there, and `0` / `false` / `no` / `off` leave the loopback default (off) unchanged. Hosted / multi-tenant deployments MUST set `NEOTOMA_HOSTED_MODE=1`: a multi-tenant server bound to `127.0.0.1` behind a tunnel or reverse proxy is not covered by the bind-host rule, so the flag is required there. When the guard is on, the inbound webhook handler rejects any `sender_peer_url` whose host is a private, loopback, or link-local address or a local name. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback.
 
 ## Example
 
