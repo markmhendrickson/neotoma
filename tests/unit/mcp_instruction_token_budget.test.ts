@@ -93,7 +93,10 @@ import {
 // Store reply `write_committed` / `store_write_completion: "unconfirmed"` (PR #2824):
 // one mirrored rule line (+~240 chars) so agents treat a committed store with an
 // unconfirmed marker as success instead of retrying it. Raised 200 chars to 153,200.
-const FULL_BLOCK_MAX_CHARS = 153_200;
+// CLI user-scope rule: one existing sentence now states that a different user_id is
+// only honoured for local requests without a token, otherwise 403 (+21 chars, to
+// 153,215). Raised 50 chars to 153,250.
+const FULL_BLOCK_MAX_CHARS = 153_250;
 
 /**
  * Ceiling for the compact payload served when NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1.
