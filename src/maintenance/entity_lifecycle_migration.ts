@@ -292,7 +292,42 @@ function allowedSchemaDelta(
   )
     refuse("schema_delta_invalid");
 }
-/** Every materialized column is compared; only source-defined wall-clock bookkeeping is validated as a timestamp. */
+/**
+ * entity_snapshots.search_text is a derived cache whose NULL-or-fresh state depends on
+ * write order (a later rename NULLs it), so it is validated rather than compared: a
+ * stored value must equal the text built now from the row's own inputs.
+ */
+async function validateSearchText(tx: DbConnection, row: Record<string, unknown>): Promise<void> {
+  const stored = row.search_text;
+  delete row.search_text;
+  if (stored === null || stored === undefined) return;
+  const { fromDbRow, getDataKey } = await import("../repositories/sqlite/local_db_adapter.js");
+  const { buildEntityLexicalSearchText, joinRawFragmentPieces } =
+    await import("../shared/entity_search_text.js");
+  const entity = (await tx
+    .prepare("SELECT canonical_name FROM entities WHERE id=?")
+    .get(row.entity_id)) as { canonical_name: string | null } | undefined;
+  if (getDataKey() || typeof stored !== "string" || entity?.canonical_name == null)
+    refuse("materialization_invalid");
+  const fragments = (await tx
+    .prepare(
+      "SELECT fragment_key,fragment_value FROM raw_fragments WHERE entity_id=? ORDER BY rowid"
+    )
+    .all(row.entity_id)) as Array<{ fragment_key: string; fragment_value: unknown }>;
+  const fresh = buildEntityLexicalSearchText(
+    entity!.canonical_name!,
+    fromDbRow("entity_snapshots", { snapshot: row.snapshot }).snapshot,
+    joinRawFragmentPieces(
+      fragments.map((fragment) => ({
+        fragment_key: fragment.fragment_key,
+        fragment_value: fromDbRow("raw_fragments", { fragment_value: fragment.fragment_value })
+          .fragment_value,
+      }))
+    )
+  );
+  if (stored !== fresh) refuse("materialization_invalid");
+}
+/** Every materialized column is compared, except entity_snapshots.search_text (validated above); only source-defined wall-clock bookkeeping is validated as a timestamp. */
 export async function lifecycleMaterialization(tx: DbConnection): Promise<unknown> {
   const result: unknown[] = [];
   for (const [name, key, clock] of [
@@ -309,6 +344,7 @@ export async function lifecycleMaterialization(tx: DbConnection): Promise<unknow
           refuse("materialization_invalid");
       }
       if (clock) delete row[clock];
+      if (name === "entity_snapshots") await validateSearchText(tx, row);
     }
     result.push({ table: name, rows });
   }
