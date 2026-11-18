@@ -4893,11 +4893,13 @@ async function relatedEntitiesReadableByGuest(
   // Only entities that exist in the owner's graph are considered.
   const { data: rows, error } = await db
     .from("entities")
-    .select("id")
-    .in("id", relatedIds)
-    .eq("user_id", ownerId);
+    .select("id, user_id")
+    .in("id", relatedIds);
   if (error) throw error;
-  const candidates = ((rows ?? []) as Array<{ id: string }>)
+  // Filter by owner here: with user_id in the WHERE clause the planner picks
+  // the user_id index and reads every entity of a single-user instance.
+  const candidates = ((rows ?? []) as Array<{ id: string; user_id: string }>)
+    .filter((row) => row.user_id === ownerId)
     .map((row) => row.id)
     .sort()
     .slice(0, GUEST_EXPANSION_MAX_RELATED_ENTITIES);
