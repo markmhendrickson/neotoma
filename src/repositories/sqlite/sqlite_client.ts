@@ -900,6 +900,24 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_entities_user_live_name ON entities(user_id, merged_to_entity_id, canonical_name, id)"
       )
       .run();
+    // Lookups that carry entity_type (and canonical_name) but no user_id: the
+    // store path's canonical-name collision check and the instance-policy
+    // merge filter. Every index above leads with user_id, so these scanned
+    // the whole entities table.
+    await createIndexLogged(
+      db,
+      "idx_entities_type_name",
+      "entities",
+      "CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name)"
+    );
+    // relationship_observations had no index besides its primary key; every
+    // create_relationship lookup by relationship_key scanned the table.
+    await createIndexLogged(
+      db,
+      "idx_relationship_observations_key_user",
+      "relationship_observations",
+      "CREATE INDEX IF NOT EXISTS idx_relationship_observations_key_user ON relationship_observations(relationship_key, user_id)"
+    );
 
     // ateles#576: the visible-entity count is a COUNT(*) over entity_snapshots
     // filtered by (user_id, entity_type). Without this index that count was a
