@@ -99,13 +99,18 @@ export async function filterOwnedEntityIds(
   if (unique.length === 0) return new Set();
   const { data, error } = await db
     .from("entities")
-    .select("id")
-    .in("id", unique)
-    .eq("user_id", userId);
+    .select("id, user_id")
+    .in("id", unique);
   if (error) {
     throw new Error(`Failed to look up entities: ${error.message}`);
   }
-  return new Set(((data as Array<{ id: string }> | null) ?? []).map((r) => r.id));
+  // Filter by owner here: with user_id in the WHERE clause the planner picks
+  // the user_id index and reads every entity of a single-user instance.
+  return new Set(
+    ((data as Array<{ id: string; user_id: string }> | null) ?? [])
+      .filter((r) => r.user_id === userId)
+      .map((r) => r.id)
+  );
 }
 
 /**
