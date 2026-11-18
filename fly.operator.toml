@@ -171,7 +171,7 @@
 # oversizes costs money and keeps serving. Until sizing is genuinely
 # per-instance, err toward the machine that needs the most — and run the drift
 # check first, which reports either direction before a deploy applies it.
-# Memory raised from 8gb to 16gb (operator decision, 2026-11-19): the operator
+# Memory raised from 8gb to 16gb (operator decision, 2026-11-18): the operator
 # database file is about 9GB, larger than the file cache an 8GB machine leaves
 # (about 6GB), so whole-table scans read from disk. The machine type stays
 # 'performance' with 2 CPUs. Other instances deployed with this file are sized

@@ -80,7 +80,7 @@ describe("deploy_workflow_config", () => {
     // running values of the largest operator instance, read from the live
     // machine on 2026-09-01: performance / 2 CPU / 8GB. It was scaled up by
     // hand after repeated exit-134 (V8 heap OOM) aborts. Raised to 16GB on
-    // 2026-11-19 (operator decision) so the roughly 9GB database fits in the
+    // 2026-11-18 (operator decision) so the roughly 9GB database fits in the
     // machine's file cache.
     const configName = deployCommand(readWorkflow()).match(/(?:-c|--config)\s+(\S+)/)?.[1];
     expect(configName).toBe("fly.operator.toml");
