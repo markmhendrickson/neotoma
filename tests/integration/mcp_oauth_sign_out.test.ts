@@ -5,7 +5,8 @@
  * - POST /mcp/oauth/sign-out ends the session on the server and clears the
  *   cookie, so a later request carrying the old cookie is treated as signed
  *   out (GET /mcp/oauth/key-auth renders the credential form instead of
- *   redirecting onward).
+ *   redirecting onward, and GET /mcp/oauth/authorize sends the browser back
+ *   to the credential form).
  * - A failed POST /mcp/oauth/key-auth ends any session the browser already
  *   holds, and clears its cookie.
  * - A correct POST /mcp/oauth/key-auth still issues a working session.
@@ -112,6 +113,21 @@ async function signIn(app: any): Promise<string> {
   return token!;
 }
 
+/** Synthetic PKCE authorize request; only the key-session gate matters here. */
+const AUTHORIZE_PATH =
+  "/mcp/oauth/authorize?" +
+  new URLSearchParams({
+    redirect_uri: "http://localhost:4321/callback",
+    state: "synthetic-state",
+    client_id: "synthetic-client",
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    code_challenge_method: "S256",
+  }).toString();
+
+function isKeyAuthPrompt(reply: Reply): boolean {
+  return reply.status === 302 && (reply.location ?? "").startsWith("/mcp/oauth/key-auth?next=");
+}
+
 /** Signed in: key-auth GET redirects onward. Signed out: it renders the form. */
 async function isSignedIn(app: any, token: string): Promise<boolean> {
   const reply = await request(app, "GET", "/mcp/oauth/key-auth", { cookie: token });
@@ -154,6 +170,28 @@ describe("OAuth key-session sign-out and failed sign-in", () => {
     // The old cookie value no longer works, even if a client keeps sending it.
     expect(sessions.isValid(token)).toBe(false);
     expect(await isSignedIn(app, token)).toBe(false);
+  });
+
+  it("after sign-out, the authorize route re-prompts for credentials on the old cookie", async () => {
+    currentTempDir = path.join(process.cwd(), "tmp", `neotoma-signout-authorize-${Date.now()}`);
+    const { app } = await loadApp(currentTempDir);
+
+    const token = await signIn(app);
+    // While the session is live, authorize does not send the browser back to
+    // the credential form (whatever it does next depends on the client).
+    const before = await request(app, "GET", AUTHORIZE_PATH, { cookie: token });
+    expect(isKeyAuthPrompt(before)).toBe(false);
+
+    const out = await request(app, "POST", "/mcp/oauth/sign-out", { cookie: token });
+    expect(out.status).toBe(200);
+
+    // The same cookie value, replayed, is sent to the credential form with the
+    // authorize request preserved as `next`.
+    const after = await request(app, "GET", AUTHORIZE_PATH, { cookie: token });
+    expect(isKeyAuthPrompt(after)).toBe(true);
+    const next = new URL(after.location!, "http://127.0.0.1").searchParams.get("next");
+    expect(next).toContain("/mcp/oauth/authorize");
+    expect(next).toContain("state=synthetic-state");
   });
 
   it("sign-out also removes the identity bound to the session", async () => {
