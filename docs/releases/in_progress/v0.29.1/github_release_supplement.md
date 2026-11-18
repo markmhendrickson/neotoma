@@ -64,10 +64,13 @@ Neotoma v0.29.1 is a patch release. It runs one background timer per server proc
 - One auto-enhancement timer runs per server process.
 - Schema changes made by another process on the same database file reach a running server's lookups within 250 ms by default.
 - On the first start after upgrade, `ensureSchema` creates one index, one table and three triggers on `schema_registry`.
+- `user_id` supplied by a caller is only honoured for local development requests without a token; set NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1 to keep the old behaviour in test setups.
 
 ## Agent-facing instruction changes
 
 - The CLI agent instructions (`docs/developer/cli_agent_instructions.md`) state that with a key configured every CLI request is signed and carries no bearer, to rerun with `--with-bearer` when an instance answers `401` to the signature, and what to do when a disable variable is set beside a key.
+
+- The MCP and CLI instructions (`docs/developer/mcp/instructions.md`, `docs/developer/cli_reference.md`) now say that `--user-id` and `NEOTOMA_USER_ID` only scope reads to a different user for local development requests that carry no token; otherwise the server answers `403` unless `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` is set.
 
 ## Plugin / hooks / SDK changes
 
