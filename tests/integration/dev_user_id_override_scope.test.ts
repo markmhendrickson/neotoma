@@ -150,9 +150,7 @@ async function queryEntities(
 }
 
 function sessionCookieFrom(res: Response): string {
-  const line = res.headers
-    .getSetCookie()
-    .find((c) => c.startsWith("neotoma_oauth_key_session="));
+  const line = res.headers.getSetCookie().find((c) => c.startsWith("neotoma_oauth_key_session="));
   if (!line) throw new Error("Expected a key-session cookie");
   return line.split(";")[0];
 }

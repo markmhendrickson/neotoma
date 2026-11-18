@@ -16,7 +16,8 @@ Resolution order:
 
 1. **Auth middleware has set `req.authenticatedUserId`** (Bearer, OAuth, or local-dev session):
    - If `providedUserId` is absent or matches the authenticated user → return the authenticated user.
-   - If `providedUserId` differs and the authenticated user is `LOCAL_DEV_USER_ID` (`00000000-0000-0000-0000-000000000000`) → allow the override (dev / test flows).
+   - If `providedUserId` differs, the authenticated user is `LOCAL_DEV_USER_ID` (`00000000-0000-0000-0000-000000000000`), and the request is a loopback request that signed in without a token (no `Authorization` header) outside production → allow the override (dev / test flows). Sign-ins that carry a token do not get the override.
+   - `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` allows the override for every sign-in that resolves to `LOCAL_DEV_USER_ID`, for test setups that pass `user_id` together with a token.
    - If `providedUserId` differs otherwise → reject with an error (session authZ cannot be bypassed).
 2. **No session set** (no auth middleware or explicit Bearer-skip): fall back to `providedUserId` from the body or query.
 
@@ -25,7 +26,7 @@ Resolution order:
 - Always call `getAuthenticatedUserId` with the caller-provided value (body `user_id` for POST/PATCH, query `user_id` for GET/DELETE).
 - Never read `req.body.user_id` or `req.query.user_id` directly for authorization.
 - New read endpoints that accept a `user_id` query parameter must declare it in `openapi.yaml` (see `docs/architecture/openapi_contract_flow.md`).
-- The `LOCAL_DEV_USER_ID` override is a deliberate dev-flow affordance; widening it to other users requires an explicit security review.
+- The `LOCAL_DEV_USER_ID` override is a deliberate dev-flow affordance limited to loopback requests without a token (or `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1`); widening it to other users or sign-in paths requires an explicit security review.
 
 ## Shared-graph identity vs graph scope (`GET /me`)
 
