@@ -4548,6 +4548,10 @@ paths:
         Idempotent: a request with no session, or an already-ended one, still
         receives the cleared cookie and the same response.
       operationId: mcpOAuthSignOut
+      # Deliberately unauthenticated: the browser caller may hold only the
+      # HttpOnly key-session cookie, and the route only ends the caller's own
+      # session and clears its own cookie.
+      security: []
       responses:
         "200":
           description: Signed-out HTML page; the response clears the session cookie
