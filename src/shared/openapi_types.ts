@@ -387,6 +387,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp/oauth/sign-out": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * End the OAuth key-session and clear its cookie
+     * @description Revokes the caller's OAuth key-session (set by key-auth or Google sign-in) on the server and clears the neotoma_oauth_key_session cookie. Idempotent: a request with no session, or an already-ended one, still receives the cleared cookie and the same response.
+     */
+    post: operations["mcpOAuthSignOut"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp/oauth/local-login": {
     parameters: {
       query?: never;
@@ -5991,6 +6011,26 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  mcpOAuthSignOut: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Signed-out HTML page; the response clears the session cookie */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/html": string;
+        };
       };
     };
   };
