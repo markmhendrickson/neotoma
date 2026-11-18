@@ -5359,8 +5359,7 @@ export async function getAuthenticatedUserId(
       }
       // When authenticated as the local dev user through the loopback no-token
       // path (outside production), allow a body/query user_id override for CLI
-      // tests and dev flows. Token-based sign-ins that resolve to the dev user
-      // (static bearer, key-derived token, OAuth sessions) do not get it unless
+      // tests and dev flows. Token-based sign-ins do not get it unless
       // NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1. The sandbox public user is
       // excluded so public sandbox callers stay on their own user.
       if (

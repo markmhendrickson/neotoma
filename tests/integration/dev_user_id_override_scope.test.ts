@@ -5,9 +5,7 @@
  * the authenticated local dev user is honoured only for a loopback request
  * that signed in WITHOUT a token, outside production, or when
  * `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` is set. Every token-based sign-in
- * that resolves to the dev user (static bearer, key-derived token, OAuth
- * access token minted through key sign-in) gets the existing 403 mismatch
- * error instead. A matching or absent `user_id` keeps working everywhere.
+ * gets the existing 403 mismatch error instead. A matching or absent `user_id` keeps working everywhere.
  *
  * All assertions drive real HTTP requests against a freshly imported app.
  */
@@ -49,7 +47,7 @@ function restoreEnv(): void {
   }
 }
 
-/** Synthetic static bearer for this test process only. */
+/** Synthetic token for this test process only. */
 const STATIC_BEARER = "synthetic-static-bearer-for-user-id-scope-tests";
 /** Synthetic user id that differs from the local dev user. */
 const OTHER_USER_ID = "11111111-2222-4333-8444-555555555555";
@@ -159,7 +157,7 @@ function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Mint an OAuth access token through the key sign-in page and local-login. */
+/** Mint a session token through the test sign-in flow. */
 async function mintOauthAccessToken(baseUrl: string): Promise<string> {
   const signIn = await fetch(`${baseUrl}/mcp/oauth/key-auth`, {
     method: "POST",
@@ -227,9 +225,9 @@ describe("local-dev user_id override is limited to loopback requests without a t
   async function credentials(h: Harness): Promise<Array<[string, string]>> {
     expect(h.keyDerivedToken).toBeTruthy();
     return [
-      ["static bearer", STATIC_BEARER],
-      ["key-derived token", h.keyDerivedToken as string],
-      ["OAuth access token from key sign-in", await mintOauthAccessToken(h.baseUrl)],
+      ["configured token", STATIC_BEARER],
+      ["derived token", h.keyDerivedToken as string],
+      ["session token", await mintOauthAccessToken(h.baseUrl)],
     ];
   }
 
