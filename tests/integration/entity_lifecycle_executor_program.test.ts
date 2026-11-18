@@ -25,7 +25,17 @@ import { withExistingLifecycleDatabase } from "../../src/repositories/db/connect
 import { migrateEntityLifecycleAuthority } from "../../src/services/entity_lifecycle_storage.js";
 import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
 import { inspectLifecycleDatabase } from "../../src/maintenance/entity_lifecycle_inventory.js";
-import { lifecycleMaterialization } from "../../src/maintenance/entity_lifecycle_migration.js";
+import {
+  lifecycleMaterialization,
+  LifecycleExecutorRefused,
+} from "../../src/maintenance/entity_lifecycle_migration.js";
+import { config } from "../../src/config.js";
+import type { DbConnection } from "../../src/repositories/db/driver.js";
+import { fromDbRow } from "../../src/repositories/sqlite/local_db_adapter.js";
+import {
+  buildEntityLexicalSearchText,
+  joinRawFragmentPieces,
+} from "../../src/shared/entity_search_text.js";
 import {
   sha256,
   type Artifact,
@@ -874,5 +884,163 @@ expected:
     });
     expect(sha256(readFileSync(source))).toBe(sha256(sourceBytes));
     expect(existsSync(output)).toBe(false);
+  });
+});
+
+describe("lifecycle materialization validates entity_snapshots.search_text", () => {
+  const repaired = "ent_owned_0000";
+  async function withOracleCopy(action: (db: AsyncSqliteDatabase) => Promise<void>) {
+    const file = join(fixture, "copy", "search-text.sqlite");
+    copyFileSync(oracle, file);
+    const db = new AsyncSqliteDatabase(file, { existing: true, readOnly: false });
+    try {
+      await action(db);
+    } finally {
+      await db.close();
+    }
+  }
+  /** The same builder the validator uses, over the row's own name, snapshot and fragments. */
+  async function freshSearchText(db: AsyncSqliteDatabase, entityId: string): Promise<string> {
+    const entity = (await db
+      .prepare("SELECT canonical_name FROM entities WHERE id=?")
+      .get(entityId)) as { canonical_name: string };
+    const row = (await db
+      .prepare("SELECT snapshot FROM entity_snapshots WHERE entity_id=?")
+      .get(entityId)) as { snapshot: unknown };
+    const fragments = (await db
+      .prepare(
+        "SELECT fragment_key,fragment_value FROM raw_fragments WHERE entity_id=? ORDER BY rowid"
+      )
+      .all(entityId)) as Array<{ fragment_key: string; fragment_value: unknown }>;
+    return buildEntityLexicalSearchText(
+      entity.canonical_name,
+      fromDbRow("entity_snapshots", { snapshot: row.snapshot }).snapshot,
+      joinRawFragmentPieces(
+        fragments.map((fragment) => ({
+          fragment_key: fragment.fragment_key,
+          fragment_value: fromDbRow("raw_fragments", { fragment_value: fragment.fragment_value })
+            .fragment_value,
+        }))
+      )
+    );
+  }
+  async function setSearchText(db: AsyncSqliteDatabase, value: string | null) {
+    await db
+      .prepare("UPDATE entity_snapshots SET search_text=? WHERE entity_id=?")
+      .run(value, repaired);
+    expect(
+      await db.prepare("SELECT search_text FROM entity_snapshots WHERE entity_id=?").get(repaired)
+    ).toEqual({ search_text: value });
+  }
+  async function expectRefused(run: Promise<unknown>, category: string) {
+    const error = await run.then(
+      () => null,
+      (caught: unknown) => caught
+    );
+    expect(error).toBeInstanceOf(LifecycleExecutorRefused);
+    expect((error as LifecycleExecutorRefused).category).toBe(category);
+  }
+
+  it("refuses a stored value that differs from freshly built text", async () => {
+    await withOracleCopy(async (db) => {
+      await db
+        .prepare(
+          "INSERT INTO raw_fragments(id,entity_id,entity_type,fragment_key,fragment_value,user_id) VALUES(?,?,?,?,?,?)"
+        )
+        .run("frag_owned_wrong", repaired, type, "synthetic_key", '"synthetic value"', owner);
+      await setSearchText(db, "synthetic wrong search text");
+      await expectRefused(lifecycleMaterialization(db), "materialization_invalid");
+    });
+  });
+
+  it("accepts a stored value equal to freshly built text and omits it from the result", async () => {
+    await withOracleCopy(async (db) => {
+      await db
+        .prepare(
+          "INSERT INTO raw_fragments(id,entity_id,entity_type,fragment_key,fragment_value,user_id) VALUES(?,?,?,?,?,?)"
+        )
+        .run("frag_owned_fresh", repaired, type, "synthetic_key", '"synthetic value"', owner);
+      const fresh = await freshSearchText(db, repaired);
+      expect(fresh).toContain("synthetic value");
+      await setSearchText(db, fresh);
+      const result = (await lifecycleMaterialization(db)) as Array<{
+        table: string;
+        rows: Array<Record<string, unknown>>;
+      }>;
+      const snapshots = result.find((entry) => entry.table === "entity_snapshots")!;
+      expect(snapshots.rows.length).toBe(251);
+      for (const row of snapshots.rows) expect(row).not.toHaveProperty("search_text");
+    });
+  });
+
+  it("accepts NULL after a rename, and the rename itself clears a stored value", async () => {
+    await withOracleCopy(async (db) => {
+      await setSearchText(db, await freshSearchText(db, repaired));
+      await db
+        .prepare("UPDATE entities SET canonical_name=? WHERE id=?")
+        .run("Synthetic renamed owned", repaired);
+      expect(
+        await db.prepare("SELECT search_text FROM entity_snapshots WHERE entity_id=?").get(repaired)
+      ).toEqual({ search_text: null });
+      await expect(lifecycleMaterialization(db)).resolves.toBeTruthy();
+
+      await setSearchText(db, null);
+      await db
+        .prepare("UPDATE entities SET canonical_name=? WHERE id=?")
+        .run("Synthetic renamed owned again", repaired);
+      await expect(lifecycleMaterialization(db)).resolves.toBeTruthy();
+    });
+  });
+
+  it("fails closed when the raw_fragments read inside the validator fails", async () => {
+    await withOracleCopy(async (db) => {
+      await setSearchText(db, await freshSearchText(db, repaired));
+      let fragmentReads = 0;
+      const failing: DbConnection = new Proxy(db as unknown as DbConnection, {
+        get(target, prop, receiver) {
+          if (prop === "prepare")
+            return (sql: string) => {
+              if (/FROM raw_fragments/.test(sql)) {
+                fragmentReads++;
+                throw new Error("synthetic unreadable raw_fragments");
+              }
+              return (target as unknown as AsyncSqliteDatabase).prepare(sql);
+            };
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const error = await lifecycleMaterialization(failing).then(
+        () => null,
+        (caught: unknown) => caught
+      );
+      expect(fragmentReads).toBe(1);
+      expect(error).toBeInstanceOf(Error);
+      // Not a refusal category: the compiled program reports it as executor_failed and exits 1.
+      expect((error as Error).message).toBe("synthetic unreadable raw_fragments");
+    });
+  });
+
+  it("refuses any stored value while column encryption is on", async () => {
+    const saved = { ...config.encryption };
+    const keyFile = join(fixture, "home", "synthetic.key");
+    writeFileSync(keyFile, "ab".repeat(32), { mode: 0o600 });
+    await withOracleCopy(async (db) => {
+      // Only the repaired row holds a value, so the refusal is attributable to it.
+      await db.prepare("UPDATE entity_snapshots SET search_text=NULL").run();
+      await expect(lifecycleMaterialization(db)).resolves.toBeTruthy();
+      await setSearchText(db, await freshSearchText(db, repaired));
+      await expect(lifecycleMaterialization(db)).resolves.toBeTruthy();
+      config.encryption.enabled = true;
+      config.encryption.keyFilePath = keyFile;
+      try {
+        await expectRefused(lifecycleMaterialization(db), "materialization_invalid");
+        // NULL stays accepted with encryption on.
+        await setSearchText(db, null);
+        await expect(lifecycleMaterialization(db)).resolves.toBeTruthy();
+      } finally {
+        Object.assign(config.encryption, saved);
+      }
+    });
   });
 });
