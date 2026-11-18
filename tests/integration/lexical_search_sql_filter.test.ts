@@ -363,6 +363,24 @@ describe("lexical search SQL candidate filter", () => {
     expect(concept.strategies).toContain("concept_bridge");
   });
 
+  it("a rename NULLs the stored text (brief 1 trigger) and the row is found by its new name", async () => {
+    await fillSearchText(fixtureIds);
+    const target = `ent_lexsql_${RUN}_hyphen`;
+    const conn = await getDb();
+    await conn
+      .prepare("UPDATE entities SET canonical_name = ? WHERE id = ?")
+      .run("cobaltmere renamed report", target);
+    try {
+      expect(await nullCount([target])).toBe(1);
+      const renamed = await run({ userId: USER, search: "cobaltmere" });
+      expect(renamed.entityIds).toEqual([target]);
+    } finally {
+      await conn
+        .prepare("UPDATE entities SET canonical_name = ? WHERE id = ?")
+        .run("alpha-beta_gamma fernwick report", target);
+    }
+  });
+
   it("a selective search over 2,000 rows loads about one row", async () => {
     const filtered = await run({ userId: USER, entityType: BULK, search: "lanternquay" });
     expect(filtered.total).toBe(1);
