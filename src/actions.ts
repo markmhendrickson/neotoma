@@ -144,6 +144,7 @@ import {
 } from "./mcp_http_stateless.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
+import { isOutboundHostGuardEnabled } from "./services/net/private_host_guard.js";
 import {
   storeWriteCompletionResponseFields,
   type StoreWriteCompletion,
@@ -14911,6 +14912,13 @@ export async function startHTTPServer() {
       }
       // eslint-disable-next-line no-console
       console.log(`HTTP Actions listening on :${boundPort}`);
+      // The bind host alone decides here (flag blanked): a non-loopback bind
+      // keeps the outbound host guard on whatever NEOTOMA_HOSTED_MODE says.
+      if (isOutboundHostGuardEnabled({ ...runtimeEnv(), NEOTOMA_HOSTED_MODE: "" })) {
+        logger.info(
+          "[outbound_host_guard] on because NEOTOMA_HTTP_HOST is not loopback; caller-supplied outbound URLs to private hosts are refused"
+        );
+      }
       if (runtimeEnv().NODE_ENV !== "test") {
         writeLocalHttpPortFile(config.projectRoot, boundPort, config.environment);
       }
