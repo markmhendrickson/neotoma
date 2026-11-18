@@ -9,6 +9,8 @@
  *   to the credential form).
  * - A failed POST /mcp/oauth/key-auth ends any session the browser already
  *   holds, and clears its cookie.
+ * - A failed Google callback (GET /mcp/oauth/google/callback) ends the
+ *   session the browser already holds, the same way.
  * - A correct POST /mcp/oauth/key-auth still issues a working session.
  *
  * Effects are asserted through the real HTTP routes. The session store is only
@@ -139,6 +141,8 @@ async function isSignedIn(app: any, token: string): Promise<boolean> {
 describe("OAuth key-session sign-out and failed sign-in", () => {
   afterEach(() => {
     delete process.env.NEOTOMA_REQUIRE_KEY_FOR_OAUTH;
+    delete process.env.NEOTOMA_GOOGLE_CLIENT_ID;
+    delete process.env.NEOTOMA_APPROVED_EMAILS;
     if (savedBearer === undefined) delete process.env.NEOTOMA_BEARER_TOKEN;
     else process.env.NEOTOMA_BEARER_TOKEN = savedBearer;
     if (currentTempDir) {
@@ -244,5 +248,24 @@ describe("OAuth key-session sign-out and failed sign-in", () => {
     const fresh = await signIn(app);
     expect(fresh).not.toBe(token);
     expect(await isSignedIn(app, fresh)).toBe(true);
+  });
+
+  it("a failed Google callback ends the session the browser already holds", async () => {
+    currentTempDir = path.join(process.cwd(), "tmp", `neotoma-signout-google-${Date.now()}`);
+    // Synthetic values: enough to turn the Google route on, never contacted.
+    process.env.NEOTOMA_GOOGLE_CLIENT_ID = "synthetic-client.apps.example.com";
+    process.env.NEOTOMA_APPROVED_EMAILS = "person@example.com";
+    const { app, sessions } = await loadApp(currentTempDir);
+
+    const token = await signIn(app);
+    expect(await isSignedIn(app, token)).toBe(true);
+
+    const reply = await request(app, "GET", "/mcp/oauth/google/callback?error=access_denied", {
+      cookie: token,
+    });
+    expect(reply.status).toBe(401);
+    expectCookieCleared(reply);
+    expect(sessions.isValid(token)).toBe(false);
+    expect(await isSignedIn(app, token)).toBe(false);
   });
 });
