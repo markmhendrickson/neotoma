@@ -220,4 +220,22 @@ describe("oauth_key_gate", () => {
       expect(store.getBoundUser(token, createdAt + 1_000)).toBe("shared-graph-owner");
     });
   });
+
+  it("revoke ends a session and its bound identity together", async () => {
+    const mod = await loadOauthKeyGateModule(`revoke-${Date.now()}`);
+    const store = new mod.OAuthKeySessionStore(60_000);
+    const now = 1_000_000;
+    const token = store.create(now);
+    store.bindUser(token, "00000000-0000-4000-8000-000000000002", now);
+    expect(store.isValid(token, now)).toBe(true);
+
+    expect(store.revoke(token)).toBe(true);
+    expect(store.isValid(token, now)).toBe(false);
+    expect(store.getBoundUser(token, now)).toBeUndefined();
+    // Revoked tokens cannot be re-bound.
+    expect(store.bindUser(token, "00000000-0000-4000-8000-000000000002", now)).toBe(false);
+    // Second revoke and empty input are no-ops.
+    expect(store.revoke(token)).toBe(false);
+    expect(store.revoke(undefined)).toBe(false);
+  });
 });

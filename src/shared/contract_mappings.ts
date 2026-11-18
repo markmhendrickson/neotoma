@@ -145,6 +145,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation mcpOAuthKeyAuthPost",
   },
   {
+    operationId: "mcpOAuthSignOut",
+    method: "post",
+    path: "/mcp/oauth/sign-out",
+    adapter: "cli",
+    cliCommand: "request --operation mcpOAuthSignOut",
+  },
+  {
     operationId: "mcpOAuthLocalLogin",
     method: "get",
     path: "/mcp/oauth/local-login",
