@@ -74,7 +74,11 @@ interface QueryEntitiesParams {
   createdSince?: string;
   /** R3: filter entities by the identity_basis carried on their observations. */
   identityBasis?:
-    "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
+    | "schema_rule"
+    | "schema_lookup"
+    | "heuristic_name"
+    | "heuristic_fallback"
+    | "target_id";
   snapshotFilters?: Record<string, SnapshotFilter>;
   /**
    * When true, omit chat bookkeeping types (`conversation`, `conversation_message`,

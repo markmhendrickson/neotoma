@@ -14996,7 +14996,9 @@ schemasCommand
       }
       const schemaDef = schemaData["schema_definition"] as Record<string, unknown> | undefined;
       const fields = (schemaDef?.["fields"] ?? schemaData["fields"]) as
-        Record<string, unknown>[] | Record<string, unknown> | undefined;
+        | Record<string, unknown>[]
+        | Record<string, unknown>
+        | undefined;
       const canonicalNameFields = (schemaDef?.["canonical_name_fields"] ??
         schemaData["canonical_name_fields"]) as string[] | undefined;
       const version = schemaData["version"] ?? schemaData["schema_version"];

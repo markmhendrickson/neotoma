@@ -487,7 +487,8 @@ async function ensureEntityRowForObservation(
   if (!entityId || !entityType) return;
 
   const existing = (await db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId)) as
-    { id: string } | undefined;
+    | { id: string }
+    | undefined;
   if (existing) return;
 
   const fields = obs["fields"];
@@ -517,7 +518,8 @@ async function ensureEntityRowForSnapshot(
   if (!entityId || !entityType) return;
 
   const existing = (await db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId)) as
-    { id: string } | undefined;
+    | { id: string }
+    | undefined;
   if (existing) return;
 
   const canonicalName =
@@ -1439,7 +1441,8 @@ class LocalAuthAdmin {
   ): Promise<QueryResult<{ user: { id: string; email?: string | null } | null }>> {
     const db = await getDb();
     const user = (await db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(userId)) as
-      { id: string; email?: string | null } | undefined;
+      | { id: string; email?: string | null }
+      | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }
