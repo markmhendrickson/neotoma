@@ -14996,9 +14996,7 @@ schemasCommand
       }
       const schemaDef = schemaData["schema_definition"] as Record<string, unknown> | undefined;
       const fields = (schemaDef?.["fields"] ?? schemaData["fields"]) as
-        | Record<string, unknown>[]
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown>[] | Record<string, unknown> | undefined;
       const canonicalNameFields = (schemaDef?.["canonical_name_fields"] ??
         schemaData["canonical_name_fields"]) as string[] | undefined;
       const version = schemaData["version"] ?? schemaData["schema_version"];
@@ -17607,6 +17605,79 @@ snapshotsCommand
       outputMode
     );
   });
+
+snapshotsCommand
+  .command("search-text-backfill")
+  .description(
+    "Fill the stored search text (entity_snapshots.search_text) for rows that have none, " +
+      "throttled and resumable, against the local database. Safe to stop and re-run; " +
+      "a second run changes nothing. Rates default to the NEOTOMA_SEARCH_TEXT_BACKFILL_* env settings."
+  )
+  .option("--batch-size <n>", "Rows per write transaction (max 200)")
+  .option("--rows-per-second <n>", "Target average rate")
+  .option(
+    "--slow-batch-ms <n>",
+    "A batch slower than this pauses slow-pause-factor times its duration"
+  )
+  .option("--stop-batch-ms <n>", "Stop after consecutive batches slower than this")
+  .action(
+    async (opts: {
+      batchSize?: string;
+      rowsPerSecond?: string;
+      slowBatchMs?: string;
+      stopBatchMs?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const { runEntitySearchTextBackfill } =
+        await import("../services/entity_search_text_backfill.js");
+      const settings: Record<string, number> = {};
+      const numeric: Array<[keyof typeof opts, string]> = [
+        ["batchSize", "batchSize"],
+        ["rowsPerSecond", "rowsPerSecond"],
+        ["slowBatchMs", "slowBatchMs"],
+        ["stopBatchMs", "stopBatchMs"],
+      ];
+      for (const [opt, key] of numeric) {
+        if (opts[opt] === undefined) continue;
+        const n = Number(opts[opt]);
+        if (!Number.isFinite(n) || n <= 0) {
+          process.stderr.write(
+            `Error: --${String(opt).replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())} must be a positive number\n`
+          );
+          process.exitCode = 1;
+          return;
+        }
+        settings[key] = n;
+      }
+      const controller = new AbortController();
+      const onSignal = () => controller.abort();
+      process.once("SIGINT", onSignal);
+      try {
+        const report = await runEntitySearchTextBackfill({
+          settings,
+          signal: controller.signal,
+          onProgress: (p) => {
+            if (outputMode === "json") return;
+            process.stdout.write(
+              `batch ${p.batches}: ${p.filled}/${p.scanned} rows filled (last batch ${p.last_batch_ms} ms, pause ${p.next_pause_ms} ms)\n`
+            );
+          },
+        });
+        if (outputMode === "json") {
+          writeOutput(report, outputMode);
+        } else {
+          process.stdout.write(
+            `${report.stopped_reason}: ${report.filled}/${report.scanned} rows filled in ${report.batches} batches; ` +
+              `${report.null_remaining ?? "?"} rows still NULL (was ${report.null_at_start ?? "?"})` +
+              (report.stop_detail ? `\n${report.stop_detail}` : "") +
+              "\n"
+          );
+        }
+      } finally {
+        process.removeListener("SIGINT", onSignal);
+      }
+    }
+  );
 
 // ---------------------------------------------------------------------
 // Fleet-general snapshot export + drift comparison (item-3).

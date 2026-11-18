@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import { clearDbCache, getDb } from "../db/connection.js";
-import type { DbDatabase } from "../db/driver.js";
+import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { beginSchemaRegistryWrite } from "../db/schema_registry_cache.js";
 import { config } from "../../config.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
@@ -487,8 +487,7 @@ async function ensureEntityRowForObservation(
   if (!entityId || !entityType) return;
 
   const existing = (await db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId)) as
-    | { id: string }
-    | undefined;
+    { id: string } | undefined;
   if (existing) return;
 
   const fields = obs["fields"];
@@ -518,8 +517,7 @@ async function ensureEntityRowForSnapshot(
   if (!entityId || !entityType) return;
 
   const existing = (await db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId)) as
-    | { id: string }
-    | undefined;
+    { id: string } | undefined;
   if (existing) return;
 
   const canonicalName =
@@ -564,7 +562,7 @@ const RAW_FRAGMENT_FINGERPRINT_SQL =
  * row, leaving the NULL the triggers set. With column encryption enabled the
  * column stays NULL: plaintext search text must not sit beside ciphertext.
  */
-async function refreshEntitySearchText(db: DbDatabase, entityId: string): Promise<void> {
+export async function refreshEntitySearchText(db: DbConnection, entityId: string): Promise<void> {
   if (getDataKey()) return;
   try {
     const { buildEntityLexicalSearchText, joinRawFragmentPieces } =
@@ -1441,8 +1439,7 @@ class LocalAuthAdmin {
   ): Promise<QueryResult<{ user: { id: string; email?: string | null } | null }>> {
     const db = await getDb();
     const user = (await db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(userId)) as
-      | { id: string; email?: string | null }
-      | undefined;
+      { id: string; email?: string | null } | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }

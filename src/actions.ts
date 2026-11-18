@@ -758,8 +758,7 @@ export function createWriteRateLimit(max: number = WRITE_RATE_LIMIT_PER_MIN) {
     keyGenerator: (req) => {
       const userId =
         ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
-          | string
-          | undefined) || "";
+          string | undefined) || "";
       if (userId) return `u:${userId}`;
       // Use the library-provided IPv6-safe key helper; keying directly on
       // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
@@ -1006,8 +1005,7 @@ app.get(
     // /.well-known/oauth-authorization-server was always public (RFC 8414 requires
     // the same); that asymmetry was the bug, not the design.
     const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
-      | string
-      | undefined;
+      string | undefined;
     const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
 
     // If X-Connection-Id is sent, validate it. Invalid/expired connection → 401 with error=invalid_token
@@ -2193,11 +2191,9 @@ app.all("/mcp", async (req, res) => {
     // When encryption off: no auth by default; optional NEOTOMA_BEARER_TOKEN (or OAuth)
     // When encryption on: require Bearer token derived from private key (same key as data encryption)
     const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
-      | string
-      | undefined;
+      string | undefined;
     let connectionIdHeader = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as
-      | string
-      | undefined;
+      string | undefined;
     let bearerValidated = false;
     let primaryBearerValidated = false;
 
@@ -4677,8 +4673,7 @@ async function resolveGuestPolicyGovernedEntityAccess(
 }
 
 type GuestShareLinkAccess =
-  | { kind: "not_found" }
-  | { kind: "found"; userId: string; entityType: string; viaToken: boolean };
+  { kind: "not_found" } | { kind: "found"; userId: string; entityType: string; viaToken: boolean };
 
 /**
  * Guest READ access for the two share-link routes only: GET /entities/:id/html
@@ -4740,8 +4735,7 @@ async function entityIsHiddenNow(entity: {
 }
 
 type GuestEntityReadAccess =
-  | { kind: "not_found" }
-  | { kind: "found"; userId: string; entityType: string };
+  { kind: "not_found" } | { kind: "found"; userId: string; entityType: string };
 
 /** Whether the owner's entity row records a merge into another entity. */
 async function entityIsMergedAway(entityId: string, userId: string): Promise<boolean> {
@@ -7796,11 +7790,9 @@ app.get("/sources/:id/relationships", async (req, res) => {
     if (expandEntities && relatedEntities) {
       relationships = relationships.map((rel) => {
         const src = relatedEntities![rel.source_entity_id as string] as
-          | { canonical_name?: string; entity_type?: string; entity_type_label?: string }
-          | undefined;
+          { canonical_name?: string; entity_type?: string; entity_type_label?: string } | undefined;
         const tgt = relatedEntities![rel.target_entity_id as string] as
-          | { canonical_name?: string; entity_type?: string; entity_type_label?: string }
-          | undefined;
+          { canonical_name?: string; entity_type?: string; entity_type_label?: string } | undefined;
         return {
           ...rel,
           source_entity_name: src?.canonical_name ?? null,
@@ -15013,6 +15005,15 @@ export async function startHTTPServer() {
         await import("./services/subscriptions/install_subscription_bridge.js");
       subscriptionBridge.installSubscriptionBridge();
       logger.info("[Subscriptions] substrate event bridge installed");
+      // Fill entity_snapshots.search_text for existing rows, throttled, in the
+      // background. Off unless NEOTOMA_SEARCH_TEXT_BACKFILL is on.
+      import("./services/entity_search_text_backfill.js")
+        .then((backfill) => backfill.startEntitySearchTextBackfillIfEnabled())
+        .catch((error: unknown) => {
+          logger.warn(
+            `[search_text_backfill] not started: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
       return { server, port: boundPort };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;

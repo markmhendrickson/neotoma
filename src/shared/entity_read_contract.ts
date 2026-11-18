@@ -16,6 +16,11 @@ export interface EntityReadTrace {
   distance_threshold_applied?: boolean;
   /** Lexical search: rows whose snapshot and fragments were loaded for matching. */
   lexical_rows_loaded?: number;
+  /**
+   * Lexical search: candidate rows in this search's scope whose stored
+   * `entity_snapshots.search_text` is still NULL (checked the old way).
+   */
+  search_text_null_remaining?: number;
 }
 export interface EntityReadRequest {
   raw: Record<string, unknown>;
