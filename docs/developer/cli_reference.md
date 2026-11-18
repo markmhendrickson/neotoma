@@ -286,7 +286,7 @@ CLI behavior can be pinned per invocation via flags or across invocations via en
 | `--offline`      | `NEOTOMA_OFFLINE`                            | Force in-process local transport; do not contact a remote API.                                                                                                                                                                                                                                                                    |
 | `--env <env>`    | `NEOTOMA_ENV` (`development` / `production`) | Environment selector for server lifecycle commands.                                                                                                                                                                                                                                                                               |
 | `--root <path>`  | `NEOTOMA_REPO_ROOT`                          | Source-checkout root when `neotoma` is run with no args.                                                                                                                                                                                                                                                                          |
-| `--user-id <id>` | `NEOTOMA_USER_ID`                            | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `list-recent-changes` (alias `recent`), `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. |
+| `--user-id <id>` | `NEOTOMA_USER_ID`                            | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `list-recent-changes` (alias `recent`), `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. A `user_id` that differs from the authenticated user is honoured only for local development requests that carry no token (or when `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` is set on the server); otherwise the server answers `403`. |
 
 `--offline` and `--api-only` are mutually exclusive; setting both (via flag or env) raises an error at startup.
 
@@ -1088,7 +1088,7 @@ Fleet-general write-integrity tooling built on the canonical snapshot layer. `sn
   - `--since <iso>`: ISO-8601 lower bound on `last_observation_at`.
   - `--limit <n>`: Cap on returned entities (default: 500).
   - `--out <path>`: Write the export to this file instead of stdout.
-  - `--user-id <id>`: Override user scope (flag > `NEOTOMA_USER_ID` > authenticated user).
+  - `--user-id <id>`: Override user scope (flag > `NEOTOMA_USER_ID` > authenticated user). A value that differs from the authenticated user is refused with `403` unless the request is a local development request with no token (see the global `--user-id` row).
   - Output shape: `{ schema_version, exported_at, filter, total_entities, entities[] }`.
 - `neotoma snapshots diff`: Compare a Neotoma export against an external-state snapshot via a pluggable `ExternalParser`. Defaults to the identity `json` parser; fleet-specific parsers register via `registerExternalParser` in `src/services/drift_comparison.ts`.
   - `--neotoma <path>` (required): Path to a `snapshots export` JSON file.

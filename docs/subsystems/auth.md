@@ -16,7 +16,7 @@ Resolution order:
 
 1. **Auth middleware has set `req.authenticatedUserId`** (Bearer, OAuth, or local-dev session):
    - If `providedUserId` is absent or matches the authenticated user → return the authenticated user.
-   - If `providedUserId` differs, the authenticated user is `LOCAL_DEV_USER_ID` (`00000000-0000-0000-0000-000000000000`), and the request is a loopback request that signed in without a token (no `Authorization` header) outside production → allow the override (dev / test flows). Sign-ins that carry a token do not get the override.
+   - If `providedUserId` differs, the authenticated user is `LOCAL_DEV_USER_ID` (`00000000-0000-0000-0000-000000000000`), and the request is a loopback request that signed in without a token (no Bearer token) outside production → allow the override (dev / test flows). Sign-ins that carry a token do not get the override.
    - `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` allows the override for every sign-in that resolves to `LOCAL_DEV_USER_ID`, for test setups that pass `user_id` together with a token.
    - If `providedUserId` differs otherwise → reject with an error (session authZ cannot be bypassed).
 2. **No session set** (no auth middleware or explicit Bearer-skip): fall back to `providedUserId` from the body or query.

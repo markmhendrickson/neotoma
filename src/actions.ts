@@ -4090,7 +4090,7 @@ function stampUserPrincipal(req: express.Request, userId: string): void {
 
 /**
  * Records that the request signed in as the local dev user through the
- * loopback no-token path (no Authorization header). `getAuthenticatedUserId`
+ * loopback no-token path (no Bearer token). `getAuthenticatedUserId`
  * honours a caller-supplied `user_id` only for requests carrying this mark
  * (or when `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1`). Every token-based path
  * leaves it unset.

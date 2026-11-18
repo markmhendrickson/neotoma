@@ -70,6 +70,8 @@ Neotoma v0.29.1 is a patch release. It runs one background timer per server proc
 
 - The CLI agent instructions (`docs/developer/cli_agent_instructions.md`) state that with a key configured every CLI request is signed and carries no bearer, to rerun with `--with-bearer` when an instance answers `401` to the signature, and what to do when a disable variable is set beside a key.
 
+- The MCP and CLI instructions (`docs/developer/mcp/instructions.md`, `docs/developer/cli_reference.md`) now say that `--user-id` and `NEOTOMA_USER_ID` only scope reads to a different user for local development requests that carry no token; otherwise the server answers `403` unless `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` is set.
+
 ## Plugin / hooks / SDK changes
 
 - No plugin, hook or SDK package change in this range.
