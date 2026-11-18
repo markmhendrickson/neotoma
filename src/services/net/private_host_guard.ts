@@ -16,40 +16,36 @@ import { isLoopbackHost, resolveBindHostFromEnv } from "../../shared/bind_host.j
 /**
  * True when the private-host guard applies to caller-supplied outbound URLs.
  *
- * The rule, in order:
+ * The rule:
  *
- * 1. `NEOTOMA_HOSTED_MODE` set to `1` / `true` / `yes` turns the guard on.
- * 2. `NEOTOMA_HOSTED_MODE` set to `0` / `false` / `no` / `off` turns it off.
- *    This is the explicit local-development override: an operator who binds
- *    beyond loopback (for example a LAN or container test setup) and still
- *    needs webhooks or peers on private addresses opts out by name.
- * 3. Any other non-empty value turns the guard on, so a mistyped value never
- *    leaves the server unguarded.
- * 4. Unset or empty: the guard follows the HTTP listener's bind host
- *    (`NEOTOMA_HTTP_HOST`, resolved by the same `resolveBindHostFromEnv` the
- *    listener uses). A loopback-only bind (the default `127.0.0.1`,
- *    `localhost`, `::1`) leaves the guard off, matching single-user self-host
- *    behaviour; any other bind host (`0.0.0.0`, a LAN address, `::`) means the
- *    server is reachable from other machines and turns the guard on.
+ * 1. The HTTP listener's bind host (`NEOTOMA_HTTP_HOST`, resolved by the same
+ *    `resolveBindHostFromEnv` the listener uses) sets the floor. Any bind host
+ *    other than loopback (`0.0.0.0`, a LAN address, `::`) means the server is
+ *    reachable from other machines, so the guard is on whatever
+ *    `NEOTOMA_HOSTED_MODE` says. No flag value turns it off on such a bind.
+ * 2. On a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) the
+ *    guard is off by default, matching single-user self-host behaviour.
+ *    `NEOTOMA_HOSTED_MODE` set to `1` / `true` / `yes` forces it on there; any
+ *    other unrecognised non-empty value also turns it on, so a mistyped value
+ *    never leaves the server unguarded. `0` / `false` / `no` / `off` change
+ *    nothing: the loopback default is already off.
  *
- * The explicit flag therefore only ever makes the guard stricter than the
- * bind-derived default, except for the named off values in rule 2.
+ * The flag can therefore only make the guard stricter than the bind-derived
+ * default. A multi-tenant server bound to loopback behind a tunnel or reverse
+ * proxy is not covered by rule 1 and must set the flag.
  */
 export function isOutboundHostGuardEnabled(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
+  if (!isLoopbackHost(resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env))) return true;
   const raw = (env.NEOTOMA_HOSTED_MODE ?? "").trim();
-  if (raw.length > 0) {
-    if (/^(1|true|yes)$/i.test(raw)) return true;
-    if (/^(0|false|no|off)$/i.test(raw)) return false;
-    return true;
-  }
-  return !isLoopbackHost(resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env));
+  if (raw.length === 0) return false;
+  return !/^(0|false|no|off)$/i.test(raw);
 }
 
 /**
  * True when the outbound host guard is in force. Kept under its original name
  * so existing importers keep working; see {@link isOutboundHostGuardEnabled}
- * for the rule (the explicit `NEOTOMA_HOSTED_MODE` flag, otherwise the bind
- * host).
+ * for the rule (on for any non-loopback bind host; on a loopback bind, only
+ * when `NEOTOMA_HOSTED_MODE` forces it on).
  */
 export function isHostedMode(): boolean {
   return isOutboundHostGuardEnabled();

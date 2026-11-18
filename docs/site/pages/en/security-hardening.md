@@ -119,7 +119,7 @@ These knobs do **not** affect authenticated abuse: a `software` / `hardware` AAu
 
 ## Peer-sync hostname enforcement
 
-The outbound host guard applies an inbound check on `POST /sync/webhook`: any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, the `localhost` family) is rejected. When `NEOTOMA_HOSTED_MODE` is unset, the guard follows the HTTP bind host: it is off for a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) and on for any other `NEOTOMA_HTTP_HOST` (for example `0.0.0.0`). `NEOTOMA_HOSTED_MODE=1` (or `true` / `yes`) forces it on; `0` / `false` / `no` / `off` turns it off explicitly for local development; any other value turns it on. Loopback-only single-tenant installs normally leave the flag unset; hosted control planes SHOULD set it to `1`. See [peer sync](/peer-sync) for the full inbound flow.
+The outbound host guard applies an inbound check on `POST /sync/webhook`: any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, the `localhost` family) is rejected. When `NEOTOMA_HOSTED_MODE` is unset, the guard follows the HTTP bind host: it is off for a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) and on for any other `NEOTOMA_HTTP_HOST` (for example `0.0.0.0`). A non-loopback bind always enforces, whatever `NEOTOMA_HOSTED_MODE` says. The flag can only force enforcement on for a loopback bind: `1` / `true` / `yes` (or any unrecognised value) turns it on there, and `0` / `false` / `no` / `off` leave the loopback default (off) unchanged. Loopback-only single-tenant installs normally leave the flag unset; hosted / multi-tenant deployments MUST set `NEOTOMA_HOSTED_MODE=1`. A multi-tenant server bound to `127.0.0.1` behind a tunnel or reverse proxy is not covered by the bind-host rule, so the flag is required there. See [peer sync](/peer-sync) for the full inbound flow.
 
 ## Inspector auth bypass advisory
 
@@ -129,7 +129,7 @@ For the May 2026 Inspector auth-bypass that motivated the loopback rewrite, see 
 
 <ul className="list-none pl-0 space-y-2 mb-6">
   <li className="text-[15px] leading-7 text-muted-foreground">
-    Set <code>NEOTOMA_HOSTED_MODE=1</code> on hosted / multi-tenant instances (the guard is already on whenever <code>NEOTOMA_HTTP_HOST</code> is not loopback).
+    Set <code>NEOTOMA_HOSTED_MODE=1</code> on hosted / multi-tenant instances (the guard is already on whenever <code>NEOTOMA_HTTP_HOST</code> is not loopback, but a multi-tenant server bound to <code>127.0.0.1</code> behind a tunnel or reverse proxy needs the flag).
   </li>
   <li className="text-[15px] leading-7 text-muted-foreground">
     Set <code>MCP_PROXY_FAIL_CLOSED=1</code> on AAuth-signed hosted MCP proxies.
