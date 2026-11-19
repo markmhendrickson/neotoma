@@ -69,10 +69,32 @@ function baseBlockStart(instructions: string): number {
 }
 
 const SEVERAL: StandingRule[] = [
-  { entity_id: "ent_parity_a", title: "Parity rule A", rule_text: "Body of parity rule A.", scope: "global", priority: 30 },
-  { entity_id: "ent_parity_b", title: "Parity rule B", rule_text: "Body of parity rule B.", priority: 20 },
-  { entity_id: "ent_parity_c", title: "Parity rule C", rule_text: "Body of parity rule C.", scope: "billing", priority: 10 },
-  { entity_id: "ent_parity_d", title: "Parity rule D", rule_text: "Body of parity rule D.", priority: 5 },
+  {
+    entity_id: "ent_parity_a",
+    title: "Parity rule A",
+    rule_text: "Body of parity rule A.",
+    scope: "global",
+    priority: 30,
+  },
+  {
+    entity_id: "ent_parity_b",
+    title: "Parity rule B",
+    rule_text: "Body of parity rule B.",
+    priority: 20,
+  },
+  {
+    entity_id: "ent_parity_c",
+    title: "Parity rule C",
+    rule_text: "Body of parity rule C.",
+    scope: "billing",
+    priority: 10,
+  },
+  {
+    entity_id: "ent_parity_d",
+    title: "Parity rule D",
+    rule_text: "Body of parity rule D.",
+    priority: 5,
+  },
 ];
 
 describe("standing rules: same-response parity between serverInfo and instructions", () => {

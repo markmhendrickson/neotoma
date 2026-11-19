@@ -9,15 +9,27 @@ import {
 import { prependClientInstructionsSection } from "../../src/mcp_instruction_doc.js";
 
 const rules: StandingRule[] = [
-  { entity_id: "ent_a", title: "Workflow catalogs describe operator goals and reusable procedures",
+  {
+    entity_id: "ent_a",
+    title: "Workflow catalogs describe operator goals and reusable procedures",
     rule_text: "Present catalog workflows around independently initiable operator goals.",
-    scope: "shared-instance", priority: 2 },
-  { entity_id: "ent_b", title: "Rendered pages use the shared page template",
+    scope: "shared-instance",
+    priority: 2,
+  },
+  {
+    entity_id: "ent_b",
+    title: "Rendered pages use the shared page template",
     rule_text: "EVERY rendered_page on this instance uses the shared page template.",
-    scope: "shared-instance", priority: 2 },
-  { entity_id: "ent_c", title: "Meeting recap pages link their full transcript",
+    scope: "shared-instance",
+    priority: 2,
+  },
+  {
+    entity_id: "ent_c",
+    title: "Meeting recap pages link their full transcript",
     rule_text: "EVERY meeting recap rendered_page MUST link the full transcript.",
-    scope: "shared-instance", priority: 2 },
+    scope: "shared-instance",
+    priority: 2,
+  },
 ];
 
 describe("renderStandingRulesSection", () => {
@@ -41,7 +53,9 @@ describe("renderStandingRulesSection", () => {
     const out = renderStandingRulesSection(big)!;
     expect(out).toContain("x".repeat(23000));
     expect(out).not.toContain("yyyy");
-    expect(out).toMatch(/### Dropped Rule \(entity_id: 2\): body omitted for size; fetch the full text/);
+    expect(out).toMatch(
+      /### Dropped Rule \(entity_id: 2\): body omitted for size; fetch the full text/
+    );
     expect(out).toContain("1 rule above had its body omitted for size: Dropped Rule");
   });
 });
@@ -50,22 +64,38 @@ describe("renderStandingRulesSection scope guidance", () => {
   it("states scope semantics in the leading lines, before any rule", () => {
     const out = renderStandingRulesSection([
       ...rules,
-      { entity_id: "ent_g", title: "Global rule", rule_text: "global body", scope: "global", priority: 1 },
+      {
+        entity_id: "ent_g",
+        title: "Global rule",
+        rule_text: "global body",
+        scope: "global",
+        priority: 1,
+      },
       { entity_id: "ent_e", title: "Unscoped rule", rule_text: "unscoped body", priority: 0 },
     ])!;
     const [tag, guidance] = out.split("\n");
     expect(tag).toBe("[STANDING RULES]");
     expect(guidance).toBe(STANDING_RULES_SCOPE_GUIDANCE);
     expect(guidance).toMatch(/global or empty scope apply to every request/);
-    expect(guidance).toMatch(/any other scope apply only when the current context matches that scope/);
+    expect(guidance).toMatch(
+      /any other scope apply only when the current context matches that scope/
+    );
     // Ahead of the first rule entry, so truncation after the opening lines keeps it.
     expect(out.indexOf(STANDING_RULES_SCOPE_GUIDANCE)).toBeLessThan(out.indexOf("### "));
-    expect(Buffer.byteLength(out.slice(0, out.indexOf(STANDING_RULES_SCOPE_GUIDANCE)), "utf8")).toBeLessThan(64);
+    expect(
+      Buffer.byteLength(out.slice(0, out.indexOf(STANDING_RULES_SCOPE_GUIDANCE)), "utf8")
+    ).toBeLessThan(64);
   });
 
   it("leads with the guidance even when the first rule is omitted for size", () => {
     const out = renderStandingRulesSection([
-      { entity_id: "h", title: "Huge", rule_text: "z".repeat(40000), scope: "billing", priority: 1 },
+      {
+        entity_id: "h",
+        title: "Huge",
+        rule_text: "z".repeat(40000),
+        scope: "billing",
+        priority: 1,
+      },
     ])!;
     expect(out.split("\n")[1]).toBe(STANDING_RULES_SCOPE_GUIDANCE);
   });
@@ -128,7 +158,8 @@ describe("renderStandingRulesSection budget (fail closed)", () => {
 });
 
 describe("renderStandingRulesSection delimiter, control-character and Unicode handling", () => {
-  const lineTags = (out: string) => out.split("\n").filter((l) => /^\[\/?[A-Z][A-Z0-9 _-]*\]$/.test(l));
+  const lineTags = (out: string) =>
+    out.split("\n").filter((l) => /^\[\/?[A-Z][A-Z0-9 _-]*\]$/.test(l));
   const headings = (out: string) => out.split("\n").filter((l) => l.startsWith("### "));
 
   it("closes the block with exactly one end marker, as the last line", () => {
@@ -169,7 +200,9 @@ describe("renderStandingRulesSection delimiter, control-character and Unicode ha
           priority: 1,
         },
       ])!;
-      expect(out.split(/\r\n|[\r\n\u0085\u2028\u2029]/).filter((l) => l.startsWith("### "))).toHaveLength(1);
+      expect(
+        out.split(/\r\n|[\r\n\u0085\u2028\u2029]/).filter((l) => l.startsWith("### "))
+      ).toHaveLength(1);
       expect(lineTags(out)).toEqual(["[STANDING RULES]", STANDING_RULES_END_MARKER]);
       expect(out).not.toMatch(/[\r\u0085\u2028\u2029]/);
     }
@@ -186,7 +219,9 @@ describe("renderStandingRulesSection delimiter, control-character and Unicode ha
       },
     ])!;
     // eslint-disable-next-line no-control-regex
-    expect(out).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\t]/);
+    expect(out).not.toMatch(
+      /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\t]/
+    );
     expect(out).toContain("### Title[31m red reversed (entity_id: ent_c)");
     expect(out).toContain("(scope: scope)");
     expect(out).toContain("> Body[0m with isolate and tab");

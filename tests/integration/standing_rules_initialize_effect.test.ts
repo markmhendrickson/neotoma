@@ -33,8 +33,7 @@ import { cleanupTestEntity, cleanupEntitySnapshot } from "../helpers/cleanup_hel
 const USER_ID = LOCAL_DEV_USER_ID;
 
 /** Rule text is asserted verbatim, so keep it distinctive. */
-const RULE_TEXT =
-  "SCOPE TEST RULE — this text must survive the round trip to serverInfo._neotoma.";
+const RULE_TEXT = "SCOPE TEST RULE — this text must survive the round trip to serverInfo._neotoma.";
 const RULE_TITLE = "Effect Test Rule";
 
 const entityId = `ent_test_sr_${randomUUID().replace(/-/g, "").slice(0, 16)}`;

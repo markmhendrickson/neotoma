@@ -211,7 +211,8 @@ export const STANDING_RULES_END_MARKER = "[END STANDING RULES]";
 // characters, bidirectional embeddings/overrides/isolates, word joiner range
 // and the byte-order mark.
 // eslint-disable-next-line no-control-regex
-const STRIP_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+const STRIP_CHARS =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
 /** Every line-break form a renderer might honour. */
 const LINE_BREAKS = /\r\n|[\r\n\u0085\u2028\u2029]/g;
 /**

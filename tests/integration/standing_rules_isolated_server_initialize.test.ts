@@ -20,8 +20,7 @@ import {
 } from "../../packages/eval-harness/src/isolated_server.js";
 
 const RULE_TITLE = "Synthetic isolated-server rule";
-const RULE_TEXT =
-  "Synthetic rule body: label every example record as synthetic before storing it.";
+const RULE_TEXT = "Synthetic rule body: label every example record as synthetic before storing it.";
 
 /** Bytes from the start of `instructions` within which the rule body must begin. */
 const NEAR_START_BYTES = 4096;
