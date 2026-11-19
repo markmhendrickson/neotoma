@@ -402,9 +402,7 @@ describe("agent grant retrieve capability on entity reads", () => {
       expect(process.env[SETTING]).toBeUndefined();
       for (const G of ["retrieve-task", "no-retrieve"]) {
         expect((await get(`/entities/${contactId}`, G)).status).toBe(200);
-        expect((await post("/get_entity_snapshot", { entity_id: contactId }, G)).status).toBe(
-          200
-        );
+        expect((await post("/get_entity_snapshot", { entity_id: contactId }, G)).status).toBe(200);
         const q = await post("/entities/query", { entity_type: "contact" }, G);
         expect(q.status).toBe(200);
         const all = await post("/entities/query", {}, G);

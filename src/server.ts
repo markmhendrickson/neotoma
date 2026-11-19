@@ -4523,7 +4523,7 @@ export class NeotomaServer {
         ...(applied_search_strategies ? { applied_search_strategies } : {}),
         search_mode,
         ...(next_cursor ? { next_cursor } : {}),
-      ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
+        ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
         ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
       });
     }

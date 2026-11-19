@@ -711,7 +711,10 @@ export function enforceAgentRetrieveScope(
  */
 export function enforceCurrentAgentRetrieveScope(entityTypes: string[]): AgentRetrieveScope | null {
   if (!isAgentRetrieveEnforcementEnabled()) return null;
-  return enforceAgentRetrieveScope(contextFromAgentIdentity(getCurrentAgentIdentity()), entityTypes);
+  return enforceAgentRetrieveScope(
+    contextFromAgentIdentity(getCurrentAgentIdentity()),
+    entityTypes
+  );
 }
 
 /**
