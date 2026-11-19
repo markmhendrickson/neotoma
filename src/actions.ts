@@ -5097,6 +5097,10 @@ app.use(async (req, res, next) => {
         // owner; otherwise the local dev user, as before.
         const staticBearerUserId = await resolveStaticBearerUserId();
         stampUserPrincipal(req, staticBearerUserId);
+        // Report the shared graph on GET /me for a static token acting as the shared owner.
+        if (getSharedGraphUserId() && staticBearerUserId === getSharedGraphUserId()) {
+          (req as any).signedInSharedGraph = true;
+        }
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${staticBearerUserId}`
         );

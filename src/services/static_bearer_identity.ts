@@ -20,6 +20,23 @@ import { ensureLocalDevUser } from "./local_auth.js";
 
 export const STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID = "static-bearer-shared-graph";
 
+/**
+ * Connection ids only the /mcp HTTP gate may assign. They are never honoured
+ * from a client message, the WebSocket bridge or the process environment: on
+ * those paths a caller could claim the id without presenting the token.
+ */
+export function isGateOnlyConnectionId(connectionId: string | null | undefined): boolean {
+  return connectionId === STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID;
+}
+
+/** The connection id with a gate-only value removed (used for non-HTTP transports). */
+export function dropGateOnlyConnectionId(
+  connectionId: string | null | undefined
+): string | undefined {
+  if (!connectionId || isGateOnlyConnectionId(connectionId)) return undefined;
+  return connectionId;
+}
+
 /** User id a matched static bearer acts as (REST and the MCP gate). */
 export async function resolveStaticBearerUserId(): Promise<string> {
   const sharedGraphUserId = getSharedGraphUserId();

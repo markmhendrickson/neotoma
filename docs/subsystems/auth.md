@@ -41,6 +41,12 @@ When `NEOTOMA_SHARED_GRAPH_USER_ID` is set, two concepts travel on the same sess
 
 Data scoping (`getAuthenticatedUserId`, store/retrieve) continues to use `user_id` alone. Inspector and CLI consumers treat `email` as who is signed in and `user_id` as whose graph.
 
+### Static bearer token identity
+
+A static bearer token (`NEOTOMA_BEARER_TOKEN`, or the retiring slot during a handover) acts as the local dev user. When `NEOTOMA_SHARED_GRAPH_USER_ID` is set to a usable UUID, it acts as the shared owner on REST and MCP alike, so a service token sees the team's records and skills. Writes made with it land in the shared graph, and `GET /me` reports `shared_graph: true` with no `email`. Without that setting the behaviour is the same as before.
+
+On MCP the identity is marked by a connection id that only the `/mcp` HTTP gate assigns. Stdio, the WebSocket bridge and the process environment never honour it, so a caller cannot claim the shared owner without presenting the token. A session opened before the setting changed keeps its earlier identity until it reconnects.
+
 ### Annotated responses
 
 **Fully remapped shared-graph session** (teammate has signed in after identity columns exist):

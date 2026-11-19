@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { WebSocketServer, WebSocket } from "ws";
 
 import { resolveBindHostFromEnv } from "./shared/bind_host.js";
+import { isGateOnlyConnectionId } from "./services/static_bearer_identity.js";
 
 const MCP_CMD = process.env.NEOTOMA_MCP_CMD || process.env.MCP_CMD || "node";
 const mcpArgsEnv = process.env.NEOTOMA_MCP_ARGS || process.env.MCP_ARGS;
@@ -124,7 +125,8 @@ wss.on("connection", (ws: WebSocket) => {
 
       // Handle OAuth initialization (must be first message)
       if (message.type === "oauth_init") {
-        if (message.connectionId) {
+        // A gate-only id (the static-bearer shared-graph marker) is never accepted from a client.
+        if (message.connectionId && !isGateOnlyConnectionId(message.connectionId)) {
           connectionId = message.connectionId;
 
           // Spawn MCP server with OAuth connection ID

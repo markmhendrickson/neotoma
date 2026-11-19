@@ -92,6 +92,7 @@ import { ensureLocalDevUser } from "./services/local_auth.js";
 import {
   resolveGateAssignedConnectionUserId,
   STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+  dropGateOnlyConnectionId,
 } from "./services/static_bearer_identity.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
@@ -595,7 +596,9 @@ export class NeotomaServer {
     let connectionId =
       this.sessionConnectionId ||
       (authInfo as any)?.connectionId ||
-      (isHTTPTransport ? getCurrentMcpConnectionId() : runtimeEnv().NEOTOMA_CONNECTION_ID) ||
+      (isHTTPTransport
+        ? getCurrentMcpConnectionId()
+        : dropGateOnlyConnectionId(runtimeEnv().NEOTOMA_CONNECTION_ID)) ||
       undefined;
 
     // If no connection ID header, try to get it from Bearer token
