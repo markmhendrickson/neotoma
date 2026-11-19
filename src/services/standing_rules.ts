@@ -381,3 +381,42 @@ export function renderStandingRulesSection(rules: StandingRule[]): string | null
 
   return `${header}\n\n${lines.join("\n\n")}${footer}\n${STANDING_RULES_END_MARKER}`;
 }
+
+/**
+ * Section stated in place of the rules when they could not be read for the
+ * caller (a failed lookup, or an authenticated request whose user could not be
+ * resolved). Never rendered as silence: an agent told nothing concludes "no
+ * rules", which is the one inference a broken read must not produce (#2131).
+ * Every entrance that serves instructions uses this one text.
+ */
+export const STANDING_RULES_UNAVAILABLE_SECTION =
+  "[STANDING RULES]\nThis instance's standing rules could not be read for this session. " +
+  "Do NOT tell the user this instance has no standing rules, and do not proceed as though " +
+  "none are in force. Treat them as unknown, retry on a later connection, and check the " +
+  "server logs for the `[standing_rules]` error if this persists.\n" +
+  STANDING_RULES_END_MARKER;
+
+/**
+ * One fixed line served ahead of the instructions when they are composed for
+ * a caller that has not authenticated (stateless `server/discover` built
+ * without an authenticated request). Carries no rule content; it names where
+ * the rules are served so a client does not read their absence as "none".
+ */
+export const STANDING_RULES_AFTER_AUTHENTICATION_NOTICE =
+  "[STANDING RULES] Standing rules are served only after authentication: fetch them with " +
+  "GET /mcp-interaction-instructions carrying your credentials, or with an authenticated " +
+  "server/discover (or initialize) call. Until then treat this instance's standing rules " +
+  "as unknown, not absent.";
+
+/**
+ * The rules section for a lookup result: the unavailable notice on a failed
+ * lookup, the rendered block otherwise (null when there are no rules).
+ */
+export function renderStandingRulesSectionForLookup(result: {
+  rules: StandingRule[];
+  lookup_failed: boolean;
+}): string | null {
+  return result.lookup_failed
+    ? STANDING_RULES_UNAVAILABLE_SECTION
+    : renderStandingRulesSection(result.rules);
+}

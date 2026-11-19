@@ -140,8 +140,8 @@ import {
 } from "./services/session_info.js";
 import {
   getActiveStandingRulesResult,
-  renderStandingRulesSection,
-  STANDING_RULES_END_MARKER,
+  renderStandingRulesSectionForLookup,
+  STANDING_RULES_AFTER_AUTHENTICATION_NOTICE,
   type StandingRule,
 } from "./services/standing_rules.js";
 import {
@@ -793,16 +793,25 @@ export class NeotomaServer {
    * `server/discover` probe there would tell it to skip `initialize`, which is
    * where those transports authenticate. Carries protocol versions, this
    * server's declared capabilities, its identity and its instructions only:
-   * no caller identity, no tenant data (standing rules and instance skills are
-   * per-user graph data and stay off this RPC), no instance topology. The
-   * instructions are the same composition `/mcp-interaction-instructions`
-   * serves publicly: the MCP instruction block plus the instance data policy.
+   * no caller identity, no instance topology. The instructions are the same
+   * composition `/mcp-interaction-instructions` serves publicly (the MCP
+   * instruction block plus the instance data policy), led by the caller's
+   * standing rules when THIS request authenticated, and by one fixed line
+   * naming where rules are served when it did not. The result itself carries
+   * no per-user data for an unauthenticated build: the rules come only from
+   * the identity this request's own credentials resolved to.
    */
   private setupDiscoverHandler(): void {
     this.mcpServer.server.setRequestHandler(ServerDiscoverRequestSchema, async () =>
       this.buildDiscoverResult()
     );
   }
+
+  /**
+   * True once {@link handleStatelessRequest} has authenticated this request.
+   * Stateless instances serve exactly one request, so this never outlives it.
+   */
+  private statelessRequestAuthenticated = false;
 
   async buildDiscoverResult(): Promise<Record<string, unknown>> {
     let policySection = "";
@@ -815,11 +824,24 @@ export class NeotomaServer {
         `[instance_policy] discover instructions render skipped: ${(err as Error).message}`
       );
     }
+    // Rules come only from the identity THIS request's credentials resolved
+    // to (see handleStatelessRequest). An authenticated request whose user id
+    // cannot be resolved reports the rules as unknown, never as none.
+    const standingRulesSection = this.statelessRequestAuthenticated
+      ? renderStandingRulesSectionForLookup(
+          await this.lookupStandingRulesForInstructions(
+            await this.resolveInstructionLookupUserId()
+          )
+        )
+      : STANDING_RULES_AFTER_AUTHENTICATION_NOTICE;
     return {
       resultType: "complete",
       supportedVersions: [...MCP_MODERN_SUPPORTED_VERSIONS],
       capabilities: { ...NEOTOMA_MCP_DECLARED_CAPABILITIES },
-      instructions: composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+      instructions: prependClientInstructionsSection(
+        composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+        standingRulesSection
+      ),
       ttlMs: MCP_STATELESS_CACHE_HINT.ttlMs,
       cacheScope: MCP_STATELESS_CACHE_HINT.cacheScope,
       _meta: { [MCP_META_SERVER_INFO]: this.getServerInfo() },
@@ -892,6 +914,7 @@ export class NeotomaServer {
       };
     }
 
+    this.statelessRequestAuthenticated = true;
     this.setupDiscoverHandler();
     const id = jsonRpcIdOf(message);
     const transport = new SingleExchangeTransport(id);
@@ -1164,6 +1187,90 @@ export class NeotomaServer {
     const baseInstructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
       : this.getMcpInteractionInstructions();
+    // Identity may not be on the instance yet at this point; resolve it the way
+    // listTools does. A null result is an UNKNOWN identity, not an absent user,
+    // so it reports as a failed lookup rather than an empty rule set.
+    const lookupUserId = await this.resolveInstructionLookupUserId();
+    const {
+      instructions,
+      standingRules,
+      standingRulesLookupFailed,
+      availableSkills,
+      instanceSkillsLookupFailed,
+    } = await this.composeSessionInstructions(baseInstructions, lookupUserId);
+
+    return {
+      protocolVersion: "2025-11-25",
+      capabilities: {
+        ...NEOTOMA_MCP_DECLARED_CAPABILITIES,
+      },
+      serverInfo: {
+        name: "neotoma",
+        version: readPackageVersion(config.projectRoot),
+        ...(updateNotice
+          ? {
+              title: "Update available",
+              description: updateNotice,
+            }
+          : {}),
+        _neotoma: {
+          standing_rules: standingRules,
+          ...(standingRulesLookupFailed
+            ? {
+                standing_rules_unavailable: true,
+                standing_rules_note:
+                  "Standing rules could not be read for this session. An empty list here does NOT mean no rules are configured — treat any instance policy as unknown rather than absent, and say so rather than proceeding as if unrestricted.",
+              }
+            : {}),
+          available_skills: availableSkills,
+          ...(instanceSkillsLookupFailed
+            ? {
+                skills_unavailable: true,
+                skills_note:
+                  "Instance-stored skills could not be read for this session. An empty or filesystem-only available_skills here does NOT mean this instance has no skills — treat the instance's skills as unknown rather than absent, and say so rather than telling the user none exist.",
+              }
+            : {}),
+        },
+      },
+      instructions,
+    };
+  }
+
+  /**
+   * The instructions text a session `initialize` returns for `userId`, with no
+   * update notice. GET /mcp-interaction-instructions serves this for an
+   * authenticated caller, so the REST text and the handshake text come from
+   * one composition and cannot drift. A null `userId` is an unknown identity
+   * and yields the standing-rules-unavailable notice, never "no rules".
+   */
+  async buildInstructionsForUser(userId: string | null): Promise<string> {
+    return (await this.composeSessionInstructions(this.getMcpInteractionInstructions(), userId))
+      .instructions;
+  }
+
+  /**
+   * Standing rules for an instruction-serving entrance. A null user id is an
+   * UNKNOWN identity on a request meant to be authenticated, so it reports as
+   * a failed lookup, never as an empty rule set.
+   */
+  private async lookupStandingRulesForInstructions(
+    userId: string | null
+  ): Promise<{ rules: StandingRule[]; lookup_failed: boolean }> {
+    if (!userId) return { rules: [], lookup_failed: true };
+    const result = await getActiveStandingRulesResult(userId);
+    return { rules: result.rules, lookup_failed: result.lookup_failed };
+  }
+
+  private async composeSessionInstructions(
+    baseInstructions: string,
+    lookupUserId: string | null
+  ): Promise<{
+    instructions: string;
+    standingRules: StandingRule[];
+    standingRulesLookupFailed: boolean;
+    availableSkills: string[];
+    instanceSkillsLookupFailed: boolean;
+  }> {
 
     // Append this instance's declared data policy (#1974) so a cooperating
     // agent knows what this instance is for before its first write, rather than
@@ -1185,23 +1292,13 @@ export class NeotomaServer {
 
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
-    let standingRules: StandingRule[] = [];
     // An empty rules array is ambiguous — it means either "no rules configured"
     // or "the lookup failed". Carry the distinction into the payload so an
     // agent is never handed an empty policy that is actually a broken read
-    // (#2131).
-    let standingRulesLookupFailed = false;
-    // Identity may not be on the instance yet at this point; resolve it the way
-    // listTools does. A null result is an UNKNOWN identity, not an absent user,
-    // so it reports as a failed lookup rather than an empty rule set.
-    const lookupUserId = await this.resolveInstructionLookupUserId();
-    if (lookupUserId) {
-      const result = await getActiveStandingRulesResult(lookupUserId);
-      standingRules = result.rules;
-      standingRulesLookupFailed = result.lookup_failed;
-    } else {
-      standingRulesLookupFailed = true;
-    }
+    // (#2131). A null user id reports as a failed lookup.
+    const standingRulesLookup = await this.lookupStandingRulesForInstructions(lookupUserId);
+    const standingRules: StandingRule[] = standingRulesLookup.rules;
+    const standingRulesLookupFailed = standingRulesLookup.lookup_failed;
 
     // Skills reach agents two ways: mirrored to a local skills directory, or
     // stored in the graph as `skill` rows. A hosted instance has only the
@@ -1265,13 +1362,7 @@ export class NeotomaServer {
     // A failed lookup is stated rather than rendered as silence, for the same
     // reason it is for skills: an agent told nothing concludes "no rules",
     // which is the one inference that must never follow from a broken read.
-    const standingRulesSection = standingRulesLookupFailed
-      ? "[STANDING RULES]\nThis instance's standing rules could not be read for this session. " +
-        "Do NOT tell the user this instance has no standing rules, and do not proceed as though " +
-        "none are in force. Treat them as unknown, retry on a later connection, and check the " +
-        "server logs for the `[standing_rules]` error if this persists.\n" +
-        STANDING_RULES_END_MARKER
-      : renderStandingRulesSection(standingRules);
+    const standingRulesSection = renderStandingRulesSectionForLookup(standingRulesLookup);
     // Nested rather than variadic: each helper takes one section and no-ops on
     // an empty one, so an instance with no policy, no rules and no skill rows
     // gets byte-identical instructions to before.
@@ -1289,39 +1380,11 @@ export class NeotomaServer {
     );
 
     return {
-      protocolVersion: "2025-11-25",
-      capabilities: {
-        ...NEOTOMA_MCP_DECLARED_CAPABILITIES,
-      },
-      serverInfo: {
-        name: "neotoma",
-        version: readPackageVersion(config.projectRoot),
-        ...(updateNotice
-          ? {
-              title: "Update available",
-              description: updateNotice,
-            }
-          : {}),
-        _neotoma: {
-          standing_rules: standingRules,
-          ...(standingRulesLookupFailed
-            ? {
-                standing_rules_unavailable: true,
-                standing_rules_note:
-                  "Standing rules could not be read for this session. An empty list here does NOT mean no rules are configured — treat any instance policy as unknown rather than absent, and say so rather than proceeding as if unrestricted.",
-              }
-            : {}),
-          available_skills: availableSkills,
-          ...(instanceSkillsLookupFailed
-            ? {
-                skills_unavailable: true,
-                skills_note:
-                  "Instance-stored skills could not be read for this session. An empty or filesystem-only available_skills here does NOT mean this instance has no skills — treat the instance's skills as unknown rather than absent, and say so rather than telling the user none exist.",
-              }
-            : {}),
-        },
-      },
       instructions,
+      standingRules,
+      standingRulesLookupFailed,
+      availableSkills,
+      instanceSkillsLookupFailed,
     };
   }
 
