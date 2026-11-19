@@ -127,6 +127,178 @@ components:
           format: date-time
         user_id:
           type: string
+    DataOrigin:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: |
+        Where stored data came from (#2242) — the file, sheet row, URL,
+        message, or API endpoint — as opposed to who wrote it (attribution,
+        `external_actor`). A caller claim, never verified: the server does not
+        fetch, open, or validate `locator` or `url`. Persisted on each created
+        observation as `provenance.data_origin`. `locator` is required unless
+        `kind` is `manual`. Every text field is single-line: control
+        characters, including newlines, are refused. Strip credentials,
+        signatures, and auth query parameters from `locator` and `url` before
+        sending; a `url` with embedded `user:pass@` is refused.
+      properties:
+        kind:
+          type: string
+          enum: [file, url, email, message, api, manual, other]
+          description: Category of origin. `manual` = typed or confirmed by a person.
+        locator:
+          type: string
+          maxLength: 2048
+          description: |
+            Primary pointer to the origin: a file path or name, URL, email or
+            chat message id, or API endpoint. Required unless `kind` is `manual`.
+        part:
+          type: string
+          maxLength: 512
+          description: Position within the locator, e.g. `sheet=Tickets;row=97`, `page=3`, `attachment=2`.
+        system:
+          type: string
+          maxLength: 256
+          description: System that holds the origin, e.g. `gmail`, `google_sheets`, `stripe`, `local_fs`.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Absolute http(s) link to the original, when `locator` is not itself a URL. Must not embed credentials (`user:pass@`).
+        producer:
+          type: string
+          maxLength: 512
+          description: Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`.
+        retrieved_at:
+          type: string
+          format: date-time
+          description: When the data was read from the origin (ISO 8601).
+        notes:
+          type: string
+          maxLength: 2000
+          description: Short free-text note about the derivation.
+    FieldProvenanceObservation:
+      type: object
+      additionalProperties: false
+      description: |
+        One contributing observation projected to the requested field only, not
+        the complete immutable row. Other fields, internal operation receipts and
+        unrecognised provenance keys are withheld. Metadata is recorded evidence,
+        not a credibility score. Nullable metadata remains unknown for legacy rows.
+      required: [id, entity_id, entity_type, schema_version, source_id, interpretation_id, observed_at, created_at, specificity_score, source_priority, observation_source, idempotency_key, fields]
+      properties:
+        id:
+          type: string
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        source_id:
+          type: string
+          nullable: true
+        interpretation_id:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          nullable: true
+          format: date-time
+        specificity_score:
+          type: number
+          nullable: true
+        source_priority:
+          type: number
+        observation_source:
+          type: string
+          nullable: true
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified, correction, null]
+        idempotency_key:
+          type: string
+          nullable: true
+        fields:
+          type: object
+          minProperties: 1
+          maxProperties: 1
+          additionalProperties: true
+          description: Only the requested field and its value on this contributor.
+        provenance:
+          type: object
+          additionalProperties: true
+          description: Recorded agent-attribution and data_origin keys only; no internal receipts or unrelated payload metadata. Existing guest redaction still applies.
+        data_origin:
+          $ref: "#/components/schemas/DataOrigin"
+    FieldProvenanceSource:
+      type: object
+      additionalProperties: false
+      description: Safe source metadata projection. No filesystem/storage paths or fabricated file_urls; use retrieve_file_url for file access.
+      required: [id, mime_type, content_hash, file_size, created_at]
+      properties:
+        id:
+          type: string
+        mime_type:
+          type: string
+          nullable: true
+        content_hash:
+          type: string
+          nullable: true
+        file_size:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+          format: date-time
+    FieldProvenanceResponse:
+      type: object
+      additionalProperties: false
+      description: |
+        Complete provenance for one visible snapshot field. observations and
+        observation_ids contain every contributor, ordered by observed_at DESC
+        then id ASC; sources are distinct and ordered by id ASC. Each observation
+        exposes only the requested field. Singular aliases are retained for MCP
+        compatibility and returned on HTTP too: source_observation/observed_at
+        select the most recent contributor, not a single winner of a merged field.
+        source is that contributor's source or null, a legal source-less state.
+        Any unresolved contributor or non-null source refuses the entire chain.
+      required: [field, entity_id, value, observation_ids, observations, sources, source_observation, source, observed_at]
+      properties:
+        field:
+          type: string
+        entity_id:
+          type: string
+        value:
+          description: The current snapshot value; not recomputed from the representative alias.
+        observation_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        observations:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/FieldProvenanceObservation"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldProvenanceSource"
+        source_observation:
+          $ref: "#/components/schemas/FieldProvenanceObservation"
+        source:
+          anyOf:
+            - $ref: "#/components/schemas/FieldProvenanceSource"
+            - type: object
+              nullable: true
+              enum: [null]
+        observed_at:
+          type: string
+          format: date-time
     Observation:
       type: object
       properties:
@@ -957,20 +1129,27 @@ paths:
                 at:
                   type: string
                   description: >-
-                    Event-time cutoff (ISO 8601). Reconstructs the snapshot from
-                    observations whose `observed_at` ≤ this timestamp. Reflects what
-                    *happened* by time T, regardless of when the observation was
-                    ingested into Neotoma. Use `at_ingested` instead when you need
-                    "what did we actually know at time T" semantics.
+                    Observation-time cutoff (ISO 8601). Reconstructs the snapshot from
+                    observations whose `observed_at` ≤ this timestamp. Public `store`
+                    and `correct` stamp `observed_at` with the server clock at write
+                    time; callers cannot set it. For ordinary writes `at` therefore
+                    answers "what had been asserted by T", not "what was true in the
+                    world at T": a fact stored after T is excluded even when it
+                    describes an earlier moment. Domain date fields on an entity
+                    (for example `measured_at` or `date`) are ordinary fields, not a
+                    reducer time axis; native valid-time queries are not supported.
                 at_ingested:
                   type: string
                   description: >-
                     Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from
                     observations whose `created_at` (row-insertion time) ≤ this
-                    timestamp. Excludes backfilled or late-arriving observations that
-                    have a past `observed_at` but arrived after this cutoff, preventing
-                    look-ahead leaks. When both `at` and `at_ingested` are supplied,
-                    both bounds are applied (AND logic): an observation must satisfy
+                    timestamp. Public `store` and `correct` assign both timestamps
+                    during the write, but they are not guaranteed to be identical:
+                    assertion stamping and row insertion can occur at different moments.
+                    This cutoff excludes any row inserted after T, even if its
+                    `observed_at` is earlier. Neither cutoff filters domain date fields.
+                    When both `at` and `at_ingested` are supplied, both bounds are
+                    applied (AND logic): an observation must satisfy
                     `observed_at ≤ at` AND `created_at ≤ at_ingested`.
                 format:
                   type: string
@@ -1031,14 +1210,25 @@ paths:
                 field:
                   type: string
       responses:
-        '200':
-          description: Provenance
+        "200":
+          description: Complete field provenance, with declared compatibility aliases.
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
-                properties: {}
+                $ref: "#/components/schemas/FieldProvenanceResponse"
+        "404":
+          description: Entity or field unavailable, including a cross-owner miss.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: PROVENANCE_INTEGRITY_ERROR for unavailable contributor/source references; DB_QUERY_FAILED for query failures. No partial chain is returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
   /create_relationship:
     post:
       summary: Create relationship
@@ -1082,6 +1272,18 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
+                  as_of:
+                    type: object
+                    description: Echo of the as-of cutoffs applied. Present only when at or
+                      at_ingested was supplied; each is the timestamp given, or null when that
+                      cutoff was not supplied.
+                    properties:
+                      at:
+                        type: string
+                        nullable: true
+                      at_ingested:
+                        type: string
+                        nullable: true
   /retrieve_entity_by_identifier:
     post:
       summary: Retrieve entity by identifier
@@ -1155,6 +1357,27 @@ paths:
                 include_entities:
                   type: boolean
                   default: true
+                at:
+                  type: string
+                  description: >-
+                    Write-time cutoff on `observed_at` (ISO 8601), not event (valid) time:
+                    the state as recorded by T. Same name and meaning as `at` on
+                    `/get_entity_snapshot`. Only observations with `observed_at` ≤ this
+                    timestamp are visible, so an edge, a metadata value or an entity written
+                    after T is not part of the answer. An edge is visible as of T only if the
+                    edge and both of its endpoint entities are. Edge liveness is decided from
+                    the visible observations only, so an edge soft-deleted after T is live as
+                    of T.
+                at_ingested:
+                  type: string
+                  description: >-
+                    Write-time cutoff on `created_at` (ISO 8601): what the record held by T.
+                    Same name and meaning as `at_ingested` on `/get_entity_snapshot`. Also
+                    excludes backfills: observations written after T are not visible even if
+                    their `observed_at` is earlier (use `at` alone to include them). When both
+                    `at` and `at_ingested` are supplied, both bounds apply (AND). The response
+                    carries an `as_of` echo of the cutoffs applied. Replays observations in
+                    memory, so it costs more than a current read.
       responses:
         '200':
           description: Related entities
@@ -1163,7 +1386,20 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-                properties: {}
+                properties:
+                  as_of:
+                    type: object
+                    description: Echo of the as-of cutoffs applied. Present only when at or
+                      at_ingested was supplied; each is the timestamp given, or null when that
+                      cutoff was not supplied.
+                    properties:
+                      at:
+                        type: string
+                        nullable: true
+                      at_ingested:
+                        type: string
+                        nullable: true
+
   /retrieve_graph_neighborhood:
     post:
       summary: Retrieve graph neighborhood

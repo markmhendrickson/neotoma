@@ -26,7 +26,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Clinical and operational state that survives",
   heroHighlight: "handoffs, revisions, and multi-agent care coordination",
   heroDesc:
-    "Patient records, treatment plans, and prior authorizations change through every shift, consult, and agent action. Neotoma versions entity state so you can answer what was known about a patient at any point in their care timeline.",
+    "Patient records, treatment plans, and prior authorizations change through every shift, consult, and agent action. Neotoma versions entity state so you can answer what had been recorded about a patient by any point in their care timeline.",
   heroTags: [
     { tag: "patient", Icon: UserCheck },
     { tag: "encounter", Icon: Stethoscope },
@@ -43,12 +43,12 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "healthcare",
   problemTitle: "EHR systems store records; they do not preserve decision context",
   problemDesc:
-    "Clinical decisions depend on what was known at the time: lab results, imaging reads, specialist notes, and prior auth status. When multiple agents and clinicians update the same patient record across shifts and referrals, the inputs that drove a specific decision get overwritten by the next update.",
+    "Clinical decisions depend on what had been recorded by the time of the decision: lab results, imaging reads, specialist notes, and prior auth status. When multiple agents and clinicians update the same patient record across shifts and referrals, the inputs that drove a specific decision get overwritten by the next update.",
   problemCards: [
     {
       Icon: Clock,
-      title: "No decision-time reconstruction",
-      desc: "The EHR shows current vitals and active orders. It cannot reconstruct which labs and notes were available when the night-shift agent recommended a dosage change at 3am.",
+      title: "No reconstruction of what was recorded by the decision",
+      desc: "The EHR shows current vitals and active orders. It cannot reconstruct which labs and notes had been recorded by the time the night-shift agent recommended a dosage change at 3am.",
     },
     {
       Icon: Link2,
@@ -58,7 +58,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: AlertTriangle,
       title: "Authorization state drift",
-      desc: "Prior auth approvals, denials, and appeals overwrite each other. Billing cannot prove what authorization status existed when a procedure was performed.",
+      desc: "Prior auth approvals, denials, and appeals overwrite each other. Billing cannot show what authorization status had been recorded by the time a procedure was performed.",
     },
     {
       Icon: Activity,
@@ -69,33 +69,33 @@ const CONFIG: UseCaseConfig = {
   problemCallout:
     "Regulators, payers, and malpractice review boards need temporal evidence, not current state.",
   problemCalloutDesc:
-    "HIPAA audits, payer disputes, and quality reviews all ask the same question: what was known, and what was the basis for the decision at the time it was made? Current EHR snapshots answer what is true now, not what was true then.",
+    "HIPAA audits, payer disputes, and quality reviews all ask the same question: what was known, and what was the basis for the decision at the time it was made? Current EHR snapshots answer what is true now, not what had been recorded by then.",
   scenarios: [
     {
       category: "Clinical decision audit",
       human:
-        "What information was available when the agent recommended switching Mrs. Chen to IV antibiotics at 3:12am on March 8?",
+        "What information had been recorded by 3:12am on March 8, when the agent recommended switching Mrs. Chen to IV antibiotics?",
       fail: "Mrs. Chen is currently on IV ceftriaxone 2g daily, started March 8. Culture results show E. coli sensitive to ceftriaxone.",
       succeed:
-        'At 2025-03-08 03:12 UTC, the clinical agent evaluated: (1) temp 39.4\u00B0C at 02:45 (vitals\u00B7v18), (2) oral amoxicillin started Mar 6 (order\u00B7v3), (3) preliminary urine culture "gram-negative rods" at 01:30 (lab\u00B7v7, final sensitivity not yet available). Agent recommendation: escalate to IV ceftriaxone, confidence 0.87, reasoning linked to sepsis protocol SP-2024.3 \u00A74.2. Attending Dr. Okafor confirmed 03:28. Culture final (E. coli, ceftriaxone sensitive) arrived 11:40, after the decision. Full inputs at encounter\u00B7v18 @ 2025-03-08T03:12.',
+        'As recorded by 2025-03-08 03:12 UTC, the clinical agent evaluated: (1) temp 39.4\u00B0C at 02:45 (vitals\u00B7v18), (2) oral amoxicillin started Mar 6 (order\u00B7v3), (3) preliminary urine culture "gram-negative rods" at 01:30 (lab\u00B7v7, final sensitivity not yet available). Agent recommendation: escalate to IV ceftriaxone, confidence 0.87, reasoning linked to sepsis protocol SP-2024.3 \u00A74.2. Attending Dr. Okafor confirmed 03:28. Culture final (E. coli, ceftriaxone sensitive) arrived 11:40, after the decision. Full inputs at encounter\u00B7v18 @ 2025-03-08T03:12.',
       version: "encounter\u00B7v18",
       Icon: Stethoscope,
       failTitle: "Current treatment confirmed, decision inputs missing",
       failDesc:
-        "The assistant confirmed today's regimen but could not show what the agent knew at 3am. The culture sensitivity that justifies the choice was not available until 8 hours later.",
+        "The assistant confirmed today's regimen but could not show what had been recorded by 3am. The culture sensitivity that justifies the choice was not recorded until 8 hours later.",
     },
     {
       category: "Prior authorization dispute",
       human:
-        "What was the authorization status for Mr. Reeves' cardiac MRI when it was performed on February 20?",
+        "What authorization status had we recorded for Mr. Reeves' cardiac MRI by the time it was performed on February 20?",
       fail: "Mr. Reeves' cardiac MRI (order ORD-8891) has prior auth status: denied. Appeal submitted February 25.",
       succeed:
-        "As of 2025-02-20 10:00 (procedure start), auth\u00B7v4 showed status APPROVED (auto-approved Feb 18 via payer portal, ref PA-2025-44102). Denial auth\u00B7v6 posted Feb 22 after retrospective review. Appeal filed Feb 25 (auth\u00B7v7). The procedure was performed under a valid approval. Timeline: requested Feb 16 \u2192 approved Feb 18 \u2192 performed Feb 20 \u2192 retro-denied Feb 22 \u2192 appeal Feb 25. Snapshot auth\u00B7v4 @ 2025-02-20 confirms approval was active at procedure time.",
+        "As recorded by 2025-02-20 10:00 (procedure start), auth\u00B7v4 showed status APPROVED (auto-approved Feb 18 via payer portal, ref PA-2025-44102). Denial auth\u00B7v6 posted Feb 22 after retrospective review. Appeal filed Feb 25 (auth\u00B7v7). The procedure was performed under a valid approval. Timeline: requested Feb 16 \u2192 approved Feb 18 \u2192 performed Feb 20 \u2192 retro-denied Feb 22 \u2192 appeal Feb 25. Snapshot auth\u00B7v4 @ 2025-02-20 shows the approval as recorded by procedure time.",
       version: "auth\u00B7v4 @ 2025-02-20",
       Icon: FileText,
       failTitle: "Current denial status returned for a historical question",
       failDesc:
-        "Billing sees the denial and assumes the procedure lacked authorization. The temporal record shows it was approved when performed, which is the fact that matters for the appeal.",
+        "Billing sees the denial and assumes the procedure lacked authorization. The temporal record shows the approval had been recorded by the time of the procedure, which is the fact that matters for the appeal.",
     },
     {
       category: "Care plan evolution",
@@ -113,7 +113,7 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Handoff reconstruction",
       human:
-        "What was communicated during the 7pm shift handoff for bed 12 in the ICU on March 15?",
+        "What had been recorded about the 7pm shift handoff for bed 12 in the ICU by March 15?",
       fail: "Bed 12 ICU: patient Davis, 68M, post-CABG day 2, hemodynamically stable, on heparin drip.",
       succeed:
         "Handoff snapshot encounter\u00B7davis_icu @ 2025-03-15T19:00: outgoing RN Martinez flagged: (1) heparin drip adjusted 16:30 from 1200 to 1400 units/hr after PTT 42 (target 60\u201380), (2) chest tube output 180mL over 4hr (trending down from 320mL prior shift), (3) family meeting scheduled Mar 16 09:00 per Dr. Nakamura. Agent-generated summary included all 3 items plus pending AM labs. Incoming RN acknowledged 19:08. Subsequent PTT at 22:00 was 58 (lab\u00B7v9). No items from this handoff were in the prior shift's note.",
@@ -139,16 +139,16 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project clinical state through time",
-      desc: "Link care plan changes to triggering labs, orders to authorizations, and handoff items to shift boundaries. Reconstruct what was known at any moment in the care timeline.",
+      desc: "Link care plan changes to triggering labs, orders to authorizations, and handoff items to shift boundaries. Reconstruct what had been recorded by any moment in the care timeline.",
       detail:
-        "Temporal queries return the state valid at the as-of instant, not the last EHR sync.",
+        "Temporal queries return the state as recorded by the cutoff time, not the last EHR sync.",
     },
     {
       Icon: Stethoscope,
       title: "Let agents and clinicians answer with provenance",
       desc: "Clinical agents, quality reviewers, and billing teams query the same versioned graph. Responses cite observation IDs, clinician identities, and timestamps so answers are defensible.",
       detail:
-        "Built for payer audits, quality reviews, and malpractice defense: what was known, by whom, and when.",
+        "Built for payer audits, quality reviews, and malpractice defense: what had been recorded, by whom, and when it was written.",
     },
   ],
   capTitle: "Capabilities built for clinical integrity and operational auditability",
@@ -159,13 +159,13 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Stethoscope,
       title: "Clinical decision reconstruction",
-      desc: "Bind agent and clinician decisions to the labs, vitals, and notes available at decision time. Reconstruct the inputs for any order, recommendation, or escalation.",
+      desc: "Bind agent and clinician decisions to the labs, vitals, and notes as recorded by decision time. Reconstruct the inputs for any order, recommendation, or escalation.",
       tags: ["encounter", "decision", "audit"],
     },
     {
       Icon: FileText,
       title: "Authorization lifecycle tracking",
-      desc: "Track prior auth requests, approvals, denials, and appeals as a timeline. Prove what authorization status existed when a procedure was performed.",
+      desc: "Track prior auth requests, approvals, denials, and appeals as a timeline. Prove what authorization status had been recorded by the time a procedure was performed.",
       tags: ["authorization", "payer", "billing"],
     },
     {
@@ -182,8 +182,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: History,
-      title: "Point-in-time patient state",
-      desc: "Answer what was the diagnosis, medication list, and active orders at any historical moment. Essential for quality reviews, incident investigations, and payer disputes.",
+      title: "Patient state as recorded",
+      desc: "Answer what the diagnosis, medication list, and active orders were as recorded up to any historical moment. Essential for quality reviews, incident investigations, and payer disputes.",
       tags: ["patient", "temporal", "reporting"],
     },
     {
@@ -224,7 +224,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest clinical state per entity, or reconstruct historical state for any timestamp relevant to a quality review, audit, or dispute.",
+      desc: "Project the latest clinical state per entity, or reconstruct state as recorded up to any timestamp relevant to a quality review, audit, or dispute.",
     },
     {
       label: "Serve agents & reviewers",
@@ -234,7 +234,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How healthcare teams use Neotoma as their integrity layer",
     desc:
-      "AI-native care coordination platforms automate clinical documentation, prior auth management, and shift handoff summaries for hospital systems. Neotoma versions every clinical input, recommendation, and authorization change so you can reconstruct what was known at any decision point.",
+      "AI-native care coordination platforms automate clinical documentation, prior auth management, and shift handoff summaries for hospital systems. Neotoma versions every clinical input, recommendation, and authorization change so you can reconstruct what had been recorded by any decision point.",
     featuresHeading: "What healthcare teams build",
     features: [
       "Clinical agents that generate shift summaries and flag deterioration patterns across ICU and med-surg units",
@@ -243,13 +243,13 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every clinical input, agent recommendation, and authorization state change",
-      'Temporal snapshots so "what was known at decision time" uses the chart state at that moment, not the latest update',
+      'Temporal snapshots so "what had been recorded by the decision" uses the chart state as recorded by that moment, not the latest update',
       "Relationship integrity between patients, encounters, care plans, and authorization records",
       "Audit-oriented exports that trace clinical decisions from triggering observation through agent recommendation to clinician action",
     ],
     generalizesTitle: "If agents touch clinical data, you need reconstructable healthcare state",
     generalizesDesc:
-      "Any team deploying clinical agents for documentation, triage, prior auth, or care coordination faces the same requirement: prove what was known when a decision was made. Neotoma generalizes the pattern to your clinical stack.",
+      "Any team deploying clinical agents for documentation, triage, prior auth, or care coordination faces the same requirement: show what had been recorded by the time a decision was made. Neotoma generalizes the pattern to your clinical stack.",
   },
   ctaHeadline: "Ship clinical agents that can defend",
   ctaHighlight: "every decision they supported",

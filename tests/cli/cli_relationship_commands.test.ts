@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { createTestEntity } from "../helpers/test_data_helpers.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 
 const CLI_PATH = "node dist/cli/index.js";
 const TEST_USER_ID = "test-user-cli-rel";

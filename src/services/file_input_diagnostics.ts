@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 // File-input diagnostics for `store()` / `parse_file()` (#2325)
 //
 // `file_path` is resolved on the *server's* filesystem, never the caller's.
@@ -73,7 +74,7 @@ export class FileInputError extends Error {
  * would reject a `file_path` that would have worked, which is worse than
  * continuing to attempt a read that then fails on its own merits.
  */
-export function isFilesystemLocalToCaller(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isFilesystemLocalToCaller(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
   const explicit = env.NEOTOMA_FILESYSTEM_LOCAL;
   if (explicit !== undefined && explicit !== "") {
     return !/^(0|false|no|off)$/i.test(explicit.trim());

@@ -27,6 +27,7 @@ import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js
 import { logger } from "../utils/logger.js";
 import { getCurrentAAuthAdmission } from "./request_context.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
@@ -53,6 +54,33 @@ export type AgentCapabilityOp =
    * Scoped by `relationship_types`, not `entity_types` — see the field below.
    */
   | "register_relationship_type"
+  /**
+   * Entity lifecycle and structure ops, scoped by `entity_types` like
+   * `store`. Each is granted only by an entry that names it: `store` and
+   * `correct` do not imply them, and `"*"` on another op does not either.
+   *
+   * - `delete` / `restore`: soft delete and restore of an entity (REST
+   *   `/delete_entity`, `/restore_entity`, `/issues/bulk_remove`; MCP
+   *   `delete_entity`, `restore_entity`).
+   * - `merge`: both entities' types must be covered (`/entities/merge`, MCP
+   *   `merge_entities`).
+   * - `split`: the source type and the new entity's type must be covered
+   *   (`/entities/split`, MCP `split_entity`).
+   *
+   * Relationship delete and restore stay under `create_relationship`, scoped
+   * by `relationship_types` (see `relationship_write_capability.ts`).
+   */
+  | "delete"
+  | "restore"
+  | "merge"
+  | "split"
+  /**
+   * Schema governance: `register_schema` and `update_schema_incremental`
+   * (REST and MCP) for the named entity types. Bundle install / enable /
+   * disable changes schema behaviour for many types at once, so it needs
+   * this op with `entity_types: ["*"]`.
+   */
+  | "register_schema"
   | "github_harness:read"
   | "github_harness:write"
   | "github_harness:*";
@@ -183,6 +211,11 @@ const CEILING_REASON_MAP: Record<Exclude<AAuthAdmissionReason, "admitted">, "den
   // is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY governs.
   no_match: "none",
   no_grants_for_user: "none",
+  // The grant lookup itself failed (a transient server error). Until this
+  // reason existed the failure was reported as `no_match`; it keeps that
+  // classification so this change alters no capability decision. Route
+  // gates still refuse the unauthenticated request (as a retryable 503).
+  lookup_failed: "none",
   strict_rejected: "none",
   aauth_disabled: "none",
   not_signed: "none",
@@ -336,7 +369,7 @@ export class LegacyAgentCapabilityEnvError extends Error {
  * during server boot (see {@link assertCapabilityEnvOnBoot} for the
  * Express-friendly wrapper used in `src/server.ts`).
  */
-export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = process.env): void {
+export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = runtimeEnv()): void {
   const present = LEGACY_CAPABILITY_ENV_VARS.filter((name) => {
     const value = env[name];
     return typeof value === "string" && value.trim().length > 0;
@@ -355,7 +388,7 @@ export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = process.env
  * agent is denied iff this flag is true and its tier is sufficient.
  */
 export function isAgentDefaultDenyEnabled(): boolean {
-  const raw = process.env.NEOTOMA_AGENT_DEFAULT_DENY;
+  const raw = runtimeEnv().NEOTOMA_AGENT_DEFAULT_DENY;
   if (!raw) return false;
   const normalised = raw.trim().toLowerCase();
   return normalised === "true" || normalised === "1" || normalised === "yes";
@@ -663,14 +696,11 @@ export function getAgentCapabilitiesSource(): string {
  *     A grant that lets an agent register `LEASE` for itself does not let it
  *     change the vocabulary for every tenant on the instance.
  *
- * NOTE ON WHAT THIS DOES NOT DO: `register_schema` — the same defect one
- * vocabulary over — has NO authorization check at all beyond authentication,
- * and its scope is caller-chosen with `global` as the DEFAULT and the
- * unattributed branch. That is deliberately left alone here. Adding a
- * capability requirement to a tool that has never had one breaks every
- * existing caller whose grant does not name it, and deserves its own issue
- * with its own back-compat analysis. Gating only the NEW surface means it is
- * safe from day one with no migration, which is the right asymmetry.
+ * `register_schema` (and `update_schema_incremental`) is gated separately,
+ * by the `register_schema` op scoped by `entity_types`
+ * (`services/mutation_capability.ts`). Unlike this op it does not refuse a
+ * request with no grant: an owner session keeps registering schemas without
+ * one, and only agent callers are checked.
  */
 /**
  * #2482 (ux round-2 finding, PR #2511): when the refused name is one of the

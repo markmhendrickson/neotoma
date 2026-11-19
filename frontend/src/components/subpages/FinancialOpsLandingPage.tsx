@@ -30,7 +30,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Financial operations that survive",
   heroHighlight: "reconciliation, close, and audit",
   heroDesc:
-    "Bank feeds, invoices, and GL entries disagree daily while agents auto-match and categorize. Neotoma versions every reconciliation entry and ledger state so you can answer what the books showed on the audit date or at month-end close.",
+    "Bank feeds, invoices, and GL entries disagree daily while agents auto-match and categorize. Neotoma versions every reconciliation entry and ledger state so you can answer what the books had recorded by the audit date or by month-end close.",
   heroTags: [
     { tag: "transaction", Icon: ArrowLeftRight },
     { tag: "account", Icon: Landmark },
@@ -47,7 +47,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: CalendarOff,
       title: "No close-date snapshots",
-      desc: "Close packages export PDFs and spreadsheets that drift the next morning. Teams cannot query the reconciliation grid as it stood on Mar 31 at 11:59pm ET.",
+      desc: "Close packages export PDFs and spreadsheets that drift the next morning. Teams cannot query the reconciliation grid as recorded by Mar 31 at 11:59pm ET.",
     },
     {
       Icon: RefreshCw,
@@ -67,20 +67,20 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: 'Auditors do not accept "we reconciled it in the tool."',
   problemCalloutDesc:
-    "They ask whether a liability existed on the audit date, how month-end tie-outs looked at close, and how a specific balance rolled forward. When reconciliation state lives only in the latest UI, you rebuild history from exports and tickets.",
+    "They ask whether a liability had been recorded by the audit date, how month-end tie-outs looked as recorded at close, and how a specific balance rolled forward. When reconciliation state lives only in the latest UI, you rebuild history from exports and tickets.",
   scenarios: [
     {
       category: "Audit date verification",
       human:
-        "Did accrued bonus liability ACC-LIAB-4411 exist in our books on the audit date December 31, 2024, and what was its balance?",
+        "Had accrued bonus liability ACC-LIAB-4411 been recorded in our books by the audit cutoff of December 31, 2024, and what balance had been recorded for it?",
       fail: "Accrued bonus liability ACC-LIAB-4411: current balance $388,420.00 as of today; last updated by payroll accrual batch.",
       succeed:
-        "As of 2024-12-31 (audit date), ACC-LIAB-4411 snapshot shows balance $412,900.00 per ledger\u00B7v18 @ 2024-12-31T23:59:00-05:00, sourced from JE-2024-12-30-884 (payroll close) and recon entry rec\u00B7v3 tying to Workday accrual export hash a3f9\u20262c1. Post-audit true-up JE-2025-01-15-102 reduced the balance to $388,420.00, preserved as ledger\u00B7v21 with full provenance. The assistant returned point-in-time state, not current GL.",
+        "As recorded by 2024-12-31 (audit date), ACC-LIAB-4411 snapshot shows balance $412,900.00 per ledger\u00B7v18 @ 2024-12-31T23:59:00-05:00, sourced from JE-2024-12-30-884 (payroll close) and recon entry rec\u00B7v3 tying to Workday accrual export hash a3f9\u20262c1. Post-audit true-up JE-2025-01-15-102 reduced the balance to $388,420.00, preserved as ledger\u00B7v21 with full provenance. The assistant returned the state recorded by then, not current GL.",
       version: "ledger\u00B7v18 @ 2024-12-31",
       Icon: ShieldCheck,
       failTitle: "Current liability balance, audit date indistinguishable",
       failDesc:
-        "Without as-of reconstruction, the assistant reports today's $388k and implies it was always true, understating the Dec 31 accrual auditors must tie to.",
+        "Without reconstruction as recorded by a date, the assistant reports today's $388k and implies it was always true, understating the Dec 31 accrual auditors must tie to.",
     },
     {
       category: "Reconciliation conflicts",
@@ -98,10 +98,10 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Month-end close",
       human:
-        "What was the reconciliation state for cash account 1000-CASH-01 at March 2025 month-end close?",
+        "What reconciliation state had been recorded for cash account 1000-CASH-01 by March 2025 month-end close?",
       fail: "Account 1000-CASH-01: book $2,884,120.33 vs. bank $2,884,118.91; two outstanding deposits; status in progress in the recon workspace.",
       succeed:
-        "Close snapshot close\u00B7mar2025 @ 2025-03-31T23:59:59-04:00: book $2,881,004.55, bank $2,881,004.55 per recon entry rec\u00B7v9; zero open exceptions; tie-out signed by controller user id ctrl_m_nguyen @ 2025-04-01T01:14Z. Today's $2,884,120.33 reflects April activity, explicitly not returned as March close state.",
+        "Close snapshot close\u00B7mar2025 @ 2025-03-31T23:59:59-04:00: book $2,881,004.55, bank $2,881,004.55 per recon entry rec\u00B7v9; zero open exceptions; tie-out signed by controller user id ctrl_m_nguyen @ 2025-04-01T01:14Z. Today's $2,884,120.33 includes April activity recorded after the close snapshot, so it is not returned for the March cutoff.",
       version: "close\u00B7mar2025",
       Icon: Calendar,
       failTitle: "Today's book vs. bank, frozen close snapshot missing",
@@ -133,14 +133,14 @@ const CONFIG: UseCaseConfig = {
       title: "Ingest every feed and post as an observation",
       desc: "Bank files, invoice extracts, ERP journals, and agent outputs become structured observations on transaction, account, reconciliation entry, ledger, and invoice entities. Nothing overwrites prior tie-outs.",
       detail:
-        "Immutable history by default. Close and as-of views are computed from observations, not re-keyed spreadsheets.",
+        "Immutable history by default. Close views as recorded by a date are computed from observations, not re-keyed spreadsheets.",
     },
     {
       Icon: Layers,
       title: "Project reconciliation and GL state through time",
       desc: "Month-end close freezes recon grids and material balances. Conflicting bank vs. AP amounts stay addressable with both timestamps and source system IDs until explicitly resolved with lineage.",
       detail:
-        "Temporal queries return the state valid on the audit or close timestamp, not the last sync job.",
+        "Temporal queries return the state as recorded by the cutoff time, not the last sync job.",
     },
     {
       Icon: Search,
@@ -157,8 +157,8 @@ const CONFIG: UseCaseConfig = {
   capabilities: [
     {
       Icon: ShieldCheck,
-      title: "Audit-date and as-of balances",
-      desc: "Reconstruct liabilities, accruals, and cash positions on any calendar date with ledger and account snapshots tied to journal and recon observations.",
+      title: "Balances as recorded by audit date",
+      desc: "Reconstruct liabilities, accruals, and cash positions as recorded up to any calendar date with ledger and account snapshots tied to journal and recon observations.",
       tags: ["ledger", "audit", "temporal"],
     },
     {
@@ -170,7 +170,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Calendar,
       title: "Month-end close snapshots",
-      desc: "Freeze tie-out state at close datetime including cleared vs. outstanding lines, preparer and reviewer attestations, and material account exceptions.",
+      desc: "Freeze tie-out state as recorded at close datetime including cleared vs. outstanding lines, preparer and reviewer attestations, and material account exceptions.",
       tags: ["close", "snapshot", "control"],
     },
     {
@@ -224,7 +224,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project latest state per entity, or reconstruct historical state for audit dates, close datetimes, and investigation windows.",
+      desc: "Project latest state per entity, or reconstruct state as recorded by audit dates, close datetimes, and investigation windows.",
     },
     {
       label: "Serve agents & auditors",
@@ -234,7 +234,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How financial operations teams use Neotoma as their integrity layer",
     desc:
-      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state at any audit date.",
+      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state as recorded up to any audit date.",
     featuresHeading: "What financial operations teams build",
     features: [
       "Continuous bank-to-ledger matching with agent-proposed categorization across thousands of daily transactions",
@@ -243,13 +243,13 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every feed ingest, match decision, and agent-generated journal proposal",
-      "Temporal snapshots so audit-date and month-end answers match attested close, not today's workspace",
+      "Temporal snapshots so audit-date and month-end answers match the close as recorded by that date, not today's workspace",
       "Relationship integrity between transactions, invoices, reconciliation entries, and GL lines",
       "Audit-oriented exports that list versions, conflicts, and lineage in one graph",
     ],
     generalizesTitle: "If you run agent-assisted close and recon, you share the same risk surface",
     generalizesDesc:
-      "Any team blending bank feeds, ERP, and autonomous matching or categorization needs the same guarantees: no silent recon overwrites, no orphan adjustments, and no guessing which snapshot was live on Dec 31. Neotoma generalizes the pattern to your stack.",
+      "Any team blending bank feeds, ERP, and autonomous matching or categorization needs the same guarantees: no silent recon overwrites, no orphan adjustments, and no guessing which snapshot had been recorded by Dec 31. Neotoma generalizes the pattern to your stack.",
   },
   ctaHeadline: "Ship finance agents that can defend",
   ctaHighlight: "every balance they explain",

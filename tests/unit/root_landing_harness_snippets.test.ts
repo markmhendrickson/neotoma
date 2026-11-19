@@ -45,6 +45,15 @@ describe("harness_snippets: inventory", () => {
     const built = buildAllHarnessSnippets(ctxFor("sandbox"));
     expect(built.map((h) => h.id)).toEqual([...HARNESS_IDS]);
   });
+
+  it("uses shared guide routes and does not invent an OpenClaw URL install flag", () => {
+    for (const result of buildAllHarnessSnippets(ctxFor("local"))) {
+      expect(result.docsUrl).toBe(`https://neotoma.io/install/${result.id}/`);
+    }
+    const remote = buildHarnessSnippet("openclaw", ctxFor("prod"));
+    expect(remote.human.code).toContain("openclaw plugins install clawhub:neotoma");
+    expect(remote.human.code).not.toContain("clawhub:neotoma --url");
+  });
 });
 
 describe("harness_snippets: remote modes interpolate mcpUrl", () => {
@@ -76,7 +85,7 @@ describe("harness_snippets: local mode uses stdio", () => {
       const out = buildHarnessSnippet(id, ctx);
       expect(out.human.code).not.toContain("http://localhost:3080/mcp");
       expect(out.human.code).not.toContain("https://");
-    },
+    }
   );
 
   it("chatgpt local snippet explains the tunnel requirement", () => {
@@ -97,7 +106,10 @@ describe("harness_snippets: local mode uses stdio", () => {
 
   it("local mode with stdioMcpScriptPath embeds that path in JSON and shell snippets", () => {
     const resolved = "/opt/neotoma/scripts/run_neotoma_mcp_stdio.sh";
-    const ctxWithPath = { ...ctxFor("local", "http://localhost:3080"), stdioMcpScriptPath: resolved };
+    const ctxWithPath = {
+      ...ctxFor("local", "http://localhost:3080"),
+      stdioMcpScriptPath: resolved,
+    };
     const cursor = buildHarnessSnippet("cursor", ctxWithPath);
     expect(cursor.human.code).toContain(resolved);
     expect(cursor.human.code).not.toContain(PLACEHOLDER_STDIO_MCP_SCRIPT);
@@ -166,13 +178,13 @@ describe("harness_snippets: docs URL resolution", () => {
   it("resolves docs paths against publicDocsUrl", () => {
     const ctx = ctxFor("sandbox");
     const out = buildHarnessSnippet("cursor", ctx);
-    expect(out.docsUrl).toBe("https://neotoma.io/neotoma-with-cursor");
+    expect(out.docsUrl).toBe("https://neotoma.io/install/cursor/");
   });
 
   it("handles trailing slash on publicDocsUrl", () => {
     const ctx = { ...ctxFor("sandbox"), publicDocsUrl: "https://neotoma.io/" };
     const out = buildHarnessSnippet("claude-code", ctx);
-    expect(out.docsUrl).toBe("https://neotoma.io/neotoma-with-claude-code");
+    expect(out.docsUrl).toBe("https://neotoma.io/install/claude-code/");
   });
 });
 

@@ -12,5 +12,6 @@ shell: detail
 translation_status: canonical
 ---
 
-# Neotoma with ChatGPT connect custom GPT
+# Neotoma with Chatgpt Connect Custom Gpt
 
+This legacy address is retained for existing links. Follow the [current Chatgpt Connect Custom Gpt connection guide](https://neotoma.io/install/chatgpt/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

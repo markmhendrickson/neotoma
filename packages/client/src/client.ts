@@ -8,9 +8,12 @@
 
 import { HttpTransport, HttpTransportOptions } from "./http.js";
 import { LocalTransport, LocalTransportOptions } from "./local.js";
+import type { CorrectRequest } from "./correction.js";
 import {
+  CorrectInput,
   CreateRelationshipsInput,
   CreateRelationshipInput,
+  DeprecatedCorrectInput,
   ListObservationsInput,
   ListTimelineEventsInput,
   NeotomaTransport,
@@ -68,11 +71,14 @@ export class NeotomaClient implements NeotomaTransport {
   createRelationships(input: CreateRelationshipsInput): Promise<unknown> {
     return this.transport.createRelationships(input);
   }
-  correct(input: {
-    entity_id: string;
-    corrections: Record<string, unknown>;
-  }): Promise<unknown> {
-    return this.transport.correct(input);
+  correct(input: CorrectInput): Promise<unknown>;
+  /** @deprecated Pass one canonical CorrectInput. A map with more than one field is refused. */
+  correct(input: DeprecatedCorrectInput): Promise<unknown>;
+  correct(input: CorrectRequest): Promise<unknown> {
+    const correct = this.transport.correct as (
+      request: CorrectRequest
+    ) => Promise<unknown>;
+    return correct.call(this.transport, input);
   }
   listEntityTypes(input: { search?: string } = {}): Promise<unknown> {
     return this.transport.listEntityTypes(input);

@@ -428,7 +428,12 @@ export type AgentCapabilityOp =
   | "store_structured"
   | "create_relationship"
   | "correct"
-  | "retrieve";
+  | "retrieve"
+  | "delete"
+  | "restore"
+  | "merge"
+  | "split"
+  | "register_schema";
 
 export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;

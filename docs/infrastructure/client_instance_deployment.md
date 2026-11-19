@@ -38,6 +38,8 @@ flyctl deploy \
   --no-cache
 ```
 
+The `[[vm]]` block in `fly.operator.toml` sizes the machine for the operator's own instance (currently `performance`, 2 CPUs, 16GB). A client instance deployed from this file would be resized to it, so read the instance's size from its own `deployment_configuration` and pass it explicitly (for example `--vm-memory`) or use a config that declares it; do not inherit it from this file.
+
 Everything below explains why each of those pieces is load-bearing.
 
 ### 0. Check for config drift before every deploy

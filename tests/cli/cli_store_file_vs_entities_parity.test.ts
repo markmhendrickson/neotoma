@@ -13,13 +13,11 @@
  */
 
 import { describe, expect, it, beforeAll } from "vitest";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";

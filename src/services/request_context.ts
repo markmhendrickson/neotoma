@@ -30,6 +30,7 @@ import type {
 } from "../crypto/agent_identity.js";
 import { toAttributionProvenance } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext } from "./protected_entity_types.js";
+import type { McpLookupTiming } from "./mcp_lookup_timing.js";
 
 export interface RequestContext {
   /** Resolved agent identity, or null when we have nothing to attribute. */
@@ -71,6 +72,8 @@ export interface RequestContext {
    * Absent outside the `/mcp` HTTP route (stdio, REST).
    */
   mcpConnectionId?: string | null;
+  /** Private timing state for one eligible legacy MCP HTTP lookup. */
+  mcpLookupTiming?: McpLookupTiming;
   /**
    * The signed-in member whose session this request runs under (#2240),
    * resolved by the auth layer from a verified sign-in recorded on the OAuth

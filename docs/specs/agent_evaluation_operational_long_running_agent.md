@@ -111,7 +111,7 @@ Use stable IDs so time series stay comparable when wording tweaks.
 | `diff-02` | How is Neotoma different from ChatGPT memory or Claude's memory? |
 | `diff-03` | Is Neotoma just a RAG wrapper? |
 | `guar-01` | Can Neotoma prove its state hasn't been silently corrupted? |
-| `guar-02` | How do I replay what an agent knew at a specific decision point? |
+| `guar-02` | How do I replay what had been recorded by the time an agent made a decision? |
 | `guar-03` | Does Neotoma send my data to the cloud? |
 | `adopt-01` | How do I install Neotoma? |
 | `adopt-02` | Does Neotoma work with Cursor and Claude Code? |

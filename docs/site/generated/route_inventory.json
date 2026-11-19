@@ -440,6 +440,10 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/compare",
+    "classification": "other"
+  },
+  {
     "path": "/memory-models",
     "classification": "other"
   },

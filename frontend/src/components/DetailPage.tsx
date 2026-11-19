@@ -62,7 +62,9 @@ export function DetailPage({
   const { pathname } = useLocation();
   const effectivePath = useEffectiveRoutePath();
   const renderedChildren = addAutoSectionDividers(children);
-  const TitleIcon = getDocPageIcon(effectivePath);
+  const TitleIcon = effectivePath === "/install" || effectivePath === "/sandbox"
+    ? undefined
+    : getDocPageIcon(effectivePath);
   const seoPathname =
     typeof window !== "undefined" ? window.location.pathname : pathname;
   return (

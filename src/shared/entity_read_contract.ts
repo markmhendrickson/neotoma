@@ -14,6 +14,8 @@ export interface EntityReadTrace {
   count_exact?: boolean;
   effective_types?: string[];
   distance_threshold_applied?: boolean;
+  /** Lexical search: rows whose snapshot and fragments were loaded for matching. */
+  lexical_rows_loaded?: number;
 }
 export interface EntityReadRequest {
   raw: Record<string, unknown>;

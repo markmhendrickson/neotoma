@@ -1,3 +1,4 @@
+import { runtimeEnv } from "../config_embedded.js";
 /**
  * Logger utility that respects MCP stdio mode
  *
@@ -15,8 +16,8 @@
  * - debug: 🔍
  */
 
-const isMCPMode = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
-const enableLogging = process.env.NEOTOMA_MCP_ENABLE_LOGGING === "1";
+const isMCPMode = runtimeEnv().NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
+const enableLogging = runtimeEnv().NEOTOMA_MCP_ENABLE_LOGGING === "1";
 
 const shouldLog = !isMCPMode || enableLogging;
 

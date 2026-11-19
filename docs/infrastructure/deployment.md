@@ -502,7 +502,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://mcp.neotoma.io/health
 flyctl secrets set NEOTOMA_HOST_URL="https://mcp.neotoma.io"
 ```
 
-Set other production secrets as needed (`NEOTOMA_BEARER_TOKEN`, encryption keys, `OPENAI_API_KEY`, etc.). **`NEOTOMA_HOST_URL`** must equal the URL clients use in the browser for MCP “Connect” (scheme + host, no trailing slash).
+Set other production secrets as needed (`NEOTOMA_BEARER_TOKEN`, encryption keys, `OPENAI_API_KEY`, etc.). To rotate `NEOTOMA_BEARER_TOKEN` without cutting every consumer at once, use the handover slot (`NEOTOMA_BEARER_TOKEN_PREVIOUS` + `NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT`); see [Rotating the static bearer](../subsystems/auth.md#rotating-the-static-bearer-handover-slot). **`NEOTOMA_HOST_URL`** must equal the URL clients use in the browser for MCP “Connect” (scheme + host, no trailing slash).
 
 ### Verify MCP and server card
 

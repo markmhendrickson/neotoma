@@ -34,6 +34,7 @@ import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_en
 import { lookupGrantForIdentity, recordMatch, type AgentGrant } from "./agent_grants.js";
 import { GRANT_KEY_PIN_DOC } from "./agent_capabilities.js";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export type { AAuthAdmissionContext, AAuthAdmissionReason };
 
@@ -60,8 +61,9 @@ export interface AdmissionResult extends AAuthAdmissionContext {
  *   and a debounced `last_used_at` observation is fired off.
  *
  * The function never throws on lookup failure: any internal error is
- * logged and returned as `not_signed` / `no_match` so the request keeps
- * flowing through attribution-only paths.
+ * logged and returned as `{ admitted: false, reason: "lookup_failed" }`
+ * so the request keeps flowing through attribution-only paths and route
+ * gates can tell a transient failure from a genuine no-match.
  */
 export async function admitFromAAuthContext(
   ctx: AAuthRequestContext | null
@@ -70,7 +72,7 @@ export async function admitFromAAuthContext(
     return { admitted: false, reason: "not_signed" };
   }
 
-  if (process.env.NEOTOMA_AAUTH_ADMISSION_DISABLED === "1") {
+  if (runtimeEnv().NEOTOMA_AAUTH_ADMISSION_DISABLED === "1") {
     return { admitted: false, reason: "aauth_disabled" };
   }
 
@@ -91,12 +93,17 @@ export async function admitFromAAuthContext(
     invalidGrantId = lookup.invalid_grant_id;
     pinConflict = lookup.pin_conflict;
   } catch (err) {
+    // A failed lookup (a busy or timed-out database read) is not a
+    // no-match: the grant may well exist. Refuse admission all the same,
+    // but under its own reason so route gates can answer a retryable 503
+    // instead of a permanent "Missing Bearer token" 401.
     logger.warn("aauth_admission lookup failed", {
+      reason: "lookup_failed",
       err: err instanceof Error ? err.message : String(err),
       sub: ctx.sub,
       thumbprint_prefix: ctx.thumbprint?.slice(0, 12),
     });
-    return { admitted: false, reason: "no_match" };
+    return { admitted: false, reason: "lookup_failed" };
   }
 
   if (pinConflict) {

@@ -144,6 +144,28 @@ describe("context-explicit entity lifecycle selector", () => {
       ])
     ).toEqual({ hidden: true, selected_observation_id: "old_sensor" });
   });
+  it("pre-migration accepts observations of mixed entity_type after a cross-type merge", () => {
+    // mergeEntities (e.g. plural-type repair) repoints observations without
+    // rewriting their entity_type, so a survivor legitimately holds rows of
+    // more than one type. The legacy reducer never refused that state.
+    const rows = [row("singular"), row("plural", { entity_type: `${target.entity_type}s` })];
+    const result = selectEntityLifecycleVisibility(rows, {
+      acquisition: "complete",
+      target,
+      mode: "pre_migration",
+    });
+    expect(result.hidden).toBe(false);
+    expect(result.factual_observations.map((r) => r.id)).toEqual(["singular", "plural"]);
+  });
+  it("pre-migration still refuses observations owned by another user", () => {
+    expect(() =>
+      selectEntityLifecycleVisibility([row("own"), row("foreign", { user_id: "other-owner" })], {
+        acquisition: "complete",
+        target,
+        mode: "pre_migration",
+      })
+    ).toThrow(/acquisition/);
+  });
   it("pre-migration refuses populated authority without a cutover", () => {
     expect(() =>
       selectEntityLifecycleVisibility([action("delete", 1, "delete")], {

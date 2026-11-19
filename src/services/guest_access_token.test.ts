@@ -26,22 +26,35 @@ vi.mock("../db.js", () => {
           rowsForTable(table).push(row);
           return { error: null };
         },
-        select: (_cols: string) => {
-          const filters: Array<[string, unknown]> = [];
-          const rows = () =>
-            rowsForTable(table).filter((row) =>
-              filters.every(([column, value]) => row[column] === value)
-            );
-          const query = {
-            eq(column: string, value: unknown) {
-              filters.push([column, value]);
-              return query;
+        select: (_cols: string) => ({
+          order: (_col: string, _opts: unknown) => {
+            return Promise.resolve({
+              data: rowsForTable(table).filter((o) => o.entity_type === "guest_access_token"),
+              error: null,
+            });
+          },
+          eq: (_col: string, _val: unknown) => ({
+            // Entity lookups: the token entity row, or nothing for other ids.
+            single: async () => ({
+              data: rowsForTable(table).find((o) => o[_col] === _val) ?? null,
+              error: null,
+            }),
+            maybeSingle: async () => ({
+              data: rowsForTable(table).find((o) => o[_col] === _val) ?? null,
+              error: null,
+            }),
+            // Merge and split history: none in this mock.
+            limit: async () => ({ data: [], error: null }),
+            order: (_col2: string, _opts: unknown) => {
+              return Promise.resolve({
+                data: rowsForTable(table).filter(
+                  (o) => o.entity_type === "guest_access_token" && o[_col] === _val
+                ),
+                error: null,
+              });
             },
-            maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
-            order: async (_column: string, _options: unknown) => ({ data: rows(), error: null }),
-          };
-          return query;
-        },
+          }),
+        }),
       }),
     },
   };

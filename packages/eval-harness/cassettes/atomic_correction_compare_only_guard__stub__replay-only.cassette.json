@@ -1,0 +1,229 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "atomic_correction_compare_only_guard",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Seed two ready synthetic drafts and one unchanged source. Apply the first draft transition with the source as a compare-only guard, verify the source has no new observation, advance the source independently, refuse a stale transition of the second draft, replay the original transition exactly, and read all three snapshots.",
+  "system_prompt": "Use correct_transaction to change one scoped entity only while atomically comparing an unchanged second entity. Retry the exact committed request after the guard advances; reject a stale new write without partial effects.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "status": {
+              "type": "string"
+            },
+            "remaining": {
+              "type": "number"
+            }
+          },
+          "canonical_name_fields": [
+            "title"
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "title": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            },
+            "status": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            },
+            "remaining": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            }
+          }
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-atomic-seed",
+        "entities": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic draft alpha",
+            "status": "ready"
+          },
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic source capacity",
+            "remaining": 1
+          },
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic draft beta",
+            "status": "ready"
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-guarded-first",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ]
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_e80de22a92c0a3db09747543"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-guard-advance",
+        "entities": [
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 4
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-guarded-stale",
+        "entities": [
+          {
+            "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ]
+      },
+      "sequence": 5
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-guarded-first",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ]
+      },
+      "sequence": 6
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_721001bcfee64e561dd21c6a"
+      },
+      "sequence": 7
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_e80de22a92c0a3db09747543"
+      },
+      "sequence": 8
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+      },
+      "sequence": 9
+    }
+  ],
+  "assistant_text": "The guarded transition committed once without changing the guard. A stale competing transition was refused; exact replay added no observation."
+}

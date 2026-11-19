@@ -214,12 +214,36 @@ export async function processAutoEnhancementQueue(): Promise<{
 }
 
 /**
- * Start the auto-enhancement processor (runs continuously)
+ * The one process-wide processor timer, or null when it is not running.
+ *
+ * The queue is global: `processAutoEnhancementQueue` reads every pending row
+ * regardless of which user or session queued it. So one timer per process does
+ * all the work there is. Starting one per MCP session (as `NeotomaServer.runHTTP`
+ * used to) only multiplied identical DB polls, and since sessions never stopped
+ * theirs, a long-lived HTTP server accumulated one 30 s timer per session ever
+ * opened.
  */
-export function startAutoEnhancementProcessor(intervalMs: number = 30000) {
+let sharedTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Ensure the auto-enhancement processor is running (process-wide singleton).
+ *
+ * The first call starts the interval; later calls are no-ops and return the
+ * same stop function, so callers may invoke this once per session safely. The
+ * processor deliberately outlives any single session: queue rows are also
+ * written by REST stores, so it must keep running when no MCP session is open.
+ *
+ * Returns a function that stops the shared processor. Only process shutdown
+ * and tests should call it; a session closing must not.
+ */
+export function startAutoEnhancementProcessor(intervalMs: number = 30000): () => void {
+  if (sharedTimer) {
+    return stopAutoEnhancementProcessor;
+  }
+
   logger.info(`[AUTO_ENHANCE_QUEUE] Starting processor (interval: ${intervalMs}ms)`);
 
-  const processInterval = setInterval(async () => {
+  sharedTimer = setInterval(async () => {
     try {
       await processAutoEnhancementQueue();
     } catch (error: any) {
@@ -227,11 +251,22 @@ export function startAutoEnhancementProcessor(intervalMs: number = 30000) {
     }
   }, intervalMs);
 
-  // Return cleanup function
-  return () => {
-    clearInterval(processInterval);
-    logger.error(`[AUTO_ENHANCE_QUEUE] Processor stopped`);
-  };
+  return stopAutoEnhancementProcessor;
+}
+
+/**
+ * Stop the process-wide auto-enhancement processor, if running. Idempotent.
+ */
+export function stopAutoEnhancementProcessor(): void {
+  if (!sharedTimer) return;
+  clearInterval(sharedTimer);
+  sharedTimer = null;
+  logger.error(`[AUTO_ENHANCE_QUEUE] Processor stopped`);
+}
+
+/** Whether the process-wide auto-enhancement processor is running. */
+export function isAutoEnhancementProcessorRunning(): boolean {
+  return sharedTimer !== null;
 }
 
 /**

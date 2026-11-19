@@ -7,12 +7,25 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, getServiceRoleClient } from "../../src/db.js";
+import { config } from "../../src/config.js";
+import { generateEmbedding } from "../../src/embeddings.js";
+import { workerBackendSimulation } from "../helpers/worker_backend_simulation.js";
 
 const semanticMock = vi.hoisted(() => ({
   semanticSearchEntities: vi.fn(async () => ({ entityIds: [] as string[], total: 0 })),
 }));
 
 vi.mock("../../src/services/entity_semantic_search.js", () => semanticMock);
+vi.mock("../../src/embeddings.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/embeddings.js")>()),
+  generateEmbedding: vi.fn(async () => Array.from({ length: 1536 }, () => 0.5)),
+}));
+vi.mock("../../src/repositories/db/connection.js", async (importOriginal) => {
+  const { simulatedConnectionModule } = await import("../helpers/worker_backend_simulation.js");
+  return simulatedConnectionModule(
+    await importOriginal<typeof import("../../src/repositories/db/connection.js")>()
+  );
+});
 
 import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
 
@@ -96,6 +109,38 @@ describe("queryEntitiesWithCount search_mode", () => {
     expect(result.search_mode).toBe("lexical_typed");
     // Typed lexical bypasses semantic entirely.
     expect(semanticMock.semanticSearchEntities).not.toHaveBeenCalled();
+  });
+
+  it("typed search on the worker backend reports lexical fallback without an embedding call", async () => {
+    const id = `ent_smode_worker_${Date.now()}`;
+    await createEntity(id, "research_report", "Synthetic Amber Ledger");
+    const actual = await vi.importActual<
+      typeof import("../../src/services/entity_semantic_search.js")
+    >("../../src/services/entity_semantic_search.js");
+    semanticMock.semanticSearchEntities.mockImplementation(actual.semanticSearchEntities);
+    vi.mocked(generateEmbedding).mockClear();
+    const previousKey = config.openaiApiKey;
+    config.openaiApiKey = "synthetic-not-a-credential";
+    workerBackendSimulation.active = true;
+    try {
+      const result = await queryEntitiesWithCount({
+        userId: testUserId,
+        entityType: "research_report",
+        search: "amber ledger",
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(semanticMock.semanticSearchEntities).toHaveBeenCalled();
+      expect(generateEmbedding).not.toHaveBeenCalled();
+      expect(result.search_mode).toBe("lexical_fallback");
+      expect(result.read_contract.mode.fallback_reason).toBe("unknown");
+      expect(result.read_contract.coverage.reasons).toContain("semantic_backend_unavailable");
+      expect(result.entities.some((e) => e.entity_id === id)).toBe(true);
+    } finally {
+      workerBackendSimulation.active = false;
+      config.openaiApiKey = previousKey;
+    }
   });
 
   it("returns search_mode 'semantic' when semantic search answers the query", async () => {

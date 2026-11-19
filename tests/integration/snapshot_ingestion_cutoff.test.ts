@@ -6,8 +6,11 @@
  * cutoff, preventing look-ahead leaks from backfilled or late-arriving data.
  *
  * The distinction:
- *   - `at`          filters on `observed_at` (event time):    "what had happened by T"
- *   - `at_ingested` filters on `created_at`  (ingestion time): "what did we know by T"
+ *   - `at`          filters on `observed_at`: stamped from the server clock when store/correct
+ *                   write, so it is write (assertion) time: "what had been recorded by T".
+ *                   It is NOT event or valid time (valid-time queries: #2034).
+ *   - `at_ingested` filters on `created_at` (insert time): "what had been inserted by T".
+ *                   It is not guaranteed identical to `observed_at` (backfills, imports).
  *
  * #1819: the at/at_ingested cutoffs were ONLY applied on the MCP (server.ts) path;
  * the offline/HTTP path (actions.ts › POST /get_entity_snapshot) silently ignored
@@ -124,7 +127,7 @@ describe("retrieve_entity_snapshot — at_ingested ingestion-time cutoff (#1757)
     (server as any).authenticatedUserId = testUserId;
 
     // -----------------------------------------------------------------------
-    // Case 1: `at` alone (event-time only) — should include BOTH observations
+    // Case 1: `at` alone (write-time `observed_at` only) — should include BOTH observations
     // since both have observed_at ≤ oneDayAgo. The reducer sorts by observed_at
     // DESC, so obs_backfill (T-2) wins over obs_early (T-3) → status="done".
     // This is deterministic because observed_at values differ.
@@ -398,7 +401,7 @@ describe("retrieve_entity_snapshot — offline/HTTP path honours at_ingested (#1
     expect(empty!.snapshot).toEqual({});
   });
 
-  it("computeEntitySnapshotAtTime: at (event-time) excludes future-observed observations", async () => {
+  it("computeEntitySnapshotAtTime: at (observed_at) excludes later assertions", async () => {
     const entityId = `ent_test_1819_at_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     tracker.trackEntity(entityId);
     const sourceId = await insertSource("at");

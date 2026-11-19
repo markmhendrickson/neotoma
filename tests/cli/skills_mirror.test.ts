@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  getPublishedSkillsSource,
   listInstallableSkillNames,
   mirrorToHarness,
   mirrorSkillsToAllHarnesses,
@@ -297,4 +298,43 @@ describe("SKILL_HARNESSES map", () => {
     );
     expect(SKILL_HARNESSES.cursor?.dir).toBe(".cursor/skills");
   });
+});
+
+describe("published continuation and digest source readback", () => {
+  it.each(["claude-code", "cursor", "codex"] as const)(
+    "preserves the complete package files through the %s project mirror",
+    (tool) => {
+      const destination = fs.mkdtempSync(path.join(os.tmpdir(), "skill-publication-"));
+      const publishedSource = getPublishedSkillsSource();
+      try {
+        const entry = SKILL_HARNESSES[tool]!;
+        fs.mkdirSync(path.join(destination, entry.base), { recursive: true });
+        const first = mirrorToHarness(tool, {
+          cwd: destination,
+          scope: "project",
+          sourceDir: publishedSource,
+        });
+        expect(first.errors ?? []).toEqual([]);
+        for (const skill of ["continue-session", "status"]) {
+          const source = fs.readFileSync(path.join(publishedSource, skill, "SKILL.md"), "utf8");
+          const actual = fs.readFileSync(
+            path.join(destination, entry.dir, skill, "SKILL.md"),
+            "utf8"
+          );
+          expect(actual).toBe(source);
+          expect(fs.realpathSync(path.join(destination, entry.dir, skill))).toBe(
+            path.join(publishedSource, skill)
+          );
+        }
+        const second = mirrorToHarness(tool, {
+          cwd: destination,
+          scope: "project",
+          sourceDir: publishedSource,
+        });
+        expect(second.changed).toBe(false);
+      } finally {
+        fs.rmSync(destination, { recursive: true, force: true });
+      }
+    }
+  );
 });

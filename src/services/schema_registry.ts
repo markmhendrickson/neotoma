@@ -5,7 +5,15 @@
  */
 
 import { db } from "../db.js";
+import {
+  PlanningDeclarationSchema,
+  type PlanningDeclaration,
+  type SchemaRegistryCoverage,
+} from "../shared/schema_planning.js";
+import { getDb } from "../repositories/db/connection.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { DbConnection } from "../repositories/db/driver.js";
+import { readThroughSchemaRegistryCache } from "../repositories/db/schema_registry_cache.js";
 import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
   checkPluralEntityType,
@@ -20,6 +28,13 @@ import { spawn } from "child_process";
 import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import {
+  validatePattern,
+  SchemaPatternRefusalError,
+  MAX_PATTERNS_PER_CONDITION,
+  MAX_PATTERNS_PER_SCHEMA,
+} from "./safe_pattern.js";
+import { isEmbeddedMode, runtimeEnv } from "../config_embedded.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -104,9 +119,12 @@ export interface FieldConstraints {
    */
   enum?: Array<string | number>;
   /**
-   * Regular-expression string (passed to `new RegExp(pattern)`) that the
-   * stored value must match. Only applied to `string` fields; ignored for
-   * other types. The pattern is anchored only if the caller includes `^`/`$`.
+   * Regular-expression string that the stored value must match. Only applied
+   * to `string` fields; ignored for other types. The pattern is anchored only
+   * if the caller includes `^`/`$`. Registration limits it to 256 characters
+   * and refuses backreferences, nested variable quantifiers and repeated
+   * alternations with overlapping branches; evaluation is bounded in time and
+   * subject length (see `safe_pattern.ts`).
    */
   pattern?: string;
   /**
@@ -183,7 +201,20 @@ export type CanonicalNameRule = string | { composite: string[] };
  * Declarative rules that drive per-type behavior from the schema instead of
  * hardcoded branches. See `docs/foundation/schema_agnostic_design_rules.md`.
  */
+export interface SchemaTypeSummary {
+  entity_type: string;
+  schema_version: string;
+  field_names: string[];
+  field_summary: Record<string, { type: string; required: boolean }>;
+  planning?: PlanningDeclaration;
+  planning_error?: "invalid_declaration";
+  similarity_score?: number;
+  match_type?: "keyword" | "vector";
+}
+
 export interface SchemaDefinition {
+  /** Instance-defined planning stratum; never an execution or edit grant. */
+  planning?: PlanningDeclaration;
   fields: Record<string, FieldDefinition>;
 
   /**
@@ -1054,7 +1085,58 @@ export function isHigherPrecedenceSchemaRow(
   return isOwnOverride(candidate) && !isOwnOverride(incumbent);
 }
 
+interface SchemaMutation {
+  active: boolean;
+  afterCommit: Array<() => void>;
+}
+
+// Context only: the existing database transaction owns serialization/rollback.
+// Shared across service instances so internal registry calls join their owner.
+const schemaMutation = new AsyncLocalStorage<SchemaMutation>();
+
+/**
+ * Read committed active-schema rows through the in-memory lookup cache
+ * (src/repositories/db/schema_registry_cache.ts). Inside a schema mutation the
+ * read must see that mutation's own uncommitted rows, so it goes to the
+ * database directly and stores nothing.
+ */
+function cachedRegistryRead<T>(key: string, load: () => Promise<T>): Promise<T> {
+  if (schemaMutation.getStore()?.active) return load();
+  return readThroughSchemaRegistryCache(key, load);
+}
+
+/** Cache keys always name the scope, and the user for a user-scoped read. */
+const registryCacheKey = {
+  user: (entityType: string, userId: string) => `user\u0000${entityType}\u0000${userId}`,
+  global: (entityType: string) => `global\u0000${entityType}`,
+  list: (userId: string | undefined) => (userId ? `list-user\u0000${userId}` : "list-global"),
+};
+
 export class SchemaRegistryService {
+  private async withSchemaMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const current = schemaMutation.getStore();
+    if (current) {
+      if (!current.active) throw new Error("Schema mutation context has expired.");
+      return operation();
+    }
+    const effects: SchemaMutation = { active: true, afterCommit: [] };
+    let result: T;
+    try {
+      result = await (await getDb()).transaction(() => schemaMutation.run(effects, operation));
+    } finally {
+      effects.active = false;
+    }
+    // No icon/provider/export work escapes a refused or rolled-back change.
+    for (const effect of effects.afterCommit) effect();
+    return result;
+  }
+
+  private afterSchemaCommit(effect: () => void): void {
+    const current = schemaMutation.getStore();
+    if (!current?.active) throw new Error("Schema mutation transaction is required.");
+    current.afterCommit.push(effect);
+  }
+
   /**
    * Register a new schema version
    */
@@ -1069,6 +1151,12 @@ export class SchemaRegistryService {
     metadata?: SchemaMetadata;
     force?: boolean;
   }): Promise<SchemaRegistryEntry> {
+    return this.withSchemaMutation(() => this.registerInTransaction(config));
+  }
+
+  private async registerInTransaction(
+    config: Parameters<SchemaRegistryService["register"]>[0]
+  ): Promise<SchemaRegistryEntry> {
     // Entity-type naming guards (forbidden-pattern + plural). Warns in dev,
     // throws in production unless force: true.
     enforceEntityTypeGuards(config.entity_type, {
@@ -1127,18 +1215,19 @@ export class SchemaRegistryService {
 
       const { error: deactivateError } = await deactivateQuery;
       if (deactivateError) {
-        logSchemaRegistryInfo(
-          `[SCHEMA_REGISTRY] Warning: failed to deactivate prior active schemas for ` +
-            `${config.entity_type}: ${deactivateError.message}`
+        throw new Error(
+          `Failed to deactivate prior active schemas for ${config.entity_type}: ${deactivateError.message}`
         );
       }
     }
 
     // Auto-generate icon if not provided (non-blocking)
-    this.generateIconAsync(registeredSchema.entity_type, config.metadata);
+    this.afterSchemaCommit(() =>
+      this.generateIconAsync(registeredSchema.entity_type, config.metadata)
+    );
 
     // Automatically export schema snapshots (non-blocking)
-    this.exportSnapshotsAsync();
+    this.afterSchemaCommit(() => this.exportSnapshotsAsync());
 
     return registeredSchema;
   }
@@ -1187,7 +1276,10 @@ export class SchemaRegistryService {
       throw new Error("The authoritative schema identity is invalid.");
     const definition = object(row.schema_definition) as unknown as SchemaDefinition;
     const reducer = object(row.reducer_config) as unknown as ReducerConfig;
-    this.validateSchemaDefinition(definition);
+    // Load-time integrity check: pattern syntax only. The stricter shape, length
+    // and count rules apply when a schema is registered; a stored schema that
+    // predates them keeps loading and its patterns are bounded at evaluation.
+    this.validateSchemaDefinition(definition, "load");
     this.validateReducerConfig(reducer, definition);
     return {
       ...row,
@@ -1346,6 +1438,14 @@ export class SchemaRegistryService {
    * a dynamic set of types (e.g. field-based type refinement).
    */
   async listActiveSchemas(userId?: string): Promise<SchemaRegistryEntry[]> {
+    const rows = await cachedRegistryRead(registryCacheKey.list(userId), () =>
+      this.queryActiveSchemaRows(userId)
+    );
+    const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
+    return applied.filter((e): e is SchemaRegistryEntry => e != null);
+  }
+
+  private async queryActiveSchemaRows(userId?: string): Promise<SchemaRegistryEntry[]> {
     const base = db
       .from("schema_registry")
       .select(
@@ -1363,12 +1463,10 @@ export class SchemaRegistryService {
     if (error) {
       throw new Error(`Failed to list active schemas: ${error.message}`);
     }
-    const rows = ((data ?? []) as SchemaRegistryEntry[]).filter(
+    return ((data ?? []) as SchemaRegistryEntry[]).filter(
       (row) =>
         row.scope === "global" || (row.scope === "user" && !!userId && row.user_id === userId)
     );
-    const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
-    return applied.filter((e): e is SchemaRegistryEntry => e != null);
   }
 
   /**
@@ -1454,6 +1552,15 @@ export class SchemaRegistryService {
     entityType: string,
     userId: string
   ): Promise<SchemaRegistryEntry | null> {
+    return cachedRegistryRead(registryCacheKey.user(entityType, userId), () =>
+      this.queryUserSpecificSchema(entityType, userId)
+    );
+  }
+
+  private async queryUserSpecificSchema(
+    entityType: string,
+    userId: string
+  ): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await db
       .from("schema_registry")
       .select("*")
@@ -1478,6 +1585,13 @@ export class SchemaRegistryService {
    * Load global schema for entity type
    */
   async loadGlobalSchema(entityType: string): Promise<SchemaRegistryEntry | null> {
+    const row = await cachedRegistryRead(registryCacheKey.global(entityType), () =>
+      this.queryGlobalSchema(entityType)
+    );
+    return applyBuiltInSchemaIdentityDefaults(row);
+  }
+
+  private async queryGlobalSchema(entityType: string): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await db
       .from("schema_registry")
       .select("*")
@@ -1494,7 +1608,7 @@ export class SchemaRegistryService {
       throw new Error(`Failed to load global schema: ${error.message}`);
     }
 
-    return applyBuiltInSchemaIdentityDefaults(data as SchemaRegistryEntry);
+    return data as SchemaRegistryEntry;
   }
 
   /**
@@ -1577,6 +1691,7 @@ export class SchemaRegistryService {
      * reconstruct it.
      */
     canonical_name_fields?: CanonicalNameRule[];
+    planning?: PlanningDeclaration;
     converters_to_add?: Array<{
       field_name: string;
       converter: {
@@ -1620,6 +1735,48 @@ export class SchemaRegistryService {
       migration_result?: { migrated_count: number; skipped: SkippedMigrationGroup[] };
     }
   > {
+    const newSchema = await this.withSchemaMutation(() => this.updateSchemaInTransaction(options));
+
+    // Historical backfill retains its existing separate effect boundary; the
+    // registry metadata and its post-commit hooks have already committed.
+    // 7. Migrate raw_fragments if requested (historical data backfill only).
+    // #2379: capture the ACTUAL result and attach it to the response instead
+    // of firing the call and reporting success unconditionally. A request to
+    // migrate with nothing promoted is a legitimate outcome (e.g. every
+    // candidate fragment was already promoted by a prior call) — the caller
+    // needs to be able to tell that apart from "the tool did nothing."
+    let migrationResult: { migrated_count: number; skipped: SkippedMigrationGroup[] } | undefined;
+    if (options.migrate_existing) {
+      logSchemaRegistryInfo(
+        `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`
+      );
+      const fieldNamesToMigrate = [
+        ...(options.fields_to_add?.map((f) => f.field_name) || []),
+        ...(options.converters_to_add?.map((c) => c.field_name) || []),
+      ];
+
+      if (fieldNamesToMigrate.length > 0) {
+        migrationResult = await this.migrateRawFragmentsToObservations({
+          entity_type: options.entity_type,
+          field_names: fieldNamesToMigrate,
+          // migrate_user_id takes precedence: for global schemas the caller passes
+          // the authenticated user's id here while options.user_id is undefined.
+          user_id: options.migrate_user_id ?? options.user_id,
+        });
+      } else {
+        // migrate_existing: true with no fields named in THIS call — nothing
+        // was asked to migrate, so say so rather than leaving the caller to
+        // infer it from an absent field.
+        migrationResult = { migrated_count: 0, skipped: [] };
+      }
+    }
+
+    return { ...newSchema, migration_result: migrationResult };
+  }
+
+  private async updateSchemaInTransaction(
+    options: Parameters<SchemaRegistryService["updateSchemaIncremental"]>[0]
+  ): Promise<SchemaRegistryEntry> {
     // Entity-type naming guards (forbidden-pattern + plural).
     enforceEntityTypeGuards(options.entity_type, {
       force: options.force,
@@ -1841,6 +1998,9 @@ export class SchemaRegistryService {
         preserved.canonical_name_fields = options.canonical_name_fields;
       }
     }
+    if (options.planning !== undefined) {
+      preserved.planning = PlanningDeclarationSchema.parse(options.planning);
+    }
     if (preserved.temporal_fields) {
       preserved.temporal_fields = preserved.temporal_fields.filter((t) => !removalSet.has(t.field));
       if (preserved.temporal_fields.length === 0) {
@@ -1882,7 +2042,7 @@ export class SchemaRegistryService {
       entity_type: options.entity_type,
       schema_version: newVersion,
       schema_definition: { ...preserved, fields: mergedFields },
-      reducer_config: { merge_policies: mergedReducerPolicies },
+      reducer_config: { ...currentSchema.reducer_config, merge_policies: mergedReducerPolicies },
       metadata: mergedMetadata,
       user_id: effectiveUserId,
       user_specific: effectiveUserSpecific,
@@ -1898,54 +2058,17 @@ export class SchemaRegistryService {
       force: options.force,
     });
 
-    // 6. Activate new version if requested (this deactivates other versions).
-    // #2374/#2356: pass the SAME resolved scope used for the write above.
-    // `effectiveUserId` is what register() just wrote to, so activate() selects
-    // exactly that row. Passing `options.user_specific ? userId : undefined`
-    // instead would re-derive scope from the caller's (possibly omitted) flag
-    // and, for a caller who omitted it while the read resolved a user row,
-    // activate the global row rather than the one this call registered.
+    // #2545: activate the row just registered, in its resolved scope. A
+    // version string is not unique and can select an older inactive row.
     if (activateSchema) {
-      await this.activate(options.entity_type, newVersion, effectiveUserId);
+      await this.activateRowInTransaction(options.entity_type, newSchema);
     }
 
     logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Incrementally updated schema for ${options.entity_type} to version ${newVersion}`
     );
 
-    // 7. Migrate raw_fragments if requested (historical data backfill only).
-    // #2379: capture the ACTUAL result and attach it to the response instead
-    // of firing the call and reporting success unconditionally. A request to
-    // migrate with nothing promoted is a legitimate outcome (e.g. every
-    // candidate fragment was already promoted by a prior call) — the caller
-    // needs to be able to tell that apart from "the tool did nothing."
-    let migrationResult: { migrated_count: number; skipped: SkippedMigrationGroup[] } | undefined;
-    if (options.migrate_existing) {
-      logSchemaRegistryInfo(
-        `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`
-      );
-      const fieldNamesToMigrate = [
-        ...(options.fields_to_add?.map((f) => f.field_name) || []),
-        ...(options.converters_to_add?.map((c) => c.field_name) || []),
-      ];
-
-      if (fieldNamesToMigrate.length > 0) {
-        migrationResult = await this.migrateRawFragmentsToObservations({
-          entity_type: options.entity_type,
-          field_names: fieldNamesToMigrate,
-          // migrate_user_id takes precedence: for global schemas the caller passes
-          // the authenticated user's id here while options.user_id is undefined.
-          user_id: options.migrate_user_id ?? options.user_id,
-        });
-      } else {
-        // migrate_existing: true with no fields named in THIS call — nothing
-        // was asked to migrate, so say so rather than leaving the caller to
-        // infer it from an absent field.
-        migrationResult = { migrated_count: 0, skipped: [] };
-      }
-    }
-
-    return { ...newSchema, migration_result: migrationResult };
+    return newSchema;
   }
 
   /**
@@ -2397,6 +2520,16 @@ export class SchemaRegistryService {
    * over-match a sibling row the way `(entity_type, schema_version)` can.
    */
   async activate(entityType: string, version: string, userId?: string): Promise<void> {
+    return this.withSchemaMutation(() =>
+      this.activateVersionInTransaction(entityType, version, userId)
+    );
+  }
+
+  private async activateVersionInTransaction(
+    entityType: string,
+    version: string,
+    userId?: string
+  ): Promise<void> {
     const { data: rows, error: lookupError } = await db
       .from("schema_registry")
       .select("id, scope, user_id")
@@ -2418,6 +2551,13 @@ export class SchemaRegistryService {
       throw new Error(`Schema not found: ${entityType} version ${version}`);
     }
 
+    await this.activateRowInTransaction(entityType, schema);
+  }
+
+  private async activateRowInTransaction(
+    entityType: string,
+    schema: Pick<SchemaRegistryEntry, "id" | "scope" | "user_id">
+  ): Promise<void> {
     const scope = schema.scope || "global";
     const schemaUserId = schema.user_id;
 
@@ -2435,7 +2575,9 @@ export class SchemaRegistryService {
       deactivateQuery = deactivateQuery.eq("scope", "global").is("user_id", null);
     }
 
-    await deactivateQuery;
+    const { error: deactivateError } = await deactivateQuery;
+    if (deactivateError)
+      throw new Error(`Failed to deactivate prior schemas: ${deactivateError.message}`);
 
     // Activate the ONE selected row by id. No extra scope predicate: the id is
     // already unambiguous, and a scope filter here could only turn activation
@@ -2447,7 +2589,7 @@ export class SchemaRegistryService {
     }
 
     // Automatically export schema snapshots (non-blocking)
-    this.exportSnapshotsAsync();
+    this.afterSchemaCommit(() => this.exportSnapshotsAsync());
   }
 
   /**
@@ -2537,19 +2679,18 @@ export class SchemaRegistryService {
   /**
    * List all active entity types, optionally filtered by keyword with vector search fallback
    */
-  async listEntityTypes(
+  async listEntityTypes(keyword?: string, userId?: string): Promise<SchemaTypeSummary[]> {
+    return (await this.listEntityTypesResult(keyword, userId)).entity_types;
+  }
+
+  /** A per-call census receipt; legacy array callers keep their fallback behavior. */
+  async listEntityTypesResult(
     keyword?: string,
     userId?: string
-  ): Promise<
-    Array<{
-      entity_type: string;
-      schema_version: string;
-      field_names: string[];
-      field_summary: Record<string, { type: string; required: boolean }>;
-      similarity_score?: number;
-      match_type?: "keyword" | "vector";
-    }>
-  > {
+  ): Promise<{
+    entity_types: SchemaTypeSummary[];
+    registry_coverage: SchemaRegistryCoverage;
+  }> {
     // Get all active schemas from database. When a userId is supplied, return
     // only global schemas (user_id IS NULL) plus that user's own schemas, so a
     // user's private entity-type names/shapes are not disclosed cross-user.
@@ -2563,7 +2704,7 @@ export class SchemaRegistryService {
     // happened to arrive last.
     let query = db
       .from("schema_registry")
-      .select("entity_type, schema_version, schema_definition, user_id, scope")
+      .select("entity_type, schema_version, schema_definition, user_id, scope", { count: "exact" })
       .eq("active", true);
     if (userId) {
       query = query.or(`user_id.is.null,user_id.eq.${userId}`);
@@ -2576,21 +2717,62 @@ export class SchemaRegistryService {
       query = query.eq("scope", "global");
     }
 
-    const { data: dbSchemas } = await query;
+    const { data: dbSchemas, error: dbError, count: rawCount } = await query;
+    const reasons = new Set<string>();
+    if (dbError) reasons.add("registry_read_failed");
+    const registeredRows = !dbError && Array.isArray(dbSchemas) ? dbSchemas : [];
+    if (
+      !dbError &&
+      (!Array.isArray(dbSchemas) ||
+        !Number.isSafeInteger(rawCount) ||
+        rawCount !== registeredRows.length)
+    ) {
+      reasons.add("registry_coverage_unqualified");
+    }
+    const source =
+      !dbError && registeredRows.length > 0 ? ("registry" as const) : ("code_fallback" as const);
+    if (source === "code_fallback") reasons.add("code_fallback");
+    if (keyword) reasons.add("filtered");
 
     // Fallback to code-defined schemas if database is empty or error
     const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
     const allSchemas = new Map<string, SchemaRegistryEntry>();
 
-    if (dbSchemas && dbSchemas.length > 0) {
-      for (const schema of dbSchemas) {
+    if (source === "registry") {
+      for (const schema of registeredRows) {
         // #2356: apply the SAME precedence `loadActiveSchema` uses — a
         // user-scoped row for this principal overrides the global row for the
         // same entity_type; otherwise the global row stands. Resolving by
         // precedence rather than by arrival order is what makes list reads
         // agree with per-type reads and with the write path.
         const row = schema as SchemaRegistryEntry;
+        if (
+          !row ||
+          typeof row.entity_type !== "string" ||
+          !row.entity_type ||
+          typeof row.schema_version !== "string" ||
+          !row.schema_definition ||
+          !row.schema_definition.fields ||
+          typeof row.schema_definition.fields !== "object" ||
+          Array.isArray(row.schema_definition.fields)
+        ) {
+          reasons.add("malformed_registry_row");
+          continue;
+        }
+        if (row.scope !== "global" && row.scope !== "user")
+          reasons.add("unqualified_registry_scope");
+        if (
+          (row.user_id != null && row.user_id !== userId) ||
+          (row.scope === "user" && (!userId || row.user_id !== userId)) ||
+          (row.scope === "global" && row.user_id != null)
+        ) {
+          reasons.add("unqualified_registry_scope");
+          continue;
+        }
         const existing = allSchemas.get(row.entity_type);
+        if (existing && row.scope === existing.scope && row.user_id === existing.user_id) {
+          reasons.add("duplicate_registry_row");
+        }
         if (existing && !isHigherPrecedenceSchemaRow(row, existing, userId)) continue;
         allSchemas.set(row.entity_type, row);
       }
@@ -2610,26 +2792,74 @@ export class SchemaRegistryService {
     }
 
     const allSchemasArray = Array.from(allSchemas.values());
+    const planningFor = (
+      schema: SchemaRegistryEntry
+    ): Pick<SchemaTypeSummary, "planning" | "planning_error"> => {
+      if (!Object.prototype.hasOwnProperty.call(schema.schema_definition, "planning")) return {};
+      const declaration = PlanningDeclarationSchema.safeParse(schema.schema_definition.planning);
+      return declaration.success
+        ? { planning: declaration.data }
+        : { planning_error: "invalid_declaration" };
+    };
+    if (allSchemasArray.some((schema) => planningFor(schema).planning_error))
+      reasons.add("invalid_planning_declaration");
+    const finish = (entity_types: SchemaTypeSummary[]) => {
+      const complete = reasons.size === 0;
+      return {
+        entity_types,
+        registry_coverage: {
+          version: "1" as const,
+          state: complete ? ("complete" as const) : ("unknown" as const),
+          source,
+          reasons: [...reasons].sort(),
+          total: [...reasons].some((reason) =>
+            [
+              "registry_read_failed",
+              "registry_coverage_unqualified",
+              "malformed_registry_row",
+              "unqualified_registry_scope",
+              "duplicate_registry_row",
+            ].includes(reason)
+          )
+            ? null
+            : source === "code_fallback"
+              ? 0
+              : allSchemasArray.length,
+          returned_count: entity_types.length,
+          exhausted: complete,
+          scope: {
+            owner: userId ? ("authenticated" as const) : ("global" as const),
+            keyword: keyword || null,
+            entity_type: null,
+          },
+        },
+      };
+    };
 
     // If no keyword, return all
     if (!keyword) {
-      return allSchemasArray.map((schema) => {
-        const fieldNames = Object.keys(schema.schema_definition.fields || {});
-        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
-          fieldSummary[fieldName] = {
-            type: fieldDef.type,
-            required: fieldDef.required || false,
-          };
-        }
+      return finish(
+        allSchemasArray.map((schema) => {
+          const fieldNames = Object.keys(schema.schema_definition.fields || {});
+          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+          for (const [fieldName, fieldDef] of Object.entries(
+            schema.schema_definition.fields || {}
+          )) {
+            fieldSummary[fieldName] = {
+              type: fieldDef.type,
+              required: fieldDef.required || false,
+            };
+          }
 
-        return {
-          entity_type: schema.entity_type,
-          schema_version: schema.schema_version,
-          field_names: fieldNames,
-          field_summary: fieldSummary,
-        };
-      });
+          return {
+            ...planningFor(schema),
+            entity_type: schema.entity_type,
+            schema_version: schema.schema_version,
+            field_names: fieldNames,
+            field_summary: fieldSummary,
+          };
+        })
+      );
     }
 
     const keywordLower = keyword.toLowerCase();
@@ -2670,29 +2900,32 @@ export class SchemaRegistryService {
     // If we have good keyword matches (score >= 3), return those
     const goodKeywordMatches = keywordMatches.filter((m) => m.score >= 3);
     if (goodKeywordMatches.length > 0) {
-      return goodKeywordMatches
-        .sort((a, b) => b.score - a.score)
-        .map(({ schema, score }) => {
-          const fieldNames = Object.keys(schema.schema_definition.fields || {});
-          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-          for (const [fieldName, fieldDef] of Object.entries(
-            schema.schema_definition.fields || {}
-          )) {
-            fieldSummary[fieldName] = {
-              type: fieldDef.type,
-              required: fieldDef.required || false,
-            };
-          }
+      return finish(
+        goodKeywordMatches
+          .sort((a, b) => b.score - a.score)
+          .map(({ schema, score }) => {
+            const fieldNames = Object.keys(schema.schema_definition.fields || {});
+            const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+            for (const [fieldName, fieldDef] of Object.entries(
+              schema.schema_definition.fields || {}
+            )) {
+              fieldSummary[fieldName] = {
+                type: fieldDef.type,
+                required: fieldDef.required || false,
+              };
+            }
 
-          return {
-            entity_type: schema.entity_type,
-            schema_version: schema.schema_version,
-            field_names: fieldNames,
-            field_summary: fieldSummary,
-            similarity_score: score / 10, // Normalize to 0-1 range
-            match_type: "keyword" as const,
-          };
-        });
+            return {
+              ...planningFor(schema),
+              entity_type: schema.entity_type,
+              schema_version: schema.schema_version,
+              field_names: fieldNames,
+              field_summary: fieldSummary,
+              similarity_score: score / 10, // Normalize to 0-1 range
+              match_type: "keyword" as const,
+            };
+          })
+      );
     }
 
     // Step 2: Fallback to vector search (semantic matching, bounded eventual consistency)
@@ -2701,29 +2934,32 @@ export class SchemaRegistryService {
 
     if (!queryEmbedding) {
       // If embeddings not available, return keyword matches even if low score
-      return keywordMatches
-        .sort((a, b) => b.score - a.score)
-        .map(({ schema, score }) => {
-          const fieldNames = Object.keys(schema.schema_definition.fields || {});
-          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-          for (const [fieldName, fieldDef] of Object.entries(
-            schema.schema_definition.fields || {}
-          )) {
-            fieldSummary[fieldName] = {
-              type: fieldDef.type,
-              required: fieldDef.required || false,
-            };
-          }
+      return finish(
+        keywordMatches
+          .sort((a, b) => b.score - a.score)
+          .map(({ schema, score }) => {
+            const fieldNames = Object.keys(schema.schema_definition.fields || {});
+            const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+            for (const [fieldName, fieldDef] of Object.entries(
+              schema.schema_definition.fields || {}
+            )) {
+              fieldSummary[fieldName] = {
+                type: fieldDef.type,
+                required: fieldDef.required || false,
+              };
+            }
 
-          return {
-            entity_type: schema.entity_type,
-            schema_version: schema.schema_version,
-            field_names: fieldNames,
-            field_summary: fieldSummary,
-            similarity_score: score / 10,
-            match_type: "keyword" as const,
-          };
-        });
+            return {
+              ...planningFor(schema),
+              entity_type: schema.entity_type,
+              schema_version: schema.schema_version,
+              field_names: fieldNames,
+              field_summary: fieldSummary,
+              similarity_score: score / 10,
+              match_type: "keyword" as const,
+            };
+          })
+      );
     }
 
     // Generate embeddings for all schemas and calculate similarity
@@ -2759,6 +2995,7 @@ export class SchemaRegistryService {
         }
 
         return {
+          ...planningFor(schema),
           entity_type: schema.entity_type,
           schema_version: schema.schema_version,
           field_names: fieldNames,
@@ -2770,37 +3007,50 @@ export class SchemaRegistryService {
 
     // If vector search found results, return them
     if (vectorMatches.length > 0) {
-      return vectorMatches;
+      return finish(vectorMatches);
     }
 
     // Final fallback: return keyword matches even if low score
-    return keywordMatches
-      .sort((a, b) => b.score - a.score)
-      .map(({ schema, score }) => {
-        const fieldNames = Object.keys(schema.schema_definition.fields || {});
-        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
-          fieldSummary[fieldName] = {
-            type: fieldDef.type,
-            required: fieldDef.required || false,
-          };
-        }
+    return finish(
+      keywordMatches
+        .sort((a, b) => b.score - a.score)
+        .map(({ schema, score }) => {
+          const fieldNames = Object.keys(schema.schema_definition.fields || {});
+          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+          for (const [fieldName, fieldDef] of Object.entries(
+            schema.schema_definition.fields || {}
+          )) {
+            fieldSummary[fieldName] = {
+              type: fieldDef.type,
+              required: fieldDef.required || false,
+            };
+          }
 
-        return {
-          entity_type: schema.entity_type,
-          schema_version: schema.schema_version,
-          field_names: fieldNames,
-          field_summary: fieldSummary,
-          similarity_score: score / 10,
-          match_type: "keyword" as const,
-        };
-      });
+          return {
+            ...planningFor(schema),
+            entity_type: schema.entity_type,
+            schema_version: schema.schema_version,
+            field_names: fieldNames,
+            field_summary: fieldSummary,
+            similarity_score: score / 10,
+            match_type: "keyword" as const,
+          };
+        })
+    );
   }
 
   /**
    * Validate schema definition
    */
-  private validateSchemaDefinition(definition: SchemaDefinition): void {
+  private validateSchemaDefinition(
+    definition: SchemaDefinition,
+    mode: "register" | "load" = "register"
+  ): void {
+    const strictPatterns = mode === "register";
+    let patternCount = 0;
+    if (Object.prototype.hasOwnProperty.call(definition, "planning")) {
+      PlanningDeclarationSchema.parse(definition.planning);
+    }
     if (!definition.fields || typeof definition.fields !== "object") {
       throw new Error("Schema definition must have fields object");
     }
@@ -3081,13 +3331,25 @@ export class SchemaRegistryService {
           if (typeof c.pattern !== "string") {
             throw new Error(`constraints.pattern for ${fieldName} must be a string`);
           }
-          try {
-            // eslint-disable-next-line no-new
-            new RegExp(c.pattern);
-          } catch {
-            throw new Error(
-              `constraints.pattern for ${fieldName} is not a valid regular expression: "${c.pattern}"`
-            );
+          if (strictPatterns) {
+            patternCount += 1;
+            const patternCheck = validatePattern(c.pattern);
+            if (!patternCheck.ok) {
+              throw new SchemaPatternRefusalError(
+                `constraints.pattern for ${fieldName} is not accepted: ${patternCheck.reason}.`,
+                patternCheck.code,
+                patternCheck.remedy
+              );
+            }
+          } else {
+            try {
+              // eslint-disable-next-line no-new
+              new RegExp(c.pattern);
+            } catch {
+              throw new Error(
+                `constraints.pattern for ${fieldName} is not a valid regular expression`
+              );
+            }
           }
           if (fieldDef.type !== "string") {
             throw new Error(
@@ -3160,6 +3422,29 @@ export class SchemaRegistryService {
               `derived_entities[${i}].conditions[${j}] with op "matches_any_pattern" must have a non-empty patterns array`
             );
           }
+          if (strictPatterns && cond.op === "matches_any_pattern") {
+            const patterns = cond.patterns as unknown[];
+            if (patterns.length > MAX_PATTERNS_PER_CONDITION) {
+              throw new SchemaPatternRefusalError(
+                `derived_entities[${i}].conditions[${j}].patterns has ${patterns.length} entries; ` +
+                  `at most ${MAX_PATTERNS_PER_CONDITION} are allowed.`,
+                "count",
+                "Split the condition or merge similar patterns."
+              );
+            }
+            patternCount += patterns.length;
+            for (let k = 0; k < patterns.length; k++) {
+              const pc = validatePattern(patterns[k]);
+              // Syntactically invalid sources keep their substring fallback.
+              if (!pc.ok && pc.code !== "syntax") {
+                throw new SchemaPatternRefusalError(
+                  `derived_entities[${i}].conditions[${j}].patterns[${k}] is not accepted: ${pc.reason}.`,
+                  pc.code,
+                  pc.remedy
+                );
+              }
+            }
+          }
         }
         if (typeof rule.derived_entity_type !== "string" || !rule.derived_entity_type.trim()) {
           throw new Error(`derived_entities[${i}].derived_entity_type must be a non-empty string`);
@@ -3187,6 +3472,15 @@ export class SchemaRegistryService {
           }
         }
       }
+    }
+
+    if (strictPatterns && patternCount > MAX_PATTERNS_PER_SCHEMA) {
+      throw new SchemaPatternRefusalError(
+        `Schema declares ${patternCount} patterns (constraints.pattern plus matches_any_pattern entries); ` +
+          `at most ${MAX_PATTERNS_PER_SCHEMA} are allowed.`,
+        "count",
+        "Remove or merge patterns."
+      );
     }
   }
 
@@ -3341,12 +3635,15 @@ export class SchemaRegistryService {
    */
   private exportSnapshotsAsync(): void {
     // Only export if we're in a Node.js environment (not browser)
-    if (typeof process === "undefined" || !process.env) {
+    if (typeof process === "undefined" || !runtimeEnv()) {
       return;
     }
 
+    // Embedded hosts do not run the repository's snapshot export script.
+    if (isEmbeddedMode()) return;
+
     // Skip export in test environments to avoid side effects
-    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    if (runtimeEnv().NODE_ENV === "test" || runtimeEnv().VITEST) {
       return;
     }
 
@@ -3355,7 +3652,7 @@ export class SchemaRegistryService {
     const child = spawn("tsx", [scriptPath], {
       stdio: "ignore", // Suppress output to avoid cluttering logs
       detached: true,
-      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
+      env: { ...runtimeEnv(), NODE_ENV: runtimeEnv().NODE_ENV || "development" },
       // tsx resolves to tsx.cmd on Windows; .cmd needs shell mode
       // (CVE-2024-27980) or spawn throws EINVAL.
       ...WIN_SHELL,
@@ -3368,7 +3665,7 @@ export class SchemaRegistryService {
     child.on("error", (error) => {
       // Silently ignore export errors - schema operations should not fail
       // if snapshot export fails (e.g., in CI/CD or restricted environments)
-      if (process.env.NODE_ENV === "development") {
+      if (runtimeEnv().NODE_ENV === "development") {
         console.warn(`[Schema Registry] Failed to export snapshots: ${error.message}`);
       }
     });

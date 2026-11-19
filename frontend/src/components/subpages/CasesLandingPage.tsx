@@ -29,7 +29,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Case intelligence that survives",
   heroHighlight: "filings, investigations, and evolving claims",
   heroDesc:
-    "Legal proceedings and insurance claims depend on timing: what evidence existed at filing, when counsel first learned about a witness, how assessments diverged. Neotoma versions case state so you can reconstruct the record at any point in the matter timeline.",
+    "Legal proceedings and insurance claims depend on timing: what evidence had been recorded by the filing, when counsel first learned about a witness, how assessments diverged. Neotoma versions case state so you can reconstruct the record as recorded up to any point in the matter timeline.",
   heroTags: [
     { tag: "case", Icon: Briefcase },
     { tag: "evidence", Icon: PackageSearch },
@@ -42,7 +42,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "cases",
   problemTitle: "Matter tools store documents; they do not preserve evidentiary time",
   problemDesc:
-    'Cases advance through motions, discovery, expert reports, and carrier investigations. Exhibits get re-labeled, analysts revise opinions, and strategy memos overwrite earlier drafts. Without as-of snapshots, "what was in the record on March 4?" becomes a scavenger hunt through drives and email.',
+    'Cases advance through motions, discovery, expert reports, and carrier investigations. Exhibits get re-labeled, analysts revise opinions, and strategy memos overwrite earlier drafts. Without snapshots as recorded by a date, "what had been recorded in the file by March 4?" becomes a scavenger hunt through drives and email.',
   problemCards: [
     {
       Icon: Clock,
@@ -67,18 +67,18 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: 'Courts, carriers, and boards do not accept "we have the latest binder."',
   problemCalloutDesc:
-    "Motions turn on what was known when they were filed. Claims turn on investigation milestones. When discovery or SIU asks for the first mention of a witness or the state of the file on a coverage date, you need timestamps and provenance.",
+    "Motions turn on what had been recorded by the time they were filed. Claims turn on investigation milestones. When discovery or SIU asks for the first mention of a witness or what the file had recorded by a coverage date, you need timestamps and provenance.",
   scenarios: [
     {
       category: "Evidence timeline",
       human:
-        "What evidence was available when we filed the motion to compel in Rivera v. Northlake Logistics?",
+        "What evidence had been recorded by the time the motion to compel was filed in Rivera v. Northlake Logistics?",
       fail: "Current evidence list for Rivera v. Northlake Logistics (N.D. Cal. 3:24-cv-01882): depositions (5), expert reports (2), business records (12), correspondence bundle.",
       succeed:
-        "As of filing date 2025-01-22 4:00pm PT (docket entry DE 47), the motion to compel referenced exhibits A\u2013F only: depo transcripts Chen, Okoro, Vance; custodian affidavit; ESI protocol email thread through Jan 18; privilege log v3. Exhibit G (forensic image hash log) was first observed Jan 24, after filing. Snapshot case\u00B7v11 @ 2025-01-22T16:00:00-08:00 matches the clerk's PDF stamp.",
+        "As recorded by the filing cutoff 2025-01-22 4:00pm PT (docket entry DE 47), the matter held exhibits A\u2013F only: depo transcripts Chen, Okoro, Vance; custodian affidavit; ESI protocol email thread through Jan 18; privilege log v3. Exhibit G (forensic image hash log) was first recorded Jan 24, after the cutoff, so it is not part of this answer. Snapshot case\u00B7v11 @ 2025-01-22T16:00:00-08:00 is the record as of that write-time cutoff; compare it with the clerk's PDF stamp.",
       version: "case\u00B7v11",
       Icon: History,
-      failTitle: "Current evidence list, no filing-time slice",
+      failTitle: "Current evidence list, no recorded-by-filing slice",
       failDesc:
         "The assistant listed everything in the matter workspace today, including items added after the motion. Opposing counsel could challenge the record.",
     },
@@ -110,15 +110,15 @@ const CONFIG: UseCaseConfig = {
     },
     {
       category: "Case state reconstruction",
-      human: "What was our case posture on the Apex IP litigation as of October 1, 2024?",
+      human: "What was our case posture on the Apex IP litigation as recorded by October 1, 2024?",
       fail: "Apex IP Ltd. v. BrightForge Inc. (S.D.N.Y. 1:23-cv-08814): active litigation; claim construction hearing set; settlement authority $4.2M.",
       succeed:
-        'Point-in-time snapshot case\u00B7apex @ 2024-10-01: Markman order not yet issued (issued Oct 18). Posture: pursuing narrow construction for term "distributed ledger node"; no settlement authority on file (authority memo obs dated Oct 9 not yet observed). Docket through DE 112 only; DE 119 (Daubert) not filed until Oct 4. Diff vs. current case\u00B7v14: authority, expert challenges, and hearing dates all post-date the as-of date.',
+        'Snapshot as recorded by 2024-10-01: case\u00B7apex @ 2024-10-01: Markman order not yet recorded (issued Oct 18). Posture: pursuing narrow construction for term "distributed ledger node"; no settlement authority on file (authority memo obs dated Oct 9 not yet observed). Docket through DE 112 only; DE 119 (Daubert) not yet recorded (filed Oct 4). Diff vs. current case\u00B7v14: authority, expert challenges, and hearing dates were all recorded after the cutoff.',
       version: "case\u00B7apex @ 2024-10-01",
       Icon: CalendarClock,
       failTitle: "Current posture returned for historical date",
       failDesc:
-        "Board decks and coverage letters often need the strategy as it stood on a specific day. Mixing today's settlement band with last quarter's claim position misstates risk.",
+        "Board decks and coverage letters often need the strategy as recorded by a specific day. Mixing today's settlement band with last quarter's claim position misstates risk.",
     },
   ],
   outcomeTitle: "From static binders to explainable case state",
@@ -137,16 +137,16 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Layers,
       title: "Project matter state through time",
-      desc: "Link evidence to docket events and coverage milestones. Reconstruct exhibit sets as of any filing date, hearing, or reserve meeting without rebuilding folders by hand.",
+      desc: "Link evidence to docket events and coverage milestones. Reconstruct exhibit sets as recorded up to any filing date, hearing, or reserve meeting without rebuilding folders by hand.",
       detail:
-        "Temporal queries return the state valid on the as-of instant, not the last sync from the DMS.",
+        "Temporal queries return the state as recorded by the cutoff time, not the last sync from the DMS.",
     },
     {
       Icon: Search,
       title: "Let agents answer with provenance",
       desc: "Litigation and claims agents read the same versioned graph. Responses cite first-seen timestamps, analyst IDs, and docket anchors so counsel and SIU can defend the answer.",
       detail:
-        "Built for hearings, carrier exams, and internal investigations: who knew what, when, and from which source.",
+        "Built for hearings, carrier exams, and internal investigations: who recorded what, when it was written, and from which source.",
     },
   ],
   capTitle: "Capabilities built for dockets, investigations, and claims",
@@ -156,8 +156,8 @@ const CONFIG: UseCaseConfig = {
   capabilities: [
     {
       Icon: History,
-      title: "Evidence timelines & filing-time slices",
-      desc: "Bind exhibits to motions, discovery responses, and carrier reports. Answer what was in the record when a pleading was filed, with clerk timestamps and hash lineage.",
+      title: "Evidence timelines & recorded-by-filing snapshots",
+      desc: "Bind exhibits to motions, discovery responses, and carrier reports. Answer what had been recorded by the time a pleading was filed, with clerk timestamps and hash lineage.",
       tags: ["evidence", "filing", "temporal"],
     },
     {
@@ -174,8 +174,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: CalendarClock,
-      title: "Point-in-time case posture",
-      desc: "Reconstruct strategy, authority, and open issues as of any date relevant to mediation, coverage, or board reporting.",
+      title: "Case posture as recorded",
+      desc: "Reconstruct strategy, authority, and open issues as recorded up to any date relevant to mediation, coverage, or board reporting.",
       tags: ["case", "strategy", "as-of"],
     },
     {
@@ -222,7 +222,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest authoritative view, or reconstruct historical state for any timestamp relevant to a motion, hearing, or coverage date.",
+      desc: "Project the latest authoritative view, or reconstruct state as recorded up to any timestamp relevant to a motion, hearing, or coverage date.",
     },
     {
       label: "Serve agents & reviewers",
@@ -232,16 +232,16 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How case management teams use Neotoma as their integrity layer",
     desc:
-      "AI litigation and claims platforms unify docket data, discovery, and strategy analytics across complex commercial and insurance defense teams. Neotoma versions every exhibit, assessment, and analyst output so you can reconstruct case state at any filing date or mediation prep point.",
+      "AI litigation and claims platforms unify docket data, discovery, and strategy analytics across complex commercial and insurance defense teams. Neotoma versions every exhibit, assessment, and analyst output so you can reconstruct case state as recorded up to any filing date or mediation prep point.",
     featuresHeading: "What case management teams build",
     features: [
       "Matter agents that summarize posture across parallel cases and coverage towers",
       "Continuous ingestion of filings, transcripts, and carrier correspondence",
-      'Partner-facing "state of the file on date X" experiences for mediation prep',
+      'Partner-facing "state of the file as recorded by date X" experiences for mediation prep',
     ],
     guarantees: [
       "Immutable observations for every exhibit version and analyst output",
-      "Temporal snapshots so filing-time and as-of answers match the record, not upload order",
+      "Temporal snapshots so answers as recorded by filing time match the record, not upload order",
       "Relationship integrity between parties, evidence, and docket events",
       "Audit-oriented exports that list divergent assessments and first-seen witnesses in one graph",
     ],

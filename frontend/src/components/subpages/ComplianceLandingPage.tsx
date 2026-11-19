@@ -72,15 +72,15 @@ const COMPLIANCE_SCENARIOS = [
       "Without versioned entity state, risk score updates overwrote previous values. The AI saw only the current score, not the change. Twelve vendors had material risk changes including a beneficial ownership flag, all invisible because the system discarded the history.",
   },
   {
-    human: "What did we know about NovaPay on February 15?",
+    human: "What had we recorded about NovaPay by February 15?",
     fail: "NovaPay: risk score 2.1, status approved.",
     succeed:
-      "As of Feb 15: NovaPay risk score was 4.7 (elevated), flagged by screening agent on Feb 12 for adverse media. Diligence agent issued questionnaire Feb 13, response pending. Status: under review. The score was later reduced to 2.1 on Mar 3 after remediation evidence submitted.",
+      "As recorded by Feb 15: NovaPay risk score was 4.7 (elevated), flagged by screening agent on Feb 12 for adverse media. Diligence agent issued questionnaire Feb 13, response pending. Status: under review. The score was later reduced to 2.1 on Mar 3 after remediation evidence submitted.",
     version: "vendor\u00B7v18 @ 2025-02-15",
     category: "Temporal state queries",
-    failTitle: "Current state returned, not historical state",
+    failTitle: "Current state returned, not state as recorded by then",
     failDesc:
-      "The AI returned today's risk score (2.1, approved) for a question about February 15, when the vendor was actually flagged at 4.7 and under active review. Without temporal state queries, the system cannot distinguish what is true now from what was true then, a critical failure for regulatory reporting.",
+      "The AI returned today's risk score (2.1, approved) for a question about February 15, when the record by then showed the vendor flagged at 4.7 and under active review. Without temporal state queries, the system cannot distinguish what is recorded now from what had been recorded by then, a critical failure for regulatory reporting.",
   },
 ];
 
@@ -897,7 +897,7 @@ export function ComplianceLandingPageBody() {
                   {
                     Icon: Eye,
                     title: "No temporal queries",
-                    desc: "A regulator asks what you knew about a vendor on a specific date. Your database shows today's state. Reconstructing the past means digging through unstructured logs.",
+                    desc: "A regulator asks what you had recorded about a vendor by a specific date. Your database shows today's state. Reconstructing the past means digging through unstructured logs.",
                   },
                   {
                     Icon: Scale,
@@ -1035,7 +1035,7 @@ export function ComplianceLandingPageBody() {
                     step: "3",
                     Icon: Brain,
                     title: "Query",
-                    desc: "Your platform queries Neotoma for current state, historical state, or the full observation trail. Every field in every snapshot traces to specific evidence. Regulators get answers, not approximations.",
+                    desc: "Your platform queries Neotoma for current state, state as recorded by a past timestamp, or the full observation trail. Every field in every snapshot traces to specific evidence. Regulators get answers, not approximations.",
                     detail: "Temporal queries, provenance chains, conflict reports.",
                   },
                 ].map(({ step, Icon, title, desc, detail }) => (
@@ -1103,7 +1103,7 @@ export function ComplianceLandingPageBody() {
                   {
                     Icon: RotateCcw,
                     title: "Temporal state queries",
-                    desc: "Answer 'what did we know about Vendor X on February 15?' with the exact snapshot from that date, not today's state back-projected. Required for regulatory reporting and incident review.",
+                    desc: "Answer 'what had we recorded about Vendor X by February 15?' with the exact snapshot recorded by that date, not today's state back-projected. Required for regulatory reporting and incident review.",
                     tags: ["vendor\u00B7v18 @ 2025-02-15", "replay"],
                   },
                   {
@@ -1178,7 +1178,7 @@ export function ComplianceLandingPageBody() {
                       },
                       {
                         label: "Serve",
-                        desc: "Your platform queries current or historical state via MCP, REST API, or CLI. Every response carries version metadata and a provenance chain.",
+                        desc: "Your platform queries current state, or state as recorded up to a time, via MCP, REST API, or CLI. Every response carries version metadata and a provenance chain.",
                       },
                       {
                         label: "Govern",
@@ -1230,7 +1230,7 @@ export function ComplianceLandingPageBody() {
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                   AI-native compliance platforms run diligence from intake through screening,
                   analysis, and continuous monitoring. Neotoma versions every risk profile,
-                  assessment, and monitoring event so you can reconstruct compliance state at any
+                  assessment, and monitoring event so you can reconstruct compliance state as recorded by any
                   audit or examination date.
                 </p>
               </div>
@@ -1272,7 +1272,7 @@ export function ComplianceLandingPageBody() {
                     {[
                       "Every vendor risk profile is a versioned entity with full observation history, no silent overwrites",
                       "Conflicting agent assessments surface with both versions preserved until policy or human resolution",
-                      "Temporal queries answer what the system believed on a given date with the exact snapshot, not today&apos;s row",
+                      "Temporal queries answer what the system had recorded by a given timestamp with the exact snapshot, not today&apos;s row",
                       "Each risk field traces to specific screenings, questionnaires, and monitoring events with auditable provenance",
                     ].map((item) => (
                       <li
@@ -1354,10 +1354,10 @@ export function ComplianceLandingPageBody() {
                   Install Neotoma
                 </Link>
                 <Link
-                  to="/docs"
+                  to="/readme/"
                   className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                 >
-                  Read the docs
+                  Read the overview
                 </Link>
               </div>
 

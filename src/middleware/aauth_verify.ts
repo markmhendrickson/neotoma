@@ -48,6 +48,7 @@ import {
 } from "../services/aauth_operator_allowlist.js";
 import { lookupGrantForIdentity, type AgentGrant } from "../services/agent_grants.js";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Stash a decision summary on the Express request so downstream handlers
@@ -133,7 +134,7 @@ function hasAAuthHeaders(req: Request): boolean {
  * cost is a string split. Case-insensitive match.
  */
 function getStrictAAuthSubs(): Set<string> {
-  const raw = process.env.NEOTOMA_STRICT_AAUTH_SUBS;
+  const raw = runtimeEnv().NEOTOMA_STRICT_AAUTH_SUBS;
   if (!raw) return new Set();
   return new Set(
     raw
@@ -351,7 +352,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
     throw new Error("aauthVerify requires a canonical `authority` string");
   }
   const envStrict =
-    process.env.NEOTOMA_AAUTH_STRICT === "1" || process.env.NEOTOMA_AAUTH_STRICT === "true";
+    runtimeEnv().NEOTOMA_AAUTH_STRICT === "1" || runtimeEnv().NEOTOMA_AAUTH_STRICT === "true";
   const strict = options.strict ?? envStrict;
 
   function rejectStrict(

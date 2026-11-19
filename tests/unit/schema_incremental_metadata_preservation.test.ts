@@ -80,9 +80,10 @@ async function runIncrementalUpdate(
     return { ...current, ...config } as SchemaRegistryEntry;
   });
 
-  vi.spyOn(registry as unknown as { activate: () => Promise<void> }, "activate").mockResolvedValue(
-    undefined
-  );
+  vi.spyOn(
+    registry as unknown as { activateRowInTransaction: () => Promise<void> },
+    "activateRowInTransaction"
+  ).mockResolvedValue(undefined);
 
   await registry.updateSchemaIncremental({
     entity_type: "rendered_page",

@@ -20,6 +20,9 @@
  * than deadlocking on the queue.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+import { logger } from "../../utils/logger.js";
+
 export interface DbRunResult {
   /** Number of rows changed by the statement. */
   changes: number;
@@ -92,28 +95,182 @@ export function normalizeParams(params: unknown[]): unknown[] {
  * per-tenant gate would let a second tenant's statement interleave into the
  * first tenant's transaction window and break that guarantee.
  */
+/**
+ * Effects waiting for the transaction whose async context registered them to
+ * settle (COMMIT or ROLLBACK). Shared across every gate, so a caller that does
+ * not hold the database handle can still ask "run this once my transaction is
+ * over".
+ */
+interface TransactionSettleScope {
+  settled: boolean;
+  effects: Array<() => void>;
+}
+
+const transactionSettleScope = new AsyncLocalStorage<TransactionSettleScope>();
+
+/**
+ * Run `effect` once the transaction the caller is inside settles, whether it
+ * commits or rolls back. Returns false, without registering anything, when the
+ * caller is not inside an open transaction: a statement issued there commits
+ * on its own, so the caller should run the effect itself once that statement
+ * returns.
+ *
+ * Used by in-memory caches of committed rows: a write inside a transaction is
+ * not visible to other connections until COMMIT, so a cache cleared at write
+ * time could be refilled with the old committed value before then.
+ *
+ * Effects run synchronously, in registration order, while the gate is still
+ * held, so they must be cheap and must not issue statements. One that throws
+ * is logged and the rest still run.
+ */
+export function deferUntilCurrentTransactionSettles(effect: () => void): boolean {
+  const scope = transactionSettleScope.getStore();
+  if (!scope || scope.settled) return false;
+  scope.effects.push(effect);
+  return true;
+}
+
+function runSettleEffects(scope: TransactionSettleScope): void {
+  scope.settled = true;
+  const effects = scope.effects.splice(0);
+  for (const effect of effects) {
+    try {
+      effect();
+    } catch (error) {
+      logger.warn(
+        `DB transaction settle effect failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+}
+
 export class TransactionGate {
   private tail: Promise<void> = Promise.resolve();
+  private lastSlowHoldLogAt = 0;
+  private suppressedSlowHoldLogs = 0;
 
-  /** Resolves once every transaction enqueued so far has settled. */
+  /**
+   * Resolves once every transaction enqueued SO FAR has settled. This is a
+   * snapshot: a transaction enqueued after the call is not waited for. Code
+   * that is about to issue a statement on a connection a transaction also uses
+   * must not rely on it alone; see {@link runInOrder}.
+   */
   whenIdle(): Promise<void> {
     return this.tail;
   }
 
-  /** Enqueue `fn` after all prior transactions; holds the gate until settled. */
-  runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  /**
+   * Run a non-transaction statement in the gate's FIFO order, behind every
+   * transaction enqueued before it and ahead of every one enqueued after it.
+   *
+   * `whenIdle()` is not enough for a non-transaction statement on a
+   * single-writer backend. A transaction enqueued after the snapshot awaits the
+   * same tail, and its `BEGIN` reaches the writer a few microtasks before the
+   * waiting statement does, so the statement runs INSIDE that transaction: it
+   * resolves before COMMIT (invisible to every other connection, and lost on
+   * ROLLBACK) while the caller believes it committed. Re-checking the tail in a
+   * loop instead would starve the statement for as long as other clients keep
+   * transactions queued. Taking a place in the queue closes both: the statement
+   * owns the gate while it runs, so no transaction can begin around it, and it
+   * cannot be overtaken indefinitely.
+   *
+   * `onWait` receives the time spent queued behind earlier transactions.
+   */
+  runInOrder<T>(
+    fn: () => Promise<T>,
+    onWait?: (waitedMs: number) => void,
+    describe?: () => string
+  ): Promise<T> {
+    const enqueuedAt = Date.now();
+    return this.runExclusive(
+      () => {
+        onWait?.(Date.now() - enqueuedAt);
+        return fn();
+      },
+      describe,
+      "statement"
+    );
+  }
+
+  /**
+   * Enqueue `fn` after all prior transactions; holds the gate until settled.
+   *
+   * `describe` returns a short, parameter-free tag (for example the head of
+   * the first SQL statement) used only when the hold is slow enough to log.
+   * It is read at release time so it can reflect what the transaction ran.
+   */
+  runExclusive<T>(
+    fn: () => Promise<T>,
+    describe?: () => string,
+    kind: "transaction" | "statement" = "transaction"
+  ): Promise<T> {
     const prev = this.tail;
     let release!: () => void;
     this.tail = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const enqueuedAt = Date.now();
     return (async () => {
       await prev;
+      const startedAt = Date.now();
+      // Only a transaction gets a settle scope. A single statement commits as
+      // it returns, and its caller is not inside `fn` anyway.
+      const settleScope: TransactionSettleScope | null =
+        kind === "transaction" ? { settled: false, effects: [] } : null;
       try {
-        return await fn();
+        return settleScope ? await transactionSettleScope.run(settleScope, fn) : await fn();
       } finally {
+        // Before release: COMMIT/ROLLBACK has run inside `fn`, and no queued
+        // transaction can begin until the effects have seen it settle.
+        if (settleScope) runSettleEffects(settleScope);
+        this.noteHold(Date.now() - startedAt, startedAt - enqueuedAt, describe, kind);
         release();
       }
     })();
   }
+
+  /** Log a transaction that held the gate longer than SLOW_GATE_HOLD_MS. Rate-limited; counts suppressed lines. */
+  private noteHold(
+    holdMs: number,
+    queueWaitMs: number,
+    describe?: () => string,
+    kind: "transaction" | "statement" = "transaction"
+  ): void {
+    if (holdMs <= SLOW_GATE_HOLD_MS) return;
+    const now = Date.now();
+    if (now - this.lastSlowHoldLogAt < SLOW_GATE_LOG_INTERVAL_MS) {
+      this.suppressedSlowHoldLogs += 1;
+      return;
+    }
+    this.lastSlowHoldLogAt = now;
+    const suppressed = this.suppressedSlowHoldLogs;
+    this.suppressedSlowHoldLogs = 0;
+    let tag = "";
+    try {
+      tag = describe ? describe() : "";
+    } catch {
+      tag = "";
+    }
+    const waitText =
+      `(waited for gate ${queueWaitMs}ms` +
+      `${suppressed > 0 ? `, ${suppressed} similar line(s) suppressed` : ""})`;
+    if (kind === "statement") {
+      logger.warn(
+        `DB single statement held the gate ${holdMs}ms ${waitText}. ` +
+          `A slow statement delays every write and transaction queued behind it; ` +
+          `this is one statement, not a long transaction.` +
+          (tag ? ` Statement: ${tag}` : "")
+      );
+      return;
+    }
+    logger.warn(
+      `DB transaction held the gate ${holdMs}ms ${waitText}. ` +
+        `A long write transaction delays other writes.` +
+        (tag ? ` First statement: ${tag}` : "")
+    );
+  }
 }
+
+/** A transaction holding the gate longer than this is logged. */
+export const SLOW_GATE_HOLD_MS = 3000;
+const SLOW_GATE_LOG_INTERVAL_MS = 1000;

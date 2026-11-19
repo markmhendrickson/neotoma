@@ -42,6 +42,12 @@ const CAPABILITY_OPS: ReadonlyArray<{ value: AgentCapabilityOp; label: string }>
   { value: "create_relationship", label: "create_relationship" },
   { value: "correct", label: "correct" },
   { value: "retrieve", label: "retrieve" },
+  // Granted only by a row that names them; store and correct do not imply them.
+  { value: "delete", label: "delete" },
+  { value: "restore", label: "restore" },
+  { value: "merge", label: "merge" },
+  { value: "split", label: "split" },
+  { value: "register_schema", label: "register_schema" },
 ];
 
 interface AgentGrantFormState {
@@ -235,8 +241,17 @@ export function AgentGrantForm({
         </div>
         <p className="text-xs text-muted-foreground">
           Each row authorizes one op on a list of entity types. Use{" "}
-          <code className="font-mono">*</code> to widen to any non-protected
-          entity type. <code className="font-mono">create_relationship</code>{" "}
+          <code className="font-mono">*</code> to widen to any entity type,
+          including <code className="font-mono">agent_grant</code> for{" "}
+          <code className="font-mono">store</code> and{" "}
+          <code className="font-mono">correct</code>; <code className="font-mono">delete</code>,{" "}
+          <code className="font-mono">restore</code>, <code className="font-mono">merge</code>,{" "}
+          <code className="font-mono">split</code> and{" "}
+          <code className="font-mono">register_schema</code> reach{" "}
+          <code className="font-mono">agent_grant</code> only when it is named. Bundle changes
+          need <code className="font-mono">register_schema</code> on{" "}
+          <code className="font-mono">*</code>.{" "}
+          <code className="font-mono">create_relationship</code>{" "}
           rows also need the relationship types the agent may write; entity
           types bound both endpoints.
         </p>

@@ -1,5 +1,7 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
+import { logger } from "../../utils/logger.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -12,7 +14,7 @@ import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
  */
 export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
   0,
-  Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
+  Number.parseInt(runtimeEnv().NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
 );
 
 function isSqliteBusyError(error: unknown): boolean {
@@ -445,6 +447,31 @@ const DEPRECATED_TABLES = [
   "interpretation_runs",
 ];
 
+/**
+ * The lifecycle-authority rows attached to an entity, so a current-state read
+ * can check them without walking the entity's history (#2792).
+ *
+ * Created at open, and only on a store that already has the lifecycle columns.
+ * The lifecycle migration deliberately does not create it: the migration
+ * executor refuses any schema object outside its allowlist and its recorded
+ * expected inventories. Migration runs offline, so the next open of a migrated
+ * store creates the index. Without it the attached-authority read is still
+ * correct, only not bounded.
+ */
+export async function ensureLifecycleAttachedIndex(
+  db: Pick<DbConnection, "prepare">
+): Promise<void> {
+  const columns = (await db.prepare("PRAGMA table_info(observations)").all()) as Array<{
+    name: string;
+  }>;
+  if (!columns.some((column) => column.name === "entity_lifecycle_kind")) return;
+  await db
+    .prepare(
+      "CREATE INDEX IF NOT EXISTS idx_entity_lifecycle_attached ON observations(entity_id, user_id) WHERE entity_lifecycle_kind IS NOT NULL"
+    )
+    .run();
+}
+
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
 async function addColumnIfMissing(
   db: DbConnection,
@@ -455,6 +482,175 @@ async function addColumnIfMissing(
   const rows = (await db.prepare(`PRAGMA table_info(${table})`).all()) as { name: string }[];
   if (rows.some((r) => r.name === column)) return;
   await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+}
+
+/**
+ * `entity_snapshots.search_text`: the entity's normalized lexical haystack
+ * (canonical_name + snapshot + raw fragment text), filled at write time by
+ * `refreshEntitySearchText` in local_db_adapter.ts.
+ *
+ * Rule: NULL means "build it the old way". Every trigger below only ever sets
+ * the column back to NULL when an input of the text changes, so a write path
+ * that does not refresh it makes search slower, never wrong. Each trigger body
+ * is one UPDATE keyed on the primary key; it touches no row that must exist, so
+ * it cannot make the triggering write fail.
+ *
+ * No default and no index: adding a nullable column and creating triggers are
+ * metadata-only and take milliseconds on a large table (no backfill here).
+ * IF NOT EXISTS never rewrites a trigger: a body change needs a new name or a
+ * DROP TRIGGER IF EXISTS first.
+ */
+async function ensureEntitySearchTextColumn(db: DbConnection): Promise<void> {
+  await addColumnIfMissing(db, "entity_snapshots", "search_text", "TEXT");
+  const clear = "UPDATE entity_snapshots SET search_text = NULL";
+  const triggers: Array<[string, string, string]> = [
+    [
+      "entity_search_text_fragment_insert",
+      "AFTER INSERT ON raw_fragments",
+      `${clear} WHERE entity_id = NEW.entity_id AND search_text IS NOT NULL;`,
+    ],
+    [
+      "entity_search_text_fragment_update",
+      "AFTER UPDATE ON raw_fragments",
+      `${clear} WHERE entity_id IN (OLD.entity_id, NEW.entity_id) AND search_text IS NOT NULL;`,
+    ],
+    [
+      "entity_search_text_fragment_delete",
+      "AFTER DELETE ON raw_fragments",
+      `${clear} WHERE entity_id = OLD.entity_id AND search_text IS NOT NULL;`,
+    ],
+    [
+      // A direct snapshot / canonical_name write that does not also set the
+      // column (INSERT OR REPLACE already leaves an omitted column NULL).
+      "entity_search_text_snapshot_update",
+      "AFTER UPDATE OF snapshot, canonical_name ON entity_snapshots " +
+        "WHEN NEW.search_text IS OLD.search_text AND NEW.search_text IS NOT NULL",
+      `${clear} WHERE entity_id = NEW.entity_id;`,
+    ],
+    [
+      "entity_search_text_entity_rename",
+      "AFTER UPDATE OF canonical_name ON entities",
+      `${clear} WHERE entity_id = NEW.id AND search_text IS NOT NULL;`,
+    ],
+    [
+      // The db adapter's entities upsert is INSERT OR REPLACE, which changes
+      // canonical_name without firing an UPDATE trigger.
+      "entity_search_text_entity_insert",
+      "AFTER INSERT ON entities",
+      `${clear} WHERE entity_id = NEW.id AND search_text IS NOT NULL;`,
+    ],
+  ];
+  for (const [name, when, body] of triggers) {
+    await db.prepare(`CREATE TRIGGER IF NOT EXISTS ${name} ${when} BEGIN ${body} END`).run();
+  }
+}
+
+/**
+ * Full-text triggers an old unmerged branch left on some databases. Each body
+ * starts with `DELETE FROM entity_search_fts WHERE entity_id = ...`; that
+ * column is UNINDEXED in the fts5 table, so every snapshot insert or update
+ * reads the whole full-text store. Nothing on main creates or reads that table,
+ * so removing the triggers does not change search results.
+ */
+export const ORPHAN_ENTITY_FTS_TRIGGERS = [
+  "entity_fts_snapshot_ai",
+  "entity_fts_snapshot_au",
+  "entity_fts_snapshot_ad",
+  "entity_fts_entities_au",
+  "entity_fts_entities_ad",
+] as const;
+
+/**
+ * The leftover full-text table and its helper table. The delete and update
+ * triggers are the only thing that ever removed rows from them, so they are
+ * dropped together with the triggers: dropping the triggers alone would leave
+ * deleted or corrected text behind with nothing to remove it.
+ */
+export const ORPHAN_ENTITY_FTS_TABLES = ["entity_search_fts", "entity_fts_rows"] as const;
+
+/** What the opt-in removal dropped: leftover triggers and leftover tables. */
+export interface OrphanEntityFtsDropResult {
+  triggers: number;
+  tables: number;
+}
+
+function orphanEntityFtsTriggerDropEnabled(): boolean {
+  return runtimeEnv().NEOTOMA_DROP_ORPHAN_ENTITY_FTS === "1";
+}
+
+/**
+ * Drop the present ORPHAN_ENTITY_FTS_TRIGGERS and then the present
+ * ORPHAN_ENTITY_FTS_TABLES on an open transaction. Any failure rolls the whole
+ * transaction back, so a deletion is never left with its cleanup removed.
+ */
+async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<OrphanEntityFtsDropResult> {
+  const presentTables: string[] = [];
+  for (const name of ORPHAN_ENTITY_FTS_TABLES) {
+    const present = await db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(name);
+    if (present) presentTables.push(name);
+  }
+  const presentTriggers: string[] = [];
+  for (const name of ORPHAN_ENTITY_FTS_TRIGGERS) {
+    const present = await db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+      .get(name);
+    if (present) presentTriggers.push(name);
+  }
+  if (presentTriggers.length === 0 && presentTables.length === 0) return { triggers: 0, tables: 0 };
+  // Triggers first (a trigger that names a dropped table would fail on the next
+  // write), then the tables.
+  for (const name of presentTriggers) {
+    await db.prepare(`DROP TRIGGER IF EXISTS ${name}`).run();
+  }
+  for (const name of presentTables) {
+    await db.prepare(`DROP TABLE IF EXISTS ${name}`).run();
+  }
+  logger.warn(
+    `Dropped ${presentTriggers.length} leftover entity_fts_* trigger(s) and ${presentTables.length} unused ` +
+      "full-text table(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS=1)"
+  );
+  return { triggers: presentTriggers.length, tables: presentTables.length };
+}
+
+/**
+ * Opt-in removal of ORPHAN_ENTITY_FTS_TRIGGERS and of the unused tables they
+ * maintain (ORPHAN_ENTITY_FTS_TABLES), in one transaction. Returns how many of
+ * each were dropped; zeros and no statement at all when not enabled. Runs at open
+ * inside ensureSchema.
+ */
+export async function dropOrphanEntityFtsTriggers(
+  db: DbDatabase,
+  enabled: boolean = orphanEntityFtsTriggerDropEnabled()
+): Promise<OrphanEntityFtsDropResult> {
+  if (!enabled) return { triggers: 0, tables: 0 };
+  return db.transaction((tx) => dropOrphanEntityFtsTriggersIn(tx));
+}
+
+/**
+ * Create an index, logging only when it is actually built. On a large existing
+ * table the first build blocks the single connection (and so all writes) until it
+ * finishes, so the operator needs a visible start and end line. Silent when the
+ * index already exists.
+ */
+async function createIndexLogged(
+  db: DbConnection,
+  name: string,
+  table: string,
+  ddl: string
+): Promise<void> {
+  const existing = await db
+    .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'index' AND name = ?")
+    .get(name);
+  if (existing) {
+    await db.prepare(ddl).run();
+    return;
+  }
+  logger.info(`Building index ${name} on ${table} (one-time, blocks writes until done)`);
+  const started = Date.now();
+  await db.prepare(ddl).run();
+  logger.info(`Built index ${name} on ${table} in ${Date.now() - started} ms`);
 }
 
 /**
@@ -560,15 +756,82 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_observations_entity_id ON observations(entity_id, source_priority, observed_at)"
       )
       .run();
+    // Source-keyed lookups (hosted-instance list freeze). `observations` and
+    // `raw_fragments` were reachable by source_id only through a full table scan,
+    // and raw_fragments by entity_id the same way, so entity listing, per-fragment
+    // store upserts and per-source reads each cost O(table) instead of O(rows
+    // touched). All of them are plain additive CREATE INDEX IF NOT EXISTS: safe on
+    // a populated database, no data rewrite, and a no-op on every open after the
+    // first. On an existing database the FIRST open after upgrade builds each index
+    // synchronously on the single connection (before the server accepts requests),
+    // one sequential pass over its table: about 0.1-0.2 s per index at 130k rows on
+    // a laptop (docs/performance/entity_list_source_lookups.md), blocking only that
+    // first start.
+    //  - observations(source_id, entity_type, entity_id): covers the listing
+    //    link lookup (entity_type + source_id -> entity_id) without touching the
+    //    row, and serves every `WHERE source_id = ?` read.
+    //  - the two raw_fragments indexes follow the entity_id column add below.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_id, entity_type, entity_id)"
+      )
+      .run();
+    // Idempotency-key replay lookups. `correct`/`store` look up
+    // `WHERE user_id = ? AND idempotency_key = ?` on observations (existingCorrectionForKey,
+    // correction_transaction receipts) and on sources (store/raw_storage admission), the
+    // former inside a write transaction that holds the single write gate. With no index
+    // each was a full table scan, so gate hold time grew with table size (14-58 s per
+    // correct on hosted, 2026-11-13). Partial: every lookup compares the key with `=`,
+    // which implies NOT NULL, and most rows carry no key. Placed after the
+    // idempotency_key addColumnIfMissing calls above so it is safe on old databases.
+    await createIndexLogged(
+      db,
+      "idx_observations_user_idempotency",
+      "observations",
+      "CREATE INDEX IF NOT EXISTS idx_observations_user_idempotency ON observations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+    );
+    await createIndexLogged(
+      db,
+      "idx_sources_user_idempotency",
+      "sources",
+      "CREATE INDEX IF NOT EXISTS idx_sources_user_idempotency ON sources(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+    );
     await addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     await addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+    await ensureEntitySearchTextColumn(db);
+    if (orphanEntityFtsTriggerDropEnabled()) await dropOrphanEntityFtsTriggersIn(db);
     await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
     await addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
+    // raw_fragments source/entity indexes (see the source-keyed lookups note
+    // above). Created after the entity_id column is guaranteed to exist, so a
+    // database that predates that column upgrades in one open.
+    //  - (entity_id, source_id): the listing fetch bounded to the page's own ids.
+    //  - (source_id, fragment_key, entity_id): the per-fragment store upsert probe
+    //    (source + key [+ entity]) and the legacy NULL-entity fragment lookup.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_raw_fragments_entity_source ON raw_fragments(entity_id, source_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_raw_fragments_source_key ON raw_fragments(source_id, fragment_key, entity_id)"
+      )
+      .run();
+    // (entity_id, fragment_key, last_seen): the current fragment per key of an
+    // entity, found by stepping through its keys rather than reading every
+    // fragment each re-store left behind (#2792).
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_raw_fragments_entity_key_seen ON raw_fragments(entity_id, fragment_key, last_seen)"
+      )
+      .run();
+    await ensureLifecycleAttachedIndex(db);
     await addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
     await addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
     await addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
@@ -674,6 +937,72 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
       )
       .run();
 
+    // `entities` had no index beyond its primary key, so every read scoped by
+    // (user_id, entity_type) was a full SCAN of the table: the /entities/query
+    // page (WHERE user_id AND entity_type AND merged_to_entity_id IS NULL
+    // ORDER BY id), the population-certificate scans, and type-filtered lookups
+    // in services/. At ~300k rows a limit-5 page for one type cost ~1.1s on the
+    // hosted instance and bursts saturated the DB reader pool.
+    //
+    // Four indexes, each tied to a query shape the real builder emits (the
+    // plan test captures that SQL from queryEntities, so it cannot drift):
+    //   - (user_id, entity_type, merged_to_entity_id, id): single-type page and
+    //     keyset, ordered by id with no sort; also COVERS the certificate query.
+    //   - (user_id, merged_to_entity_id, id): the type-less default listing
+    //     (and both keyset directions) and multi-type `IN (...)` pages, ordered
+    //     by id with no sort. Without it the planner takes the type index with
+    //     only user_id bound and sorts every row the user owns (measured
+    //     ~0.1ms -> ~220ms at 300k).
+    //   - (user_id, entity_type, merged_to_entity_id, canonical_name, id) and
+    //     (user_id, merged_to_entity_id, canonical_name, id): the same two
+    //     listings with sort_by=canonical_name, so they stay an ordered index
+    //     walk instead of a scan plus top-N sort (the type index alone made
+    //     that sort several times slower than the old scan).
+    // `merged_to_entity_id` sits after the equality columns because every
+    // listing filters `merged_to_entity_id IS NULL`, which SQLite treats as an
+    // equality, so the following column still delivers order. Only
+    // include_merged=true (opt-in, no filter) loses index order and sorts.
+    // All are CREATE INDEX IF NOT EXISTS, so existing databases build them on
+    // next open (one-time) and later opens are a no-op.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_type_live_id ON entities(user_id, entity_type, merged_to_entity_id, id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_live_id ON entities(user_id, merged_to_entity_id, id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_type_live_name ON entities(user_id, entity_type, merged_to_entity_id, canonical_name, id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entities_user_live_name ON entities(user_id, merged_to_entity_id, canonical_name, id)"
+      )
+      .run();
+    // Lookups that carry entity_type (and canonical_name) but no user_id: the
+    // store path's canonical-name collision check and the instance-policy
+    // merge filter. Every index above leads with user_id, so these scanned
+    // the whole entities table.
+    await createIndexLogged(
+      db,
+      "idx_entities_type_name",
+      "entities",
+      "CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name)"
+    );
+    // relationship_observations had no index besides its primary key; every
+    // create_relationship lookup by relationship_key scanned the table.
+    await createIndexLogged(
+      db,
+      "idx_relationship_observations_key_user",
+      "relationship_observations",
+      "CREATE INDEX IF NOT EXISTS idx_relationship_observations_key_user ON relationship_observations(relationship_key, user_id)"
+    );
+
     // ateles#576: the visible-entity count is a COUNT(*) over entity_snapshots
     // filtered by (user_id, entity_type). Without this index that count was a
     // full table SCAN of every snapshot row on every /entities/query request —
@@ -686,16 +1015,72 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_user_type ON entity_snapshots(user_id, entity_type, entity_id)"
       )
       .run();
+    // The instance-policy lookup (services/instance_policy.ts
+    // getInstancePolicyResult) reads entity_snapshots by entity_type alone:
+    // the policy is instance-wide by design and takes no user id, so the
+    // (user_id, entity_type) index above cannot serve it. Without this index
+    // that lookup was a full SCAN of every snapshot row on every MCP
+    // initialize and on every policy-enforced write.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_type ON entity_snapshots(entity_type)"
+      )
+      .run();
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
       )
       .run();
 
+    // Active-schema resolution. Every lookup filters on entity_type, scope and
+    // active by equality, and the user-scoped lookup on user_id as well
+    // (schema_registry.ts loadUserSpecificSchema / loadGlobalSchema /
+    // loadActiveSchemaInTransaction). Without this index each lookup was a
+    // full scan of the table, run four to eight times per stored entity and
+    // inside correction transactions while the write gate is held.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_schema_registry_resolve " +
+          "ON schema_registry(entity_type, scope, active, user_id)"
+      )
+      .run();
+
+    // Change counter for the in-memory schema lookup cache
+    // (src/repositories/db/schema_registry_cache.ts). Triggers bump it on any
+    // write to schema_registry, from any connection or process, so the cache
+    // notices writes that bypass the query adapter (raw SQL, the CLI writing
+    // the same file). One row, id = 1.
+    await db
+      .prepare(
+        "CREATE TABLE IF NOT EXISTS schema_registry_change_counter (" +
+          "id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)"
+      )
+      .run();
+    await db
+      .prepare("INSERT OR IGNORE INTO schema_registry_change_counter (id, version) VALUES (1, 0)")
+      .run();
+    // IF NOT EXISTS never rewrites an existing trigger. A change to the body
+    // below needs a DROP TRIGGER IF EXISTS first, or a new trigger name.
+    // `neotoma storage merge-db` never copies the counter table
+    // (MERGE_DB_SKIPPED_INTERNAL_TABLES); these triggers keep the target's own.
+    for (const [name, event] of [
+      ["schema_registry_change_after_insert", "INSERT"],
+      ["schema_registry_change_after_update", "UPDATE"],
+      ["schema_registry_change_after_delete", "DELETE"],
+    ] as const) {
+      await db
+        .prepare(
+          `CREATE TRIGGER IF NOT EXISTS ${name} AFTER ${event} ON schema_registry ` +
+            "BEGIN UPDATE schema_registry_change_counter SET version = version + 1 WHERE id = 1; END"
+        )
+        .run();
+    }
+
     // Relationship-type registry (#1972 / G25). Two indexes, and neither is
-    // optional: `schema_registry` has NO index at all, so every registry read
-    // there is a full table scan — and this registry is read on the
-    // relationship WRITE path, not just at boot.
+    // optional: until idx_schema_registry_resolve above, `schema_registry` had
+    // no index at all, so every registry read there was a full table scan —
+    // and this registry is read on the relationship WRITE path, not just at
+    // boot.
     //
     // The UNIQUE index is the one `schema_registry` lacks. Without it nothing
     // prevents two rows for the same key, which is why

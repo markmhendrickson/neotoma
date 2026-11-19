@@ -23,13 +23,13 @@ Unlike retrieval memory (Mem0, Zep) or platform memory (Claude, ChatGPT), a dete
 
 Mem0 and Zep use retrieval-augmented memory: vector embeddings, semantic search, and probabilistic matching. Neotoma uses deterministic state: append-only logs, schema-bound entities, and reducers that always produce the same snapshot from the same observations.
 
-Retrieval memory is useful for context injection into prompts. Deterministic memory is necessary when you need to reconstruct the exact state of an entity at a past point in time, resolve multi-writer conflicts consistently, or prove provenance for audits.
+Retrieval memory is useful for context injection into prompts. Deterministic memory is necessary when you need to reconstruct the exact state of an entity as recorded by a past point in time, resolve multi-writer conflicts consistently, or prove provenance for audits.
 
 [Memory models comparison](/memory-models)
 
 ## What's the difference between RAG memory and deterministic memory? {#what-s-the-difference-between-rag-memory-and-deterministic-memory}
 
-RAG memory stores text chunks and retrieves them by semantic similarity. Deterministic memory stores structured observations and composes entity state via reducers. RAG answers 'what is relevant?'; deterministic memory answers 'what was true?'
+RAG memory stores text chunks and retrieves them by semantic similarity. Deterministic memory stores structured observations and composes entity state via reducers. RAG answers 'what is relevant?'; deterministic memory answers 'what was recorded?'
 
 RAG is optimized for prompt augmentation. Deterministic memory is optimized for state integrity: temporal queries, multi-writer consistency, schema validation, and reproducible reconstruction.
 
@@ -37,7 +37,7 @@ RAG is optimized for prompt augmentation. Deterministic memory is optimized for 
 
 ## Why can't I just use markdown files for agent memory? {#why-can-t-i-just-use-markdown-files-for-agent-memory}
 
-Markdown files are maximally portable and human-editable, but they conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state at a past moment. Git provides file-level versioning but not field-level provenance or deterministic merge logic.
+Markdown files are maximally portable and human-editable, but they conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state as recorded at a past moment. Git provides file-level versioning but not field-level provenance or deterministic merge logic.
 
 [Neotoma vs file-based memory](/neotoma-vs-files)
 
@@ -45,7 +45,7 @@ Markdown files are maximally portable and human-editable, but they conflate obse
 
 Those products usually version a shared context tree, rules pack, or prompt bundle so teams can sync what coding agents read. Neotoma is a structured state layer: append-only observations, schema-bound entities, reducers, and field-level provenance, with replay and diff on entity state across MCP-connected tools—not Git operations on a single vendor context package.
 
-Git-style workflows address collaboration and drift for agent-facing files. Neotoma answers a different core question: what was true at time T, from which source, and how did state change? The two can complement (synced context plus Neotoma as system of record) or substitute when you need cross-tool structured memory beyond one codebase context.
+Git-style workflows address collaboration and drift for agent-facing files. Neotoma answers a different core question: what had been recorded by time T, from which source, and how did state change? The two can complement (synced context plus Neotoma as system of record) or substitute when you need cross-tool structured memory beyond one codebase context.
 
 [Memory guarantees](/memory-guarantees)
 
@@ -127,13 +127,13 @@ Neotoma stores structured entities with schema validation, versioned history, an
 
 ## How do I install Neotoma? {#how-do-i-install-neotoma}
 
-Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes under 5 minutes.
+Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes a few minutes.
 
 [Install guide](/install)
 
 ## Does Neotoma send my data to the cloud? {#does-neotoma-send-my-data-to-the-cloud}
 
-No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data. You can optionally expose the API via a tunnel for remote MCP clients.
+No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync and no training on your data. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address. You can optionally expose the API via a tunnel for remote MCP clients.
 
 [Privacy-first architecture](/foundations)
 

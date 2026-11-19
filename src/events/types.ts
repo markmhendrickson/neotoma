@@ -34,6 +34,12 @@ export interface SubstrateEvent {
   relationship_type?: string;
   source_entity_id?: string;
   target_entity_id?: string;
+  /**
+   * Sorted names of fields that changed. Only meaningful on `entity.updated`:
+   * an absent value there means "changed, fields unknown" (for example the
+   * snapshot could not be computed), NOT "nothing changed". Not applicable to
+   * `entity.created`.
+   */
   fields_changed?: string[];
   action: SubstrateEntityAction;
   source_id?: string;

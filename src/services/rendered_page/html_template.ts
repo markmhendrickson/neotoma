@@ -10,6 +10,8 @@
  * and `customCss` are sanitized as described inline.
  */
 
+import { hasRenderedPageCopyBlocks, RENDERED_PAGE_COPY_SCRIPT } from "./copy_controls.js";
+
 export interface RenderedPageHtmlInput {
   title: string;
   htmlBody: string;
@@ -48,6 +50,10 @@ table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
 th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e3ddd2; }
 th { background: #f4f1ec; font-weight: 600; }
 .footer-meta { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e3ddd2; font-size: 0.85rem; color: #777; }
+.neotoma-copy-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem; margin: 0.5rem 0; }
+.neotoma-copy-button { min-height: 44px; padding: 0.5rem 0.8rem; border: 1px solid currentColor; border-radius: 6px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.neotoma-copy-button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.neotoma-copy-status { font-size: 0.85em; }
 `;
 
 function escapeHtmlAttribute(s: string): string {
@@ -75,6 +81,9 @@ export function renderRenderedPageHtml(input: RenderedPageHtmlInput): string {
 
   const metaTag = metaDescription ? `<meta name="description" content="${metaDescription}">` : "";
   const customStyleTag = customCss ? `<style>${customCss}</style>` : "";
+  const copyScriptTag = hasRenderedPageCopyBlocks(input.htmlBody)
+    ? `<script>${RENDERED_PAGE_COPY_SCRIPT}</script>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -90,6 +99,7 @@ ${customStyleTag}
 <main>
 ${input.htmlBody}
 </main>
+${copyScriptTag}
 </body>
 </html>`;
 }

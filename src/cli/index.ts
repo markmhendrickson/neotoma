@@ -21,11 +21,16 @@ import {
 } from "node:fs";
 import * as readline from "node:readline";
 import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import { MERGE_DB_SKIPPED_INTERNAL_TABLES } from "../repositories/sqlite/internal_tables.js";
 
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
-import { createApiClient } from "../shared/api_client.js";
+import {
+  createApiClient,
+  resolveCliRequestAuth,
+  setExplicitBearerRequested,
+} from "../shared/api_client.js";
 import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { parseSchemaFields } from "./parse_schema_fields.js";
@@ -1354,13 +1359,33 @@ export function getSqliteRecoveryHint(
   err: unknown,
   envHint: "dev" | "prod" = inferCliRecoveryEnvHint()
 ): string | null {
+  // The classified result is authoritative. Its message may contain a user-
+  // selected path with words like sqlite_corrupt, which is not evidence that
+  // the database itself failed an integrity check.
+  if (err instanceof CliHintError && err.hint.code !== "INTEGRITY_FAILED") {
+    return null;
+  }
+  if (err instanceof CliHintError && err.hint.code === "INTEGRITY_FAILED") {
+    const checkCommand =
+      envHint === "prod" ? "neotoma prod storage recover-db" : "neotoma storage recover-db";
+    const recoverCommand =
+      envHint === "prod"
+        ? "neotoma prod storage recover-db --recover"
+        : "neotoma storage recover-db --recover";
+    return (
+      "SQLite may be corrupted. Run " +
+      `\`${checkCommand}\`` +
+      " first, then " +
+      `\`${recoverCommand}\`` +
+      " after stopping Neotoma."
+    );
+  }
   const msg = formatCliError(err).toLowerCase();
   const patterns = [
     "database disk image is malformed",
     "sqlite_corrupt",
     "btreeinitpage",
     "rowid out of order",
-    "integrity_check",
   ];
   const matches = patterns.some((pattern) => msg.includes(pattern));
   if (!matches) return null;
@@ -1379,14 +1404,23 @@ export function getSqliteRecoveryHint(
   );
 }
 
-export function writeCliError(err: unknown): void {
+export function writeCliError(
+  err: unknown,
+  options: { suppressRecoveryHint?: boolean } = {}
+): void {
   const msg = formatCliError(err);
-  const recoveryHint = getSqliteRecoveryHint(err);
+  const recoveryHint = options.suppressRecoveryHint ? null : getSqliteRecoveryHint(err);
   const outputMode = resolveOutputMode();
   if (outputMode === "json") {
     const envelope: Record<string, unknown> = { error: msg };
-    if (err instanceof CliHintError) envelope.hint = err.hint;
-    else if (recoveryHint) envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
+    if (err instanceof CliHintError) {
+      envelope.hint =
+        err.hint.code === "INTEGRITY_FAILED" && recoveryHint
+          ? { ...err.hint, message: recoveryHint }
+          : err.hint;
+    } else if (recoveryHint) {
+      envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
+    }
     process.stderr.write(JSON.stringify(envelope) + "\n");
     return;
   }
@@ -1438,6 +1472,49 @@ function cliApiError(error: unknown): Error {
     message: detail,
     ...(hintOf(error) ? { hint: hintOf(error) } : {}),
   });
+}
+
+/**
+ * #2700: an as-of request that fails validation answers 400 with the generic
+ * "Invalid request payload." and carries the reason (which cutoff, which format)
+ * in `details.issues[].message`. Surface those so the user sees the flag and the
+ * expected format; anything else goes through `cliApiError` unchanged.
+ */
+function asOfApiError(error: unknown): Error {
+  const issues = (error as { details?: { issues?: unknown } } | null)?.details?.issues;
+  const reasons = Array.isArray(issues)
+    ? issues
+        .map((issue) => (issue as { message?: unknown } | null)?.message)
+        .filter((m): m is string => typeof m === "string" && m.length > 0)
+    : [];
+  if (reasons.length === 0) return cliApiError(error);
+  return new Error(`${formatApiError(error)} ${reasons.join(" ")}`);
+}
+
+/**
+ * #2700: `--at` / `--at-ingested` are as-of cutoffs. An empty value must be an
+ * error, never a silent current read, so this checks presence (not truthiness)
+ * and names the flag. Format errors are left to the server, whose 400 reason
+ * (flag name and expected format) is surfaced through `cliApiError`.
+ */
+function resolveAsOfFlags(opts: { at?: string; atIngested?: string }): {
+  at?: string;
+  at_ingested?: string;
+} {
+  const out: { at?: string; at_ingested?: string } = {};
+  for (const [flag, key, value] of [
+    ["--at", "at", opts.at],
+    ["--at-ingested", "at_ingested", opts.atIngested],
+  ] as const) {
+    if (value === undefined) continue;
+    if (value.trim() === "") {
+      throw new Error(
+        `${flag} needs a timestamp in ISO 8601 format (for example 2026-01-01T00:00:00Z)`
+      );
+    }
+    out[key] = value;
+  }
+  return out;
 }
 
 /**
@@ -1509,7 +1586,8 @@ function formatRequestError(error: unknown): string {
     };
     if (typeof envelope.error_code === "string") {
       const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
-      return `${envelope.error_code}${message}`;
+      const hint = hintOf(error);
+      return `${envelope.error_code}${message}${hint ? ` ${hint}` : ""}`;
     }
     if (typeof envelope.code === "string") {
       const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
@@ -1520,6 +1598,42 @@ function formatRequestError(error: unknown): string {
       return formatRequestError(envelope.error);
   }
   return formatApiError(error);
+}
+
+/**
+ * #2781: the server's refusal as `<code>: <message>` (or whichever of the two
+ * is present) for a failed write. Reads only the envelope's code and message,
+ * never the rest of the response. Returns undefined when neither is present so
+ * the caller keeps its fixed message.
+ *
+ * Not built on `formatRequestError` (docs/foundation/principles.md
+ * #extend-the-mechanism-that-already-generalizes): that formatter always
+ * returns a string, falling back to `formatApiError`, which prints `detail`,
+ * a string `error` or `String(error)` and so would replace the fixed-message
+ * fallback with unrelated response content; it also appends `hint` for
+ * `code` envelopes, which a refusal line does not print.
+ */
+export function refusalDetail(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const envelope = error as {
+    error_code?: unknown;
+    code?: unknown;
+    message?: unknown;
+    error?: unknown;
+  };
+  if (envelope.error && typeof envelope.error === "object") return refusalDetail(envelope.error);
+  const code =
+    typeof envelope.error_code === "string" && envelope.error_code.length > 0
+      ? envelope.error_code
+      : typeof envelope.code === "string" && envelope.code.length > 0
+        ? envelope.code
+        : undefined;
+  const message =
+    typeof envelope.message === "string" && envelope.message.length > 0
+      ? envelope.message
+      : undefined;
+  if (code && message) return `${code}: ${message}`;
+  return code ?? message;
 }
 
 function parseOptionalJson(value?: string): unknown {
@@ -1704,6 +1818,8 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {
+    // Deliberately outside the CLI credential rule: this reads back the
+    // access token the login flow above just obtained, to show who it names.
     const res = await fetch(`${baseUrl}/me`, {
       headers: { Authorization: `Bearer ${token.access_token}` },
       signal: AbortSignal.timeout(10000),
@@ -1740,14 +1856,13 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
   } catch {
     token = undefined;
   }
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const auth = await resolveCliRequestAuth({ token });
   const maxAttempts = 3;
   const retryDelayMs = 1200;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(`${baseUrl}/me`, {
-        headers,
+      const res = await auth.fetch(`${baseUrl}/me`, {
+        headers: auth.headers,
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) return;
@@ -1771,6 +1886,14 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
  * Resolve CLI auth token using same patterns as MCP.
  * Encryption off: NEOTOMA_BEARER_TOKEN env, then stored OAuth token from config, or no token (API treats no Bearer as dev-local).
  * Encryption on: key-derived token (requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC).
+ *
+ * Never attach this token to a request by hand. Pass it to `createApiClient`,
+ * or, for a raw `fetch`, to `resolveCliRequestAuth` and send with the headers
+ * and `fetch` it returns. Both apply one rule (`decideCliCredentials` in
+ * `src/shared/api_client.ts`): with an AAuth keypair configured the token is
+ * withheld unless `--with-bearer` is passed, and a request is refused when
+ * NEOTOMA_CLI_AAUTH_DISABLE=1 / NEOTOMA_CLI_AAUTH_ENABLE=0 would drop the
+ * signature.
  */
 async function getCliToken(): Promise<string | undefined> {
   if (appConfig.encryption.enabled) {
@@ -1858,6 +1981,89 @@ class CliHintError extends Error {
   ) {
     super(message);
     this.name = "CliHintError";
+  }
+}
+
+export type BackupIntegrityVerification = {
+  kind: "verified" | "verify_instrument_failure" | "integrity_failed";
+};
+
+/** Only driver metadata, never a message or user path, can classify a thrown verification error. */
+function isStructuredSqliteCorruptionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const sqliteError = err as Error & { code?: unknown; errcode?: unknown };
+  if (typeof sqliteError.code !== "string") return false;
+  if (
+    sqliteError.code === "SQLITE_CORRUPT" ||
+    /^SQLITE_CORRUPT_[A-Z0-9_]+$/.test(sqliteError.code)
+  ) {
+    return true;
+  }
+  // node:sqlite reports the generic JS code plus SQLite's numeric primary or
+  // extended result code; 11 is SQLITE_CORRUPT.
+  return (
+    sqliteError.code === "ERR_SQLITE_ERROR" &&
+    Number.isInteger(sqliteError.errcode) &&
+    ((sqliteError.errcode as number) & 0xff) === 11
+  );
+}
+
+/**
+ * Preserve the distinction between a negative SQLite conclusion and a check
+ * that did not return a conclusion at all. Only an exact `ok` is success.
+ */
+export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVerification {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { kind: "verify_instrument_failure" };
+  }
+  const details: string[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      return { kind: "verify_instrument_failure" };
+    }
+    const record = row as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (
+      keys.length !== 1 ||
+      keys[0] !== "integrity_check" ||
+      typeof record.integrity_check !== "string" ||
+      record.integrity_check.length === 0 ||
+      record.integrity_check.trim() !== record.integrity_check
+    ) {
+      return { kind: "verify_instrument_failure" };
+    }
+    details.push(record.integrity_check);
+  }
+
+  if (details.length === 1 && details[0] === "ok") {
+    return { kind: "verified" };
+  }
+  // Older verification paths used this sentinel when the driver produced no
+  // rows. It is not a SQLite conclusion and must never imply corruption.
+  if (details.some((detail) => detail === "no result")) {
+    return { kind: "verify_instrument_failure" };
+  }
+  if (details.every((detail) => detail !== "ok")) {
+    return { kind: "integrity_failed" };
+  }
+  return { kind: "verify_instrument_failure" };
+}
+
+async function verifyBackupDatabaseIntegrity(
+  databasePath: string
+): Promise<BackupIntegrityVerification> {
+  let database: AsyncSqliteDatabase | null = null;
+  try {
+    database = new AsyncSqliteDatabase(databasePath, { existing: true, readOnly: true });
+    return classifyBackupIntegrityCheck(await database.pragma("integrity_check"));
+  } catch (error) {
+    return {
+      kind: isStructuredSqliteCorruptionError(error)
+        ? "integrity_failed"
+        : "verify_instrument_failure",
+    };
+  } finally {
+    await database?.close().catch(() => {});
   }
 }
 
@@ -2195,7 +2401,11 @@ program
     "Append CLI stdout and stderr to this file (development default: <neotoma>/data/logs/cli.<pid>.log when a Neotoma path is configured, else ~/.config/neotoma/cli.<pid>.log)"
   )
   .option("--no-log-file", "Do not append CLI output to the log file (no-op in prod)")
-  .option("--no-update-check", "Disable update availability check");
+  .option("--no-update-check", "Disable update availability check")
+  .option(
+    "--with-bearer",
+    "With an AAuth key configured, also send the bearer token (NEOTOMA_BEARER_TOKEN or the stored login) beside the request signature. Without this flag the signature is the only credential sent."
+  );
 
 function isDebug(): boolean {
   return Boolean((program.opts() as { debug?: boolean }).debug);
@@ -2314,7 +2524,12 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   const opts = (actionCommand as Command).optsWithGlobals() as {
     offline?: boolean;
     apiOnly?: boolean;
+    withBearer?: boolean;
   };
+  // Only the explicit flag may add a bearer beside an AAuth signature. Set on
+  // every command (true or false) so an interactive session does not carry one
+  // command's flag into the next.
+  setExplicitBearerRequested(opts.withBearer === true);
   const isTestEnv = process.env.NODE_ENV === "test";
 
   // Precedence: flag > env > default. NEOTOMA_API_ONLY / NEOTOMA_OFFLINE /
@@ -3011,6 +3226,11 @@ function quoteSqliteStringLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+/** Quote one value for a POSIX shell command shown to a human. */
+function quotePosixShellArgument(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 async function checkpointWal(db: AsyncSqliteDatabase): Promise<void> {
   try {
     await db.pragma("wal_checkpoint(FULL)");
@@ -3090,6 +3310,9 @@ async function mergeSqliteDatabase(
     for (const table of targetTables) {
       const tableName = table.name;
       if (!sourceTableSet.has(tableName)) continue;
+      // Per-database bookkeeping: the target keeps its own (its triggers bump
+      // the schema_registry change counter as merged rows land).
+      if (MERGE_DB_SKIPPED_INTERNAL_TABLES.has(tableName)) continue;
 
       const targetCols = (await targetDb
         .prepare(`PRAGMA table_info(${quoteSqlIdent(tableName)})`)
@@ -3960,9 +4183,9 @@ async function startSessionWatch(
     process.env[preferredEnv === "dev" ? "NEOTOMA_SESSION_DEV_PORT" : "NEOTOMA_SESSION_PROD_PORT"];
   if (sessionPort) {
     try {
-      const token = await getCliToken();
-      const res = await fetch(`http://127.0.0.1:${sessionPort}/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const auth = await resolveCliRequestAuth({ token: await getCliToken() });
+      const res = await auth.fetch(`http://127.0.0.1:${sessionPort}/me`, {
+        headers: auth.headers,
       });
       if (res.ok) {
         const me = (await res.json()) as { user_id?: string };
@@ -6082,8 +6305,9 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               try {
                 const token = await getCliToken();
                 if (token) {
-                  const res = await fetch(`${baseUrl}/me`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                  const auth = await resolveCliRequestAuth({ token });
+                  const res = await auth.fetch(`${baseUrl}/me`, {
+                    headers: auth.headers,
                     signal: AbortSignal.timeout(10000),
                   });
                   if (res.ok) {
@@ -7529,9 +7753,14 @@ const authLoginCommand = authCommand
       token = undefined;
     }
     if (token) {
-      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      // Outside the try below: a refusal (disable variable with a key
+      // configured) is reported, not taken as "not signed in".
+      const auth = await resolveCliRequestAuth({ token });
       try {
-        const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
+        const res = await auth.fetch(`${baseUrl}/me`, {
+          headers: auth.headers,
+          signal: AbortSignal.timeout(10000),
+        });
         if (res.ok) {
           // #2228: `email` is who is signed in; `user_id` is the graph being
           // operated on. Under shared-graph mode they describe different
@@ -7580,10 +7809,9 @@ authCommand
     };
     if (config.expires_at) status.expires_at = config.expires_at;
     if (config.access_token) status.token_expired = isTokenExpired(config);
+    const auth = await resolveCliRequestAuth({ token });
     try {
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`${baseUrl}/me`, { headers });
+      const res = await auth.fetch(`${baseUrl}/me`, { headers: auth.headers });
       if (res.ok) {
         const me = (await res.json()) as { user_id?: string; email?: string };
         if (me.user_id) status.user_id = me.user_id;
@@ -9009,11 +9237,10 @@ program
           process.exit(1);
         }
         const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
+        const auth = await resolveCliRequestAuth({ token });
         let userId: string | null = null;
         try {
-          const res = await fetch(`${baseUrl}/me`, { headers });
+          const res = await auth.fetch(`${baseUrl}/me`, { headers: auth.headers });
           if (res.ok) {
             const me = (await res.json()) as { user_id?: string };
             if (me.user_id) userId = me.user_id;
@@ -9100,11 +9327,10 @@ program
         process.exit(1);
       }
       const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
+      const auth = await resolveCliRequestAuth({ token });
       let userId: string;
       try {
-        const res = await fetch(`${baseUrl}/me`, { headers });
+        const res = await auth.fetch(`${baseUrl}/me`, { headers: auth.headers });
         if (!res.ok) {
           process.stderr.write(
             "neotoma watch: could not resolve user. Run `neotoma auth login` and ensure the API is running.\n"
@@ -11124,6 +11350,290 @@ async function directorySizeAndFileCount(
   return { bytes, files };
 }
 
+/** A backup filesystem failure is not evidence of SQLite corruption. */
+async function backupFileOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    // Do not forward driver or path-bearing OS error text to the generic CLI
+    // recovery-hint scanner (or into a JSON error envelope).
+    throw new Error("Backup operation failed while accessing files. Check paths and permissions.");
+  }
+}
+
+/** Resolve a manifest member without allowing its path or symlinks to leave the selected root. */
+async function containedBackupPath(root: string, member: string): Promise<string | null> {
+  if (
+    !member ||
+    path.isAbsolute(member) ||
+    path.win32.isAbsolute(member) ||
+    member.includes("\0")
+  ) {
+    return null;
+  }
+  const realRoot = await fs.realpath(root);
+  const candidate = path.resolve(realRoot, member);
+  const relative = path.relative(realRoot, candidate);
+  if (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    return null;
+  }
+
+  let current = realRoot;
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component);
+    try {
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink()) return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+      return null;
+    }
+  }
+  return candidate;
+}
+
+async function resolveManifestContents(
+  root: string,
+  contents: Record<string, unknown>
+): Promise<{ paths: Record<string, string>; issues: string[] }> {
+  const paths: Record<string, string> = Object.create(null) as Record<string, string>;
+  const issues: string[] = [];
+  for (const [key, member] of Object.entries(contents)) {
+    const resolved = typeof member === "string" ? await containedBackupPath(root, member) : null;
+    if (resolved === null) issues.push(`${key} path outside backup directory or invalid`);
+    else paths[key] = resolved;
+  }
+  return { paths, issues };
+}
+
+async function backupDirectoryContainsSymlink(dir: string): Promise<boolean> {
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) return true;
+    if (entry.isDirectory() && (await backupDirectoryContainsSymlink(path.join(dir, entry.name)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** An absent optional directory is valid; an unreadable or unsupported one is not. */
+async function copyOptionalBackupDirectory(source: string, destination: string): Promise<boolean> {
+  let stat: Stats;
+  try {
+    stat = await fs.lstat(source);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error("Backup create refused: optional input is not a real directory.");
+  }
+  if (await backupDirectoryContainsSymlink(source)) {
+    throw new Error("Backup create refused: optional input directory contains a symlink.");
+  }
+  await fs.cp(source, destination, { recursive: true });
+  // Verify what was actually copied, since fs.cp preserves symlinks on supported Node versions.
+  if (await backupDirectoryContainsSymlink(destination)) {
+    throw new Error("Backup create refused: copied directory contains a symlink.");
+  }
+  return true;
+}
+
+type BackupInspection = {
+  manifest?: Record<string, unknown>;
+  contents: Record<string, string>;
+  paths: Record<string, string>;
+  issues: string[];
+  integrity?: BackupIntegrityVerification;
+  manifestError?: string;
+};
+
+/** The shared source preflight for verify and restore. No target is touched here. */
+async function inspectBackupDirectory(dir: string): Promise<BackupInspection> {
+  const result: BackupInspection = { contents: {}, paths: {}, issues: [] };
+  try {
+    const parsed: unknown = JSON.parse(await fs.readFile(path.join(dir, "manifest.json"), "utf-8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      result.manifestError = "Backup verification failed: invalid manifest.";
+      return result;
+    }
+    result.manifest = parsed as Record<string, unknown>;
+  } catch {
+    result.manifestError = "No manifest.json found in backup directory: " + dir;
+    return result;
+  }
+
+  const rawContents = result.manifest.contents;
+  if (rawContents === null || typeof rawContents !== "object" || Array.isArray(rawContents)) {
+    result.manifestError = "Backup verification failed: invalid manifest contents.";
+    return result;
+  }
+  result.contents = rawContents as Record<string, string>;
+  const rawChecksums = result.manifest.checksums;
+  if (
+    rawChecksums !== undefined &&
+    (rawChecksums === null || typeof rawChecksums !== "object" || Array.isArray(rawChecksums))
+  ) {
+    result.manifestError = "Backup verification failed: invalid manifest checksums.";
+    return result;
+  }
+  const checksums = (rawChecksums ?? {}) as Record<string, unknown>;
+  if (
+    Object.hasOwn(result.manifest, "db_snapshot_method") &&
+    result.manifest.db_snapshot_method !== "file_copy" &&
+    result.manifest.db_snapshot_method !== "vacuum_into"
+  ) {
+    result.issues.push(
+      "unsupported manifest db_snapshot_method; expected 'file_copy' or 'vacuum_into' " +
+        "(omit the field only for older backups)"
+    );
+    return result;
+  }
+  try {
+    const resolved = await resolveManifestContents(dir, result.contents);
+    result.paths = resolved.paths;
+    result.issues.push(...resolved.issues);
+  } catch {
+    result.issues.push("backup directory cannot be inspected");
+    return result;
+  }
+
+  if (Object.hasOwn(result.contents, "wal")) {
+    if (result.manifest.db_snapshot_method === "vacuum_into") {
+      result.issues.push(
+        "vacuum_into snapshots are self-contained and must not declare contents.wal; " +
+          "repair the manifest only after confirming the database contains the committed data"
+      );
+      return result;
+    }
+    if (
+      result.paths.neotoma_db &&
+      result.paths.wal &&
+      result.paths.wal !== `${result.paths.neotoma_db}-wal`
+    ) {
+      result.issues.push(
+        "manifest contents.wal must reference the database path plus '-wal'; " +
+          "repair the manifest and ensure the paired WAL file exists"
+      );
+      return result;
+    }
+  }
+
+  const dbName = result.contents.neotoma_db;
+  if (typeof dbName !== "string" || dbName.length === 0) {
+    result.issues.push("manifest does not reference a database file");
+  } else if (result.paths.neotoma_db) {
+    const dbPath = result.paths.neotoma_db;
+    let inspectIntegrity = false;
+    try {
+      const stat = await fs.stat(dbPath);
+      if (!stat.isFile())
+        result.issues.push("database reference is not a file in backup directory");
+      else if (stat.size < 1024) {
+        result.issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
+      } else inspectIntegrity = true;
+    } catch {
+      result.issues.push("database file missing from backup directory: " + dbName);
+    }
+    if (inspectIntegrity) result.integrity = await verifyBackupDatabaseIntegrity(dbPath);
+  }
+
+  for (const [key, member] of Object.entries(result.contents)) {
+    if (typeof member !== "string" || !result.paths[key]) continue;
+    if (member.endsWith("/")) {
+      try {
+        const stat = await fs.stat(result.paths[key]);
+        if (!stat.isDirectory())
+          result.issues.push(`referenced directory is not a directory: ${key}`);
+        else if (await backupDirectoryContainsSymlink(result.paths[key])) {
+          result.issues.push(`referenced directory contains a symlink: ${key}`);
+        }
+      } catch {
+        result.issues.push(`referenced directory missing: ${key} (${member})`);
+      }
+    } else if (key === "wal") {
+      try {
+        const stat = await fs.stat(result.paths[key]);
+        if (!stat.isFile()) result.issues.push("referenced WAL is not a file in backup directory");
+      } catch {
+        result.issues.push("referenced WAL missing from backup directory");
+      }
+    }
+    if (Object.hasOwn(checksums, member)) {
+      if (typeof checksums[member] !== "string" || member.endsWith("/")) {
+        result.issues.push(`invalid checksum for referenced member: ${key}`);
+      } else {
+        try {
+          const bytes = await fs.readFile(result.paths[key]);
+          const computed = "sha256:" + createHash("sha256").update(bytes).digest("hex");
+          if (computed !== checksums[member]) {
+            result.issues.push(`checksum mismatch: expected ${checksums[member]}, got ${computed}`);
+          }
+        } catch {
+          result.issues.push(`referenced file missing or unreadable: ${key}`);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+async function verifyStagedBackupMemberChecksum(
+  inspection: BackupInspection,
+  key: "neotoma_db" | "wal",
+  stagedPath: string
+): Promise<void> {
+  const member = inspection.contents[key];
+  const rawChecksums = inspection.manifest?.checksums;
+  if (
+    !member ||
+    !rawChecksums ||
+    typeof rawChecksums !== "object" ||
+    Array.isArray(rawChecksums) ||
+    !Object.hasOwn(rawChecksums, member)
+  ) {
+    return;
+  }
+  const expected = (rawChecksums as Record<string, unknown>)[member];
+  if (typeof expected !== "string") {
+    throw new Error(`Backup restore refused: staged ${key} checksum is invalid.`);
+  }
+  const actual =
+    "sha256:" +
+    createHash("sha256")
+      .update(await fs.readFile(stagedPath))
+      .digest("hex");
+  if (actual !== expected) {
+    const label = key === "neotoma_db" ? "database" : "WAL";
+    throw new Error(`Backup restore refused: staged ${label} checksum mismatch.`);
+  }
+}
+
+function backupIntegrityError(
+  databasePath: string,
+  integrity: BackupIntegrityVerification
+): CliHintError {
+  const instrumentFailure = integrity.kind === "verify_instrument_failure";
+  const message = instrumentFailure
+    ? "Backup verification could not obtain an integrity result. " +
+      "The snapshot has been left in place for inspection at " +
+      databasePath +
+      `. Run \`sqlite3 ${quotePosixShellArgument(databasePath)} "PRAGMA integrity_check;"\` directly; ` +
+      'if it returns "ok", this is a tooling or driver issue.'
+    : "Backup verification failed: the snapshot integrity check failed. " +
+      "The backup is NOT usable and has been left in place for inspection at " +
+      databasePath;
+  return new CliHintError(message, {
+    code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
+    failure_kind: integrity.kind,
+  });
+}
+
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -11163,7 +11673,7 @@ backupCommand
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const backupDir = path.join(opts.output, `neotoma-backup-${timestamp}`);
 
-    await fs.mkdir(backupDir, { recursive: true });
+    await backupFileOperation(() => fs.mkdir(backupDir, { recursive: true }));
 
     const manifest: Record<string, unknown> = {
       version: "1.0",
@@ -11214,27 +11724,24 @@ backupCommand
       // Verify the snapshot is a usable database, not merely a plausible-sized file.
       // The old >1KB check passed happily on corrupt output, which is what made the
       // #2075 failure silent.
-      let integrityOk = false;
-      let integrityDetail = "unknown";
-      let verifyDb: AsyncSqliteDatabase | null = null;
-      try {
-        verifyDb = new AsyncSqliteDatabase(destDb);
-        const rows = (await verifyDb.pragma("integrity_check")) as Array<Record<string, unknown>>;
-        const first = rows?.[0];
-        const value = first ? String(Object.values(first)[0] ?? "") : "";
-        integrityOk = value === "ok";
-        integrityDetail = value || "no result";
-      } catch (err) {
-        integrityDetail = err instanceof Error ? err.message : String(err);
-      } finally {
-        await verifyDb?.close().catch(() => {});
-      }
+      const integrity = await verifyBackupDatabaseIntegrity(destDb);
 
-      if (!integrityOk) {
+      if (integrity.kind !== "verified") {
+        const instrumentFailure = integrity.kind === "verify_instrument_failure";
+        const message = instrumentFailure
+          ? "Backup verification could not obtain an integrity result. " +
+            "The snapshot has been left in place for inspection at " +
+            destDb +
+            `. Run \`sqlite3 ${quotePosixShellArgument(destDb)} "PRAGMA integrity_check;"\` directly; ` +
+            'if it returns "ok", this is a tooling or driver issue.'
+          : "Backup verification failed: the snapshot integrity check failed. " +
+            "The backup is NOT usable and has been left in place for inspection at " +
+            destDb;
         writeCliError(
-          `Backup verification failed: integrity_check on the snapshot returned "${integrityDetail}" ` +
-            '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
-            destDb
+          new CliHintError(message, {
+            code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
+            failure_kind: integrity.kind,
+          })
         );
         process.exitCode = 1;
         return;
@@ -11247,41 +11754,54 @@ backupCommand
       const dbBuf = await fs.readFile(destDb);
       checksums[path.basename(sqlitePath)] =
         "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-    } catch (err) {
+    } catch (error) {
       if (!dbCopied) {
-        const detail = err instanceof Error ? `: ${err.message}` : "";
+        if (isStructuredSqliteCorruptionError(error)) {
+          writeCliError(
+            new CliHintError(
+              "Backup failed: the source database integrity check failed. " +
+                "No usable snapshot was created.",
+              { code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" }
+            )
+          );
+          process.exitCode = 1;
+          return;
+        }
         writeCliError(
-          "SQLite database not found, not readable, or could not be snapshotted at " +
-            sqlitePath +
-            detail
+          "SQLite database not found, not readable, or could not be snapshotted at " + sqlitePath,
+          { suppressRecoveryHint: true }
         );
         process.exitCode = 1;
         return;
       }
     }
 
-    // Copy sources directory
+    // Copy optional directories. Only ENOENT means absent; copy and validation
+    // failures must never become a successful but incomplete backup.
     try {
-      await fs.access(rawStorageDir);
-      const destSources = path.join(backupDir, "sources");
-      await fs.cp(rawStorageDir, destSources, { recursive: true });
-      contents.sources = "sources/";
-    } catch {
-      // No sources directory — acceptable for minimal installs
-    }
-
-    // Copy logs directory (includes events.log and other log files)
-    try {
-      await fs.access(logsDir);
+      if (await copyOptionalBackupDirectory(rawStorageDir, path.join(backupDir, "sources"))) {
+        contents.sources = "sources/";
+      }
       const dirName = path.basename(logsDir);
-      await fs.cp(logsDir, path.join(backupDir, dirName), { recursive: true });
-      contents[dirName] = dirName + "/";
-    } catch {
-      // Directory does not exist — acceptable
+      if (await copyOptionalBackupDirectory(logsDir, path.join(backupDir, dirName))) {
+        contents[dirName] = dirName + "/";
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      writeCliError(
+        message.startsWith("Backup create refused:")
+          ? message
+          : "Backup create failed while copying or inspecting files. Check paths and permissions.",
+        { suppressRecoveryHint: true }
+      );
+      process.exitCode = 1;
+      return;
     }
 
     // Write manifest
-    await fs.writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+    await backupFileOperation(() =>
+      fs.writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(manifest, null, 2))
+    );
 
     // Final verification: ensure the DB file is present in the backup directory
     const finalDbPath = path.join(backupDir, contents.neotoma_db || "");
@@ -11302,7 +11822,7 @@ backupCommand
       return;
     }
 
-    const finalStat = await fs.stat(finalDbPath);
+    const finalStat = await backupFileOperation(() => fs.stat(finalDbPath));
     const walBytes =
       contents.wal !== undefined
         ? ((await fs.stat(path.join(backupDir, contents.wal)).catch(() => null))?.size ?? null)
@@ -11329,11 +11849,11 @@ backupCommand
     for (const [key, val] of Object.entries(contents)) {
       if (typeof val !== "string" || !val.endsWith("/")) continue;
       const sub = path.join(backupDir, val);
-      const { bytes, files } = await directorySizeAndFileCount(sub);
+      const { bytes, files } = await backupFileOperation(() => directorySizeAndFileCount(sub));
       componentSizes[key] = { path: sub, bytes, files, kind: "directory" };
     }
 
-    const totalWalk = await directorySizeAndFileCount(backupDir);
+    const totalWalk = await backupFileOperation(() => directorySizeAndFileCount(backupDir));
     const manifestPath = path.join(backupDir, "manifest.json");
     let manifestBytes = 0;
     try {
@@ -11377,9 +11897,10 @@ backupCommand
         result.archive_path = archive_path;
         result.archive_bytes = archive_bytes;
         (result.sizes as Record<string, unknown>).archive_bytes = archive_bytes;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        writeCliError(msg);
+      } catch {
+        writeCliError("Could not create a tar.gz archive for this backup.", {
+          suppressRecoveryHint: true,
+        });
         process.exitCode = 1;
         return;
       }
@@ -11477,11 +11998,277 @@ backupCommand
     }
   });
 
+type RestoreMember = {
+  target: string;
+  replacement?: string;
+  recovery: string;
+  oldMoved: boolean;
+  newPlaced: boolean;
+};
+
+async function existingRestorePath(filePath: string): Promise<Stats | null> {
+  try {
+    return await fs.lstat(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/** Resolve existing ancestors too, so a parent symlink cannot disguise overlapping roots. */
+async function canonicalRestorePath(filePath: string): Promise<string> {
+  let ancestor = path.resolve(filePath);
+  const missing: string[] = [];
+  while (!(await existingRestorePath(ancestor))) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor)
+      throw new Error("Backup restore refused: target path cannot be resolved.");
+    missing.unshift(path.basename(ancestor));
+    ancestor = parent;
+  }
+  return path.join(await fs.realpath(ancestor), ...missing);
+}
+
+/** A best-effort active-handle check supplements the required stopped-client precondition. */
+async function refuseActiveRestoreTarget(databasePath: string): Promise<void> {
+  const files = [databasePath, `${databasePath}-wal`, `${databasePath}-shm`];
+  const existing: string[] = [];
+  for (const file of files) if (await existingRestorePath(file)) existing.push(file);
+  if (existing.length === 0) return;
+  try {
+    const pids = execFileSync("lsof", ["-t", "--", ...existing], { encoding: "utf8" });
+    if (pids.trim())
+      throw new Error(
+        "Backup restore refused: target database is in use; stop Neotoma and every SQLite client first."
+      );
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Backup restore refused:")) throw error;
+    const commandError = error as NodeJS.ErrnoException & { status?: number };
+    if (commandError.code !== "ENOENT" && commandError.status !== 1) {
+      throw new Error("Backup restore refused: target database use could not be checked.");
+    }
+    // lsof is unavailable on some platforms. The documented offline precondition still applies.
+  }
+}
+
+/** Stage the complete input, then move only the target members this backup owns. */
+export async function restoreBackupIntoTarget(
+  backupDir: string,
+  targetDir: string,
+  inspection: BackupInspection,
+  publicationFileOps: Pick<typeof fs, "rename"> = fs
+): Promise<void> {
+  const requestedTarget = await existingRestorePath(path.resolve(targetDir));
+  if (requestedTarget?.isSymbolicLink()) {
+    throw new Error("Backup restore refused: target is a symlink.");
+  }
+  const absoluteTarget = await canonicalRestorePath(targetDir);
+  const absoluteBackup = await fs.realpath(backupDir);
+  if (
+    absoluteBackup === absoluteTarget ||
+    absoluteBackup.startsWith(`${absoluteTarget}${path.sep}`) ||
+    absoluteTarget.startsWith(`${absoluteBackup}${path.sep}`)
+  ) {
+    throw new Error("Backup restore refused: backup and target directories must be separate.");
+  }
+
+  const targetParent = path.dirname(absoluteTarget);
+  await fs.mkdir(targetParent, { recursive: true });
+  const workDir = await fs.mkdtemp(
+    path.join(targetParent, `.${path.basename(absoluteTarget)}-restore-`)
+  );
+  let keepRecovery = false;
+  let targetCreated = false;
+  try {
+    const stageDir = path.join(workDir, "stage");
+    const recoveryDir = path.join(workDir, "previous-target");
+    await fs.mkdir(stageDir);
+    await fs.mkdir(recoveryDir);
+    const stagedDb = path.join(stageDir, "input.db");
+    const stagedSnapshot = path.join(stageDir, "snapshot.db");
+    await fs.copyFile(inspection.paths.neotoma_db, stagedDb);
+    await verifyStagedBackupMemberChecksum(inspection, "neotoma_db", stagedDb);
+    if (inspection.contents.wal) {
+      await fs.copyFile(inspection.paths.wal, `${stagedDb}-wal`);
+      await verifyStagedBackupMemberChecksum(inspection, "wal", `${stagedDb}-wal`);
+      let db: AsyncSqliteDatabase | null = null;
+      try {
+        db = new AsyncSqliteDatabase(stagedDb, { existing: true, readOnly: false });
+        await db.exec(`VACUUM INTO ${quoteSqliteStringLiteral(stagedSnapshot)}`);
+      } finally {
+        await db?.close();
+      }
+    } else {
+      await fs.rename(stagedDb, stagedSnapshot);
+    }
+    const stagedIntegrity = await verifyBackupDatabaseIntegrity(stagedSnapshot);
+    if (stagedIntegrity.kind !== "verified") {
+      throw backupIntegrityError(stagedSnapshot, stagedIntegrity);
+    }
+
+    const stagedDirectories: Array<{ key: string; path: string }> = [];
+    for (const [key, value] of Object.entries(inspection.contents)) {
+      if (!value.endsWith("/")) continue;
+      const staged = path.join(stageDir, `directory-${stagedDirectories.length}`);
+      await fs.cp(inspection.paths[key], staged, { recursive: true });
+      if (await backupDirectoryContainsSymlink(staged)) {
+        throw new Error("Backup restore refused: copied directory contains a symlink.");
+      }
+      stagedDirectories.push({ key, path: staged });
+    }
+
+    const targetStat = await existingRestorePath(absoluteTarget);
+    if (targetStat && (targetStat.isSymbolicLink() || !targetStat.isDirectory())) {
+      throw new Error(
+        "Backup operation failed while accessing files. Check paths and permissions."
+      );
+    }
+    if (!targetStat) {
+      await fs.mkdir(absoluteTarget);
+      targetCreated = true;
+    }
+    const destination = await resolveManifestContents(absoluteTarget, inspection.contents);
+    if (destination.issues.length > 0) {
+      throw new Error(`Backup restore refused: ${destination.issues.join("; ")}.`);
+    }
+    const targetDb = destination.paths.neotoma_db;
+    const targetSidecars = [`${targetDb}-wal`, `${targetDb}-shm`];
+    const targets = [
+      targetDb,
+      ...targetSidecars,
+      ...stagedDirectories.map(({ key }) => destination.paths[key]),
+    ];
+    if (new Set(targets).size !== targets.length) {
+      throw new Error("Backup restore refused: manifest target members overlap.");
+    }
+    for (const [index, member] of targets.entries()) {
+      for (const other of targets.slice(index + 1)) {
+        if (other.startsWith(`${member}${path.sep}`) || member.startsWith(`${other}${path.sep}`)) {
+          throw new Error("Backup restore refused: manifest target members overlap.");
+        }
+      }
+    }
+    for (const file of [targetDb, ...targetSidecars]) {
+      const stat = await existingRestorePath(file);
+      if (stat && !stat.isFile()) {
+        throw new Error(
+          "Backup restore failed while copying files. Target database member is not a file."
+        );
+      }
+      if (file === targetDb && stat) {
+        await fs.chmod(stagedSnapshot, stat.mode & 0o777);
+      }
+    }
+    for (const { key, path: staged } of stagedDirectories) {
+      const destinationDir = destination.paths[key];
+      const stat = await existingRestorePath(destinationDir);
+      if (stat && !stat.isDirectory()) {
+        throw new Error("Backup restore refused: target directory member is not a directory.");
+      }
+      if (stat && (await backupDirectoryContainsSymlink(destinationDir))) {
+        throw new Error("Backup restore refused: target directory contains a symlink.");
+      }
+      if (stat) {
+        const merged = `${staged}-merged`;
+        await fs.cp(destinationDir, merged, { recursive: true });
+        await fs.cp(staged, merged, { recursive: true });
+        stagedDirectories.find((entry) => entry.key === key)!.path = merged;
+      }
+    }
+    await refuseActiveRestoreTarget(targetDb);
+
+    const members: RestoreMember[] = [
+      {
+        target: targetDb,
+        replacement: stagedSnapshot,
+        recovery: path.join(recoveryDir, "db"),
+        oldMoved: false,
+        newPlaced: false,
+      },
+      ...targetSidecars.map((target, index) => ({
+        target,
+        recovery: path.join(recoveryDir, `sidecar-${index}`),
+        oldMoved: false,
+        newPlaced: false,
+      })),
+      ...stagedDirectories.map(({ key, path: replacement }, index) => ({
+        target: destination.paths[key],
+        replacement,
+        recovery: path.join(recoveryDir, `directory-${index}`),
+        oldMoved: false,
+        newPlaced: false,
+      })),
+    ];
+    let publicationStarted = false;
+    try {
+      for (const member of members) {
+        await fs.mkdir(path.dirname(member.target), { recursive: true });
+        if (await existingRestorePath(member.target)) {
+          publicationStarted = true;
+          await publicationFileOps.rename(member.target, member.recovery);
+          member.oldMoved = true;
+        }
+        if (member.replacement) {
+          publicationStarted = true;
+          await publicationFileOps.rename(member.replacement, member.target);
+          member.newPlaced = true;
+        }
+      }
+    } catch {
+      const rollbackErrors: string[] = [];
+      if (publicationStarted) {
+        for (const member of [...members].reverse()) {
+          try {
+            if (member.newPlaced) await fs.rm(member.target, { recursive: true, force: true });
+            if (member.oldMoved) await publicationFileOps.rename(member.recovery, member.target);
+          } catch {
+            rollbackErrors.push(member.target);
+          }
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        keepRecovery = true;
+        throw new Error(
+          `Backup restore failed during publication; rollback also failed. Previous target members remain recoverable at ${recoveryDir}. Inspect ${rollbackErrors.join(", ")} before restarting Neotoma.`
+        );
+      }
+      throw new Error(
+        "Backup restore failed during publication; previous target members were restored."
+      );
+    }
+  } catch (error) {
+    if (targetCreated) await fs.rmdir(absoluteTarget).catch(() => {});
+    if (
+      error instanceof CliHintError ||
+      (error instanceof Error && /^Backup (restore|operation)/.test(error.message))
+    )
+      throw error;
+    throw new Error("Backup restore failed while copying files. Check paths and permissions.");
+  } finally {
+    if (!keepRecovery) await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 backupCommand
   .command("restore")
-  .description("Restore a backup into the data directory")
+  .description(
+    "Restore a backup into the data directory. Stop Neotoma and every SQLite client " +
+      "that can access the target first; best-effort lsof detection does not make online restore safe."
+  )
   .requiredOption("--from <dir>", "Backup directory to restore from")
   .option("--target <dir>", "Target data directory (default: NEOTOMA_DATA_DIR or ./data)")
+  .addHelpText(
+    "after",
+    "\nRecovery after failure:\n" +
+      "  On a caught publication failure, restore attempts to put the previous\n" +
+      "  target back. If rollback also fails, leave every SQLite client stopped,\n" +
+      "  keep the backup, and inspect the target and the reported previous-target\n" +
+      "  recovery directory before restarting. That directory retains prior\n" +
+      "  members still needing manual recovery; the error names its path.\n" +
+      "  Restore is not crash-wide atomic. After any interrupted restore, inspect\n" +
+      "  the target and any sibling .<target-name>-restore-* work directory before\n" +
+      "  restarting clients.\n"
+  )
   .action(async (opts: { from: string; target?: string }) => {
     const outputMode = resolveOutputMode();
     let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
@@ -11500,42 +12287,37 @@ backupCommand
       process.env.NEOTOMA_DATA_DIR ||
       (projectRoot ? path.join(projectRoot, "data") : "data");
 
-    // Read manifest
-    const manifestPath = path.join(opts.from, "manifest.json");
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
-    } catch {
-      writeCliError("No manifest.json found in backup directory: " + opts.from);
+    const inspection = await inspectBackupDirectory(opts.from);
+    if (inspection.manifestError) {
+      writeCliError(inspection.manifestError, { suppressRecoveryHint: true });
+      process.exitCode = 1;
       return;
     }
-
-    const contents = (manifest.contents || {}) as Record<string, string>;
-    await fs.mkdir(targetDir, { recursive: true });
-
-    // Restore DB
-    if (contents.neotoma_db) {
-      await fs.copyFile(
-        path.join(opts.from, contents.neotoma_db),
-        path.join(targetDir, contents.neotoma_db)
-      );
+    if (inspection.integrity && inspection.integrity.kind !== "verified") {
+      writeCliError(backupIntegrityError(inspection.paths.neotoma_db, inspection.integrity));
+      process.exitCode = 1;
+      return;
     }
-    if (contents.wal) {
-      await fs.copyFile(path.join(opts.from, contents.wal), path.join(targetDir, contents.wal));
+    if (inspection.issues.length > 0) {
+      writeCliError(`Backup restore refused: ${inspection.issues.join("; ")}.`, {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
     }
-
-    // Restore directories
-    for (const [, val] of Object.entries(contents)) {
-      if (typeof val === "string" && val.endsWith("/")) {
-        const srcDir = path.join(opts.from, val);
-        const destDir = path.join(targetDir, val);
-        try {
-          await fs.access(srcDir);
-          await fs.cp(srcDir, destDir, { recursive: true });
-        } catch {
-          // skip missing dirs
-        }
+    const manifest = inspection.manifest!;
+    const contents = inspection.contents;
+    try {
+      await restoreBackupIntoTarget(opts.from, targetDir, inspection);
+    } catch (error) {
+      if (error instanceof CliHintError) {
+        writeCliError(error);
+      } else {
+        const message = error instanceof Error ? error.message : "Backup restore failed.";
+        writeCliError(message, { suppressRecoveryHint: true });
       }
+      process.exitCode = 1;
+      return;
     }
 
     const result = {
@@ -11570,61 +12352,20 @@ backupCommand
   .argument("<dir>", "Backup directory to verify")
   .action(async (dir: string) => {
     const outputMode = resolveOutputMode();
-    const issues: string[] = [];
-
-    // Check manifest exists
-    const manifestPath = path.join(dir, "manifest.json");
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
-    } catch {
-      writeCliError("No manifest.json found in backup directory: " + dir);
+    const inspection = await inspectBackupDirectory(dir);
+    if (inspection.manifestError) {
+      writeCliError(inspection.manifestError, { suppressRecoveryHint: true });
       process.exitCode = 1;
       return;
     }
-
-    const contents = (manifest.contents || {}) as Record<string, string>;
-    const checksums = (manifest.checksums || {}) as Record<string, string>;
-
-    // Verify DB file exists and has reasonable size
-    if (!contents.neotoma_db) {
-      issues.push("manifest does not reference a database file");
-    } else {
-      const dbPath = path.join(dir, contents.neotoma_db);
-      try {
-        const stat = await fs.stat(dbPath);
-        if (stat.size < 1024) {
-          issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
-        }
-
-        // Verify checksum if available
-        if (checksums[contents.neotoma_db]) {
-          const dbBuf = await fs.readFile(dbPath);
-          const computed = "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-          if (computed !== checksums[contents.neotoma_db]) {
-            issues.push(
-              `checksum mismatch: expected ${checksums[contents.neotoma_db]}, got ${computed}`
-            );
-          }
-        }
-      } catch {
-        issues.push("database file missing from backup directory: " + contents.neotoma_db);
-      }
+    if (inspection.integrity && inspection.integrity.kind !== "verified") {
+      writeCliError(backupIntegrityError(inspection.paths.neotoma_db, inspection.integrity));
+      process.exitCode = 1;
+      return;
     }
-
-    // Verify referenced directories exist
-    for (const [key, val] of Object.entries(contents)) {
-      if (typeof val === "string" && val.endsWith("/")) {
-        try {
-          await fs.access(path.join(dir, val));
-        } catch {
-          issues.push(`referenced directory missing: ${key} (${val})`);
-        }
-      }
-    }
-
+    const { manifest, contents, issues } = inspection;
     const valid = issues.length === 0;
-    const walk = await directorySizeAndFileCount(dir);
+    const walk = await backupFileOperation(() => directorySizeAndFileCount(dir));
     const backup_size = {
       bytes: walk.bytes,
       files: walk.files,
@@ -11633,7 +12374,7 @@ backupCommand
     const result = {
       status: valid ? "valid" : "invalid",
       backup_dir: dir,
-      created_at: manifest.created_at,
+      created_at: manifest?.created_at,
       contents,
       backup_size,
       issues: issues.length > 0 ? issues : undefined,
@@ -13368,6 +14109,14 @@ entitiesCommand
   .option("--relationship-types <types>", "Comma-separated relationship types to filter")
   .option("--max-hops <n>", "Maximum relationship hops (1 = direct, 2 = 2-hop, etc.)", "1")
   .option("--include-entities", "Include full entity snapshots in response", true)
+  .option(
+    "--at <iso>",
+    "As-of cutoff on observed_at (ISO 8601), a write-time cutoff: the state as recorded by T, not event time. Same meaning as the entity snapshot's at"
+  )
+  .option(
+    "--at-ingested <iso>",
+    "As-of cutoff on created_at (ISO 8601), a write-time cutoff. Adds to --at by also excluding backfills: observations written after T even when their observed time is earlier. Same meaning as the entity snapshot's at_ingested"
+  )
   .option("--user-id <userId>", "User ID")
   .action(async (entityId: string, opts) => {
     const outputMode = resolveOutputMode();
@@ -13380,6 +14129,8 @@ entitiesCommand
     const relationshipTypes = opts.relationshipTypes
       ? opts.relationshipTypes.split(",")
       : undefined;
+    const asOfFlags = resolveAsOfFlags(opts);
+    const asOfRequested = Object.keys(asOfFlags).length > 0;
     const { data, error } = await api.POST("/retrieve_related_entities", {
       body: {
         entity_id: entityId,
@@ -13387,9 +14138,12 @@ entitiesCommand
         relationship_types: relationshipTypes,
         max_hops: Number(opts.maxHops),
         include_entities: opts.includeEntities,
+        ...asOfFlags,
       },
     });
-    if (error) throw new Error("Failed to get related entities");
+    if (error) {
+      throw asOfRequested ? asOfApiError(error) : new Error("Failed to get related entities");
+    }
     writeOutput(data, outputMode);
   });
 
@@ -13785,7 +14539,12 @@ relationshipsCommand
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
         } as any,
       });
-      if (error) throw new Error("Failed to create relationships");
+      if (error) {
+        const detail = refusalDetail(error);
+        throw new Error(
+          detail ? `Failed to create relationships: ${detail}` : "Failed to create relationships"
+        );
+      }
       writeOutput(data, outputMode);
       return;
     }
@@ -13803,7 +14562,12 @@ relationshipsCommand
         ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
-    if (error) throw new Error("Failed to create relationship");
+    if (error) {
+      const detail = refusalDetail(error);
+      throw new Error(
+        detail ? `Failed to create relationship: ${detail}` : "Failed to create relationship"
+      );
+    }
     const rel = data as any;
     writeOutput(
       {
@@ -13825,6 +14589,14 @@ relationshipsCommand
   .option("--target-entity-id <id>", "Filter by target entity ID")
   .option("--relationship-type <type>", "Filter by relationship type")
   .option("--direction <direction>", "Direction: inbound, outbound, both")
+  .option(
+    "--at <iso>",
+    "As-of cutoff on observed_at (ISO 8601), a write-time cutoff: the state as recorded by T, not event time. Same meaning as the entity snapshot's at Requires --source-entity-id, --target-entity-id or --relationship-type (the as-of read is served by the filtered list read; a plain list needs none)."
+  )
+  .option(
+    "--at-ingested <iso>",
+    "As-of cutoff on created_at (ISO 8601), a write-time cutoff. Adds to --at by also excluding backfills: observations written after T even when their observed time is earlier. Same meaning as the entity snapshot's at_ingested Requires --source-entity-id, --target-entity-id or --relationship-type (the as-of read is served by the filtered list read; a plain list needs none)."
+  )
   .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
@@ -13837,6 +14609,32 @@ relationshipsCommand
       token,
     });
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
+    const asOfFlags = resolveAsOfFlags(opts);
+    if (Object.keys(asOfFlags).length > 0) {
+      // Record-wide as-of read: served by POST /list_relationships, which
+      // replays relationship observations under the cutoff. It needs at least
+      // one of source, target or relationship type, like the MCP tool.
+      if (!opts.sourceEntityId && !opts.targetEntityId && !opts.relationshipType) {
+        throw new Error(
+          "--at / --at-ingested require at least one of --source-entity-id, --target-entity-id or --relationship-type"
+        );
+      }
+      const { data: asOfData, error: asOfError } = await api.POST("/list_relationships", {
+        body: {
+          ...(opts.sourceEntityId ? { source_entity_id: opts.sourceEntityId } : {}),
+          ...(opts.targetEntityId ? { target_entity_id: opts.targetEntityId } : {}),
+          ...(opts.relationshipType ? { relationship_type: opts.relationshipType } : {}),
+          ...(opts.direction ? { direction: opts.direction } : {}),
+          limit: Number(opts.limit),
+          offset: Number(opts.offset),
+          ...asOfFlags,
+          ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
+        } as any,
+      });
+      if (asOfError) throw asOfApiError(asOfError);
+      writeOutput(asOfData, outputMode);
+      return;
+    }
     const { data, error } = await api.GET("/relationships", {
       params: {
         query: {
@@ -14101,6 +14899,7 @@ timelineCommand
 schemasCommand
   .command("list")
   .description("List schemas")
+  .option("--summary", "Return compact registry declarations and census coverage")
   .option("--entity-type <type>", "Filter by entity type")
   .option("--user-specific", "Show user-specific schemas")
   .option("--user-id <userId>", "Filter by user ID")
@@ -14118,6 +14917,7 @@ schemasCommand
       params: {
         query: {
           entity_type: opts.entityType,
+          summary: opts.summary,
           user_id: resolveEffectiveUserId(opts.userId),
           user_specific: opts.userSpecific,
           limit: Number(opts.limit),
@@ -14366,6 +15166,10 @@ schemasCommand
     "--canonical-name-fields <json>",
     'JSON array replacing the identity rule, e.g. \'[{"composite":["linkedin_url"]},"email","name"]\' (triggers major version bump; existing reducer_config preserved; governs new writes only)'
   )
+  .option(
+    "--planning <json>",
+    "JSON planning declaration: finite level and optional read_only; preserves other schema data"
+  )
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
@@ -14398,6 +15202,7 @@ schemasCommand
         fields?: string;
         removeFields?: string;
         canonicalNameFields?: string;
+        planning?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
@@ -14416,10 +15221,15 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields) {
+      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields && !opts.planning) {
         throw new Error(
-          "at least one of --fields, --remove-fields, or --canonical-name-fields is required"
+          "at least one of --fields, --remove-fields, --canonical-name-fields, or --planning is required"
         );
+      }
+      let planning: import("../shared/schema_planning.js").PlanningDeclaration | undefined;
+      if (opts.planning !== undefined) {
+        const { PlanningDeclarationSchema } = await import("../shared/schema_planning.js");
+        planning = PlanningDeclarationSchema.parse(JSON.parse(opts.planning));
       }
       let canonicalNameFields: unknown[] | undefined;
       if (opts.canonicalNameFields) {
@@ -14494,7 +15304,7 @@ schemasCommand
         const { data, error } = await api.POST("/register_schema", {
           body: {
             entity_type: entityType,
-            schema_definition: { fields: bootstrapFields },
+            schema_definition: { fields: bootstrapFields, ...(planning ? { planning } : {}) },
             reducer_config: { merge_policies: bootstrapPolicies },
             schema_version: opts.schemaVersion,
             activate: true,
@@ -14535,6 +15345,7 @@ schemasCommand
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
       if (canonicalNameFields) body.canonical_name_fields = canonicalNameFields;
+      if (planning) body.planning = planning;
       const { data, error } = await api.POST("/update_schema_incremental", {
         body: body as any,
       });
@@ -15992,7 +16803,10 @@ correctionsCommand
   .option("--entity-id <id>", "Entity ID to correct")
   .option("--entity-type <type>", "Entity type (optional, looked up if not provided)")
   .option("--field-name <field>", "Field name to correct (required)")
-  .option("--corrected-value <value>", "Corrected value (required)")
+  .option(
+    "--corrected-value <value>",
+    "Corrected value (required). A JSON array replaces a merge_array field in full ('[]' clears it); send the complete list"
+  )
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
   .option("--expected-version <version>", "Entity version read from the current snapshot")
@@ -16446,15 +17260,14 @@ program
           // call it via raw fetch. It returns a structured JSON body whose
           // `status` discriminates `applied` / `conflict` / `validation_error`.
           const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-          const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-          };
-          if (token) headers["Authorization"] = `Bearer ${token}`;
-          const rawResponse = await fetch(
+          // Same credential rule as the read above (`resolveCliRequestAuth`),
+          // so the read and the write authenticate as the same principal.
+          const auth = await resolveCliRequestAuth({ token });
+          const rawResponse = await auth.fetch(
             `${baseUrl}/entities/${encodeURIComponent(entityId)}/batch_correct`,
             {
               method: "POST",
-              headers,
+              headers: { "Content-Type": "application/json", ...auth.headers },
               body: JSON.stringify({
                 changes,
                 expected_last_observation_at: current.last_observation_at,
@@ -17000,6 +17813,9 @@ program
       ...(opts.aauth
         ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
         : {}),
+      // --guest-access-token replaces the configured credential for this
+      // request, so it goes out as the only credential, unsigned.
+      ...(opts.guestAccessToken ? { signWithCliAAuth: false } : {}),
     });
 
     const params = parseOptionalJson(opts.params);
@@ -17040,11 +17856,12 @@ program
           url.searchParams.set(key, String(value));
         }
       }
-      const response = await fetch(url, {
-        headers: {
-          Accept: "text/event-stream",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+      const auth = await resolveCliRequestAuth({
+        token,
+        ...(opts.guestAccessToken ? { signWithCliAAuth: false } : {}),
+      });
+      const response = await auth.fetch(url, {
+        headers: { Accept: "text/event-stream", ...auth.headers },
       });
       if (!response.ok) {
         const contentType = response.headers.get("content-type") ?? "";
@@ -19269,12 +20086,10 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           }
           try {
             debugLog("Resolving CLI token for /me…");
-            const token = await getCliToken();
-            const meHeaders: Record<string, string> = {};
-            if (token) meHeaders.Authorization = `Bearer ${token}`;
+            const auth = await resolveCliRequestAuth({ token: await getCliToken() });
             debugLog(`Fetching http://127.0.0.1:${actualPort}/me`);
-            const meRes = await fetch(`http://127.0.0.1:${actualPort}/me`, {
-              headers: meHeaders,
+            const meRes = await auth.fetch(`http://127.0.0.1:${actualPort}/me`, {
+              headers: auth.headers,
             });
             if (meRes.ok) {
               const me = (await meRes.json()) as { user_id?: string };
@@ -19633,9 +20448,9 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         const actualPort = preferredPort;
         await fetchIntroStats(String(actualPort));
         try {
-          const token = await getCliToken();
-          const meRes = await fetch(`http://127.0.0.1:${actualPort}/me`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          const auth = await resolveCliRequestAuth({ token: await getCliToken() });
+          const meRes = await auth.fetch(`http://127.0.0.1:${actualPort}/me`, {
+            headers: auth.headers,
           });
           if (meRes.ok) {
             const me = (await meRes.json()) as { user_id?: string };

@@ -42,6 +42,9 @@ import {
 } from "../docs/bundled_nav.js";
 import { getBundledDocsIndex } from "../docs/index.js";
 import { isProductionEnvironment } from "../../shared/environment.js";
+import { wantsHtml } from "../../shared/http_content_negotiation.js";
+import { runtimeEnv } from "../../config_embedded.js";
+export { wantsHtml } from "../../shared/http_content_negotiation.js";
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -132,7 +135,7 @@ function forwardedForValues(req: express.Request): string[] {
  * upward dependency on that file. In production, loopback from a reverse proxy
  * is not local unless explicitly trusted.
  */
-function isLoopbackRequest(req: express.Request, env: NodeJS.ProcessEnv = process.env): boolean {
+function isLoopbackRequest(req: express.Request, env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
   if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
   const forwardedFor = forwardedForValues(req);
   // Forwarded hops can only disqualify a caller: an all-loopback chain falls
@@ -142,7 +145,7 @@ function isLoopbackRequest(req: express.Request, env: NodeJS.ProcessEnv = proces
   return !isProductionEnvironment(env);
 }
 
-function readEnvMode(env: NodeJS.ProcessEnv = process.env): LandingMode | null {
+function readEnvMode(env: NodeJS.ProcessEnv = runtimeEnv()): LandingMode | null {
   const raw = (env.NEOTOMA_ROOT_LANDING_MODE || "").trim().toLowerCase();
   if (!raw) return null;
   return VALID_MODES.has(raw as LandingMode) ? (raw as LandingMode) : null;
@@ -152,7 +155,7 @@ function readEnvMode(env: NodeJS.ProcessEnv = process.env): LandingMode | null {
  * Same resolution as `src/config.ts` (`NEOTOMA_ENV` or `development`), trimmed for display.
  * Orthogonal to landing {@link LandingMode}: e.g. loopback `local` with `production` config.
  */
-export function readNeotomaConfigEnvironment(env: NodeJS.ProcessEnv = process.env): string {
+export function readNeotomaConfigEnvironment(env: NodeJS.ProcessEnv = runtimeEnv()): string {
   const raw = (env.NEOTOMA_ENV || "development").trim();
   return raw.length ? raw : "development";
 }
@@ -167,7 +170,7 @@ export function readNeotomaConfigEnvironment(env: NodeJS.ProcessEnv = process.en
  */
 export function resolveLandingMode(
   req: express.Request,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnv()
 ): LandingMode {
   const explicit = readEnvMode(env);
   if (explicit) return explicit;
@@ -205,7 +208,7 @@ export function readPackageVersion(): string {
   return "0.0.0";
 }
 
-export function readGitSha(env: NodeJS.ProcessEnv = process.env): string | null {
+export function readGitSha(env: NodeJS.ProcessEnv = runtimeEnv()): string | null {
   const candidates = [env.NEOTOMA_GIT_SHA, env.GIT_SHA, env.SOURCE_COMMIT, env.FLY_MACHINE_VERSION];
   for (const value of candidates) {
     if (value && value.trim().length) return value.trim();
@@ -213,7 +216,7 @@ export function readGitSha(env: NodeJS.ProcessEnv = process.env): string | null 
   return null;
 }
 
-function defaultPublicDocsUrl(env: NodeJS.ProcessEnv = process.env): string {
+function defaultPublicDocsUrl(env: NodeJS.ProcessEnv = runtimeEnv()): string {
   return (env.NEOTOMA_PUBLIC_DOCS_URL || "https://neotoma.io").trim().replace(/\/+$/, "");
 }
 
@@ -239,7 +242,7 @@ export function parseCookieBearer(req: express.Request): string | null {
 
 export function buildLandingContext(
   req: express.Request,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = runtimeEnv()
 ): RootLandingContext {
   const mode = resolveLandingMode(req, env);
   const configEnvironment = readNeotomaConfigEnvironment(env);
@@ -385,20 +388,6 @@ export function buildRobotsTxt(mode: LandingMode, publicDocsUrl: string): string
     lines.push(`Sitemap: ${publicDocsUrl.replace(/\/+$/, "")}/sitemap.xml`);
   }
   return lines.join("\n") + "\n";
-}
-
-/**
- * True when the `Accept` header indicates the caller wants HTML. Defaults to
- * false (JSON) so tools like `curl` without an explicit `Accept` get the
- * structured payload.
- */
-export function wantsHtml(acceptHeader: string | undefined): boolean {
-  if (!acceptHeader) return false;
-  const value = acceptHeader.toLowerCase();
-  // `text/html` anywhere takes priority; `*/*` without html stays JSON.
-  if (value.includes("text/html")) return true;
-  if (value.includes("application/xhtml+xml")) return true;
-  return false;
 }
 
 /**

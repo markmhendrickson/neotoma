@@ -1,3 +1,5 @@
+import { runtimeEnv } from "../../config_embedded.js";
+import { isLoopbackHost, resolveBindHostFromEnv } from "../../shared/bind_host.js";
 /**
  * Shared SSRF guard: detect private / loopback / link-local hostnames so remote
  * fetches (peer sync inbound, repo-discovery manifest fetch, guest-token
@@ -11,19 +13,62 @@
  * (`NEOTOMA_HOSTED_MODE`).
  */
 
-/** True when `NEOTOMA_HOSTED_MODE` opts the process into multi-tenant SSRF hardening. */
+/**
+ * True when the private-host guard applies to caller-supplied outbound URLs.
+ *
+ * The rule:
+ *
+ * 1. The HTTP listener's bind host (`NEOTOMA_HTTP_HOST`, resolved by the same
+ *    `resolveBindHostFromEnv` the listener uses) sets the floor. Any bind host
+ *    other than loopback (`0.0.0.0`, a LAN address, `::`) means the server is
+ *    reachable from other machines, so the guard is on whatever
+ *    `NEOTOMA_HOSTED_MODE` says. No flag value turns it off on such a bind.
+ * 2. On a loopback-only bind (the default `127.0.0.1`, `localhost`, `::1`) the
+ *    guard is off by default, matching single-user self-host behaviour.
+ *    `NEOTOMA_HOSTED_MODE` set to `1` / `true` / `yes` forces it on there; any
+ *    other unrecognised non-empty value also turns it on, so a mistyped value
+ *    never leaves the server unguarded. `0` / `false` / `no` / `off` change
+ *    nothing: the loopback default is already off.
+ *
+ * The flag can therefore only make the guard stricter than the bind-derived
+ * default. A multi-tenant server bound to loopback behind a tunnel or reverse
+ * proxy is not covered by rule 1 and must set the flag.
+ */
+export function isOutboundHostGuardEnabled(env: NodeJS.ProcessEnv = runtimeEnv()): boolean {
+  if (!isLoopbackHost(resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env))) return true;
+  const raw = (env.NEOTOMA_HOSTED_MODE ?? "").trim();
+  if (raw.length === 0) return false;
+  return !/^(0|false|no|off)$/i.test(raw);
+}
+
+/**
+ * True when the outbound host guard is in force. Kept under its original name
+ * so existing importers keep working; see {@link isOutboundHostGuardEnabled}
+ * for the rule (on for any non-loopback bind host; on a loopback bind, only
+ * when `NEOTOMA_HOSTED_MODE` forces it on).
+ */
 export function isHostedMode(): boolean {
-  return /^(1|true|yes)$/i.test(process.env.NEOTOMA_HOSTED_MODE ?? "");
+  return isOutboundHostGuardEnabled();
 }
 
 /**
  * True when `hostname` is private, loopback, or link-local (RFC 1918,
  * `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `::1` / `fc00::/7` / `fe80::/10`, the
- * `localhost` family, and `0.0.0.0`). Used to reject `sender_peer_url` /
- * `peer.url` hosts under hosted mode before any outbound fetch.
+ * `localhost` family, `0.0.0.0`, and the unspecified IPv6 address `::`). Used to
+ * reject `sender_peer_url` / `peer.url` hosts under hosted mode before any
+ * outbound fetch.
+ *
+ * A fully qualified name may end in a dot (`localhost.` names the same host as
+ * `localhost`), so trailing dots and IPv6 brackets are removed before any check.
  */
 export function isPrivateOrLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.+$/, "");
+  // The unspecified address (`::`, `0::`, `0:0:0:0:0:0:0:0`) connects to the
+  // local host, like `0.0.0.0`.
+  if (/^[0:]+$/.test(normalized) && normalized.includes(":")) return true;
   if (normalized === "localhost" || normalized.endsWith(".localhost")) return true;
   // Platform-internal service discovery suffixes (Fly.io `*.internal`,
   // Kubernetes `*.cluster.local`). These resolve only inside the deployment
@@ -90,11 +135,12 @@ export function isPrivateOrLoopbackHostname(hostname: string): boolean {
  * the parse-plus-check here keeps every sink on one implementation rather than
  * each re-deriving the hostname.
  *
- * SECURITY: the check is enforced under hosted/multi-tenant mode
- * ({@link isHostedMode}), where a caller is not the host operator and must not
- * be able to aim the server at its own infrastructure. Self-hosted single-user
- * installs legitimately point webhooks and peers at loopback, so the guard is
- * not applied there.
+ * SECURITY: the check is enforced whenever {@link isOutboundHostGuardEnabled}
+ * is true: hosted mode set explicitly, or a listener bound beyond loopback,
+ * where a caller is not necessarily the host operator and must not be able to
+ * aim the server at its own infrastructure. A loopback-only single-user
+ * install legitimately points webhooks and peers at loopback, so the guard is
+ * not applied there unless the flag turns it on.
  */
 export function isPublicFetchUrlAllowed(urlStr: string): boolean {
   let parsed: URL;
@@ -129,7 +175,7 @@ const MAX_GUARDED_REDIRECTS = 5;
  * reachable, and a redirect to a disallowed target is refused rather than
  * followed.
  *
- * Under self-hosted (non-hosted) mode this behaves exactly like a plain
+ * When the guard is off (loopback-only bind, flag unset) this behaves exactly like a plain
  * `fetch` with automatic redirects: `isPublicFetchUrlAllowed` always returns
  * true there, so every hop passes and is fetched, matching prior behavior
  * for the single-user case this guard was never meant to restrict.

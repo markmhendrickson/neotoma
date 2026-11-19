@@ -14,6 +14,7 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { runtimeEnv } from "../../config_embedded.js";
 
 export interface RedactionResult {
   title: string;
@@ -170,6 +171,6 @@ export function scanAndRedact(input: {
 export type RedactionMode = "strip" | "reject";
 
 export function redactionModeFromEnv(): RedactionMode {
-  const raw = (process.env.REDACTION_MODE ?? "strip").toLowerCase();
+  const raw = (runtimeEnv().REDACTION_MODE ?? "strip").toLowerCase();
   return raw === "reject" ? "reject" : "strip";
 }

@@ -11,11 +11,17 @@
  */
 import { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  RENDERED_PAGE_COPY_SCRIPT,
+  RENDERED_PAGE_COPY_SCRIPT_HASH,
+  RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY,
+} from "../../src/services/rendered_page/copy_controls.js";
 
 describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () => {
   let server: ReturnType<import("express").Application["listen"]>;
   let baseUrl: string;
   let entityId: string | null = null;
+  let copyEntityId: string | null = null;
 
   beforeAll(async () => {
     const { app } = await import("../../src/actions.js");
@@ -43,6 +49,28 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
       const body = (await res.json()) as { entities?: Array<{ entity_id: string }> };
       entityId = body.entities?.[0]?.entity_id ?? null;
     }
+    const copyRes = await fetch(`${baseUrl}/store`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        idempotency_key: "csp-copy-test-seed-v2",
+        entities: [
+          {
+            entity_type: "rendered_page",
+            canonical_name: "rendered_page:csp-copy-test",
+            title: "Copy CSP Test",
+            html_body:
+              '<pre title="x > y" data-copyable><code>Full prompt\nLast instruction.</code></pre><script>document.title="PWNED"</script><button onclick="alert(1)">untrusted</button><script src="/untrusted.js"></script><a href="javascript:alert(1)">untrusted</a>' +
+              `<script src="https://untrusted.invalid/script.js" integrity="sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}"></script>` +
+              `<script src="/untrusted-integrity.js" integrity="sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}"></script>`,
+          },
+        ],
+      }),
+    });
+    if (copyRes.ok) {
+      const body = (await copyRes.json()) as { entities?: Array<{ entity_id: string }> };
+      copyEntityId = body.entities?.[0]?.entity_id ?? null;
+    }
   });
 
   afterAll(() => {
@@ -68,5 +96,31 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
     // The page still renders its content (the script is served inert, not stripped).
     const html = await res.text();
     expect(html).toContain("<h1>content</h1>");
+  });
+
+  it("allows only the pinned copy helper on opted-in pages, without origin authority", async () => {
+    expect(copyEntityId, "copy fixture seed /store call failed").toBeTruthy();
+    const res = await fetch(`${baseUrl}/entities/${copyEntityId}/html`);
+    expect(res.status).toBe(200);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const policies = csp.split(", ");
+    expect(policies).toHaveLength(2);
+    expect(policies[1]).toBe(RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY);
+    expect(res.headers.get("content-security-policy-report-only")).toBeNull();
+    expect(csp).toContain(`script-src 'sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}'`);
+    expect(csp).toContain("script-src-attr 'none'");
+    expect(csp).toContain("sandbox allow-scripts");
+    expect(csp).not.toContain("allow-same-origin");
+    expect(policies[0]).not.toMatch(
+      /script-src[^;]*(?:unsafe-inline|self|https:|unsafe-eval|unsafe-hashes)/
+    );
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("form-action 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    const html = await res.text();
+    expect(html).toContain(RENDERED_PAGE_COPY_SCRIPT);
+    expect(html).toContain('document.title="PWNED"');
+    expect(html).toContain(`integrity="sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}"`);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });

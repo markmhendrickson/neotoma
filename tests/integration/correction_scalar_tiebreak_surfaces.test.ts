@@ -1,10 +1,8 @@
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -12,6 +10,7 @@ import { NeotomaServer } from "../../src/server.js";
 import { resolveOwnedObservations } from "../../src/services/attachment_resolution.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 
 vi.mock("../../src/embeddings.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/embeddings.js")>();
@@ -23,7 +22,7 @@ vi.mock("../../src/embeddings.js", async (importOriginal) => {
 
 const USER_ID = LOCAL_DEV_USER_ID;
 const TYPE = "test_scalar_tiebreak_2394";
-const execFileAsync = promisify(execFile);
+const execFileAsync = execFileLocal;
 const CLI_PATH = resolve("dist/cli/index.js");
 let apiBase: string;
 
@@ -405,27 +404,31 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
     expect(refreshed.provenance.notes).toBe(desiredObservation.id);
   });
 
-  it("store still respects a legitimately higher-priority scalar source over a later normal correction", async () => {
+  // This case used to assert the opposite: that a store at source_priority 1500
+  // beat a later correction. That ordering was an undecided by-product of the
+  // priority comparator (it entered as a regression guard in #2396), not a
+  // ruling. The rule is now that a correction wins on every merge strategy
+  // until a later correction replaces it (#2033), whatever priority the other
+  // write carries.
+  it("a correction wins over a store at a higher source_priority, whichever came first", async () => {
     const label = `store-priority-${randomUUID()}`;
     const entityId = await createEntity(server, label);
 
-    const stored = parse(
-      await server.store({
-        user_id: USER_ID,
-        idempotency_key: `store-priority-${randomUUID()}`,
-        commit: true,
-        source_priority: 1500,
-        entities: [
-          {
-            entity_type: TYPE,
-            label,
-            notes: "trusted store value",
-          },
-        ],
-      })
-    );
-    expect(stored.entities?.[0]?.entity_id).toBe(entityId);
+    const storeAt = async (priority: number, notes: string) => {
+      const stored = parse(
+        await server.store({
+          user_id: USER_ID,
+          idempotency_key: `store-priority-${priority}-${randomUUID()}`,
+          commit: true,
+          source_priority: priority,
+          entities: [{ entity_type: TYPE, label, notes }],
+        })
+      );
+      expect(stored.entities?.[0]?.entity_id).toBe(entityId);
+    };
 
+    // Higher-priority store first, correction after.
+    await storeAt(1500, "high-priority store value");
     await server.correct({
       user_id: USER_ID,
       entity_id: entityId,
@@ -434,9 +437,11 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
       value: "later normal correction",
       idempotency_key: `normal-correction-${randomUUID()}`,
     });
+    expect((await snapshot(server, entityId)).snapshot.notes).toBe("later normal correction");
 
-    const snap = await snapshot(server, entityId);
-    expect(snap.snapshot.notes).toBe("trusted store value");
+    // Correction first, an even higher-priority store after: still the correction.
+    await storeAt(5000, "assertive store value");
+    expect((await snapshot(server, entityId)).snapshot.notes).toBe("later normal correction");
   });
 
   it("CLI corrections create materializes the second same-priority scalar correction", async () => {

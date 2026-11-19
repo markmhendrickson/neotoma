@@ -1,7 +1,16 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
 import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
+import { CORRECTION_RULE_TEXT } from "./services/correction_identity.js";
 
 export type ToolInputSchema = Record<string, unknown>;
+
+/**
+ * The `resolve_sync_conflict` description. The YAML mirror in
+ * docs/developer/mcp/tool_descriptions.yaml must carry the same text; a unit test
+ * (tests/unit/correct_description_parity.test.ts) fails if the two drift.
+ */
+export const RESOLVE_SYNC_CONFLICT_DESCRIPTION =
+  "Resolve a replication conflict. prefer_remote (needs sender_peer_url) applies the remote snapshot's differing declared fields as one atomic correction transaction, so they hold until corrected again, and returns fields_applied, fields_withheld (array fields that already hold a local correction, undeclared fields; capped, names never repeated in the message) and fields_withheld_count; ok:true with a non-empty fields_withheld means a partial apply. A remote entity_type that is protected, or a governance type not named in both the matching configured peer's entity_types and accept_governance_entity_types, is refused with ok false and nothing written. manual flags sync_conflict. prefer_remote and manual need the correct capability. prefer_local and last_write_wins keep local state; source_priority only explains that a corrected field is never displaced by priority.";
 
 export interface ToolDefinition {
   name: string;
@@ -74,7 +83,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_snapshot",
       description: desc(
         "retrieve_entity_snapshot",
-        "Retrieve the current snapshot of an entity with provenance information. Supports point-in-time / as-of reconstruction ('what did we know at time T') via 'at' (event-time cutoff: filters on observed_at) and 'at_ingested' (ingestion-time cutoff: filters on created_at, prevents look-ahead from backfilled observations). When both are supplied, both bounds are applied."
+        "Retrieve the current snapshot of an entity with provenance information. Optional historical cutoffs: 'at' filters observations on observed_at, which public store and correct stamp with the server clock at write time, so it answers 'what had been asserted by T', not 'what was true in the world at T'; 'at_ingested' filters on created_at (row-insertion time), which prevents look-ahead from backfilled observations. When both are supplied, both bounds are applied. Domain date fields such as measured_at are ordinary fields, not a time axis; native valid-time queries are not supported. list_relationships and retrieve_related_entities accept the same cutoffs."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
     },
@@ -87,7 +96,7 @@ export function buildToolDefinitions(
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve the provenance chain for a specific field in an entity snapshot. source is null when the winning observation has no source document (for example a correction). For a merged array field, source_observation and source describe the most recent contributing observation, not every contributor."
+        "Retrieve complete provenance for one visible snapshot field: observation_ids, observations (every contributor, requested field only, actual write metadata) and sources (safe metadata, no file paths). Singular source_observation/source/observed_at are the most recent contributor, not a merged-field winner. source is null for a source-less correction. Unavailable references fail with PROVENANCE_INTEGRITY_ERROR; no partial chain."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },
@@ -108,7 +117,7 @@ export function buildToolDefinitions(
       name: "list_relationships",
       description: desc(
         "list_relationships",
-        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Soft-deleted relationships are excluded by default, so a deleted edge will not be re-offered for deletion; pass include_deleted: true to include them for audit. Paginated via limit/offset."
+        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Soft-deleted relationships are excluded by default, so a deleted edge will not be re-offered for deletion; pass include_deleted: true to include them for audit. Paginated via limit/offset. Pass at (cutoff on observed_at) and/or at_ingested (cutoff on created_at) to list the relationships as the state recorded by T, not event (valid) time. Both bounds apply when both are given; at_ingested also excludes backfills, observations written after T even if their observed time is earlier. As of T an edge is listed only if the edge and both of its endpoint entities exist as of T. Liveness is decided from the observations visible at T, so soft-deleted edges are excluded unless include_deleted is true. It replays observations in memory, so it costs more than a current read. The response carries an as_of echo."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
     },
@@ -154,6 +163,12 @@ export function buildToolDefinitions(
       inputSchema: {
         type: "object",
         properties: {
+          read_mode: {
+            type: "string",
+            enum: ["exact_identity"],
+            description:
+              "Bounded same-view read with one entity_type and one snapshot_filters string equality. Supply no other options.",
+          },
           entity_type: {
             type: "string",
             description:
@@ -369,7 +384,7 @@ export function buildToolDefinitions(
       name: "retrieve_related_entities",
       description: desc(
         "retrieve_related_entities",
-        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal."
+        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal. Pass at and/or at_ingested to answer as the state recorded by T, not event (valid) time; same meaning as on retrieve_entity_snapshot, and at_ingested also excludes backfills. An edge is returned only if the edge and both endpoint entities exist as of T, entity snapshots are replayed as of T, and edges soft-deleted as of T are excluded (the current read does not filter soft-deleted edges). It replays observations in memory, so it costs more than a current read; max_hops is not capped, so keep it small."
       ),
       inputSchema: {
         type: "object",
@@ -399,6 +414,16 @@ export function buildToolDefinitions(
             type: "boolean",
             description: "Whether to include full entity snapshots in response",
             default: true,
+          },
+          at: {
+            type: "string",
+            description:
+              "Write-time cutoff on observed_at (ISO 8601), not event (valid) time: the state as recorded by T. Same meaning as 'at' on retrieve_entity_snapshot; edges, endpoint existence and entity snapshots are answered as recorded by T, so anything written after T is excluded.",
+          },
+          at_ingested: {
+            type: "string",
+            description:
+              "Write-time cutoff on created_at (ISO 8601): what the record held by T. Same meaning as 'at_ingested' on retrieve_entity_snapshot; also excludes backfills (observations written after T even if their observed time is earlier). When both are supplied, both bounds apply.",
           },
         },
         required: ["entity_id"],
@@ -464,7 +489,7 @@ export function buildToolDefinitions(
       name: "store",
       description: desc(
         "store",
-        "Save, create, or record entities and files into Neotoma. Use this tool to store any structured data — tasks, notes, contacts, transactions, events, plans, issues, receipts, decisions, or any other entity type. Also handles file uploads (base64 or path). Alias names: store, save, create entity, add record, ingest, persist. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments."
+        "Save, create, or record entities and files into Neotoma. Use this tool to store any structured data — tasks, notes, contacts, transactions, events, plans, issues, receipts, decisions, or any other entity type. Also handles file uploads (base64 or path). Alias names: store, save, create entity, add record, ingest, persist. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. Every entity must carry entity_type as a non-empty string (the type shortcut is not accepted); a missing or malformed entity_type is refused with ERR_INVALID_ENTITY_TYPE before anything is written. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments. The response's related_entities array is compact by default ({id, entity_type, canonical_name} per entity linked to what you stored); pass include_related_snapshots: true only if you need each related entity's full row and snapshot, otherwise retrieve it by id."
       ),
       inputSchema: {
         ...storeBaseSchema,
@@ -538,8 +563,7 @@ export function buildToolDefinitions(
     },
     {
       name: "correct",
-      description:
-        "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
+      description: `Create a priority-1000 correction observation to override lower-priority extracted fields. ${CORRECTION_RULE_TEXT} Read back the entity snapshot and field provenance before claiming the correction took effect. On a merge_array field send the complete list you want, not just the change (pass [] to clear it, and expected_version if another writer may change it concurrently).`,
       inputSchema: {
         type: "object",
         properties: {
@@ -816,7 +840,7 @@ export function buildToolDefinitions(
       name: "list_entity_types",
       description: desc(
         "list_entity_types",
-        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
+        "List all available entity types with their schema information and optional planning declarations. registry_coverage certifies a complete registered planning-level census only for an unfiltered, fully acquired principal-scoped registry result; fallback, invalid and incomplete reads are unknown. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
@@ -908,7 +932,7 @@ export function buildToolDefinitions(
       name: "update_schema_incremental",
       description: desc(
         "update_schema_incremental",
-        "Incrementally update a schema by adding or removing fields, or replacing the entity type's identity rule via canonical_name_fields. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
+        "Incrementally update a schema by adding or removing fields, replacing the entity type's identity rule via canonical_name_fields, or replacing schema_definition.planning via a standalone planning declaration. Omitted planning preserves the current declaration; read_only never grants write authority. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
       ),
       inputSchema: {
         type: "object",
@@ -958,6 +982,14 @@ export function buildToolDefinitions(
               ],
             },
           },
+          planning: {
+            type: "object",
+            additionalProperties: false,
+            required: ["level"],
+            description:
+              "Replace the registry planning-stratum declaration; omit to preserve. No edit or execution grant.",
+            properties: { level: { type: "number" }, read_only: { type: "boolean" } },
+          },
           schema_version: {
             type: "string",
             description: "New schema version (auto-increments if not provided)",
@@ -999,35 +1031,7 @@ export function buildToolDefinitions(
         "register_schema",
         "Register a new schema or schema version (global or user-specific). This is also where you configure per-field CONFLICT RESOLUTION via reducer_config: pick a merge strategy per field (last_write [default], highest_priority, most_specific, merge_array) plus tie-breakers (observed_at, source_priority). To make an observation's source_priority actually take effect, set that field's strategy to highest_priority here — under the default last_write, source_priority is recorded but ignored."
       ),
-      inputSchema: {
-        type: "object",
-        properties: {
-          entity_type: { type: "string" },
-          schema_definition: {
-            type: "object",
-            description: "Schema definition with fields object",
-          },
-          reducer_config: {
-            type: "object",
-            description:
-              "Per-field conflict-resolution config. merge_policies maps each field to a strategy: last_write (default — latest observed_at wins), highest_priority (the observation with the largest source_priority wins), most_specific, or merge_array; with an optional tie_breaker (observed_at | source_priority). Set highest_priority to honor source_priority — without it, source_priority is stored but ignored.",
-          },
-          schema_version: { type: "string", default: "1.0" },
-          user_specific: { type: "boolean", default: false },
-          user_id: {
-            type: "string",
-            description: "User ID for user-specific schema (required if user_specific=true)",
-          },
-          activate: { type: "boolean", default: false },
-          force: {
-            type: "boolean",
-            description:
-              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
-            default: false,
-          },
-        },
-        required: ["entity_type", "schema_definition", "reducer_config"],
-      },
+      inputSchema: getOpenApiInputSchemaOrThrow("register_schema"),
     },
     {
       name: "create_interpretation",
@@ -1457,7 +1461,7 @@ export function buildToolDefinitions(
       name: "add_peer",
       description: desc(
         "add_peer",
-        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied."
+        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied. Governance entity types (e.g. issue, subscription) are refused from a peer until accept_governance_entity_types is set with correct on its peer_config; add_peer does not set it."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("add_peer"),
     },
@@ -1489,16 +1493,13 @@ export function buildToolDefinitions(
       name: "sync_peer",
       description: desc(
         "sync_peer",
-        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up."
+        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up. Pulled rows whose entity_type is not admitted are counted in refused; pushed rows the peer refuses by entity type are counted in refused_by_peer, not failed."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("sync_peer"),
     },
     {
       name: "resolve_sync_conflict",
-      description: desc(
-        "resolve_sync_conflict",
-        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url."
-      ),
+      description: desc("resolve_sync_conflict", RESOLVE_SYNC_CONFLICT_DESCRIPTION),
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
     {
@@ -1559,7 +1560,7 @@ export function buildToolDefinitions(
       name: "publish_rendered_page",
       description: desc(
         "publish_rendered_page",
-        "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, OR inline { title, html_body, custom_css } to create one first. Mints a guest_access_token scoped to that page and returns the absolute `…/entities/<id>/html?access_token=<token>` URL plus ttl_seconds — the link works for non-authenticated viewers. html_body is injected verbatim into a server template; do NOT include <html>/<head>/<body> wrappers. Note: each call mints a fresh token (raw tokens are not stored, only hashed), so repeated calls return new working URLs rather than a single stable one."
+        "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, OR inline { title, html_body, custom_css } to create one first. Mints a guest_access_token scoped to that page and returns the absolute `…/entities/<id>/html?access_token=<token>` URL plus ttl_seconds — the link works for non-authenticated viewers. html_body is injected verbatim into a server template; do NOT include <html>/<head>/<body> wrappers. Note: each call mints a fresh token (raw tokens are not stored, only hashed), so repeated calls return new working URLs rather than a single stable one. A link opens only that page and lasts the shorter of its stored lifetime and NEOTOMA_GUEST_TOKEN_TTL_SECONDS (default 30 days); if a link returns 401 GUEST_TOKEN_INVALID, call publish_rendered_page again for a fresh link."
       ),
       inputSchema: {
         type: "object",

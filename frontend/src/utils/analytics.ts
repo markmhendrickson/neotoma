@@ -9,6 +9,17 @@
  * VITE_UMAMI_URL only when VITE_UMAMI_URL_DEV is unset.
  */
 
+import { SITEMAP_PATHS } from "@/site/seo_metadata";
+import {
+  canonicalUmamiBaseUrl,
+  explicitUmamiPayload,
+  safeOutboundDestination,
+  safePublicPath,
+  validUmamiWebsiteId,
+  type SiteEventName,
+} from "./site_analytics_contract";
+export { safeOutboundDestination } from "./site_analytics_contract";
+
 declare global {
   interface Window {
     umami?: {
@@ -17,7 +28,7 @@ declare global {
           | string
           | Record<string, unknown>
           | ((props: Record<string, unknown>) => Record<string, unknown>),
-        data?: Record<string, unknown>,
+        data?: Record<string, unknown>
       ): void;
     };
   }
@@ -50,7 +61,10 @@ function umamiBaseUrlForMode(): string | undefined {
 }
 
 function isUmamiConfigured(): boolean {
-  return Boolean(umamiWebsiteIdForMode() && umamiBaseUrlForMode());
+  return (
+    validUmamiWebsiteId(umamiWebsiteIdForMode()) &&
+    Boolean(canonicalUmamiBaseUrl(umamiBaseUrlForMode()))
+  );
 }
 
 function runWhenUmamiReady(fn: () => void): void {
@@ -75,7 +89,7 @@ export function initUmami(): void {
   if (document.querySelector(`script[${UMAMI_SCRIPT_MARKER}]`)) return;
 
   const websiteId = umamiWebsiteIdForMode()!;
-  const base = umamiBaseUrlForMode()!.replace(/\/$/, "");
+  const base = canonicalUmamiBaseUrl(umamiBaseUrlForMode())!;
 
   const script = document.createElement("script");
   script.defer = true;
@@ -94,6 +108,25 @@ export function initSiteAnalytics(): void {
 
 function isAnyAnalyticsBackendConfigured(): boolean {
   return isUmamiConfigured();
+}
+
+/** Umami's named-event API adds browser URL, title and referrer; the object API sends only these fields. */
+export function safeUmamiPayload(
+  website: string,
+  path: string,
+  name?: SiteEventName,
+  data?: Record<string, string>
+): Record<string, unknown> {
+  return explicitUmamiPayload(website, path, PUBLIC_ANALYTICS_PATHS, name, data);
+}
+
+function trackSafe(name?: SiteEventName, data?: Record<string, string>, path?: string): void {
+  const website = umamiWebsiteIdForMode();
+  if (!website || !isUmamiConfigured()) return;
+  const pagePath = path ?? (typeof window !== "undefined" ? window.location.pathname : "/");
+  const payload = safeUmamiPayload(website, pagePath, name, data);
+  runWhenUmamiReady(() => window.umami!.track(payload));
+  flushUmamiQueue();
 }
 
 function rawHrefFromAnchor(anchor: HTMLAnchorElement): string | null {
@@ -120,24 +153,25 @@ function anchorOutboundResolvedUrl(raw: string, loc: Location): string | null {
   }
 }
 
-function linkLabelFromAnchor(anchor: HTMLAnchorElement): string {
-  const t = anchor.textContent?.replace(/\s+/g, " ").trim() ?? "";
-  return t.length > 200 ? `${t.slice(0, 200)}…` : t;
+/** Bound analytics paths to authored public routes; arbitrary URL segments may contain private data. */
+export function safeAnalyticsPagePath(rawPath: string): string {
+  return safePublicPath(rawPath, PUBLIC_ANALYTICS_PATHS);
 }
 
-/** Send a page_view for SPA navigation. No-op when no backend is active. */
+const PUBLIC_ANALYTICS_PATHS = new Set([
+  ...SITEMAP_PATHS,
+  ...["/", "/install", "/evaluate", "/compare", "/docs", "/meet", "/privacy", "/terms"],
+]);
+
+let lastPageViewPath: string | null = null;
+
+/** Send one pageview per SPA path transition, including StrictMode effect replay. */
 export function sendPageView(path: string): void {
-  if (isUmamiConfigured()) {
-    const title = document.title;
-    runWhenUmamiReady(() => {
-      window.umami!.track((props: Record<string, unknown>) => ({
-        ...props,
-        url: path,
-        title,
-      }));
-    });
-    flushUmamiQueue();
-  }
+  if (!isUmamiConfigured()) return;
+  const publicPath = safeAnalyticsPagePath(path);
+  if (publicPath === lastPageViewPath) return;
+  lastPageViewPath = publicPath;
+  trackSafe(undefined, undefined, publicPath);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,28 +250,18 @@ export type CtaName =
 
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {
-  const page_path = pagePath ?? (typeof window !== "undefined" ? window.location.pathname : "/");
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("cta_click", { cta_name: ctaName, page_path });
-    });
-    flushUmamiQueue();
-  }
+  const page_path = safeAnalyticsPagePath(
+    pagePath ?? (typeof window !== "undefined" ? window.location.pathname : "/")
+  );
+  trackSafe("cta_click", { cta_name: ctaName, page_path }, page_path);
 }
 
-/** Track an outbound link click (GitHub, npm, blog, etc.). */
-export function sendOutboundClick(url: string, linkText?: string): void {
-  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("outbound_click", {
-        link_url: url,
-        link_text: linkText ?? "",
-        page_path,
-      });
-    });
-    flushUmamiQueue();
-  }
+/** Track an outbound handoff, never the full destination or link text. */
+export function sendOutboundClick(url: string): void {
+  const page_path = safeAnalyticsPagePath(
+    typeof window !== "undefined" ? window.location.pathname : "/"
+  );
+  trackSafe("outbound_click", { destination: safeOutboundDestination(url), page_path }, page_path);
 }
 
 let outboundLinkTrackingInstalled = false;
@@ -255,15 +279,15 @@ export function installOutboundLinkTracking(): void {
   const onPointerActivation = (ev: MouseEvent) => {
     if (ev.button !== 0 && ev.button !== 1) return;
     const target = ev.target;
-    if (!(target instanceof Node)) return;
-    const anchor = (target as Node).closest?.("a[href]");
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest("a[href]");
     if (!(anchor instanceof HTMLAnchorElement)) return;
     if (anchor.hasAttribute("data-analytics-no-outbound")) return;
     const raw = rawHrefFromAnchor(anchor);
     if (!raw) return;
     const resolved = anchorOutboundResolvedUrl(raw, window.location);
     if (!resolved) return;
-    sendOutboundClick(resolved, linkLabelFromAnchor(anchor));
+    sendOutboundClick(resolved);
   };
 
   document.addEventListener("click", onPointerActivation, true);
@@ -272,18 +296,15 @@ export function installOutboundLinkTracking(): void {
 
 /** Track documentation navigation clicks (header nav dropdown, docs index). */
 export function sendDocsNavClick(destination: string, source?: string): void {
-  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  const src = source ?? "header_nav";
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("docs_nav_click", {
-        destination,
-        source: src,
-        page_path,
-      });
-    });
-    flushUmamiQueue();
-  }
+  const page_path = safeAnalyticsPagePath(
+    typeof window !== "undefined" ? window.location.pathname : "/"
+  );
+  const src = source === "header_nav" ? source : "other";
+  trackSafe(
+    "docs_nav_click",
+    { destination: safeAnalyticsPagePath(destination), source: src, page_path },
+    page_path
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -338,19 +359,12 @@ export type ProductNavSource = (typeof PRODUCT_NAV_SOURCES)[keyof typeof PRODUCT
 export function sendProductNavClick(
   target: ProductNavTarget,
   source: ProductNavSource,
-  pagePath?: string,
+  pagePath?: string
 ): void {
-  const page_path = pagePath ?? (typeof window !== "undefined" ? window.location.pathname : "/");
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("product_nav_click", {
-        nav_target: target,
-        nav_source: source,
-        page_path,
-      });
-    });
-    flushUmamiQueue();
-  }
+  const page_path = safeAnalyticsPagePath(
+    pagePath ?? (typeof window !== "undefined" ? window.location.pathname : "/")
+  );
+  trackSafe("product_nav_click", { nav_target: target, nav_source: source, page_path }, page_path);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,17 +383,18 @@ export type EvaluatePromptCopySurface = "home" | "evaluate_page" | "integration_
  * Joint conversion: count all `funnel_evaluate_prompt_copy`. Per-path: filter `copy_surface`.
  */
 export function sendFunnelEvaluatePromptCopy(surface: EvaluatePromptCopySurface): void {
-  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("funnel_evaluate_prompt_copy", {
-        funnel: "evaluate_prompt",
-        copy_surface: surface,
-        page_path,
-      });
-    });
-    flushUmamiQueue();
-  }
+  const page_path = safeAnalyticsPagePath(
+    typeof window !== "undefined" ? window.location.pathname : "/"
+  );
+  trackSafe(
+    "funnel_evaluate_prompt_copy",
+    {
+      funnel: "evaluate_prompt",
+      copy_surface: surface,
+      page_path,
+    },
+    page_path
+  );
 }
 
 /** Which install page code block was copied - filter `funnel_install_prompt_copy` in Umami by this. */
@@ -402,17 +417,18 @@ export type InstallPromptCopyBlock =
 
 /** Install page prompt/command copy. Filter by `install_block` in Umami. */
 export function sendFunnelInstallPromptCopy(block: InstallPromptCopyBlock): void {
-  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("funnel_install_prompt_copy", {
-        funnel: "install_prompt",
-        install_block: block,
-        page_path,
-      });
-    });
-    flushUmamiQueue();
-  }
+  const page_path = safeAnalyticsPagePath(
+    typeof window !== "undefined" ? window.location.pathname : "/"
+  );
+  trackSafe(
+    "funnel_install_prompt_copy",
+    {
+      funnel: "install_prompt",
+      install_block: block,
+      page_path,
+    },
+    page_path
+  );
 }
 
 /** Which permissions pre-flight snippet the user copied. */
@@ -423,15 +439,16 @@ export type PreflightHarness = "claude-code" | "cursor" | "codex";
  * we can see which harnesses benefit most from the pre-flight surface.
  */
 export function sendFunnelPreflightCopy(harness: PreflightHarness): void {
-  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isUmamiConfigured()) {
-    runWhenUmamiReady(() => {
-      window.umami!.track("funnel_preflight_copy", {
-        funnel: "install_prompt",
-        preflight_harness: harness,
-        page_path,
-      });
-    });
-    flushUmamiQueue();
-  }
+  const page_path = safeAnalyticsPagePath(
+    typeof window !== "undefined" ? window.location.pathname : "/"
+  );
+  trackSafe(
+    "funnel_preflight_copy",
+    {
+      funnel: "install_prompt",
+      preflight_harness: harness,
+      page_path,
+    },
+    page_path
+  );
 }

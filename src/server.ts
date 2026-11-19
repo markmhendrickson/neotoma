@@ -1,3 +1,4 @@
+import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -13,6 +14,7 @@ import {
 import { db } from "./db.js";
 import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
+import { withPatternBudget, SchemaPatternRefusalError } from "./services/safe_pattern.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
 import { collapsedEntityReadContract } from "./shared/entity_read_contract.js";
@@ -22,6 +24,11 @@ import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import {
+  EXACT_IDENTITY_REQUEST_MESSAGE,
+  exactIdentityRequested,
+  readExactIdentity,
+} from "./shared/action_handlers/exact_identity_read.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
@@ -82,9 +89,24 @@ import {
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
+import {
+  resolveGateAssignedConnectionUserId,
+  STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+  dropGateOnlyConnectionId,
+} from "./services/static_bearer_identity.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { AgentCapabilityError } from "./services/agent_capabilities.js";
+import { InvalidEntityTypeError } from "./services/store_admission.js";
+import {
+  ISSUE_THREAD_ENTITY_TYPES,
+  assertCurrentAgentMay,
+  assertCurrentAgentMayOnEntities,
+  assertCurrentAgentMayLink,
+  assertCurrentAgentMayStoreEntities,
+  assetEntityTypeForMimeType,
+  storeEntityTypeOf,
+} from "./services/mutation_capability.js";
 import {
   DEFAULT_OBSERVATION_SOURCE,
   buildObservationRow,
@@ -121,7 +143,12 @@ import {
   resolveConfiguredSessionOrigin,
   type SessionOriginInfo,
 } from "./services/session_info.js";
-import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
+import {
+  getActiveStandingRulesResult,
+  renderStandingRulesSection,
+  STANDING_RULES_END_MARKER,
+  type StandingRule,
+} from "./services/standing_rules.js";
 import {
   getInstanceSkillsResult,
   renderInstanceSkillsSection,
@@ -137,14 +164,12 @@ import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
+  getRequestContext,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { timeMcpIdentifierLookup } from "./services/mcp_lookup_timing.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
-import {
-  emitEntitySnapshotChange,
-  emitObservationCreated,
-  shallowFieldsChanged,
-} from "./events/substrate_store_emit.js";
+import { emitStoreWriteEvents } from "./events/substrate_store_emit.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import { identifyEntityBySignals } from "./services/entity_signal_resolver.js";
 import {
@@ -159,6 +184,7 @@ import { getOrCreateMemberAttributionId } from "./services/member_attribution.js
 import {
   composeClientInstructions,
   extractFirstFencedCodeBlock,
+  prependClientInstructionsSection,
   readMcpInstructionsMarkdown,
   resolveNeotomaPackageRoot,
 } from "./mcp_instruction_doc.js";
@@ -169,6 +195,13 @@ import {
 } from "./services/issues/issue_operations.js";
 import { syncIssuesFromGitHub } from "./services/issues/sync_issues_from_github.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import {
+  asOfEcho,
+  hasAsOfCutoff,
+  listRelationshipsAsOf,
+  retrieveRelatedEntitiesAsOf,
+} from "./services/record_as_of.js";
+import { runtimeEnv } from "./config_embedded.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -284,7 +317,7 @@ let stdioSignalHandlersInstalled = false;
  */
 export function installStdioSignalHandlers(close: () => Promise<void>): boolean {
   if (stdioSignalHandlersInstalled) return false;
-  if (process.env.NODE_ENV === "test") return false;
+  if (runtimeEnv().NODE_ENV === "test") return false;
   stdioSignalHandlersInstalled = true;
 
   process.on("SIGINT", async () => {
@@ -307,11 +340,27 @@ type StoreStructuredInternalOptions = {
   interpretationSourceId?: string;
   /** Effective data origin per entity index (#2242); see provenance_data_origin.ts. */
   dataOrigins?: Array<DataOrigin | undefined>;
+  /**
+   * When true, `related_entities` in the response carries each related
+   * entity's full row and current snapshot. Default (omitted/false): compact
+   * `{id, entity_type, canonical_name}` entries only.
+   */
+  includeRelatedSnapshots?: boolean;
 };
+
+/**
+ * One entry of the store response's `related_entities` array in its compact
+ * (default) form. The full entity row and snapshot are available on request
+ * (`include_related_snapshots`) or by retrieving the entity by id.
+ */
+export interface CompactRelatedEntity {
+  id: string;
+  entity_type: string;
+  canonical_name: string | null;
+}
 
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
-  private autoEnhancementCleanup?: () => void;
   private authenticatedUserId: string | null = null;
   /**
    * #2240: the signed-in member behind this server's authenticated identity —
@@ -553,7 +602,9 @@ export class NeotomaServer {
     let connectionId =
       this.sessionConnectionId ||
       (authInfo as any)?.connectionId ||
-      (isHTTPTransport ? getCurrentMcpConnectionId() : process.env.NEOTOMA_CONNECTION_ID) ||
+      (isHTTPTransport
+        ? getCurrentMcpConnectionId()
+        : dropGateOnlyConnectionId(runtimeEnv().NEOTOMA_CONNECTION_ID)) ||
       undefined;
 
     // If no connection ID header, try to get it from Bearer token
@@ -612,7 +663,7 @@ export class NeotomaServer {
 
     if (connectionId) {
       // In test environment, allow test connection ID to bypass authentication
-      const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+      const isTestEnv = runtimeEnv().NODE_ENV === "test" || runtimeEnv().VITEST === "true";
       if (connectionId === "test-connection-bypass" && isTestEnv) {
         this.setAuthenticatedIdentity("00000000-0000-0000-0000-000000000000", null);
         this.requestAuth.set(requestId, {
@@ -647,6 +698,29 @@ export class NeotomaServer {
           token: "dev-local",
         });
         logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
+        return "authenticated";
+      }
+
+      // Static bearer under shared-graph mode: act as the shared graph owner.
+      // Fails closed when shared-graph mode is no longer configured.
+      if (connectionId === STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID) {
+        let sharedOwnerId: string | null;
+        try {
+          sharedOwnerId = await resolveGateAssignedConnectionUserId(connectionId);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          logger.error(`[MCP Server] Static bearer shared-graph identity unavailable: ${msg}`);
+          return "unauthenticated";
+        }
+        if (!sharedOwnerId) return "unauthenticated";
+        this.setAuthenticatedIdentity(sharedOwnerId, null);
+        this.requestAuth.set(requestId, {
+          userId: sharedOwnerId,
+          token: STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+        });
+        logger.info(
+          `[MCP Server] Using static bearer as shared graph owner (user: ${this.authenticatedUserId})`
+        );
         return "authenticated";
       }
 
@@ -1099,10 +1173,10 @@ export class NeotomaServer {
     if (!connectionId) return null;
 
     try {
-      if (connectionId === "dev-local") {
-        const devUser = await ensureLocalDevUser();
-        this.setAuthenticatedIdentity(devUser.id, null);
-        return devUser.id;
+      const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+      if (gateAssignedUserId) {
+        this.setAuthenticatedIdentity(gateAssignedUserId, null);
+        return gateAssignedUserId;
       }
       const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
       const { userId, authenticatedUserId } = await getAccessTokenForConnection(connectionId);
@@ -1212,12 +1286,36 @@ export class NeotomaServer {
         "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
         "the `[instance_skills]` warning if this persists."
       : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
-    // Nested rather than variadic: `composeClientInstructions` takes one
-    // section, and each call no-ops on an empty one, so an instance with no
-    // policy and no skill rows gets byte-identical instructions to before.
-    const instructions = composeClientInstructions(
-      composeClientInstructions(baseInstructions, policySection),
-      skillsSection
+    // Standing rules were delivered ONLY via `serverInfo._neotoma`, which
+    // general MCP clients drop — they surface `instructions` to the model and
+    // ignore unknown `serverInfo` keys. Rules that an operator had enabled
+    // therefore reached no session, while the instance policy (which does ride
+    // `instructions`) arrived fine (#2187). Render them into the prose too.
+    //
+    // A failed lookup is stated rather than rendered as silence, for the same
+    // reason it is for skills: an agent told nothing concludes "no rules",
+    // which is the one inference that must never follow from a broken read.
+    const standingRulesSection = standingRulesLookupFailed
+      ? "[STANDING RULES]\nThis instance's standing rules could not be read for this session. " +
+        "Do NOT tell the user this instance has no standing rules, and do not proceed as though " +
+        "none are in force. Treat them as unknown, retry on a later connection, and check the " +
+        "server logs for the `[standing_rules]` error if this persists.\n" +
+        STANDING_RULES_END_MARKER
+      : renderStandingRulesSection(standingRules);
+    // Nested rather than variadic: each helper takes one section and no-ops on
+    // an empty one, so an instance with no policy, no rules and no skill rows
+    // gets byte-identical instructions to before.
+    //
+    // Standing rules go FIRST, not appended with the other sections: the base
+    // block is well over 100KB and clients truncate long `instructions`, so an
+    // appended rule is the first thing cut. Operator-set rules are the
+    // must-follow content in this payload; they lead it.
+    const instructions = prependClientInstructionsSection(
+      composeClientInstructions(
+        composeClientInstructions(baseInstructions, policySection),
+        skillsSection
+      ),
+      standingRulesSection
     );
 
     return {
@@ -1303,7 +1401,7 @@ export class NeotomaServer {
     isHTTPTransport: boolean,
     timeoutMs: number
   ): Promise<{ message: string; latestVersion: string } | null> {
-    if (isHTTPTransport || process.env.NO_UPDATE_NOTIFIER === "1") {
+    if (isHTTPTransport || runtimeEnv().NO_UPDATE_NOTIFIER === "1") {
       return null;
     }
 
@@ -1761,6 +1859,19 @@ export class NeotomaServer {
     const visibility: "public" | "private" =
       usedAdvisoryAlias || parsed.visibility === "private" ? "private" : "public";
 
+    // Agent grants: submitting writes an issue thread (and may open a GitHub
+    // issue). The in-process operations layer below does not carry the
+    // caller's grant, so the check runs here, before anything is written.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES, { guestCapable: true });
+    // Edges from the new issue to entities the caller names.
+    await assertCurrentAgentMayLink(
+      userId,
+      "issue",
+      "REFERS_TO",
+      [...(parsed.entity_ids_to_link ?? []), parsed.conversation_turn_id ?? ""],
+      { guestCapable: true }
+    );
+
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
 
@@ -1926,6 +2037,11 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ entity_type: z.string().optional() });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: the issue provider runs sync_issues (see handleSyncIssues).
+    if ((parsed.entity_type ?? "issue") === "issue") {
+      assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES);
+      assertCurrentAgentMay("correct", ISSUE_THREAD_ENTITY_TYPES);
+    }
     const { syncEntitySubmissions } =
       await import("./services/entity_submission/submission_service.js");
     const { createOperations } = await import("./core/operations.js");
@@ -1964,6 +2080,14 @@ export class NeotomaServer {
         { message: "Provide entity_id or issue_number" }
       );
     const parsed = schema.parse(args ?? {});
+
+    // Agent grants: a thread message is an issue-thread write (and a GitHub
+    // comment); checked before the operations layer, which does not carry it.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES, { guestCapable: true });
+    // Edges from the issue to entities the caller names.
+    await assertCurrentAgentMayLink(userId, "issue", "REFERS_TO", parsed.entity_ids_to_link ?? [], {
+      guestCapable: true,
+    });
 
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
@@ -2049,6 +2173,11 @@ export class NeotomaServer {
     });
     const parsed = schema.parse(args ?? {});
 
+    // Agent grants: a sync stores new issue threads, corrects existing ones
+    // and can push local issues to GitHub.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES);
+    assertCurrentAgentMay("correct", ISSUE_THREAD_ENTITY_TYPES);
+
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
 
@@ -2098,6 +2227,9 @@ export class NeotomaServer {
       sync_peer_id: z.string().min(1).optional(),
     });
     const parsed = schema.parse(args ?? {});
+    // Same check the store admission inside subscribeUser applies, run first so
+    // a refusal keeps the capability_denied envelope instead of being wrapped.
+    assertCurrentAgentMay("store", ["subscription"], { guestCapable: true });
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     try {
       const result = await subscribeUser({
@@ -2128,6 +2260,8 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ subscription_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: unsubscribing corrects the subscription (active=false).
+    assertCurrentAgentMay("correct", ["subscription"], { guestCapable: true });
     const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     try {
       await unsubscribeUser({ userId, subscription_id: parsed.subscription_id });
@@ -2187,8 +2321,8 @@ export class NeotomaServer {
       UnknownBundleError,
     } = await import("./services/bundles/index.js");
 
-    // m3 follow-up: AAuth admin-tier gating of install/disable belongs here,
-    // before the mutating actions below. Intentionally not implemented in m3.
+    // Agent callers are gated in services/bundles/activation.ts
+    // (assertAdminGateHook) before any state change.
 
     try {
       if (parsed.action === "list") {
@@ -2222,6 +2356,8 @@ export class NeotomaServer {
       return this.buildTextResponse({ ok: true, action: parsed.action, ...result });
     } catch (err) {
       if (err instanceof McpError) throw err;
+      // A grant refusal keeps its capability_denied envelope (mapped centrally).
+      if (err instanceof AgentCapabilityError) throw err;
       if (err instanceof BundleStateError || err instanceof UnknownBundleError) {
         return this.buildTextResponse({
           ok: false,
@@ -2255,6 +2391,9 @@ export class NeotomaServer {
       sync_target_user_id: z.string().uuid().optional(),
     });
     const parsed = schema.parse(args ?? {});
+    // Same check the store admission inside addPeerForUser applies, run first
+    // so a refusal keeps the capability_denied envelope.
+    assertCurrentAgentMay("store", ["peer_config"]);
     const { addPeerForUser } = await import("./services/sync/peer_ops.js");
     try {
       const out = await addPeerForUser({ userId, ...parsed });
@@ -2273,6 +2412,8 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ peer_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: removing a peer corrects its peer_config.
+    assertCurrentAgentMay("correct", ["peer_config"]);
     const { removePeerForUser } = await import("./services/sync/peer_ops.js");
     try {
       await removePeerForUser({ userId, peer_id: parsed.peer_id });
@@ -2316,6 +2457,9 @@ export class NeotomaServer {
       limit: z.number().int().positive().max(500).optional(),
     });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: a sync run sends local data to the peer and advances the
+    // peer_config watermark; pulled rows are still checked per type by store.
+    assertCurrentAgentMay("correct", ["peer_config"]);
     const { syncPeerFull } = await import("./services/sync/full_sync.js");
     const result = await syncPeerFull({
       userId,
@@ -2387,8 +2531,9 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             let principalUserId: string | undefined;
-            if (connectionId === "dev-local") {
-              userId = (await ensureLocalDevUser()).id;
+            const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+            if (gateAssignedUserId) {
+              userId = gateAssignedUserId;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId, authenticatedUserId } =
@@ -2473,8 +2618,11 @@ export class NeotomaServer {
       try {
         const { name, arguments: args } = request.params;
 
-        const cliEquivalent = buildCliEquivalentInvocation(name, args);
-        logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+        const exactIdentity = name === "retrieve_entities" && exactIdentityRequested(args);
+        if (!exactIdentity) {
+          const cliEquivalent = buildCliEquivalentInvocation(name, args);
+          logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+        }
 
         // Check if this is an encrypted request wrapper
         if (name === "encrypted_request" && (args as any)?.encryptedPayload) {
@@ -2524,13 +2672,16 @@ export class NeotomaServer {
             attributionDecision,
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+            mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
           },
           () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
         const resultWithNotice = this.withRuntimeUpdateNotice(result, runtimeUpdateNotice);
-        const resultSummary = summarizeToolResultForLog(name, resultWithNotice);
+        const resultSummary = exactIdentity
+          ? "exact identity proof response"
+          : summarizeToolResultForLog(name, resultWithNotice);
         if (resultSummary) {
           logger.info(`[MCP Server] ${name} → ${resultSummary}`);
         }
@@ -2548,6 +2699,14 @@ export class NeotomaServer {
             error.message,
             error.toErrorEnvelope()
           );
+        }
+        if (error instanceof InvalidEntityTypeError) {
+          // Same code and hint as the REST 400 envelope.
+          throw new McpError(ErrorCode.InvalidParams, error.message, {
+            code: error.code,
+            message: error.message,
+            hint: error.hint,
+          });
         }
         if (error instanceof AttributionPolicyError) {
           // Surface policy rejections as structured MCP errors so clients can
@@ -2855,8 +3014,9 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             let principalUserId: string | undefined;
-            if (connectionId === "dev-local") {
-              userId = (await ensureLocalDevUser()).id;
+            const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+            if (gateAssignedUserId) {
+              userId = gateAssignedUserId;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId, authenticatedUserId } =
@@ -3695,12 +3855,13 @@ export class NeotomaServer {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
     }
 
-    // If 'at' (event-time) or 'at_ingested' (ingestion-time) cutoff is provided,
+    // If 'at' (observation-time) or 'at_ingested' (ingestion-time) cutoff is provided,
     // compute a point-in-time snapshot via the shared helper so this path and
     // the offline/HTTP path (actions.ts) stay in sync.
     //
-    // - `at`          filters on `observed_at`  (event time): "what had happened by T"
-    // - `at_ingested` filters on `created_at`   (row time):   "what did we know by T"
+    // - `at`          filters on `observed_at` (assertion time, stamped by the server on
+    //                 public store/correct): "what had been asserted by T"
+    // - `at_ingested` filters on `created_at`  (row-insertion time)
     //
     // When both are supplied, both bounds are applied (AND): an observation must
     // satisfy observed_at ≤ at AND created_at ≤ at_ingested. This is the most
@@ -3809,126 +3970,20 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-
-    // Get the snapshot to extract provenance. Every read below is scoped to
-    // the authenticated user; an entity outside that scope resolves exactly
-    // like one that does not exist.
-    const { data: snapshot, error: snapshotError } = await db
-      .from("entity_snapshots")
-      .select("*")
-      .eq("entity_id", parsed.entity_id)
-      .eq("user_id", userId)
-      .single();
-
-    if (snapshotError || !snapshot) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Entity snapshot not found for ID: ${parsed.entity_id}`
+    try {
+      return this.buildTextResponse(
+        await getFieldProvenance(parsed.entity_id, parsed.field, userId)
       );
-    }
-
-    const provenance = snapshot.provenance as Record<string, string>;
-    const observationId = provenance[parsed.field];
-
-    if (!observationId) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Field '${parsed.field}' not found in entity snapshot`
-      );
-    }
-
-    // A merge_array / merge_array_by_key field records every contributing
-    // observation as a comma-joined id list (observation_reducer.ts); a scalar
-    // field records exactly one. Same split as HTTP /get_field_provenance.
-    const observationIds = observationId
-      .split(",")
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0);
-
-    const { data: observationRows, error: obsError } = await db
-      .from("observations")
-      .select("*")
-      .in("id", observationIds)
-      .eq("user_id", userId);
-
-    if (obsError || !observationRows || observationRows.length === 0) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get observation: ${obsError?.message ?? "Observation not found"}`
-      );
-    }
-
-    // The observation reported as `source_observation` is the most recent
-    // contributor (latest observed_at, then id, so the pick is deterministic).
-    // For a scalar field it is the single winning observation. A merged field
-    // has no single winner, so this is a presentation choice, not a winner.
-    const observations = [...(observationRows as Array<Record<string, any>>)].sort((a, b) => {
-      const byTime = String(b.observed_at ?? "").localeCompare(String(a.observed_at ?? ""));
-      return byTime !== 0 ? byTime : String(a.id).localeCompare(String(b.id));
-    });
-    const observation = observations[0];
-
-    // `source_id` is nullable on `observations`, and NULL is a legal state:
-    // correct() and deletion observations are written without a source
-    // document. Report that as `source: null` instead of failing (#2026). A
-    // non-NULL source_id that does not resolve is an integrity violation and
-    // still errors.
-    let source: {
-      id: string;
-      mime_type: string | null;
-      file_urls: string[];
-      created_at: string | null;
-    } | null = null;
-
-    if (observation.source_id) {
-      const { data: sourceData, error: sourceError } = await db
-        .from("sources")
-        .select("id, mime_type, file_size, original_filename, created_at")
-        .eq("id", observation.source_id)
-        .eq("user_id", userId)
-        .single();
-
-      if (sourceError || !sourceData) {
+    } catch (error) {
+      if (error instanceof FieldProvenanceError) {
         throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to get source: ${sourceError?.message || "Source not found"}`
+          error.statusCode === 404 ? ErrorCode.InvalidParams : ErrorCode.InternalError,
+          error.message,
+          error.toErrorEnvelope()
         );
       }
-
-      source = {
-        id: sourceData.id,
-        mime_type: sourceData.mime_type,
-        file_urls: [], // Sources table doesn't have file_urls directly
-        created_at: sourceData.created_at,
-      };
+      throw error;
     }
-
-    // #2242: the caller-claimed data origin of the reported observation, when
-    // one was supplied. Absent (not null) when the observation carries none.
-    const { readDataOriginFromProvenance } = await import("./services/provenance_data_origin.js");
-    const winningDataOrigin = readDataOriginFromProvenance(observation.provenance);
-
-    // Response shape is unchanged from before #2026: one source_observation
-    // and its source. Aligning this with the HTTP response of the same
-    // operation (observation_ids, every contributing observation, per-
-    // contributor sources) is deliberately left to a follow-up that declares
-    // one schema for both surfaces in openapi.yaml.
-    const provenanceChain = {
-      field: parsed.field,
-      value: (snapshot.snapshot as Record<string, unknown>)[parsed.field],
-      source_observation: {
-        id: observation.id,
-        source_id: observation.source_id ?? null,
-        observed_at: observation.observed_at,
-        specificity_score: observation.specificity_score,
-        source_priority: observation.source_priority,
-        ...(winningDataOrigin ? { data_origin: winningDataOrigin } : {}),
-      },
-      source: source,
-      observed_at: observation.observed_at,
-    };
-
-    return this.buildTextResponse(provenanceChain);
   }
 
   private async createRelationship(
@@ -4113,7 +4168,46 @@ export class NeotomaServer {
     const useDirectionalEntityIdPath =
       !parsed.source_entity_id && !parsed.target_entity_id && Boolean(parsed.entity_id);
 
-    if (!useDirectionalEntityIdPath) {
+    // Record-wide as-of read (#2700): same `at` / `at_ingested` write-clock
+    // cutoffs as retrieve_entity_snapshot. Replays relationship observations
+    // instead of reading the materialized (current) snapshot rows.
+    const asOf = { at: parsed.at, at_ingested: parsed.at_ingested };
+    const asOfActive = hasAsOfCutoff(asOf);
+
+    if (asOfActive) {
+      const rows = await listRelationshipsAsOf(
+        {
+          userId,
+          entityId: parsed.entity_id,
+          sourceEntityId: parsed.source_entity_id,
+          targetEntityId: parsed.target_entity_id,
+          direction: normalizedDirection,
+          relationshipType: parsed.relationship_type,
+          includeDeleted: parsed.include_deleted,
+        },
+        asOf
+      );
+      if (useDirectionalEntityIdPath) {
+        // Tag each row with the side it was matched on, as the live path does
+        // (a self-edge matches both sides under direction "both").
+        for (const r of rows) {
+          if (
+            r.source_entity_id === parsed.entity_id &&
+            (normalizedDirection === "outbound" || normalizedDirection === "both")
+          ) {
+            relationships.push(decorate(r, "outbound"));
+          }
+          if (
+            r.target_entity_id === parsed.entity_id &&
+            (normalizedDirection === "inbound" || normalizedDirection === "both")
+          ) {
+            relationships.push(decorate(r, "inbound"));
+          }
+        }
+      } else {
+        relationships.push(...rows.map((r) => decorate(r)));
+      }
+    } else if (!useDirectionalEntityIdPath) {
       let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
 
       // Exclude soft-deleted edges at the DB via the materialized `is_live`
@@ -4214,6 +4308,7 @@ export class NeotomaServer {
       total: relationships.length,
       limit: parsed.limit,
       offset: parsed.offset,
+      ...(asOfActive ? { as_of: asOfEcho(asOf) } : {}),
     });
   }
 
@@ -4300,6 +4395,13 @@ export class NeotomaServer {
   private async retrieveEntities(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (exactIdentityRequested(args)) {
+      const userId = this.getAuthenticatedUserId();
+      const exact_identity = await readExactIdentity(args, userId);
+      if (!exact_identity)
+        throw new McpError(ErrorCode.InvalidParams, EXACT_IDENTITY_REQUEST_MESSAGE);
+      return this.buildTextResponse({ exact_identity });
+    }
     const parsed = RetrieveEntitiesRequestSchema.parse(args ?? {});
     const rawArgs =
       args && typeof args === "object" && !Array.isArray(args)
@@ -4536,15 +4638,20 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { entities, total, match_mode, hint } = await retrieveEntityByIdentifierWithFallback({
-      identifier: parsed.identifier,
-      entityType: parsed.entity_type,
-      userId,
-      limit: parsed.limit ?? 100,
-      by: parsed.by,
-      includeObservations: parsed.include_observations,
-      observationsLimit: parsed.observations_limit,
-    });
+    const { entities, total, match_mode, hint } = await timeMcpIdentifierLookup(
+      getRequestContext()?.mcpLookupTiming,
+      parsed,
+      () =>
+        retrieveEntityByIdentifierWithFallback({
+          identifier: parsed.identifier,
+          entityType: parsed.entity_type,
+          userId,
+          limit: parsed.limit ?? 100,
+          by: parsed.by,
+          includeObservations: parsed.include_observations,
+          observationsLimit: parsed.observations_limit,
+        })
+    );
 
     const response: Record<string, unknown> = { entities, total, match_mode };
     // Only surface `hint` when the handler populated it (id-shaped identifier
@@ -4576,6 +4683,31 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+
+    // Record-wide as-of read (#2700): edges, endpoint existence and entity
+    // snapshots are all answered as recorded by the cutoff.
+    const asOf = { at: parsed.at, at_ingested: parsed.at_ingested };
+    if (hasAsOfCutoff(asOf)) {
+      const result = await retrieveRelatedEntitiesAsOf(
+        {
+          entityId: parsed.entity_id,
+          userId,
+          relationshipTypes: parsed.relationship_types,
+          direction: parsed.direction,
+          maxHops: parsed.max_hops,
+          includeEntities: parsed.include_entities,
+        },
+        asOf
+      );
+      return this.buildTextResponse({
+        entities: result.entities,
+        relationships: result.relationships,
+        total_entities: result.entities.length,
+        total_relationships: result.relationships.length,
+        hops_traversed: result.hops_traversed,
+        as_of: asOfEcho(asOf),
+      });
+    }
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();
@@ -4939,11 +5071,12 @@ export class NeotomaServer {
     const schemaRegistry = new SchemaRegistryService();
 
     try {
-      const entityTypes = await schemaRegistry.listEntityTypes(
+      const catalog = await schemaRegistry.listEntityTypesResult(
         parsed.keyword,
         this.getAuthenticatedUserId()
       );
 
+      const entityTypes = catalog.entity_types;
       // When no keyword, always return summary to avoid huge payload (all types × full schema).
       // When keyword is provided, respect summary param (default full detail for the few matches).
       const useSummary =
@@ -4955,7 +5088,10 @@ export class NeotomaServer {
               entity_type: et.entity_type,
               schema_version: et.schema_version,
               field_count: et.field_names?.length || 0,
+              ...(et.planning ? { planning: et.planning } : {}),
+              ...(et.planning_error ? { planning_error: et.planning_error } : {}),
             })),
+            registry_coverage: catalog.registry_coverage,
             total: entityTypes.length,
             keyword: parsed.keyword || null,
             search_method: parsed.keyword
@@ -4966,6 +5102,7 @@ export class NeotomaServer {
           }
         : {
             entity_types: entityTypes,
+            registry_coverage: catalog.registry_coverage,
             total: entityTypes.length,
             keyword: parsed.keyword || null,
             search_method: parsed.keyword
@@ -5192,6 +5329,9 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `register_schema` on the entity type, before any write.
+    assertCurrentAgentMay("register_schema", [parsed.entity_type]);
+
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
@@ -5305,6 +5445,7 @@ export class NeotomaServer {
         fields_to_add: parsed.fields_to_add,
         fields_to_remove: parsed.fields_to_remove,
         canonical_name_fields: parsed.canonical_name_fields,
+        planning: parsed.planning,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
         user_id: userId,
@@ -5357,6 +5498,16 @@ export class NeotomaServer {
         ...(scopeWritten === "user" ? { user_id: updatedSchema.user_id ?? null } : {}),
       });
     } catch (error: any) {
+      if (error instanceof SchemaPatternRefusalError) {
+        return this.buildTextResponse({
+          error: {
+            error_code: "SCHEMA_VALIDATION_FAILED",
+            message: error.message,
+            hint: error.remedy,
+            details: { entity_type: parsed.entity_type, refusal: error.refusal },
+          },
+        });
+      }
       // Detect R2 identity-configuration error from the base schema.
       // When the existing schema lacks canonical_name_fields and identity_opt_out,
       // the incremental update's register() call raises the R2 error. Surface a
@@ -5552,6 +5703,9 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `register_schema` on the entity type, before any write.
+    assertCurrentAgentMay("register_schema", [parsed.entity_type]);
+
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const { lintEntityTypeName } = await import("./services/entity_type_guard.js");
     const schemaRegistry = new SchemaRegistryService();
@@ -5585,6 +5739,16 @@ export class NeotomaServer {
         name_lint_warnings: nameLintWarnings,
       });
     } catch (error: any) {
+      if (error instanceof SchemaPatternRefusalError) {
+        return this.buildTextResponse({
+          error: {
+            error_code: "SCHEMA_VALIDATION_FAILED",
+            message: error.message,
+            hint: error.remedy,
+            details: { entity_type: parsed.entity_type, refusal: error.refusal },
+          },
+        });
+      }
       throw new McpError(ErrorCode.InternalError, `Failed to register schema: ${error.message}`);
     }
   }
@@ -5631,6 +5795,10 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = CreateInterpretationRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+    // Same per-type `store` capability scope MCP `store` applies, before any
+    // source lookup or write. No-op without an agent identity.
+    const { assertInterpretationStoreCapability } = await import("./services/interpretation.js");
+    await assertInterpretationStoreCapability(userId, parsed.entities as Record<string, unknown>[]);
     const { data: source, error: sourceError } = await db
       .from("sources")
       .select("id")
@@ -5733,6 +5901,7 @@ export class NeotomaServer {
     const schema = z
       .object({
         expected_entity_absent: z.boolean().optional(),
+        include_related_snapshots: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
@@ -5795,6 +5964,14 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    // Every structured entity names its type before any other step, so the
+    // rule holds on every branch below (normal, overflow intake, commit:false,
+    // conditional) and nothing is written for a refused request.
+    if (parsed.entities?.length) {
+      const { assertStoreEntityTypesNamed } = await import("./services/store_admission.js");
+      assertStoreEntityTypesNamed(parsed.entities);
+    }
+
     // #2242: peel the reserved per-entity `data_origin` key off every entity and
     // resolve each entity's effective origin (entity → request → none) before
     // anything else reads the entities. Mirrors the REST boundary in actions.ts.
@@ -5817,6 +5994,14 @@ export class NeotomaServer {
           overflowed: false,
         });
       }
+      // Agent grants: overflow intake is a store into the sink, judged on the
+      // entity types the request carries (a request with none needs "*").
+      assertCurrentAgentMay(
+        "store",
+        (parsed.entities ?? []).map((entity) =>
+          storeEntityTypeOf(entity as Record<string, unknown>)
+        )
+      );
       const { writeToOverflowSink } = await import("./services/overflow_sink.js");
       const result = writeToOverflowSink(args, parsed.intake.reason);
       return this.buildTextResponse(result);
@@ -5829,6 +6014,19 @@ export class NeotomaServer {
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+
+    // Agent grants on the file leg, before either leg writes, so a combined
+    // entities-and-file call refused on the file writes no entities either.
+    if (hasUnstructured && parsed.commit !== false) {
+      const { resolveMimeTypeFromExtension } = await import("./services/raw_storage.js");
+      const { extname } = await import("node:path");
+      const uploadMime =
+        parsed.mime_type ||
+        (parsed.file_path ? resolveMimeTypeFromExtension(extname(parsed.file_path)) : undefined);
+      assertCurrentAgentMay("store", [assetEntityTypeForMimeType(uploadMime)], {
+        guestCapable: true,
+      });
+    }
 
     if (hasEntities && hasUnstructured && parsed.commit !== false) {
       const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
@@ -5889,6 +6087,7 @@ export class NeotomaServer {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
           expectedEntityAbsent: parsed.expected_entity_absent,
+          includeRelatedSnapshots: parsed.include_related_snapshots === true,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -5956,6 +6155,7 @@ export class NeotomaServer {
           {
             commit: parsed.commit !== false,
             observationSource: parsed.observation_source,
+            includeRelatedSnapshots: parsed.include_related_snapshots === true,
           }
         );
       }
@@ -5986,6 +6186,20 @@ export class NeotomaServer {
           path: parsed.file_path,
           mime_type: resolvedMimeType,
         });
+      }
+      {
+        // Agent grants: the reference is recorded under its asset type.
+        const { resolveMimeTypeFromExtension } = await import("./services/raw_storage.js");
+        const { extname } = await import("node:path");
+        assertCurrentAgentMay(
+          "store",
+          [
+            assetEntityTypeForMimeType(
+              parsed.mime_type || resolveMimeTypeFromExtension(extname(parsed.file_path))
+            ),
+          ],
+          { guestCapable: true }
+        );
       }
       const { storeRawReference } = await import("./services/raw_storage.js");
       const refResult = await storeRawReference({
@@ -6067,6 +6281,10 @@ export class NeotomaServer {
       });
     }
 
+    // Agent grants: the upload is recorded under its asset type; checked before
+    // the source is stored.
+    assertCurrentAgentMay("store", [assetEntityTypeForMimeType(mimeType)], { guestCapable: true });
+
     const storageResult = await storeRawContent({
       userId,
       fileBuffer,
@@ -6141,11 +6359,7 @@ export class NeotomaServer {
 
   // Helper method to get entity IDs from a source_id
   private getAssetEntityType(mimeType: string): string {
-    const normalized = (mimeType || "").toLowerCase();
-    if (normalized.startsWith("image/")) return "image_asset";
-    if (normalized.startsWith("audio/")) return "audio_asset";
-    if (normalized.startsWith("video/")) return "video_asset";
-    return "file_asset";
+    return assetEntityTypeForMimeType(mimeType);
   }
 
   private async ensureUnstructuredAssetEntity(params: {
@@ -6240,7 +6454,7 @@ export class NeotomaServer {
       return [];
     }
 
-    if (process.env.NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
+    if (runtimeEnv().NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
       logger.debug(
         `Found ${observations.length} observation(s) for source ${sourceId}:`,
         observations.map((obs: { id: string; entity_id: string | null }) => ({
@@ -6259,7 +6473,7 @@ export class NeotomaServer {
       )
     );
 
-    if (process.env.NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
+    if (runtimeEnv().NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
       logger.debug(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
     }
     return entityIds;
@@ -6268,8 +6482,10 @@ export class NeotomaServer {
   // Helper method to retrieve related entities and relationships for entity IDs
   private async getRelatedEntitiesAndRelationships(
     entityIds: string[],
-    userId: string
+    userId: string,
+    options: { includeSnapshots?: boolean } = {}
   ): Promise<{ entities: any[]; relationships: any[] }> {
+    const includeSnapshots = options.includeSnapshots === true;
     if (entityIds.length === 0) {
       return { entities: [], relationships: [] };
     }
@@ -6304,16 +6520,28 @@ export class NeotomaServer {
       }
     }
 
-    // Get related entity details with snapshots
+    // Get related entity details. By default these are compact
+    // ({id, entity_type, canonical_name}): a related entity can carry a very
+    // large snapshot (a plan or a long-running record), and echoing it back on
+    // every store made a one-entity write return hundreds of kilobytes. Full
+    // rows plus snapshots are opt-in via `include_related_snapshots`.
     let entities: any[] = [];
     if (relatedEntityIds.size > 0) {
       const { data: entityData, error: entityError } = await db
         .from("entities")
-        .select("*")
+        .select(includeSnapshots ? "*" : "id, entity_type, canonical_name")
         .in("id", Array.from(relatedEntityIds))
         .eq("user_id", userId);
 
-      if (!entityError && entityData) {
+      if (!entityError && entityData && !includeSnapshots) {
+        entities = entityData.map(
+          (entity: { id: string; entity_type: string; canonical_name?: string | null }) => ({
+            id: entity.id,
+            entity_type: entity.entity_type,
+            canonical_name: entity.canonical_name ?? null,
+          })
+        ) satisfies CompactRelatedEntity[];
+      } else if (!entityError && entityData) {
         entities = entityData;
 
         // Include snapshots
@@ -6354,15 +6582,21 @@ export class NeotomaServer {
     relationships?: StoreRelationshipRef[],
     options: StoreStructuredInternalOptions = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Same rule for every internal caller, before any write or key claim.
+    const { assertStoreEntityTypesNamed } = await import("./services/store_admission.js");
+    assertStoreEntityTypesNamed(entities);
+    // One pattern-evaluation budget per store request.
     const run = () =>
-      this.storeStructuredInternalUnguarded(
-        userId,
-        entities,
-        sourcePriority,
-        idempotencyKey,
-        originalFilename,
-        relationships,
-        options
+      withPatternBudget(() =>
+        this.storeStructuredInternalUnguarded(
+          userId,
+          entities,
+          sourcePriority,
+          idempotencyKey,
+          originalFilename,
+          relationships,
+          options
+        )
       );
     if (!idempotencyKey || options.commit === false || options.expectedEntityAbsent === true) {
       return run();
@@ -6404,6 +6638,15 @@ export class NeotomaServer {
       });
       return this.buildTextResponse(result);
     }
+
+    // Before the first write (no `sources` row, no schema auto-create, no
+    // entity of the batch), as the REST preflight does: `store` on every
+    // named type, the protected-type guard, `store` on the stored type of an
+    // entity being extended, and the reserved lifecycle marker as a delete or
+    // restore. The per-entity gate inside the write loop runs again on the
+    // alias- or equivalence-resolved type.
+    assertCurrentAgentMay("store", entities.map(storeEntityTypeOf));
+    await assertCurrentAgentMayStoreEntities(userId, entities);
     const commit = options.commit !== false;
     const strict = options.strict === true;
     const observationSource = options.observationSource;
@@ -6548,8 +6791,7 @@ export class NeotomaServer {
       const issues: Array<{ observation_index: number; entity_type: string; message: string }> = [];
       for (let i = 0; i < entities.length; i++) {
         const entityData = entities[i] ?? {};
-        const entityType =
-          (entityData.entity_type as string) || (entityData.type as string) || "generic";
+        const entityType = storeEntityTypeOf(entityData);
         const fieldsForPlan = { ...entityData };
         delete fieldsForPlan.entity_type;
         delete fieldsForPlan.type;
@@ -6780,7 +7022,8 @@ export class NeotomaServer {
           ) ?? [];
         const relatedData = await this.getRelatedEntitiesAndRelationships(
           existingEntityIds,
-          userId
+          userId,
+          { includeSnapshots: options.includeRelatedSnapshots }
         );
         const { data: fragmentRows } = await db
           .from("raw_fragments")
@@ -6868,6 +7111,16 @@ export class NeotomaServer {
       2
     );
     const fileBuffer = Buffer.from(jsonContent, "utf-8");
+
+    // The interpretation leg below writes through runInterpretation and returns
+    // before the per-entity `store` capability check in the direct-store loop,
+    // so it applies the same scope here, before the raw source or any entity is
+    // written: the declared type and the type each entity resolves to, as
+    // create_interpretation does. No-op without an agent identity.
+    if (interpretation) {
+      const { assertInterpretationStoreCapability } = await import("./services/interpretation.js");
+      await assertInterpretationStoreCapability(userId, entities as Record<string, unknown>[]);
+    }
 
     // Omit filename when not provided: agent-provided structured data has no real file origin.
     const filenameForStorage = originalFilename?.trim() || undefined;
@@ -6971,10 +7224,9 @@ export class NeotomaServer {
 
       // Every observation and relationship is written; record it on the source so
       // a replay of this key knows the write finished (#2144).
-      {
-        const { markStoreWriteComplete } = await import("./services/store_write_state.js");
-        await markStoreWriteComplete(storageResult.sourceId, userId);
-      }
+      const { confirmStoreWriteComplete, storeWriteCompletionResponseFields } =
+        await import("./services/store_write_state.js");
+      const storeWriteCompletion = await confirmStoreWriteComplete(storageResult.sourceId, userId);
 
       return this.buildTextResponse({
         source_id: storageResult.sourceId,
@@ -6993,6 +7245,10 @@ export class NeotomaServer {
           : {}),
         ...(result.hint ? { hint: result.hint } : {}),
         relationships_created: interpretationRelationshipsCreated,
+        ...storeWriteCompletionResponseFields(storeWriteCompletion, {
+          hasInterpretation: true,
+          hasIdempotencyKey: Boolean(idempotencyKey),
+        }),
         ...(interpretationRelationshipsRefused.length > 0
           ? { relationships_refused: interpretationRelationshipsRefused }
           : {}),
@@ -7088,8 +7344,7 @@ export class NeotomaServer {
 
     for (const [entityIndex, entityData] of entities.entries()) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
-      let entityType =
-        (entityData.entity_type as string) || (entityData.type as string) || "generic";
+      let entityType = storeEntityTypeOf(entityData);
 
       // Exclude entity_type, type, target_id, and schema_version from field
       // validation — they are metadata consumed by the store pipeline, not
@@ -7282,7 +7537,8 @@ export class NeotomaServer {
         const cvPolicy = schema.schema_definition.constraint_violation_policy ?? "reject";
         const violations = collectConstraintViolations(
           validFields,
-          schema.schema_definition.fields
+          schema.schema_definition.fields,
+          { entityType, schemaVersion: schema.schema_version }
         );
         if (violations.length > 0) {
           if (cvPolicy === "reject") {
@@ -7563,6 +7819,34 @@ export class NeotomaServer {
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
     for (const createdEntity of createdEntities) {
+      // Substrate events must not depend on the snapshot recompute: a new entity
+      // has to announce itself with `entity.created` even when the snapshot
+      // cannot be computed. `emitted` keeps this to one emission per entity.
+      let storeEventsEmitted = false;
+      let priorSnapshotForEvents: Record<string, unknown> = {};
+      const emitStoreEventsOnce = (
+        snapshotAfter: Record<string, unknown> | null,
+        timestamp: string
+      ) => {
+        if (storeEventsEmitted || !insertedObservationIds.has(createdEntity.observationId)) {
+          return;
+        }
+        storeEventsEmitted = true;
+        emitStoreWriteEvents({
+          user_id: userId,
+          entity_id: createdEntity.entityId,
+          entity_type: createdEntity.entityType,
+          observation_id: createdEntity.observationId,
+          timestamp,
+          is_new_entity: createdEntity.action === "created",
+          prior_snapshot: priorSnapshotForEvents,
+          snapshot_after: snapshotAfter,
+          source_id: storageResult.sourceId,
+          idempotency_key: idempotencyKey,
+          observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
+          source_peer_id: sourcePeerId ?? undefined,
+        });
+      };
       try {
         const { data: priorSnapRow } = await db
           .from("entity_snapshots")
@@ -7572,6 +7856,7 @@ export class NeotomaServer {
           .maybeSingle();
         const priorSnapshot =
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+        priorSnapshotForEvents = priorSnapshot;
         priorSnapshotByEntityId.set(createdEntity.entityId, priorSnapshot);
 
         // #2343: the observations ATTACHED to this entity, through the
@@ -7589,6 +7874,12 @@ export class NeotomaServer {
             `Failed to get observations for entity ${createdEntity.entityId}:`,
             err instanceof Error ? err.message : String(err)
           );
+          // Whether the id was merged away is unknown. A new entity cannot be, so
+          // it still announces itself; for an existing entity the entity event is
+          // omitted rather than risk a phantom event under a tombstone id.
+          if (createdEntity.action === "created") {
+            emitStoreEventsOnce(null, new Date().toISOString());
+          }
           continue;
         }
         if (allObservations === null) {
@@ -7625,7 +7916,9 @@ export class NeotomaServer {
           );
 
           if (!snapshot) {
-            continue; // Skip snapshot and timeline derivation if snapshot computation failed
+            // Skip snapshot and timeline derivation, but still announce the write.
+            emitStoreEventsOnce(null, new Date().toISOString());
+            continue;
           }
 
           // Issue #1839: record the post-reduction snapshot before the embedding
@@ -7709,39 +8002,7 @@ export class NeotomaServer {
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
           const emitTs = snapshot.computed_at || new Date().toISOString();
-          if (insertedObservationIds.has(createdEntity.observationId)) {
-            emitObservationCreated({
-              user_id: userId,
-              entity_id: createdEntity.entityId,
-              entity_type: createdEntity.entityType,
-              observation_id: createdEntity.observationId,
-              timestamp: emitTs,
-              source_id: storageResult.sourceId,
-              idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
-              source_peer_id: sourcePeerId ?? undefined,
-            });
-            const isNewEntity = createdEntity.action === "created";
-            const entityEventType = isNewEntity
-              ? ("entity.created" as const)
-              : ("entity.updated" as const);
-            const fieldsChanged = isNewEntity
-              ? undefined
-              : shallowFieldsChanged(priorSnapshot, newSnapshot);
-            emitEntitySnapshotChange({
-              user_id: userId,
-              entity_id: createdEntity.entityId,
-              entity_type: createdEntity.entityType,
-              event_type: entityEventType,
-              timestamp: emitTs,
-              observation_id: createdEntity.observationId,
-              fields_changed: fieldsChanged,
-              source_id: storageResult.sourceId,
-              idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
-              source_peer_id: sourcePeerId ?? undefined,
-            });
-          }
+          emitStoreEventsOnce(newSnapshot, emitTs);
 
           // Schema-driven auto-linking of reference_fields → typed edges.
           if (timelineSchema?.reference_fields?.length) {
@@ -7780,7 +8041,10 @@ export class NeotomaServer {
           `Failed to compute snapshot for entity ${createdEntity.entityId}:`,
           error instanceof Error ? error.message : "Unknown error"
         );
+        emitStoreEventsOnce(null, new Date().toISOString());
       }
+      // Empty observation set: nothing to snapshot, but the observation was written.
+      emitStoreEventsOnce(null, new Date().toISOString());
     }
 
     // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation).
@@ -7845,7 +8109,8 @@ export class NeotomaServer {
     // Get related entities and relationships for all created entities
     const relatedData = await this.getRelatedEntitiesAndRelationships(
       createdEntities.map((e) => e.entityId),
-      userId
+      userId,
+      { includeSnapshots: options.includeRelatedSnapshots }
     );
 
     // Schema-driven store_warnings: non-blocking warnings declared in the schema
@@ -8209,10 +8474,9 @@ export class NeotomaServer {
 
     // Every observation and relationship is written; record it on the source so
     // a replay of this key knows the write finished (#2144).
-    {
-      const { markStoreWriteComplete } = await import("./services/store_write_state.js");
-      await markStoreWriteComplete(storageResult.sourceId, userId);
-    }
+    const { confirmStoreWriteComplete, storeWriteCompletionResponseFields } =
+      await import("./services/store_write_state.js");
+    const storeWriteCompletion = await confirmStoreWriteComplete(storageResult.sourceId, userId);
 
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
@@ -8252,6 +8516,10 @@ export class NeotomaServer {
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
       relationships_created: relationshipsCreated,
+      ...storeWriteCompletionResponseFields(storeWriteCompletion, {
+        hasInterpretation: false,
+        hasIdempotencyKey: Boolean(idempotencyKey),
+      }),
       ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });
@@ -8442,6 +8710,8 @@ export class NeotomaServer {
           stored_entity_type: corrErr.storedEntityType,
         });
       }
+      // A grant refusal keeps its capability_denied envelope (mapped centrally).
+      if (corrErr instanceof AgentCapabilityError) throw corrErr;
       if (corrErr instanceof EntityOwnerConflictError) {
         // Re-throw as-is (not wrapped in McpError) so the outer MCP
         // dispatcher's EntityOwnerConflictError branch runs
@@ -8542,6 +8812,7 @@ export class NeotomaServer {
     } catch (patchErr) {
       if (patchErr instanceof McpError) throw patchErr;
       if (patchErr instanceof EntityOwnerConflictError) throw patchErr;
+      if (patchErr instanceof AgentCapabilityError) throw patchErr;
       // Instance store-policy denials/unavailability: re-throw as-is (not
       // wrapped in McpError) so the outer executeTool dispatcher's dedicated
       // branches run `error.toErrorEnvelope()` and report the structured
@@ -8593,6 +8864,10 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(
       typeof a.user_id === "string" ? a.user_id : undefined
     );
+
+    // Agent grants: publishing mints a guest_access_token for the page (a new
+    // page is also stored as a rendered_page, checked by the store below).
+    assertCurrentAgentMay("store", ["guest_access_token"]);
 
     const { publishRenderedPage, PublishRenderedPageError } =
       await import("./services/rendered_page/publish.js");
@@ -8658,6 +8933,13 @@ export class NeotomaServer {
     const parsed = MergeEntitiesRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `merge` on both entities' stored types, before any write
+    // (outside the try below so a refusal keeps its capability_denied envelope).
+    await assertCurrentAgentMayOnEntities("merge", userId, [
+      parsed.from_entity_id,
+      parsed.to_entity_id,
+    ]);
+
     const {
       mergeEntities: mergeEntitiesService,
       EntityNotFoundError,
@@ -8704,6 +8986,15 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = SplitEntityRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    // Agent grants: `split` on the source's stored type, the new entity's type
+    // and, when the split targets an existing entity, its stored type.
+    await assertCurrentAgentMayOnEntities(
+      "split",
+      userId,
+      [parsed.source_entity_id, parsed.new_entity.target_entity_id ?? ""],
+      [parsed.new_entity.entity_type]
+    );
 
     const {
       splitEntity: splitEntityService,
@@ -8821,6 +9112,15 @@ export class NeotomaServer {
     const parsed = DeleteEntityRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `delete` on the stored type (and the type the request
+    // names), before the deletion observation is written.
+    await assertCurrentAgentMayOnEntities(
+      "delete",
+      userId,
+      [parsed.entity_id],
+      [parsed.entity_type]
+    );
+
     const result = await softDeleteEntityService(
       parsed.entity_id,
       parsed.entity_type,
@@ -8925,6 +9225,15 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RestoreEntityRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    // Agent grants: `restore` on the stored type (and the type the request
+    // names), before the restoration observation is written.
+    await assertCurrentAgentMayOnEntities(
+      "restore",
+      userId,
+      [parsed.entity_id],
+      [parsed.entity_type]
+    );
 
     const result = await restoreEntityService(
       parsed.entity_id,
@@ -10064,15 +10373,18 @@ export class NeotomaServer {
   }
 
   /**
-   * Start auto-enhancement processor (shared by both transports)
+   * Ensure the auto-enhancement processor is running (shared by both transports).
+   *
+   * The processor is one process-wide timer, not one per server instance: on
+   * the HTTP transport a NeotomaServer is minted per MCP session, and each used
+   * to start its own 30 s interval that nothing ever cleared. Repeat calls are
+   * no-ops, so nothing needs to stop it when a session closes.
    */
   private async startAutoEnhancement(): Promise<void> {
-    // Start auto-enhancement processor (runs every 30 seconds)
     try {
       const { startAutoEnhancementProcessor } =
         await import("./services/auto_enhancement_processor.js");
-      this.autoEnhancementCleanup = startAutoEnhancementProcessor(30000);
-      logger.info("[Neotoma MCP] Auto-enhancement processor started");
+      startAutoEnhancementProcessor(30000);
     } catch (error: any) {
       // Don't fail server startup if processor fails - log and continue
       logger.error(`[Neotoma MCP] Failed to start auto-enhancement processor: ${error.message}`);

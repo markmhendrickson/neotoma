@@ -1,0 +1,14 @@
+{
+  "entity_type": "legacy_counted_quantifier_pattern",
+  "schema_version": "1.0.0",
+  "schema_definition": {
+    "fields": {
+      "code_list": {
+        "type": "string",
+        "constraints": { "pattern": "^(\\d+){000006}$" }
+      }
+    },
+    "canonical_name_fields": ["code_list"]
+  },
+  "reducer_config": {}
+}

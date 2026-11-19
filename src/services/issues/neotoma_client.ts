@@ -14,8 +14,12 @@
  * `GET /entities/{id}` (guest `access_token` query).
  */
 
-import { createApiClient, type NeotomaApiClient } from "../../shared/api_client.js";
-import { hasCliAAuthKeypair } from "../../cli/aauth_signer.js";
+import {
+  cliAAuthDisabledByEnv,
+  createApiClient,
+  type NeotomaApiClient,
+} from "../../shared/api_client.js";
+import { isEmbeddedMode, runtimeEnv } from "../../config_embedded.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError } from "./errors.js";
 import {
@@ -48,12 +52,20 @@ function formatRemoteIssueError(error: unknown): string {
 }
 
 async function createRemoteClient(targetUrl: string): Promise<NeotomaApiClient> {
-  const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";
+  // Embedded mode signs nothing: the CLI key pair lives under the host home directory and
+  // is not part of the explicit embedded configuration, so requests go out as unsigned
+  // guest requests to the target the host named, and the CLI signer module is not loaded.
+  if (isEmbeddedMode()) {
+    return createApiClient({ baseUrl: targetUrl, signWithCliAAuth: false });
+  }
+  const signingDisabled = cliAAuthDisabledByEnv(runtimeEnv()) !== null;
   // Skip AAuth entirely when no keypair is present (e.g. Claude.ai MCP context).
   // Without a keypair, cliSignedFetch silently falls back to plain fetch anyway,
   // making the signed attempt identical to the unsigned retry — wasting a round
   // trip and surfacing a confusing AUTH_REQUIRED error. Detect the absence here
   // and go straight to the unsigned (guest) path. (resolves #944)
+  // embedded-import-ok: standard mode only (guarded by isEmbeddedMode above)
+  const { hasCliAAuthKeypair } = await import("../../cli/aauth_signer.js");
   const signWithCliAAuth = !signingDisabled && (await hasCliAAuthKeypair());
   return createApiClient({
     baseUrl: targetUrl,
@@ -169,7 +181,8 @@ export async function submitIssueToRemote(params: {
     // NEOTOMA_ACCESS_POLICY_ISSUE=closed still rejects, which is intended.
     const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
     if (errObj?.["error_code"] === "AUTH_REQUIRED") {
-      const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";
+      // Embedded mode already sent this request unsigned; there is nothing to retry.
+      const signingDisabled = isEmbeddedMode() || cliAAuthDisabledByEnv(runtimeEnv()) !== null;
       if (!signingDisabled) {
         const unsignedClient = createApiClient({
           baseUrl: targetUrl,

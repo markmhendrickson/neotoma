@@ -1,7 +1,16 @@
 import OpenAI from "openai";
 import { config } from "./config.js";
 
-const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
+/** Bound each embedding request so a slow provider cannot stall callers. */
+export const EMBEDDING_REQUEST_TIMEOUT_MS = 5000;
+
+const openai = config.openaiApiKey
+  ? new OpenAI({
+      apiKey: config.openaiApiKey,
+      timeout: EMBEDDING_REQUEST_TIMEOUT_MS,
+      maxRetries: 0,
+    })
+  : null;
 
 /**
  * Generate an embedding vector from text.

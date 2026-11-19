@@ -31,7 +31,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Trading agent state that survives",
   heroHighlight: "strategy drift, analyst disagreement, and post-trade reconstruction",
   heroDesc:
-    "When multiple specialist agents analyze markets, debate positions, and execute trades autonomously, the decision chain, strategy version, analyst inputs, debate resolution, and risk parameters must be reconstructable after the fact, including the trades the agent chose to pass on. Neotoma versions every trading entity so you can answer what the agent knew, what each analyst recommended, and why the final call was made (or deliberately not made).",
+    "When multiple specialist agents analyze markets, debate positions, and execute trades autonomously, the decision chain, strategy version, analyst inputs, debate resolution, and risk parameters must be reconstructable after the fact, including the trades the agent chose to pass on. Neotoma versions every trading entity so you can answer what the agent had recorded, what each analyst recommended, and why the final call was made (or deliberately not made).",
   heroTags: [
     { tag: "trade_decision", Icon: Scale },
     { tag: "pass_decision", Icon: CircleSlash },
@@ -44,7 +44,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "trading",
   problemTitle: "Trading agents log outcomes but not the reasoning chain that produced them",
   problemDesc:
-    "Autonomous trading systems make high-stakes decisions every minute. Multiple analysts evaluate signals, structured debates synthesize views, and a portfolio manager commits capital. Current systems log the trade but not the full decision context: which analysts disagreed, what the strategy said at the time, or what risk limits were active when the position opened.",
+    "Autonomous trading systems make high-stakes decisions every minute. Multiple analysts evaluate signals, structured debates synthesize views, and a portfolio manager commits capital. Current systems log the trade but not the full decision context: which analysts disagreed, what the strategy had recorded at the time, or which risk limits had been recorded by the time the position opened.",
   problemCards: [
     {
       Icon: Clock,
@@ -58,7 +58,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: AlertTriangle,
-      title: "Risk state is point-in-time only",
+      title: "Risk state is current-only",
       desc: "Position limits, drawdown caps, and kill switches change over time. When a liquidation happens at 3 AM, nobody can reconstruct whether the risk limits were already breached or just changed.",
     },
     {
@@ -77,12 +77,12 @@ const CONFIG: UseCaseConfig = {
         "Why did the agent go long ETH at $3,840 on March 12? The price dropped 8% in the next hour.",
       fail: "The agent's current strategy is bullish on ETH based on positive funding rates and network activity. The position was opened at $3,840.",
       succeed:
-        "On 2026-03-12 at 14:23 UTC, strategy strat·v7 (momentum + on-chain hybrid, last modified Mar 10) was active. Six analysts reported: Technical OVERWEIGHT (RSI divergence, confidence 0.82), Sentiment NEUTRAL (mixed social signals), News OVERWEIGHT (ETF inflow report), Fundamentals OVERWEIGHT (TVL growth +12% WoW), Tokenomics NEUTRAL (unlock schedule neutral), Competitive UNDERWEIGHT (SOL gaining DEX share). Bull case won debate 4-2 with combined confidence 0.71. PM decision: OVERWEIGHT at trade_decision·v3. Risk state at entry: position limit 15% portfolio, drawdown cap 5%, kill switch inactive. The 8% drop triggered the drawdown cap at 15:41 UTC (risk_state·v4).",
+        "On 2026-03-12 at 14:23 UTC, strategy strat·v7 (momentum + on-chain hybrid, last modified Mar 10) was active. Six analysts reported: Technical OVERWEIGHT (RSI divergence, confidence 0.82), Sentiment NEUTRAL (mixed social signals), News OVERWEIGHT (ETF inflow report), Fundamentals OVERWEIGHT (TVL growth +12% WoW), Tokenomics NEUTRAL (unlock schedule neutral), Competitive UNDERWEIGHT (SOL gaining DEX share). Bull case won debate 4-2 with combined confidence 0.71. PM decision: OVERWEIGHT at trade_decision·v3. Risk state recorded at entry: position limit 15% portfolio, drawdown cap 5%, kill switch inactive. The 8% drop triggered the drawdown cap at 15:41 UTC (risk_state·v4).",
       version: "trade_decision·v3",
       Icon: Scale,
       failTitle: "Current strategy cited, historical reasoning missing",
       failDesc:
-        "The assistant used today's strategy and market view to explain a trade made under different conditions. The actual analyst scores, debate outcome, and risk parameters at trade time are unavailable.",
+        "The assistant used today's strategy and market view to explain a trade made under different conditions. The actual analyst scores, debate outcome, and risk parameters as recorded by trade time are unavailable.",
     },
     {
       category: "Pass decision audit",
@@ -90,7 +90,7 @@ const CONFIG: UseCaseConfig = {
         "Why did the agent skip the SOL long at 09:42 UTC on March 27 when my manual watchlist flagged it? It ran 14% in the next four hours.",
       fail: "The agent focuses on high-conviction setups. SOL did not meet its filters on March 27.",
       succeed:
-        "On 2026-03-27 at 09:42 UTC, pass_decision·v12 was recorded against ticker SOL-PERP. Six analysts reported: Technical OVERWEIGHT (breakout confirmed, confidence 0.74), Sentiment OVERWEIGHT (funding flipped long, 0.68), News NEUTRAL (no catalyst), Fundamentals UNDERWEIGHT (TVL outflow 4% WoW), Tokenomics UNDERWEIGHT (upcoming unlock in 7 days, 2.1% of supply), Competitive NEUTRAL. Debate resolved bull 3-3 with combined confidence 0.52, below the 0.60 entry threshold in strategy strat·v7. Risk state at evaluation: drawdown already 3.4%, two correlated SOL-beta positions open (portfolio_snapshot·v19, correlation gate triggered). PM decision: PASS with rationale 'confidence below threshold and correlated exposure too high'. Pass reason preserved at pass_decision·v12 linked to analysis·v74-79, debate·v23, and strategy·v7.",
+        "On 2026-03-27 at 09:42 UTC, pass_decision·v12 was recorded against ticker SOL-PERP. Six analysts reported: Technical OVERWEIGHT (breakout confirmed, confidence 0.74), Sentiment OVERWEIGHT (funding flipped long, 0.68), News NEUTRAL (no catalyst), Fundamentals UNDERWEIGHT (TVL outflow 4% WoW), Tokenomics UNDERWEIGHT (upcoming unlock in 7 days, 2.1% of supply), Competitive NEUTRAL. Debate resolved bull 3-3 with combined confidence 0.52, below the 0.60 entry threshold in strategy strat·v7. Risk state recorded at evaluation: drawdown already 3.4%, two correlated SOL-beta positions open (portfolio_snapshot·v19, correlation gate triggered). PM decision: PASS with rationale 'confidence below threshold and correlated exposure too high'. Pass reason preserved at pass_decision·v12 linked to analysis·v74-79, debate·v23, and strategy·v7.",
       version: "pass_decision·v12",
       Icon: CircleSlash,
       failTitle: "Current filter framing, historical rationale missing",
@@ -113,15 +113,15 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Risk state reconstruction",
       human:
-        "Were my risk limits already breached when the liquidation happened at 3:42 AM on April 1?",
+        "Which risk limits had been recorded by 3:42 AM UTC on April 1, when the liquidation completed, and had they been breached?",
       fail: "Your current risk limits are: 15% position limit, 5% drawdown cap, kill switch inactive. No liquidations in the past 24 hours.",
       succeed:
-        "Timeline for Apr 1 risk events: 02:15 UTC drawdown at 3.8% (risk_state·v11, within 5% cap). 02:47 UTC BTC flash crash begins, portfolio drawdown hits 4.9% (risk_state·v12, cap not yet breached). 03:12 UTC drawdown hits 5.1%, kill switch triggered (risk_state·v13). 03:14 UTC kill switch executed: all open positions flagged for closure. 03:42 UTC liquidation of ETH-PERP completed at $3,211 (execution·v8). The kill switch activated 30 minutes before liquidation. Drawdown cap was 5% (set in strategy·v5 on Apr 2, note: this was the pre-tightening 8% cap from strategy·v4 at the time). At 03:42 UTC the effective cap was 8%, not 5%.",
+        "As recorded by 03:42 UTC on Apr 1: 02:15 UTC drawdown at 3.8% (risk_state·v11). 02:47 UTC BTC flash crash begins, portfolio drawdown hits 4.9% (risk_state·v12). 03:12 UTC drawdown hits 5.1%, kill switch triggered (risk_state·v13). 03:14 UTC kill switch executed: all open positions flagged for closure. 03:42 UTC liquidation of ETH-PERP completed at $3,211 (execution·v8). The kill switch activated 30 minutes before liquidation. The drawdown cap recorded at that cutoff is 8% (strategy·v4), so the 5.1% drawdown was not a limit breach. The tightening to a 5% cap (strategy·v5) was recorded on Apr 2, after the cutoff, so it is not part of this answer.",
       version: "risk_state·v13",
       Icon: Shield,
       failTitle: "Current limits reported, event timeline missing",
       failDesc:
-        "Without temporal state, the assistant reports today's 5% cap and misses that the cap was 8% on April 1. The sequence of drawdown escalation, kill switch activation, and liquidation cannot be reconstructed.",
+        "Without temporal state, the assistant reports today's 5% cap and misses the 8% cap that had been recorded by April 1. The sequence of drawdown escalation, kill switch activation, and liquidation cannot be reconstructed.",
     },
     {
       category: "Analyst attribution",
@@ -153,9 +153,9 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Clock,
       title: "Project trading state through time",
-      desc: "Strategy versions, risk parameters, and portfolio compositions are queryable at any point in time. Ask what the agent's risk limits were at 3 AM and get the exact parameters, not today's configuration.",
+      desc: "Strategy versions, risk parameters, and portfolio compositions are queryable as recorded up to any point in time. Ask what risk limits had been recorded for the agent by 3 AM and get the exact parameters, not today's configuration.",
       detail:
-        "Temporal queries return the state valid at the as-of timestamp, not the latest strategy update.",
+        "Temporal queries return the state as recorded by the cutoff time, not the latest strategy update.",
     },
     {
       Icon: Search,
@@ -173,7 +173,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: Scale,
       title: "Trade decision reconstruction",
-      desc: "Link every trade backward through PM decision, debate resolution, analyst outputs, market signals, and strategy version. Reconstruct the complete reasoning chain for any historical trade.",
+      desc: "Link every trade backward through PM decision, debate resolution, analyst outputs, market signals, and strategy version. Reconstruct the complete reasoning chain recorded for any historical trade.",
       tags: ["trade_decision", "debate", "provenance"],
     },
     {
@@ -190,8 +190,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: Shield,
-      title: "Risk state time travel",
-      desc: "Reconstruct position limits, drawdown caps, kill switch status, and spending caps at any historical timestamp. Verify what constraints were active during any market event.",
+      title: "Risk state history",
+      desc: "Reconstruct position limits, drawdown caps, kill switch status, and spending caps as recorded up to any timestamp. Verify what constraints had been recorded when a market event occurred.",
       tags: ["risk_state", "temporal", "compliance"],
     },
     {
@@ -203,7 +203,7 @@ const CONFIG: UseCaseConfig = {
     {
       Icon: LineChart,
       title: "Portfolio state snapshots",
-      desc: "Version portfolio composition, exposure by chain and asset, and unrealized P&L at any timestamp. Compare pre- and post-rebalance states with full provenance.",
+      desc: "Version portfolio composition, exposure by chain and asset, and unrealized P&L as recorded up to any timestamp. Compare pre- and post-rebalance states with full provenance.",
       tags: ["portfolio_snapshot", "temporal", "audit"],
     },
     {
@@ -245,7 +245,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest state per entity, or reconstruct historical state for any timestamp relevant to post-trade analysis, risk audit, or strategy review.",
+      desc: "Project the latest state per entity, or reconstruct state as recorded up to any timestamp relevant to post-trade analysis, risk audit, or strategy review.",
     },
     {
       label: "Serve agents & users",
@@ -255,16 +255,16 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How autonomous trading platforms use Neotoma as their integrity layer",
     desc:
-      "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade at any point in time.",
+      "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade as recorded up to any point in time.",
     featuresHeading: "What trading teams build",
     features: [
       "Multi-analyst reasoning chains with versioned assessments, confidence scores, and debate resolutions linked to every trade decision, including the pass decisions the agent made and why",
       "Strategy evolution tracking that attributes returns to specific parameter versions and agent adaptations over time",
-      "Risk state timelines that prove what limits, caps, and kill switch states were active during any market event",
+      "Risk state timelines that show which limits, caps, and kill switch states had been recorded by the time of any market event",
     ],
     guarantees: [
       "Immutable observations for every analyst assessment, debate outcome, PM decision, and execution event",
-      "Temporal snapshots so post-trade analysis uses the strategy, risk state, and market data in effect at trade time, not current values",
+      "Temporal snapshots so post-trade analysis uses the strategy, risk state, and market data as recorded by trade time, not current values",
       "Relationship integrity between strategies, analyst outputs, debates, decisions, executions, and portfolio states",
       "Audit-oriented exports that trace reasoning from market signal through analyst debate to final execution",
     ],

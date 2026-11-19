@@ -70,7 +70,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
     },
     {
       q: "¿Está listo para producción?",
-      a: "Neotoma está en vista previa para desarrolladores — usado a diario en flujos reales. Las garantías núcleo (memoria determinista, historial versionado, registro solo anexado) son estables. Instala en 5 minutos y deja que tu agente evalúe el encaje.",
+      a: "Neotoma se usa a diario en flujos reales de agentes. El proyecto avanza rápido y las API o los formatos de almacenamiento pueden cambiar entre versiones. Instálalo y deja que tu agente evalúe el encaje.",
     },
     {
       q: "¿Neotoma sustituye la memoria de Claude o la de ChatGPT?",
@@ -372,7 +372,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
         { label: "Grafo de memoria", sub: "entidades \u00b7 relaciones \u00b7 l\u00ednea temporal" },
       ],
       operations: ["registrar", "reducir", "relacionar"] as const,
-      replayHint: "\u21bb reproducir \u00b7 inspecciona cualquier estado pasado",
+      replayHint: "\u21bb reproducir \u00b7 inspecciona cualquier estado registrado",
     },
   },
   cliDemo: {
@@ -385,7 +385,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
     },
     chatPlaceholder: "Pregunta lo que quieras\u2026",
     playPause: { pauseLabel: "Pausar demo", playLabel: "Reproducir demo" },
-    installCta: "Instalar en 5 minutos",
+    installCta: "Instalar en unos minutos",
     chatScenarios: CLI_DEMO_CHAT_SCENARIOS_ES,
     cliScenarios: CLI_DEMO_CLI_SCENARIOS_ES,
     agenticScenarios: CLI_DEMO_AGENTIC_SCENARIOS_ES,

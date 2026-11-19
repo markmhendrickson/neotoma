@@ -11,7 +11,7 @@ Clinical decision-making depends on understanding what was known about a patient
 
 ## Key question
 
-> "What was known about this patient when the agent recommended the dosage change?"
+> "What had been recorded about this patient by the time the agent recommended the dosage change?"
 
 ## Data sources
 

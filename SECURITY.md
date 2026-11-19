@@ -4,8 +4,8 @@
 
 | Version  | Supported |
 |----------|-----------|
-| `0.24.x` | Yes       |
-| `< 0.24` | No (patch only on critical advisories — see [advisories index](docs/security/advisories/README.md)) |
+| `0.29.x` | Yes       |
+| `< 0.29` | No (patch only on critical advisories — see [advisories index](docs/security/advisories/README.md)) |
 
 The most recent published Neotoma version is the only one that receives proactive support. Critical advisories may produce a one-off patch on the previous minor when the affected range is large; see the per-advisory file under [`docs/security/advisories/`](docs/security/advisories/README.md) for the exact range.
 
@@ -72,7 +72,7 @@ When deploying or developing Neotoma:
 7. **Rotate bearer tokens** periodically and after any advisory in `docs/security/advisories/` whose affected range includes your deployment.
 8. **Never commit `.env` or credentials** — see [`docs/conventions/code_conventions.md`](docs/conventions/code_conventions.md).
 9. **Tune the guest-write and token-TTL knobs** for hosted / multi-tenant deployments. The defaults (`NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN=30`, `NEOTOMA_GUEST_TOKEN_TTL_SECONDS=2592000`) suit single-tenant self-hosted instances; lower them in hosted contexts. See [`docs/security/threat_model.md`](docs/security/threat_model.md#operator-hardening-knobs-v012) `## Operator hardening knobs`.
-10. **Set `NEOTOMA_HOSTED_MODE=1`** on hosted / multi-tenant deployments so inbound peer-sync rejects private / loopback `sender_peer_url` values; see [`docs/subsystems/peer_sync.md`](docs/subsystems/peer_sync.md) `## Concepts`.
+10. **Set `NEOTOMA_HOSTED_MODE=1`** on hosted / multi-tenant deployments so outbound fetches and inbound peer-sync reject private / loopback targets and `sender_peer_url` values. A server bound to any non-loopback `NEOTOMA_HTTP_HOST` (for example `0.0.0.0`) already enforces this whatever the flag says, but a multi-tenant server bound to `127.0.0.1` behind a tunnel or reverse proxy is not covered by the bind-host rule and needs the flag; see [`docs/subsystems/peer_sync.md`](docs/subsystems/peer_sync.md) `## Concepts`.
 11. **Set `MCP_PROXY_FAIL_CLOSED=1`** on AAuth-signed hosted MCP proxies so unsigned downstream requests are refused when signing or session preflight fails; see [`docs/developer/mcp/proxy.md`](docs/developer/mcp/proxy.md).
 
 ## Index

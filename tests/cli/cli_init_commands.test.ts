@@ -1,12 +1,10 @@
-import { exec } from "node:child_process";
 import { mkdtemp, mkdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = `node "${path.join(process.cwd(), "dist", "cli", "index.js")}"`;
 
 async function setupTempNeotomaRepo(root: string): Promise<void> {

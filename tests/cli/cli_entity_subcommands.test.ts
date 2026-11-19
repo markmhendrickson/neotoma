@@ -9,12 +9,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { createTestEntity } from "../helpers/test_data_helpers.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 const TEST_USER_ID = "test-user-entity-subcmds";
 const FAKE_ENTITY_ID = "ent_test_subcmd_abc123";

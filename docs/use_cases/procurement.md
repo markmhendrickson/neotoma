@@ -1,6 +1,6 @@
 # Procurement & sourcing
 
-Procurement decisions involve multiple competing bids, internal approvals, and supplier evaluations that are difficult to reconstruct after the fact — yet auditors, regulators, and internal stakeholders regularly need to understand why a particular supplier was selected. Neotoma provides a full audit trail for bids, approvals, and supplier decisions by versioning every step of the procurement process as immutable observations with provenance. This enables procurement teams and AI agents to reconstruct the competitive landscape, approval chain, and evaluation criteria that existed at any supplier selection point.
+Procurement decisions involve multiple competing bids, internal approvals, and supplier evaluations that are difficult to reconstruct after the fact — yet auditors, regulators, and internal stakeholders regularly need to understand why a particular supplier was selected. Neotoma provides a full audit trail for bids, approvals, and supplier decisions by versioning every step of the procurement process as immutable observations with provenance. This enables procurement teams and AI agents to reconstruct the competitive landscape, approval chain, and evaluation criteria as recorded by any supplier selection.
 
 ## Entity examples
 
@@ -11,7 +11,7 @@ Procurement decisions involve multiple competing bids, internal approvals, and s
 
 ## Key question
 
-> "What were the competing bids when we selected this supplier?"
+> "What bids had been recorded when we selected this supplier?"
 
 ## Data sources
 

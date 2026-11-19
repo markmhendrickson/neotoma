@@ -37,10 +37,10 @@ export const CLI_DEMO_CLI_SCENARIOS_ES: HomeCliDemoTerminalScenario[] = [
     steps: [
       {
         comment:
-          "La ejecuci\u00f3n #47 de la canalizaci\u00f3n dio un resultado incorrecto \u2014 \u00bfqu\u00e9 cre\u00eda el agente?",
+          "La ejecuci\u00f3n #47 de la canalizaci\u00f3n dio un resultado incorrecto \u2014 \u00bfqu\u00e9 constaba registrado hasta ese momento?",
         command: "neotoma replay --entity acme-corp --at 2025-03-15T14:30:00",
         output: [
-          "Estado en 2025-03-15 14:30:00:",
+          "Estado registrado hasta 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
           "  primary_contact: james@acme.com",
@@ -103,11 +103,11 @@ export const CLI_DEMO_AGENTIC_SCENARIOS_ES: HomeCliDemoTerminalScenario[] = [
     label: "Reproducci\u00f3n y depuraci\u00f3n",
     steps: [
       {
-        comment: "La canalizaci\u00f3n dio un resultado incorrecto \u2014 el agente inspecciona el estado en ese momento",
+        comment: "La canalizaci\u00f3n dio un resultado incorrecto \u2014 el agente inspecciona lo registrado hasta ese momento",
         command:
           'retrieve_entity_snapshot({ identifier: "acme-corp", at: "2025-03-15T14:30:00" })',
         output: [
-          "Estado en 2025-03-15 14:30:00:",
+          "Estado registrado hasta 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
           "  primary_contact: james@acme.com",
@@ -173,11 +173,11 @@ export const CLI_DEMO_API_SCENARIOS_ES: HomeCliDemoTerminalScenario[] = [
     label: "Reproducci\u00f3n y depuraci\u00f3n",
     steps: [
       {
-        comment: "Recupera el estado de la entidad en un instante concreto",
+        comment: "Recupera el estado de la entidad tal como constaba registrado hasta un instante (momento de escritura)",
         command:
           'curl -s "localhost:3080/entities/acme-corp/snapshot?at=2025-03-15T14:30:00"',
         output: [
-          "Estado en 2025-03-15 14:30:00:",
+          "Estado registrado hasta 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
           "  primary_contact: james@acme.com",
@@ -257,14 +257,14 @@ export const CLI_DEMO_CHAT_SCENARIOS_ES: HomeCliDemoChatScenario[] = [
       {
         role: "user",
         content:
-          "La ejecuci\u00f3n #47 de la canalizaci\u00f3n dio resultados incorrectos para Acme Corp. \u00bfQu\u00e9 vio el agente en ese momento?",
+          "La ejecuci\u00f3n #47 de la canalizaci\u00f3n dio resultados incorrectos para Acme Corp. \u00bfQu\u00e9 constaba registrado sobre Acme Corp hasta ese momento?",
       },
       {
         role: "tool",
         content: "",
         toolName: "retrieve_entity_snapshot",
         toolLines: [
-          "Estado en 2025-03-15 14:30:00:",
+          "Estado registrado hasta 2025-03-15 14:30:00:",
           "  company \u00b7 acme-corp \u00b7 v4",
           "  status: active_client  \u00b7  revenue: $48,000",
         ],
@@ -272,7 +272,7 @@ export const CLI_DEMO_CHAT_SCENARIOS_ES: HomeCliDemoChatScenario[] = [
       {
         role: "assistant",
         content:
-          "En el momento de la ejecuci\u00f3n #47, Acme Corp segu\u00eda siendo cliente activo con 48.000 $ de ingresos.",
+          "Seg\u00fan lo registrado hasta la ejecuci\u00f3n #47, Acme Corp segu\u00eda siendo cliente activo con 48.000 $ de ingresos.",
       },
       { role: "divider", content: "ChatGPT" },
       {

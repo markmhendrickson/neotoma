@@ -115,12 +115,12 @@ describe("MCP handler cross-user scoping", () => {
       id: randomUUID(),
       entity_type: bPrivateType,
       schema_version: "1.0.0",
-      schema_definition: JSON.stringify({
+      schema_definition: {
         entity_type: bPrivateType,
         schema_version: "1.0.0",
         fields: {},
-      }),
-      reducer_config: JSON.stringify({}),
+      },
+      reducer_config: {},
       active: 1,
       scope: "user",
       user_id: userB,

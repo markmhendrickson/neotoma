@@ -8,6 +8,7 @@ import fs from "fs/promises";
 import path from "path";
 import { clearDbCache, getDb } from "../db/connection.js";
 import type { DbDatabase } from "../db/driver.js";
+import { beginSchemaRegistryWrite } from "../db/schema_registry_cache.js";
 import { config } from "../../config.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
@@ -252,6 +253,10 @@ function sleep(ms: number): Promise<void> {
 
 export function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
+  // entity_snapshots.search_text is an internal search cache: keep it out of
+  // every query-builder read (API responses, exports, mirrors). Lexical search
+  // reads it with its own statement.
+  if (table === "entity_snapshots") delete result.search_text;
   const booleanColumns = BOOLEAN_COLUMNS[table];
   if (booleanColumns) {
     for (const column of booleanColumns) {
@@ -535,6 +540,79 @@ async function ensureEntityRowForSnapshot(
 }
 
 /**
+ * Order-sensitive, injective fingerprint of an entity's raw_fragments rows
+ * (length-prefixed key and value, row order). Used inside the guarded UPDATE in
+ * {@link refreshEntitySearchText}, so the stored text is written only when the
+ * fragments it was built from are still exactly what the table holds.
+ */
+const RAW_FRAGMENT_FINGERPRINT_SQL =
+  "SELECT coalesce(group_concat(" +
+  "length(fragment_key) || ':' || fragment_key || ':' || " +
+  "coalesce(length(fragment_value), -1) || ':' || coalesce(fragment_value, ''), char(30)), '') " +
+  "FROM (SELECT fragment_key, fragment_value FROM raw_fragments WHERE entity_id = ? ORDER BY rowid)";
+
+/**
+ * Fill `entity_snapshots.search_text` for one entity after its snapshot row was
+ * written. NULL means "search builds the text the old way", so every failure
+ * here leaves the column NULL and the write itself still succeeds.
+ *
+ * Race-free without its own transaction (callers may already be inside one,
+ * and nested transaction() is unsupported): the inputs are read, the text is
+ * built, then a single UPDATE writes it only if the snapshot text, the
+ * entities.canonical_name and the raw-fragment fingerprint still equal what
+ * was read. A fragment or name written in between makes the UPDATE match no
+ * row, leaving the NULL the triggers set. With column encryption enabled the
+ * column stays NULL: plaintext search text must not sit beside ciphertext.
+ */
+async function refreshEntitySearchText(db: DbDatabase, entityId: string): Promise<void> {
+  if (getDataKey()) return;
+  try {
+    const { buildEntityLexicalSearchText, joinRawFragmentPieces } =
+      await import("../../shared/entity_search_text.js");
+    const head = (await db
+      .prepare(
+        "SELECT s.snapshot AS snapshot, e.canonical_name AS canonical_name " +
+          "FROM entity_snapshots s JOIN entities e ON e.id = s.entity_id WHERE s.entity_id = ?"
+      )
+      .get(entityId)) as { snapshot: string | null; canonical_name: string | null } | undefined;
+    if (!head || head.canonical_name == null) return;
+    // Rows and fingerprint come from one statement, so they describe one state.
+    const fragmentRows = (await db
+      .prepare(
+        "SELECT fragment_key, fragment_value, (" +
+          RAW_FRAGMENT_FINGERPRINT_SQL +
+          ") AS fingerprint FROM raw_fragments WHERE entity_id = ? ORDER BY rowid"
+      )
+      .all(entityId, entityId)) as Array<{
+      fragment_key: string;
+      fragment_value: string | null;
+      fingerprint: string;
+    }>;
+    const fingerprint = fragmentRows.length > 0 ? fragmentRows[0].fingerprint : "";
+    const snapshot = fromDbRow("entity_snapshots", { snapshot: head.snapshot }).snapshot;
+    const fragmentText = joinRawFragmentPieces(
+      fragmentRows.map((row) => ({
+        fragment_key: row.fragment_key,
+        fragment_value: fromDbRow("raw_fragments", { fragment_value: row.fragment_value })
+          .fragment_value,
+      }))
+    );
+    const text = buildEntityLexicalSearchText(head.canonical_name, snapshot, fragmentText);
+    await db
+      .prepare(
+        "UPDATE entity_snapshots SET search_text = ? WHERE entity_id = ? AND snapshot IS ? " +
+          "AND (SELECT canonical_name FROM entities WHERE id = ?) IS ? " +
+          `AND (${RAW_FRAGMENT_FINGERPRINT_SQL}) = ?`
+      )
+      .run(text, entityId, head.snapshot, entityId, head.canonical_name, entityId, fingerprint);
+  } catch (error) {
+    console.warn(
+      `[search_text] left NULL for ${entityId}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
  * Recompute an entity snapshot from inside the adapter's observation-insert
  * path (local backend parity).
  *
@@ -598,6 +676,7 @@ async function recomputeEntitySnapshot(db: DbDatabase, entityId: string): Promis
       `INSERT OR REPLACE INTO entity_snapshots (${columns.join(", ")}) VALUES (${placeholders})`
     )
     .run(values);
+  await refreshEntitySearchText(db, entityId);
 }
 
 async function recomputeRelationshipSnapshot(
@@ -648,6 +727,7 @@ class LocalQueryBuilder {
   private countHead = false;
   private expectSingle = false;
   private allowNullSingle = false;
+  private snapshotMaterialization = true;
   private orConditions: Array<{ clause: string; values: unknown[] }> = [];
 
   constructor(table: string) {
@@ -667,6 +747,18 @@ class LocalQueryBuilder {
   insert(payload: Record<string, unknown> | Record<string, unknown>[]): this {
     this.operation = "insert";
     this.insertPayload = Array.isArray(payload) ? payload : [payload];
+    return this;
+  }
+
+  /**
+   * Skip the insert-time snapshot materialization (see the `observations`
+   * branch of insert). For a caller that persists the entity's snapshot itself
+   * later in the same transaction: the materialized one would be overwritten,
+   * and building it re-reads and re-reduces every observation of the entity
+   * while the write gate is held. The entity row is still ensured.
+   */
+  withoutSnapshotMaterialization(): this {
+    this.snapshotMaterialization = false;
     return this;
   }
 
@@ -881,6 +973,21 @@ class LocalQueryBuilder {
   }
 
   async execute(): Promise<QueryResult<any>> {
+    // Every adapter write to schema_registry brackets the in-memory schema
+    // lookup cache, so no lookup can serve or store a row this write changes
+    // until the write has committed or rolled back (schema_registry_cache.ts).
+    if (this.operation !== "select" && this.table === "schema_registry") {
+      const endWrite = beginSchemaRegistryWrite();
+      try {
+        return await this.executeStatement();
+      } finally {
+        endWrite();
+      }
+    }
+    return this.executeStatement();
+  }
+
+  private async executeStatement(): Promise<QueryResult<any>> {
     const whereClauses: string[] = [];
     const values: unknown[] = [];
 
@@ -1072,12 +1179,14 @@ class LocalQueryBuilder {
               // Local backend parity: inserts can materialize related state (entities + snapshots).
               if (this.table === "observations") {
                 await ensureEntityRowForObservation(db, payload);
-                if (typeof payload["entity_id"] === "string") {
+                if (this.snapshotMaterialization && typeof payload["entity_id"] === "string") {
                   await recomputeEntitySnapshot(db, payload["entity_id"] as string);
                 }
               }
               if (this.table === "entity_snapshots") {
                 await ensureEntityRowForSnapshot(db, payload);
+                if (typeof payload["entity_id"] === "string")
+                  await refreshEntitySearchText(db, payload["entity_id"] as string);
               }
               if (this.table === "relationship_observations") {
                 const rk = payload["relationship_key"];
@@ -1162,6 +1271,8 @@ class LocalQueryBuilder {
 
               if (this.table === "entity_snapshots") {
                 await ensureEntityRowForSnapshot(db, payload);
+                if (typeof payload["entity_id"] === "string")
+                  await refreshEntitySearchText(db, payload["entity_id"] as string);
               }
             }
             if (this.selectColumns) {

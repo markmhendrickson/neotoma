@@ -184,7 +184,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
           { entity_ids, delivery_method: "sse" }
         );
         expect(denied.response.status).toBe(403);
-        expect(denied.body).toMatchObject({ error_code: "FORBIDDEN" });
+        expect(denied.body).toMatchObject({ error_code: "GUEST_TOKEN_SCOPE" });
       }
 
       const afterDenials = await postJson<ListSubscriptionsResponse>(
@@ -268,7 +268,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
       // Regression target: same-owner membership is insufficient when the
       // guest token itself does not name the requested entity.
       expect(result.response.status).toBe(403);
-      expect(result.body).toMatchObject({ error_code: "FORBIDDEN" });
+      expect(result.body).toMatchObject({ error_code: "GUEST_TOKEN_SCOPE" });
 
       const listed = await postJson<ListSubscriptionsResponse>(
         baseUrl,
@@ -303,7 +303,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
       // Regression target: matching the subscription's owning user_id must
       // not replace the guest token's narrower entity grant.
       expect(result.response.status).toBe(403);
-      expect(result.body).toMatchObject({ error_code: "FORBIDDEN" });
+      expect(result.body).toMatchObject({ error_code: "GUEST_TOKEN_SCOPE" });
 
       const preserved = await postJson<{ subscription: ListedSubscription | null }>(
         baseUrl,
@@ -369,8 +369,8 @@ describe("guest subscription routes must not escalate to the token owner's whole
         guestToken,
         { subscription_id: created.subscription_id }
       );
-      expect(status.response.status).toBe(200);
-      expect(status.body.subscription).toBeNull();
+      expect(status.response.status).toBe(403);
+      expect(status.body).toMatchObject({ error_code: "GUEST_TOKEN_SCOPE" });
 
       const unsubscribe = await postJson<ErrorEnvelope & { success?: boolean }>(
         baseUrl,
@@ -379,7 +379,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
         { subscription_id: created.subscription_id }
       );
       expect(unsubscribe.response.status).toBe(403);
-      expect(unsubscribe.body).toMatchObject({ error_code: "FORBIDDEN" });
+      expect(unsubscribe.body).toMatchObject({ error_code: "GUEST_TOKEN_SCOPE" });
 
       const preservedStatus = parseToolResponse<{ subscription: ListedSubscription | null }>(
         await tools.handleGetSubscriptionStatus(
@@ -396,7 +396,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
         `${baseUrl}/events/stream?subscription_id=${encodeURIComponent(created.subscription_id)}`,
         { headers: { Authorization: `Bearer ${guestToken}` } }
       );
-      expect(stream.status).toBe(404);
+      expect(stream.status).toBe(403);
 
       const ownerList = parseToolResponse<ListSubscriptionsResponse>(
         await tools.handleListSubscriptions(ownerId)

@@ -9,7 +9,9 @@ import {
   announceSkip,
   hasPrerequisite,
 } from "./tests/helpers/test_prerequisites.js";
+import { SCRUB_WARNING, scrubNonLocalBaseUrl } from "./tests/helpers/cli_local_target.js";
 import { resolveHarnessForceMode } from "./src/shared/harness_force_mode.js";
+import { stripGitRepositoryEnv } from "./tests/helpers/git_env.js";
 
 /**
  * Isolate every test worker's notion of "home" from the operator's real
@@ -99,6 +101,19 @@ function announceMissingPrerequisites(): void {
  * SQLite backend and a test-scoped data directory under `.vitest/`.
  */
 export default async function globalSetup() {
+  // FIRST, before anything can spawn git and before workers fork (they inherit
+  // this process.env): drop the repository-locating variables a git hook
+  // exports. Run from a pre-commit hook in a linked worktree, GIT_DIR points at
+  // the shared clone's worktree gitdir, and a test's `git init <tmp>` or
+  // `git fetch --depth 1` would act on that clone instead of its temp dir (it
+  // flipped core.bare and wrote .git/shallow). See tests/helpers/git_env.ts.
+  const removedGitEnv = stripGitRepositoryEnv(process.env);
+  if (removedGitEnv.length > 0) {
+    process.stderr.write(
+      `[neotoma] removed inherited ${removedGitEnv.join(", ")} from the test environment ` +
+        "(expected under a git hook) so tests that run git act on their own directories, not the enclosing repository.\n"
+    );
+  }
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
   requireBuiltServer(projectRoot);
   announceMissingPrerequisites();
@@ -109,6 +124,14 @@ export default async function globalSetup() {
   process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || vitestDir;
   process.env.NODE_ENV = "test";
 
+  // A non-local NEOTOMA_BASE_URL (shell, or a project env file) would make the in-process
+  // test server treat itself as a remote instance and would be inherited by every worker.
+  // Drop it before the server starts and before workers fork. Limit: a later import of
+  // src/config.ts reloads a repo-root .env with override, so this does not stop a .env
+  // from re-adding it in-process; spawned CLI tests are protected separately by
+  // tests/helpers/cli_local_target.ts. RUN_REMOTE_TESTS=1 is the in-process opt-out.
+  if (scrubNonLocalBaseUrl(process.env)) process.stderr.write(`${SCRUB_WARNING}\n`);
+
   // Unit/smoke suites share this HTTP process. Blank the issues target unless the
   // caller deliberately set one — otherwise loadIssuesConfig falls back to
   // DEFAULT_ISSUES_TARGET_URL (prod operator) and CLI smoke tests like
@@ -117,6 +140,18 @@ export default async function globalSetup() {
   // tests/helpers/two_server_fixture.ts for the canonical operator server.
   if (process.env.NEOTOMA_ISSUES_TARGET_URL === undefined) {
     process.env.NEOTOMA_ISSUES_TARGET_URL = "";
+  }
+
+  // This HTTP server, the forked test workers and spawned CLI processes all
+  // write one SQLite file, so each process's in-memory schema lookup cache must
+  // see the others' schema_registry writes at once rather than within the
+  // production check interval. 0 re-reads the cache's change counter on every
+  // lookup. Set before the server starts and before workers fork. The
+  // production default (250 ms) is exercised only by the cache's own tests,
+  // which set the interval explicitly and drive the clock
+  // (tests/unit/schema_registry_cache.test.ts).
+  if (process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS === undefined) {
+    process.env.NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS = "0";
   }
 
   // Pick a stable base port for tests and let the server probe upward if in use.

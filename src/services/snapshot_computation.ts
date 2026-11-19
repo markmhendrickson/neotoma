@@ -7,7 +7,12 @@
 
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
-import { observationReducer } from "../reducers/observation_reducer.js";
+import {
+  codeDefinedSchemaEntry,
+  observationReducer,
+  type EntitySnapshot,
+  type Observation,
+} from "../reducers/observation_reducer.js";
 import {
   CanonicalNameUnresolvedError,
   deriveCanonicalNameFromFieldsWithTrace,
@@ -17,6 +22,7 @@ import {
 import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
+import { certifySnapshot } from "./snapshot_incremental.js";
 
 export interface SnapshotRecord {
   entity_id: string;
@@ -84,34 +90,68 @@ export async function recomputeSnapshot(
     return null;
   }
 
-  const computed = await observationReducer.computeSnapshot(entityId, observations);
+  // Pin the schema the reduction runs under (the same one computeSnapshot
+  // would load: the active registry entry, else the code-defined schema), so
+  // the certificate below names exactly that schema. The first observation
+  // carries the type and owner computeSnapshot reads.
+  const first = observations[0] as Observation;
+  const registered = await schemaRegistry.loadActiveSchema(first.entity_type, first.user_id);
+  const pinned = registered ?? codeDefinedSchemaEntry(first.entity_type);
+
+  const computed = await observationReducer.computeSnapshot(
+    entityId,
+    observations,
+    pinned ?? undefined
+  );
   if (!computed) {
     await deleteSnapshot(entityId, userId);
     return null;
   }
-
-  const { error: upsertError } = await db
-    .from("entity_snapshots")
-    .upsert({ ...computed } as Record<string, unknown>);
-
-  if (upsertError) throw new Error(`Failed to upsert snapshot: ${upsertError.message}`);
 
   const sourceId =
     typeof (observations[0] as { source_id?: string | null }).source_id === "string"
       ? (observations[0] as { source_id: string }).source_id || ""
       : "";
 
-  let schema: SchemaDefinition | null = null;
-  try {
-    const entry = await schemaRegistry.loadActiveSchema(
-      computed.entity_type,
-      computed.user_id || userId
-    );
-    schema = entry?.schema_definition ?? null;
-  } catch {
-    if (strictDerivedEffects) throw new Error("Lifecycle schema acquisition failed");
-    schema = null;
+  await persistComputedSnapshot(computed, {
+    entityId,
+    userId,
+    sourceId,
+    schema: registered?.schema_definition ?? null,
+    strictDerivedEffects,
+  });
+  if (pinned) certifySnapshot(computed, pinned);
+
+  return computed as SnapshotRecord;
+}
+
+/**
+ * Persist a computed snapshot and its derived state: the snapshot row, the
+ * entity's timeline events and opportunistic canonical_name evolution. Shared
+ * by the full rebuild ({@link recomputeSnapshot}) and the incremental
+ * correction path (snapshot_incremental.ts), so both write exactly the same.
+ *
+ * `schema` is the active registry schema definition (not a code-defined one),
+ * as timeline events and canonical names have always been derived with it.
+ */
+export async function persistComputedSnapshot(
+  computed: EntitySnapshot,
+  params: {
+    entityId: string;
+    userId: string;
+    sourceId: string;
+    schema: SchemaDefinition | null;
+    strictDerivedEffects?: boolean;
   }
+): Promise<void> {
+  const { entityId, userId, sourceId, schema } = params;
+  const strictDerivedEffects = params.strictDerivedEffects ?? false;
+
+  const { error: upsertError } = await db
+    .from("entity_snapshots")
+    .upsert({ ...computed } as Record<string, unknown>);
+
+  if (upsertError) throw new Error(`Failed to upsert snapshot: ${upsertError.message}`);
 
   await upsertTimelineEventsForEntitySnapshot({
     strictPersistence: strictDerivedEffects,
@@ -147,8 +187,6 @@ export async function recomputeSnapshot(
         (err instanceof Error ? err.message : String(err))
     );
   }
-
-  return computed as SnapshotRecord;
 }
 
 /**

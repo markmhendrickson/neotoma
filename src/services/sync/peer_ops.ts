@@ -9,8 +9,9 @@ import {
   readLocalNeotomaPackageVersion,
   type PeerRemoteHealth,
 } from "./peer_health.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
-const MAX_PEERS = parseInt(process.env.NEOTOMA_MAX_PEERS ?? "10", 10) || 10;
+const MAX_PEERS = parseInt(runtimeEnv().NEOTOMA_MAX_PEERS ?? "10", 10) || 10;
 
 export interface PeerConfigRecord {
   entity_id: string;
@@ -29,6 +30,8 @@ export interface PeerConfigRecord {
   active: boolean;
   last_sync_at?: string;
   consecutive_failures?: number;
+  /** Governance entity types the operator lets this peer supply (remote_snapshot_admission). */
+  accept_governance_entity_types: string[];
 }
 
 function parsePeerSnapshot(
@@ -61,7 +64,36 @@ function parsePeerSnapshot(
     last_sync_at: typeof snap.last_sync_at === "string" ? snap.last_sync_at : undefined,
     consecutive_failures:
       typeof snap.consecutive_failures === "number" ? snap.consecutive_failures : undefined,
+    accept_governance_entity_types: toStrArray(snap.accept_governance_entity_types),
   };
+}
+
+function normalizePeerUrlForMatch(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.hash = "";
+    parsed.search = "";
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The caller's ACTIVE configured peer whose `peer_url` is `baseUrl`, or null.
+ * A peer reached by a URL nobody configured resolves to null, and so keeps
+ * every default-deny rule that depends on peer configuration.
+ */
+export async function findActivePeerForUrl(
+  userId: string,
+  baseUrl: string
+): Promise<PeerConfigRecord | null> {
+  const wanted = normalizePeerUrlForMatch(baseUrl);
+  if (!wanted) return null;
+  const peers = await listPeersWithSecrets(userId);
+  const hit = peers.find((p) => p.active && normalizePeerUrlForMatch(p.peer_url) === wanted);
+  return hit ? redactPeerForClient(hit) : null;
 }
 
 async function countPeersForUser(userId: string): Promise<number> {

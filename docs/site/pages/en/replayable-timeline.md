@@ -8,7 +8,7 @@ nav_group: guides
 nav_order: 52
 ---
 
-The full sequence of observations can be replayed to reconstruct state at any timestamp. This enables
+The full sequence of observations can be replayed to reconstruct state as recorded up to any timestamp. This enables
 deterministic debugging and incident analysis.
 
 ## Before vs after

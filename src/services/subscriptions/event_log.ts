@@ -18,6 +18,7 @@ import { getDataKey } from "../../repositories/sqlite/local_db_adapter.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { logger } from "../../utils/logger.js";
 import type { SubstrateEvent } from "../../events/types.js";
+import { runtimeEnv } from "../../config_embedded.js";
 
 /**
  * Encryption-at-rest for the durable-event-log payload.
@@ -49,7 +50,7 @@ function maybeDecryptPayload(stored: string): string {
 
 export const EVENT_RETENTION_DAYS = Math.max(
   1,
-  parseInt(process.env.NEOTOMA_EVENT_RETENTION_DAYS ?? "7", 10) || 7
+  parseInt(runtimeEnv().NEOTOMA_EVENT_RETENTION_DAYS ?? "7", 10) || 7
 );
 
 export interface DurableEvent {

@@ -2,18 +2,19 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { access, mkdir, open } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import http from "node:http";
-import os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import createClient from "openapi-fetch";
 import type { paths } from "./openapi_types.js";
+import { isEmbeddedMode, runtimeEnv, userStateDir } from "../config_embedded.js";
 
 type LocalTransportClient = ReturnType<typeof createClient<paths>>;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-let localClientPromise: Promise<LocalTransportClient> | null = null;
+/** Base URL of the started local API child (`http://127.0.0.1:<port>`). */
+let localClientPromise: Promise<string> | null = null;
 let localApiChild: ChildProcess | null = null;
 let localTransportKillHandler: (() => void) | null = null;
 
@@ -37,9 +38,7 @@ function portFromBaseUrl(baseUrl?: string): number | null {
 /** Reads preferred_env from ~/.config/neotoma/config.json. Returns null on any error. */
 function readPreferredEnvFromCliConfig(): "production" | "development" | null {
   try {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-    if (!homeDir) return null;
-    const configPath = join(homeDir, ".config", "neotoma", "config.json");
+    const configPath = join(userStateDir(), "config.json");
     if (!existsSync(configPath)) return null;
     const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as {
       preferred_env?: string;
@@ -68,14 +67,14 @@ function readPreferredEnvFromCliConfig(): "production" | "development" | null {
  * installed Neotoma via npm should never silently hit the development DB.
  */
 export function resolveLocalTransportEnv(baseUrl?: string): "production" | "development" {
-  const explicitEnv = process.env.NEOTOMA_ENV;
+  const explicitEnv = runtimeEnv().NEOTOMA_ENV;
   if (explicitEnv === "production" || explicitEnv === "development") return explicitEnv;
 
-  const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+  const sessionEnv = runtimeEnv().NEOTOMA_SESSION_ENV;
   if (sessionEnv === "prod") return "production";
   if (sessionEnv === "dev") return "development";
 
-  const preferredEnv = process.env.NEOTOMA_CLI_PREFERRED_ENV;
+  const preferredEnv = runtimeEnv().NEOTOMA_CLI_PREFERRED_ENV;
   if (preferredEnv === "prod") return "production";
   if (preferredEnv === "dev") return "development";
 
@@ -88,7 +87,7 @@ export function resolveLocalTransportEnv(baseUrl?: string): "production" | "deve
   // NEOTOMA_TEST_SIMULATE_DIST_BUILD is an internal test hook that allows unit tests to
   // exercise this branch without physically running from a dist/ directory. It MUST NOT
   // be set in production — doing so forces production mode regardless of actual build origin.
-  if (__dirname.includes("/dist/") || process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1")
+  if (__dirname.includes("/dist/") || runtimeEnv().NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1")
     return "production";
 
   // Step 5b: port inference (source checkout only)
@@ -124,10 +123,38 @@ function warnOnEnvBaseUrlMismatch(
   );
 }
 
+/**
+ * Client for the local API child the CLI starts on 127.0.0.1. The child is the
+ * same API server as `neotoma api start`, so it verifies AAuth signatures on
+ * every route. `fetch` is the caller's: `createApiClient` passes the fetch that
+ * applies the CLI credential rule (`decideCliCredentials`), so a request to
+ * the child is signed, carries the bearer, or is refused exactly as a request
+ * to a remote API would be. The child is started once per process; the client
+ * (token and fetch) is built per call, so one command's credentials never
+ * carry into the next.
+ */
 export async function getLocalTransportClient(options: {
   token?: string;
   baseUrl?: string;
+  fetch?: typeof fetch;
 }): Promise<LocalTransportClient> {
+  if (isEmbeddedMode()) {
+    throw new Error(
+      "The local transport is not available in embedded mode: it starts a separate local API process."
+    );
+  }
+  const localBaseUrl = await startLocalTransport(options.baseUrl);
+  const headers: Record<string, string> = {};
+  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+  return createClient<paths>({
+    baseUrl: localBaseUrl,
+    headers,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+}
+
+async function startLocalTransport(baseUrl: string | undefined): Promise<string> {
+  const options = { baseUrl };
   if (!localClientPromise) {
     localClientPromise = (async () => {
       const env = resolveLocalTransportEnv(options.baseUrl);
@@ -169,10 +196,17 @@ export async function getLocalTransportClient(options: {
       localApiChild = spawn(process.execPath, [actionsPath], {
         cwd: projectRoot,
         env: {
+          // Standard mode only (getLocalTransportClient refuses in embedded mode); the local
+          // API child needs the host's full environment. runtime-env-ok
           ...process.env,
           NEOTOMA_ENV: env,
           HTTP_PORT: String(port),
           NEOTOMA_HTTP_PORT: String(port),
+          // The child is reached only at 127.0.0.1:<port>: bind there, and
+          // verify AAuth signatures against that authority rather than a
+          // public URL inherited from the environment.
+          NEOTOMA_HTTP_HOST: "127.0.0.1",
+          NEOTOMA_AAUTH_AUTHORITY: `127.0.0.1:${port}`,
         },
         stdio: ["ignore", logStream, logStream],
       });
@@ -208,13 +242,7 @@ export async function getLocalTransportClient(options: {
         throw new Error("Local transport API failed to start");
       }
 
-      const headers: Record<string, string> = {};
-      if (options.token) headers.Authorization = `Bearer ${options.token}`;
-
-      return createClient<paths>({
-        baseUrl: `http://127.0.0.1:${port}`,
-        headers,
-      });
+      return `http://127.0.0.1:${port}`;
     })();
   }
 

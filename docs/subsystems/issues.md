@@ -102,6 +102,18 @@ flowchart LR
   Local --> Out[Return entity_id; no github_number unless later mirrored]
 ```
 
+## Guest submits
+
+A guest submit is any `POST /issues/submit` request from a guest principal, and any request that carries `github_number`, `github_url`, `author`, `local_issue_id` or `submission_timestamp`. That includes submits forwarded from another instance's `submit_issue` by `submitIssueToRemote` (`neotoma_client.ts`). It runs `submitGuestIssue` and returns a guest access token naming the issue and conversation it created.
+
+**A guest submit only creates a new issue (v0.29.1+).** The caller's `github_number`, or otherwise its `local_issue_id`, decides the identity of the issue and of its thread's conversation. Before anything is written, the submit resolves both with the store's own resolution in dry-run mode. When either already identifies a stored entity, the submit is refused with `400 ERR_ISSUE_IDENTITY_IN_USE`: nothing is written and no guest access token is returned. `details.extra.identity_field` is `github_number` or `local_issue_id`, and `details.extra.entity_type` is `issue` or `conversation`. A submit retried with the same identifier now gets this 400.
+
+Client note (the same text is the error's `details.hint`): nothing was written. If you are retrying a submit whose response was lost, the first submit may already have created the issue: check it with `get_issue_status` and that issue's guest access token, or, without the token, submit again with a new `local_issue_id` (or with neither `local_issue_id` nor `submission_timestamp`, so the server assigns one) and accept that this may create a second issue. `github_number` takes precedence over `local_issue_id`, so when you pass `github_number` for an issue synced from GitHub a new `local_issue_id` does not change the identity: post to that issue with `add_issue_message` and its guest access token instead.
+
+Neotoma's own reporter flow is not affected: `submit_issue` (MCP, CLI `neotoma issues create`, and the owner path of `POST /issues/submit`) derives a new `local_issue_id` from the title and the current time on every call and never sends `github_number`. When it forwards to `issues.target_url`, its only retry is one unsigned resend after an `AUTH_REQUIRED` refusal, which wrote nothing.
+
+Two submits of the same new identifier that arrive at the same moment can both pass the check; the store's shared idempotency key (`issue-guest-submit-<repo>-<id>`) then serialises them.
+
 ## Comment flow
 
 ```mermaid
@@ -245,6 +257,7 @@ First-class HTTP routes (see `openapi.yaml` / `contract_mappings.ts`); each `/is
 ## Testing
 
 - Unit: `src/services/issues/issue_operations.test.ts`, `src/services/issues/neotoma_client.test.ts`.
+- Security: `tests/security/guest_issue_submit_token_scope.test.ts` pins the `ERR_ISSUE_IDENTITY_IN_USE` refusal and its no-write effect over HTTP and through `submitIssueToRemote`; `tests/security/guest_issue_submit_attribution.test.ts` pins which account a guest submit is stored under.
 - Integration: `tests/integration/cross_instance_issues.test.ts` exercises the dual-write + cross-instance forwarding.
 - Coverage guard: `tests/cli/cli_command_coverage_guard.test.ts` ensures every `neotoma issues …` subcommand is registered.
 

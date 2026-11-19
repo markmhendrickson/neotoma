@@ -1,7 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import { isHostedMode, isPrivateOrLoopbackHostname } from "../net/private_host_guard.js";
+import {
+  guardedFetch,
+  isHostedMode,
+  isPrivateOrLoopbackHostname,
+} from "../net/private_host_guard.js";
 import { signWebhookBody } from "../subscriptions/webhook_delivery.js";
+import { logger } from "../../utils/logger.js";
 import {
   getPeerForAAuthVerification,
   getPeerSecretForVerification,
@@ -9,6 +14,7 @@ import {
   type PeerConfigRecord,
 } from "./peer_ops.js";
 import { listEntitySnapshotsForPeerSyncOutbound } from "./peer_sync_batch.js";
+import { admitRemoteSnapshotType, remoteSnapshotStoreEntity } from "./remote_snapshot_admission.js";
 
 export interface SyncWebhookPayload {
   sender_peer_id: string;
@@ -135,10 +141,19 @@ export async function applyInboundSyncWebhook(params: {
     : "";
   const url = `${base}/entities/${encodeURIComponent(payload.entity_id)}${tokenQ}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-  });
+  // guardedFetch checks every redirect hop against the same host policy as the
+  // first request (hosted mode refuses private hosts); plain fetch would follow
+  // a peer's redirect unchecked. The error text names the redirect target the
+  // peer chose, so it is not relayed.
+  let res: Response;
+  try {
+    res = await guardedFetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error("REMOTE_FETCH_FAILED:refused");
+  }
   if (!res.ok) {
     throw new Error(`REMOTE_FETCH_FAILED:${res.status}`);
   }
@@ -150,9 +165,25 @@ export async function applyInboundSyncWebhook(params: {
     throw new Error("REMOTE_ENTITY_SHAPE_INVALID");
   }
 
-  const { entity_type, snapshot } = remote;
-  const fields = { ...snapshot };
-  delete (fields as Record<string, unknown>).entity_id;
+  // The peer names the entity_type of the snapshot it serves. Accept only a type
+  // configured for this peer, never a protected one, and a governance type only
+  // when this peer's accept_governance_entity_types names it (remote_snapshot_admission).
+  const typeRefusal = await admitRemoteSnapshotType(remote.entity_type, {
+    userId: payload.target_user_id,
+    peerEntityTypes: peer.entity_types,
+    acceptGovernanceEntityTypes: peer.accept_governance_entity_types,
+  });
+  if (typeRefusal) {
+    // Visible to this instance's operator, who is the one who can admit the
+    // type. Only the reason and the local list entry are logged, never the
+    // peer's entity_type string.
+    logger.warn("[sync] refused an inbound peer snapshot by entity type", {
+      peer_id: peer.peer_id,
+      reason: typeRefusal.reason,
+      matched_type: typeRefusal.entity_type,
+    });
+    throw new Error(`REMOTE_ENTITY_TYPE_REFUSED:${typeRefusal.reason}`);
+  }
 
   const { storeStructuredForApi } = await import("../../actions.js");
   const idempotencyKey = createHash("sha256")
@@ -161,7 +192,7 @@ export async function applyInboundSyncWebhook(params: {
 
   await storeStructuredForApi({
     userId: payload.target_user_id,
-    entities: [{ entity_type, ...fields }],
+    entities: [remoteSnapshotStoreEntity(remote.entity_type, remote.snapshot)],
     sourcePriority: 40,
     observationSource: "sync",
     sourcePeerId: payload.sender_peer_id,

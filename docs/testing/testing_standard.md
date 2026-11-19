@@ -117,6 +117,20 @@ See `docs/testing/fixtures_standard.md`.
 ## Automated test catalog
 See `docs/testing/automated_test_catalog.md` for the canonical repo-wide inventory of automated tests and primary suite commands.
 
+## Packed production-consumer check
+
+Run `npm run check:production-consumer` after changing package dependencies or
+published build inputs. It builds and packs the package with the prebuilt
+Inspector, installs the tarball into an empty project with production
+dependencies only, rejects frontend build-only packages in the published
+runtime manifest, validates the installed dependency tree, runs the installed
+`neotoma --help`, imports the public package entry point, and requires the
+installed HTTP server to reach `/health` on an ephemeral loopback port with an
+isolated data directory. It then requests the Inspector shell from that server
+(2xx, HTML, the `<div id="root">` mount point) and the script and stylesheet the
+shell references (2xx, JavaScript and CSS content types), so a tarball missing
+`dist/inspector` fails with a message naming the failed request.
+
 The required baseline CI lane also runs
 `python3 -m unittest discover -s tests/scripts -p test_docker_context.py -v`.
 This uses Docker's actual matcher with a synthetic-only `FROM scratch` context,
@@ -133,6 +147,26 @@ the validated loopback/owned-IPC Node network control and bounded deadlines. Too
 absence, skipped tests, external attempts and changed candidate bindings fail.
 Partial additive registry writes on failure are retained; no rollback, remote
 image, deployment or real-instance schema authority is inferred.
+
+The required baseline CI lane also runs
+`npx vitest run tests/scripts/worktree_env_copy.test.ts`. This verifies that
+worktree env copying requires explicit opt-in, refuses production-selected or
+unreadable sources without leaking their contents, and rejects staged env files.
+
+The required `baseline` CI job first runs its regular tests on Node 20, then
+switches to Node 24 and runs `NEOTOMA_REQUIRE_NATIVE_SQLITE=1
+./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts` after a fresh
+server build. This checks the native `node:sqlite` backup-create effect, JSON
+failure classes, and corruption guidance under the runtime that enables that
+driver; a missing native `DatabaseSync` fails the job rather than skipping it.
+
+The required `eval_scenarios` CI job also uses Node 24 and a fresh server and
+eval-harness build. Its `backup_restore_cli_safety` replay cell executes the
+built CLI and sealed synthetic probes inside a verified local Linux Docker
+boundary; the committed cassette supplies only fixed CLI inputs. The job runs
+the focused executor control tests and full replay suite. Missing native
+SQLite, a missing cassette, failed isolation, or a failed live backup effect
+fails this job. Local macOS runs use a restrictive `sandbox-exec` profile.
 
 
 ### Catalog maintenance

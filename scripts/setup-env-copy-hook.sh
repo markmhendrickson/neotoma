@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup git post-checkout hook to automatically copy .env files to worktrees
+# Setup an opt-in git post-checkout hook for copying env files to worktrees
 
 set -e
 
@@ -16,7 +16,7 @@ fi
 # Create or update the post-checkout hook
 cat > "$HOOK_FILE" << 'HOOK_EOF'
 #!/bin/bash
-# Git post-checkout hook - copy env file to worktrees
+# Git post-checkout hook - optionally copy env file to worktrees
 
 # This hook is called after a successful git checkout
 # For worktrees, we need to detect the worktree path and copy env files there
@@ -47,11 +47,15 @@ if [ -z "$WORKTREE_PATH" ]; then
   fi
 fi
 
-# If we found a worktree path, run the copy script there
+# If we found a worktree path, copy only with explicit opt-in
 if [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "$REPO_ROOT" ]; then
-  COPY_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
-  if [ -f "$COPY_SCRIPT" ] && command -v node >/dev/null 2>&1; then
-    (cd "$WORKTREE_PATH" && node "$COPY_SCRIPT" 2>/dev/null) || true
+  if [ "${NEOTOMA_WORKTREE_COPY_ENV:-}" = "1" ]; then
+    COPY_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
+    if [ -f "$COPY_SCRIPT" ] && command -v node >/dev/null 2>&1; then
+      (cd "$WORKTREE_PATH" && node "$COPY_SCRIPT") || true
+    fi
+  else
+    echo "[copy-env] Skipped env copy. Set NEOTOMA_WORKTREE_COPY_ENV=1 to opt in."
   fi
 fi
 
@@ -61,7 +65,7 @@ HOOK_EOF
 chmod +x "$HOOK_FILE"
 
 echo "✓ Git post-checkout hook installed at ${HOOK_FILE}"
-echo "  This will automatically copy .env files to new worktrees."
+echo "  Env copying is disabled unless NEOTOMA_WORKTREE_COPY_ENV=1 is set."
 echo ""
 echo "To manually copy the env file to the current worktree, run:"
-echo "  node scripts/copy-env-to-worktree.js"
+echo "  NEOTOMA_WORKTREE_COPY_ENV=1 node scripts/copy-env-to-worktree.js"

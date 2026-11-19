@@ -676,7 +676,7 @@ export function IcpDetailPage({
                 navSource={PRODUCT_NAV_SOURCES.icpDetailInstall}
                 className="inline-flex items-center rounded-md border border-foreground bg-foreground px-4 py-2 text-[14px] font-medium text-background no-underline hover:bg-foreground/90 transition-colors"
               >
-                Install in 5 minutes
+                Install in a few minutes
               </TrackedProductLink>
               <MdxI18nLink
                 to="/architecture"

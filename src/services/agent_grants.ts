@@ -41,11 +41,8 @@
 import { db } from "../db.js";
 import { queryEntities, getEntityWithProvenance } from "./entity_queries.js";
 import { logger } from "../utils/logger.js";
-import {
-  AgentCapabilityError,
-  type AgentCapabilityEntry,
-  type AgentCapabilityOp,
-} from "./agent_capabilities.js";
+import { runWithRequestContext } from "./request_context.js";
+import { type AgentCapabilityEntry, type AgentCapabilityOp } from "./agent_capabilities.js";
 
 export type AgentGrantStatus = "active" | "suspended" | "revoked";
 
@@ -67,6 +64,13 @@ const ALLOWED_OPS: ReadonlySet<AgentCapabilityOp> = new Set([
   // read since the op was introduced, independent of the entity_types /
   // relationship_types fix above.
   "register_relationship_type",
+  // Entity lifecycle / structure and schema-governance ops (v0.27.0). Each
+  // is granted only by an entry that names it; see agent_capabilities.ts.
+  "delete",
+  "restore",
+  "merge",
+  "split",
+  "register_schema",
   "github_harness:read",
   "github_harness:write",
   "github_harness:*",
@@ -1345,8 +1349,22 @@ function todayUtc(): string {
 /**
  * Record that the supplied grant was used for admission. Debounced to
  * once per UTC day per grant so admission cost on hot paths stays
- * bounded. Best-effort: failures are logged and swallowed because the
- * caller is on the request critical path.
+ * bounded. Best-effort: failures are logged once and swallowed because
+ * the caller is on the request critical path.
+ *
+ * The write is server bookkeeping, not an act of the admitted agent: the
+ * admission service calls this from inside the agent's request context,
+ * where the protected-type guard would judge an `agent_grant` correction
+ * against the agent's own capabilities (which normally exclude
+ * `agent_grant`). It therefore runs in a fresh request context carrying no
+ * agent identity, admission, external actor or signed-in principal, so the
+ * observation is attributed to the server on behalf of the grant owner.
+ * This grants no agent any new write: only this fixed `last_used_at` field
+ * on the grant that admitted the request is written.
+ *
+ * On failure the day's debounce entry is kept, so a persistent failure
+ * costs one attempt and one warning per grant per day rather than one per
+ * admitted request.
  */
 export async function recordMatch(grant: AgentGrant): Promise<void> {
   const today = todayUtc();
@@ -1355,23 +1373,24 @@ export async function recordMatch(grant: AgentGrant): Promise<void> {
   matchDebounce.set(grant.grant_id, today);
   try {
     const { createCorrection } = await import("./correction.js");
-    await createCorrection({
-      entity_id: grant.grant_id,
-      entity_type: GRANT_ENTITY_TYPE,
-      field: "last_used_at",
-      value: new Date().toISOString(),
-      schema_version: "1.0.0",
-      user_id: grant.user_id,
-      idempotency_key: `agent_grant:last_used:${grant.grant_id}:${today}`,
-    });
+    await runWithRequestContext(
+      { agentIdentity: null, attributionDecision: null, aauthAdmission: null },
+      () =>
+        createCorrection({
+          entity_id: grant.grant_id,
+          entity_type: GRANT_ENTITY_TYPE,
+          field: "last_used_at",
+          value: new Date().toISOString(),
+          schema_version: "1.0.0",
+          user_id: grant.user_id,
+          idempotency_key: `agent_grant:last_used:${grant.grant_id}:${today}`,
+        })
+    );
   } catch (err) {
-    // Best-effort. Don't fail the admission flow if observability fails.
-    matchDebounce.delete(grant.grant_id);
-    if (err instanceof AgentCapabilityError) {
-      // The admission service runs as the grant owner; if the protected
-      // guard rejects this we have a deeper bug worth surfacing.
-      throw err;
-    }
+    logger.warn("agent_grant recordMatch failed; next attempt tomorrow (UTC)", {
+      err: err instanceof Error ? err.message : String(err),
+      grant_id: grant.grant_id,
+    });
   }
 }
 

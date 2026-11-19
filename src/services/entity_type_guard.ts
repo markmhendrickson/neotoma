@@ -28,6 +28,7 @@
  */
 
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 const DEFAULT_FORBIDDEN_PATTERNS: RegExp[] = [
   // Numeric-suffixed test types: "test_type_001", "test_foo_42"
@@ -82,7 +83,7 @@ const IRREGULAR_SINGULAR_NAMES: Set<string> = new Set([
 ]);
 
 function parseForbiddenPatternsFromEnv(): RegExp[] {
-  const raw = process.env.NEOTOMA_FORBIDDEN_TYPE_PATTERNS;
+  const raw = runtimeEnv().NEOTOMA_FORBIDDEN_TYPE_PATTERNS;
   if (!raw) return DEFAULT_FORBIDDEN_PATTERNS;
   const parts = raw
     .split(",")
@@ -104,7 +105,7 @@ function parseForbiddenPatternsFromEnv(): RegExp[] {
 }
 
 function parseAllowlistFromEnv(envVar: string): Set<string> {
-  const raw = process.env[envVar];
+  const raw = runtimeEnv()[envVar];
   if (!raw) return new Set();
   return new Set(
     raw
@@ -297,7 +298,7 @@ export function enforceEntityTypeGuards(
   const plural = checkPluralEntityType(entityType);
   const ctx = options.context ? ` (${options.context})` : "";
 
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction = runtimeEnv().NODE_ENV === "production";
 
   if (forbidden.reason) {
     const msg = `${forbidden.message}${ctx} ${forbidden.suggestion ?? ""}`.trim();

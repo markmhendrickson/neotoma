@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { deriveMcpAuthToken, hexToKey, mnemonicToSeed } from "../crypto/key_derivation.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 /**
  * Default lifetime for a KEY-ENTRY gate session — the short window in which a
@@ -120,6 +121,18 @@ export class OAuthKeySessionStore {
     return bound ? { ...bound } : undefined;
   }
 
+  /**
+   * End a session now: remove its expiry and its bound identity together, so
+   * the token stops validating and stops resolving a user. Returns whether a
+   * session was present. Used by sign-out and by a failed sign-in.
+   */
+  revoke(token: string | undefined): boolean {
+    if (!token) return false;
+    const existed = this.sessions.delete(token);
+    this.boundUsers.delete(token);
+    return existed;
+  }
+
   cleanup(nowMs: number = Date.now()): void {
     for (const [token, expiresAt] of this.sessions.entries()) {
       if (expiresAt <= nowMs) {
@@ -166,7 +179,12 @@ export function isOauthKeyCredentialValid(credentials: OAuthKeyCredentials): {
   reason?: string;
 } {
   const bearerToken = credentials.bearerToken?.trim() || "";
-  const configuredBearer = (process.env.NEOTOMA_BEARER_TOKEN || "").trim();
+  // Primary bearer ONLY. The retiring bearer in the handover slot
+  // (NEOTOMA_BEARER_TOKEN_PREVIOUS, src/services/bearer_slots.ts) is
+  // deliberately not accepted here: this preflight mints a durable OAuth
+  // connection, and a credential being retired must not mint one that
+  // outlives its own window.
+  const configuredBearer = (runtimeEnv().NEOTOMA_BEARER_TOKEN || "").trim();
   if (bearerToken) {
     if (!configuredBearer) {
       return {

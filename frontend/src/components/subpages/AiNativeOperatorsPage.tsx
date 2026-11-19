@@ -162,8 +162,8 @@ export function AiNativeOperatorsPageBody() {
           href: "/versioned-history",
           body: (
             <p>
-              Every conversation and fact is stored with its source. See what was
-              known at any point in time and where each fact came from.
+              Every conversation and fact is stored with its source. See what had been
+              recorded by any point in time and where each fact came from.
             </p>
           ),
         },

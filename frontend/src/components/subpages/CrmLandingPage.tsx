@@ -1099,7 +1099,7 @@ export function CrmLandingPageBody() {
                   {
                     Icon: RotateCcw,
                     title: "Replayable account history",
-                    desc: "Reconstruct the state of any account, pipeline, or relationship at any point in time. Useful for QBRs, forecasting audits, and compliance reviews.",
+                    desc: "Reconstruct the state of any account, pipeline, or relationship as recorded up to any point in time. Useful for QBRs, forecasting audits, and compliance reviews.",
                     tags: ["account\u00B7v9", "snapshot\u00B7replay"],
                   },
                   {
@@ -1178,7 +1178,7 @@ export function CrmLandingPageBody() {
                       },
                       {
                         label: "Audit",
-                        desc: "Inspect any entity at any version. Diff states between dates. Replay the observation log to reconstruct historical state.",
+                        desc: "Inspect any entity at any version. Diff states as recorded between two timestamps. Replay the observation log to reconstruct past state as recorded.",
                       },
                     ].map((item) => (
                       <li key={item.label} className="flex items-start gap-2.5">
@@ -1226,7 +1226,7 @@ export function CrmLandingPageBody() {
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                   AI relationship intelligence platforms surface warm intros, track deal diligence,
                   and flag commitment windows. Neotoma versions every contact, deal stage, and
-                  relationship signal so you can reconstruct pipeline state at any prior date.
+                  relationship signal so you can reconstruct pipeline state as recorded up to any prior date.
                 </p>
               </div>
 
@@ -1268,7 +1268,7 @@ export function CrmLandingPageBody() {
                       "Every contact, deal, and commitment is a versioned entity with full observation history",
                       "Intro recommendations trace to specific connections and threads with auditable provenance",
                       "Deal stage transitions are schema-validated: no skipping diligence, no silent field overwrites",
-                      "Pipeline state is replayable: reconstruct any commitment or snapshot at any prior date",
+                      "Pipeline state is replayable: reconstruct any commitment or snapshot as recorded up to any prior date",
                     ].map((item) => (
                       <li
                         key={item}
@@ -1349,10 +1349,10 @@ export function CrmLandingPageBody() {
                   Install Neotoma
                 </Link>
                 <Link
-                  to="/docs"
+                  to="/readme/"
                   className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                 >
-                  Read the docs
+                  Read the overview
                 </Link>
               </div>
 

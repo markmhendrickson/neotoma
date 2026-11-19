@@ -9,6 +9,7 @@ import { assertGuestWriteAllowed, type GuestIdentity } from "./access_policy.js"
 import { contextFromAgentIdentity, enforceAgentCapability } from "./agent_capabilities.js";
 import { enforceRelationshipWriteCapabilities } from "./relationship_write_capability.js";
 import { assertCanWriteProtectedBatch } from "./protected_entity_types.js";
+import { assertCurrentAgentMayStoreEntities } from "./mutation_capability.js";
 import type { StoreInterpretationInput } from "../shared/action_schemas.js";
 export type StoreRelationshipRef = {
   relationship_type: string;
@@ -42,6 +43,68 @@ export interface StructuredStoreApiParams {
   dataOrigins?: Array<import("../shared/action_schemas.js").DataOrigin | undefined>;
 }
 
+/**
+ * Per-type `store` capability scope for write entry points that are not a
+ * `/store` call (`POST /observations/create`, `POST /interpretations/create`,
+ * MCP `create_interpretation`), so each applies the scope `/store` and MCP
+ * `store` apply. The grant is read from the request context and applies to
+ * AAuth-admitted agents only: a request with no agent identity (operator /
+ * user-authenticated callers) is not capability-gated. Also applies the
+ * protected-type guard up front so a governance-type refusal reaches the caller
+ * as the same `capability_denied` envelope. Throws `AgentCapabilityError`
+ * before the caller writes anything.
+ */
+export function assertCurrentAgentMayStoreEntityTypes(entityTypes: unknown[]): void {
+  const identity = getCurrentAgentIdentity();
+  const capabilityCtx = contextFromAgentIdentity(identity);
+  if (capabilityCtx) {
+    enforceAgentCapability("store", judgedStoreTypes(entityTypes), capabilityCtx);
+  }
+  assertCanWriteProtectedBatch({
+    entity_types: entityTypes.filter(isNamedType),
+    op: "store",
+    identity,
+    admission: getCurrentAAuthAdmission(),
+  });
+}
+
+function isNamedType(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Raised when a structured store entity does not carry a usable `entity_type`. */
+export class InvalidEntityTypeError extends Error {
+  readonly code = "ERR_INVALID_ENTITY_TYPE" as const;
+  readonly hint = 'Give every entity an "entity_type" that is a non-empty string.';
+  constructor(readonly index: number) {
+    super(`entities[${index}].entity_type must be a non-empty string.`);
+  }
+}
+
+/**
+ * A structured store writes each entity under its own `entity_type` value, so
+ * that value must be a non-empty string for every caller kind. Admission
+ * (access policy, protected types, grants) then judges the same value the
+ * write uses. Throws {@link InvalidEntityTypeError} before anything is written.
+ */
+export function assertStoreEntityTypesNamed(entities: readonly unknown[]): void {
+  entities.forEach((entity, index) => {
+    const entityType = (entity as Record<string, unknown> | null | undefined)?.entity_type;
+    if (!isNamedType(entityType)) throw new InvalidEntityTypeError(index);
+  });
+}
+
+/**
+ * The types a `store` grant check judges: a missing, blank or non-string type
+ * is judged as `"*"` (only a grant covering every type allows it), and an
+ * empty list is judged as `["*"]`, so a request can never pass the check by
+ * naming no type.
+ */
+function judgedStoreTypes(entityTypes: readonly unknown[]): string[] {
+  const judged = entityTypes.map((t) => (isNamedType(t) ? t : "*"));
+  return judged.length > 0 ? judged : ["*"];
+}
+
 /** Pure pre-persistence admission, reusable before either combined leg starts. */
 export async function preflightStructuredStoreAdmission(
   params: StructuredStoreApiParams
@@ -56,6 +119,7 @@ export async function preflightStructuredStoreAdmission(
     idempotencyKey,
   } = params;
   const commit = params.commit !== false;
+  assertStoreEntityTypesNamed(entities);
   const { assertConditionalStoreRequest } = await import("./store_condition_request.js");
   assertConditionalStoreRequest({
     entities,
@@ -75,7 +139,15 @@ export async function preflightStructuredStoreAdmission(
   const agentIdentity = getCurrentAgentIdentity();
   const admission = getCurrentAAuthAdmission();
   const isAAuthVerified = agentIdentity?.thumbprint != null;
-  const isGuest = isAAuthVerified && (!admission || !admission.admitted);
+  // A signature whose grant is revoked, suspended, unbound, invalid or in a pin
+  // conflict carries the `deny` ceiling and is not a guest: it is refused by
+  // the capability check below. Only an unrecognised signer is left to access
+  // policy (same split as relationship_write_capability.ts).
+  const capabilityCtx = contextFromAgentIdentity(agentIdentity);
+  const isGuest =
+    isAAuthVerified &&
+    (!admission || !admission.admitted) &&
+    capabilityCtx?.ceiling?.kind !== "deny";
 
   if (isGuest && !requestContext?.bypassGuestStoreAccessPolicy) {
     const entityTypes = entities
@@ -125,12 +197,15 @@ export async function preflightStructuredStoreAdmission(
   // before any writes touch the DB. Guests who passed access policy above
   // skip grant-based capability enforcement. Unknown / anonymous callers
   // fall through (attribution_policy still gates their writes downstream).
-  const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
   if (capabilityCtx && !isGuest) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    enforceAgentCapability("store", entityTypes, capabilityCtx);
+    enforceAgentCapability(
+      "store",
+      judgedStoreTypes(entities.map((entity) => entity?.entity_type)),
+      capabilityCtx
+    );
+    // Extending an existing entity needs `store` on its stored type, and the
+    // reserved lifecycle marker turns a store into a delete or restore.
+    await assertCurrentAgentMayStoreEntities(userId, entities);
     if (Array.isArray(relationships) && relationships.length > 0) {
       // Same shared check the MCP store and every standalone relationship
       // entrance run (services/relationship_write_capability.ts).

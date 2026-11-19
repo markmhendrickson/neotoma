@@ -153,6 +153,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation mcpOAuthKeyAuthPost",
   },
   {
+    operationId: "mcpOAuthSignOut",
+    method: "post",
+    path: "/mcp/oauth/sign-out",
+    adapter: "cli",
+    cliCommand: "request --operation mcpOAuthSignOut",
+  },
+  {
     operationId: "mcpOAuthLocalLogin",
     method: "get",
     path: "/mcp/oauth/local-login",
@@ -216,6 +223,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     adapter: "both",
     mcpTool: "retrieve_entities",
     cliCommand: "entities list",
+    notes: "For exact_identity mode use the generic request command with operation queryEntities.",
   },
   {
     operationId: "listEntities",
@@ -280,6 +288,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     path: "/entities/{id}",
     adapter: "cli",
     cliCommand: "entities get",
+  },
+  {
+    operationId: "getEntityHtml",
+    method: "get",
+    path: "/entities/{id}/html",
+    adapter: "cli",
+    cliCommand: "request --operation getEntityHtml",
   },
   {
     operationId: "getEntityObservations",

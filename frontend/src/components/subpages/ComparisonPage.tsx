@@ -197,7 +197,7 @@ export function ComparisonPage({
 const NEOTOMA_VS_MEM0: Omit<ComparisonPageProps, "mdxShell"> = {
   title: "Neotoma vs Mem0",
   answerBlock:
-    "Mem0 is a retrieval memory layer that stores text chunks and retrieves them by semantic similarity. Neotoma is a deterministic state layer that stores structured observations and composes entity state via reducers. Mem0 answers 'what is relevant?'; Neotoma answers 'what was true?'",
+    "Mem0 is a retrieval memory layer that stores text chunks and retrieves them by semantic similarity. Neotoma is a deterministic state layer that stores structured observations and composes entity state via reducers. Mem0 answers 'what is relevant?'; Neotoma answers 'what was recorded?'",
   question: "How does Neotoma compare to Mem0?",
   competitorLabel: "Mem0",
   competitorColumn: "retrieval",
@@ -205,12 +205,12 @@ const NEOTOMA_VS_MEM0: Omit<ComparisonPageProps, "mdxShell"> = {
   competitorDescription:
     "Mem0 stores memories as text chunks with vector embeddings. It retrieves relevant context by semantic similarity search. Memory is optimized for prompt augmentation: finding relevant past context to inject into the current conversation.",
   neotomaDescription:
-    "Neotoma stores structured observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Memory is optimized for state integrity: knowing the exact composed state of an entity at any point in time.",
+    "Neotoma stores structured observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Memory is optimized for state integrity: knowing the exact composed state of an entity as recorded up to any point in time.",
   whenToUse: {
     competitor:
       "You need semantic retrieval to inject relevant past context into prompts. Your primary concern is making conversations feel continuous, and approximate recall is sufficient.",
     neotoma:
-      "You need to reconstruct entity state at a specific point in time, resolve multi-writer conflicts deterministically, enforce schema validation, or prove provenance for audits.",
+      "You need to reconstruct entity state as recorded by a specific point in time, resolve multi-writer conflicts deterministically, enforce schema validation, or prove provenance for audits.",
   },
   faqItems: [
     {
@@ -245,7 +245,7 @@ const NEOTOMA_VS_ZEP: Omit<ComparisonPageProps, "mdxShell"> = {
   competitorDescription:
     "Zep combines vector similarity search with a knowledge graph extracted from conversations. It auto-summarizes sessions, extracts entities, and builds a temporal knowledge graph. Memory is optimized for retrieving relevant context with business-data enrichment.",
   neotomaDescription:
-    "Neotoma stores append-only observations and composes them into entity snapshots via deterministic reducers. Every state change is versioned with full provenance. Memory is optimized for knowing exactly what was true at any point in time.",
+    "Neotoma stores append-only observations and composes them into entity snapshots via deterministic reducers. Every state change is versioned with full provenance. Memory is optimized for knowing exactly what had been recorded by any point in time.",
   whenToUse: {
     competitor:
       "You need enriched retrieval with automatic knowledge graph extraction from conversations. Your primary concern is injecting the most relevant context into prompts with minimal configuration.",
@@ -277,7 +277,7 @@ export function NeotomaVsZepPage() {
 const NEOTOMA_VS_RAG: Omit<ComparisonPageProps, "mdxShell"> = {
   title: "Neotoma vs RAG memory",
   answerBlock:
-    "RAG (Retrieval-Augmented Generation) memory stores text as vector embeddings and retrieves relevant chunks by semantic similarity. Deterministic memory stores structured observations and composes entity state via reducers. RAG answers 'what is relevant to this query?'; deterministic memory answers 'what was true at this moment?'",
+    "RAG (Retrieval-Augmented Generation) memory stores text as vector embeddings and retrieves relevant chunks by semantic similarity. Deterministic memory stores structured observations and composes entity state via reducers. RAG answers 'what is relevant to this query?'; deterministic memory answers 'what was recorded by this moment?'",
   question: "What's the difference between RAG memory and deterministic memory?",
   competitorLabel: "RAG memory",
   competitorColumn: "retrieval",
@@ -290,7 +290,7 @@ const NEOTOMA_VS_RAG: Omit<ComparisonPageProps, "mdxShell"> = {
     competitor:
       "You need to augment LLM prompts with relevant context from a document corpus. Approximate retrieval is sufficient, and you don't need to reconstruct historical entity state.",
     neotoma:
-      "You need to know the exact state of an entity at any past moment, resolve conflicts between multiple writers deterministically, enforce schemas, or provide auditable provenance chains.",
+      "You need to know the exact state of an entity as recorded up to any past moment, resolve conflicts between multiple writers deterministically, enforce schemas, or provide auditable provenance chains.",
   },
   faqItems: [
     {
@@ -330,12 +330,12 @@ const NEOTOMA_VS_PLATFORM_MEMORY: Omit<ComparisonPageProps, "mdxShell"> = {
   competitorDescription:
     "Platform memory is controlled by the model provider. Conversation-level memory may remember preferences, summaries, or user details inside that product, but the storage model is opaque. File-based primitives like the Claude Memory Tool give agents CRUD access to a /memories directory, but there is no schema validation, no append-only guarantee, no entity resolution, and no field-level provenance. Users typically cannot inspect lineage, replay state transitions, or export a deterministic observation log.",
   neotomaDescription:
-    "Neotoma stores append-only structured observations with deterministic reducers, schema validation, and provenance. Memory remains user-controlled, cross-tool, and reconstructable at any point in time. It can run alongside both conversation memory and the Memory Tool via MCP.",
+    "Neotoma stores append-only structured observations with deterministic reducers, schema validation, and provenance. Memory remains user-controlled, cross-tool, and reconstructable as recorded up to any point in time. It can run alongside both conversation memory and the Memory Tool via MCP.",
   whenToUse: {
     competitor:
       "You want the fastest possible setup inside a single AI product, you are using the Memory Tool as a lightweight scratchpad, and convenience matters more than portability, versioning, or auditability.",
     neotoma:
-      "You need memory that survives tool changes, supports exact historical reconstruction, exposes provenance, and gives multiple agents a shared state layer with formal guarantees.",
+      "You need memory that survives tool changes, supports exact reconstruction of state as recorded, exposes provenance, and gives multiple agents a shared state layer with formal guarantees.",
   },
   faqItems: [
     {
@@ -436,7 +436,7 @@ const NEOTOMA_VS_DATABASE: Omit<ComparisonPageProps, "mdxShell"> = {
     competitor:
       "You have a single writer, do not need historical state reconstruction, and are comfortable with last-write-wins semantics. Standard application development patterns are sufficient for your use case.",
     neotoma:
-      "Multiple agents write to the same entities. You need to know what was true at any past moment, resolve conflicts deterministically, enforce schemas across writers, or prove provenance for audits. You want the guarantees without building the architecture yourself.",
+      "Multiple agents write to the same entities. You need to know what had been recorded by any past moment, resolve conflicts deterministically, enforce schemas across writers, or prove provenance for audits. You want the guarantees without building the architecture yourself.",
   },
   faqItems: [
     {

@@ -47,8 +47,6 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { randomUUID } from "crypto";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { join } from "path";
@@ -58,8 +56,8 @@ import { db } from "../../src/db.js";
 import { resolveLocalSourceFilePath } from "../../src/services/raw_storage.js";
 import { storeStructuredForApi, storeUnstructuredForApi } from "../../src/actions.js";
 import { cleanupAllTestData } from "../helpers/cleanup_helpers.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 
 const CLI_PATH = "node dist/cli/index.js";
 const TEST_USER_ID = "test-user-cli-store-plan-mode";

@@ -20,7 +20,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { holdOrdinaryWorker, holdWriterWorker } from "../helpers/worker_lifetime_barrier.js";
+import { logger } from "../../src/utils/logger.js";
 import {
+  summarizeQueuedStatements,
+  oldestQueuedWaitMs,
   WorkerFileDatabase,
   WorkerDbCrashError,
   WorkerDbTimeoutError,
@@ -281,7 +285,10 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await seedSlowTable(db);
 
       const slowStart = Date.now();
-      await expect(db.prepare(SLOW_SQL).get()).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      await expect(db.prepare(SLOW_SQL).get()).rejects.toMatchObject({
+        name: "WorkerDbTimeoutError",
+        message: expect.stringContaining("worker retired and draining (replacement spawned)"),
+      });
       const slowMs = Date.now() - slowStart;
 
       // Rejected on the budget, not after the query's natural duration.
@@ -291,6 +298,29 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       const row = await db.prepare("SELECT 1 AS ok").get();
       expect(row).toEqual({ ok: 1 });
     } finally {
+      await db.close();
+    }
+  }, 120_000);
+
+  it("at the retirement cap, still rejects a timed-out read but keeps its worker (queueing, no extra thread)", async () => {
+    const previous = process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS;
+    process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS = "1";
+    const db = makeDb(2, { statementTimeoutMs: 250 });
+    try {
+      await seedSlowTable(db);
+      await Promise.all([db.prepare("SELECT 1").get(), db.prepare("SELECT 1").get()]);
+      const results = await Promise.allSettled([
+        db.prepare(SLOW_SQL).get(),
+        db.prepare(SLOW_SQL).get(),
+      ]);
+      for (const r of results) {
+        expect(r.status).toBe("rejected");
+        expect((r as PromiseRejectedResult).reason).toBeInstanceOf(WorkerDbTimeoutError);
+      }
+      expect(await db.prepare("SELECT 1 AS ok").get()).toEqual({ ok: 1 });
+    } finally {
+      if (previous === undefined) delete process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS;
+      else process.env.NEOTOMA_DB_MAX_RETIRED_WORKERS = previous;
       await db.close();
     }
   }, 120_000);
@@ -412,74 +442,732 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       const saturated = db.readerPoolStats();
       expect(saturated.busy).toBe(2);
       expect(saturated.queued).toBeGreaterThanOrEqual(2);
+      expect(saturated.oldestQueuedWaitMs).toBe(0);
 
-      await Promise.all(slow);
+      // A third statement queues behind a busy reader, so its wait is visible.
+      const third = db.prepare(SLOW_SQL).get();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(db.readerPoolStats().oldestQueuedWaitMs).toBeGreaterThan(0);
+
+      await Promise.all([...slow, third]);
       expect(db.readerPoolStats().busy).toBe(0);
     } finally {
       await db.close();
     }
   }, 120_000);
 
-  it(
-    "close() does not reject when a worker's terminate() rejects (#2483)",
-    async () => {
-      // `abandon()`'s two call sites already guard `worker.terminate()` with
-      // `.catch(() => {})` (#2324's own fix); `WorkerConnection.terminate()` —
-      // reachable only from `close()` — did not, so an unhandled rejection
-      // there could crash a clean shutdown exactly like the abort path can
-      // crash a live request. Forcing the real neon panic that made
-      // `terminate()` reject in production is what
-      // `db_abort_client_disconnect_survival.test.ts` does at a whole
-      // child-process level; this test instead proves the GUARD ITSELF is in
-      // place by making `Worker.prototype.terminate` reject directly, which
-      // is deterministic and does not depend on winning that race.
-      //
-      // A dedicated instance (not `makeDb`) with a near-zero `orphanGraceMs`:
-      // `close()`'s `awaitWorkerIdle` otherwise waits for the drain reply,
-      // which cannot arrive until the genuinely-slow in-flight statement below
-      // finishes, and defaults to a 30s grace window before falling through —
-      // this test is about the terminate() guard, not about #2324's orphan
-      // drain timing, which is covered elsewhere.
+  it("names the queued statements when the reader pool saturates", async () => {
+    const db = makeDb(2);
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await seedSlowTable(db);
+      await Promise.all(Array.from({ length: 2 }, () => db.prepare("SELECT 1 AS ok").get()));
+      const slow = [db.prepare(SLOW_SQL).get(), db.prepare(SLOW_SQL).get()];
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Every reader is busy, so this read is the one that trips the warning.
+      const third = db.prepare(SLOW_SQL).get();
+      await Promise.all([...slow, third]);
+      const message = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("saturated"));
+      expect(message).toBeDefined();
+      expect(message).toContain("In flight: ");
+      expect(message).toContain(SLOW_SQL.replace(/\s+/g, " ").trim().slice(0, 70));
+    } finally {
+      warn.mockRestore();
+      await db.close();
+    }
+  }, 120_000);
+
+  it("summarizes queued statements by shape without bound values", () => {
+    const summary = summarizeQueuedStatements([
+      "SELECT * FROM entities\n   WHERE id IN (?, ?)",
+      "SELECT * FROM entities WHERE id IN (?, ?)",
+      "SELECT 1",
+    ]);
+    expect(summary).toBe('2x "SELECT * FROM entities WHERE id IN (?, ?)"; 1x "SELECT 1"');
+  });
+
+  it("close waits for actual exit when termination rejects, without an unhandled rejection", async () => {
+    const db = makeDb();
+    await db.prepare("SELECT 1").get();
+    const actual = Worker.prototype.terminate;
+    let held: Worker | undefined;
+    const spy = vi.spyOn(Worker.prototype, "terminate").mockImplementationOnce(function (
+      this: Worker
+    ) {
+      held = this;
+      return Promise.reject(new Error("synthetic termination failure"));
+    });
+    let closed = false;
+    const closing = db.close().then(() => {
+      closed = true;
+    });
+    try {
+      await vi.waitFor(() => expect(held).toBeDefined());
+      expect(closed).toBe(false);
+    } finally {
+      spy.mockRestore();
+      if (held) await actual.call(held);
+      await expect(closing).resolves.toBeUndefined();
+      await db.close();
+    }
+  });
+});
+
+describe("pinned worker read view", () => {
+  it.each(
+    ["test", "development", "production"].flatMap((mode) =>
+      ["reader", "writer"].map((role) => ({ mode, role }))
+    )
+  )("confines the valid lifetime barrier to test mode ($mode/$role)", async ({ mode, role }) => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = mode;
+    const db = makeDb();
+    let held: ReturnType<typeof holdOrdinaryWorker> | undefined;
+    try {
+      await db.exec("CREATE TABLE environment_control(n INTEGER)");
+      await db.prepare("SELECT 1").get();
+      held = (role === "reader" ? holdOrdinaryWorker : holdWriterWorker)(
+        db,
+        new AbortController().signal
+      );
+      const result = held.pending.then(
+        (value) => ({ kind: "returned", value }),
+        (error) => ({ kind: "rejected", message: error.message })
+      );
+      if (mode === "test") {
+        await vi.waitFor(() => expect(Atomics.load(held!.flags, 0)).toBe(1));
+        held.release();
+        expect(await result).toEqual({ kind: "returned", value: { held: true } });
+      } else {
+        const outcome = await Promise.race([
+          result,
+          new Promise((resolve) => setTimeout(() => resolve({ kind: "still-held" }), 150)),
+        ]);
+        expect(outcome).toEqual({ kind: "rejected", message: "Worker test barrier unavailable" });
+        expect(Atomics.load(held.flags, 0)).toBe(0);
+      }
+    } finally {
+      held?.release();
+      await db.close();
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
+  it("aborts before BEGIN without creating an exact reader", async () => {
+    const db = makeDb();
+    const control = new AbortController();
+    control.abort();
+    try {
+      await expect(
+        withDbAbortSignal(control.signal, () => db.withPinnedReadView(async () => 1))
+      ).rejects.toBeInstanceOf(WorkerDbAbortError);
+      expect(db.readerPoolStats().size).toBe(0);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it.each(["BEGIN", "SELECT 1 AS exact_stage", "ROLLBACK"])(
+    "retains an unfinished %s generation through abort or failed cleanup",
+    async (stage) => {
       counter += 1;
-      const db = new WorkerFileDatabase(path.join(workDir, `w-${counter}.db`), {
-        readerWorkers: 1,
-        statementTimeoutMs: 0,
+      const db = new WorkerFileDatabase(path.join(workDir, `stage-${counter}.db`), {
+        readerWorkers: 2,
         orphanGraceMs: 20,
       });
-      try {
-        await seedSlowTable(db, 1500);
-        // Get a real reader worker spawned and mid-statement, so `close()`
-        // takes the "wasBusy" branch in `terminate()` — the one that awaits
-        // `awaitWorkerIdle` and then calls `worker.terminate()` — rather than
-        // the trivial "nothing to terminate" early return.
-        const inFlight = db.prepare(SLOW_SQL).get();
-        await new Promise((resolve) => setTimeout(resolve, 20));
-
-        const terminateSpy = vi
-          .spyOn(Worker.prototype, "terminate")
-          .mockRejectedValueOnce(new Error("simulated native panic during terminate (#2483)"));
-        try {
-          await expect(db.close()).resolves.toBeUndefined();
-        } finally {
-          terminateSpy.mockRestore();
+      const flags = new Int32Array(new SharedArrayBuffer(8));
+      const originalPost = Worker.prototype.postMessage;
+      let held: Worker | undefined;
+      const posting = vi.spyOn(Worker.prototype, "postMessage").mockImplementation(function (
+        this: Worker,
+        message,
+        ...rest
+      ) {
+        if (message?.sql === stage) {
+          held = this;
+          return originalPost.call(
+            this,
+            { ...message, sql: "__hold_for_test__", params: [flags.buffer] },
+            ...rest
+          );
         }
-
-        // Deliberately NOT awaited. The mock intercepted `terminate()` without
-        // actually killing the real worker thread, so the genuinely-slow
-        // cross-join underneath `inFlight` keeps running for its full natural
-        // duration (seconds) regardless of anything this test does — the same
-        // shape as the abandoned reads `guardAbandonedRead` exists for.
-        // Awaiting it here would make this test about that unrelated timing
-        // rather than about `close()`, so it gets the identical no-op guard
-        // instead: never left unhandled, never blocked on.
-        void inFlight.catch(() => {});
+        return originalPost.call(this, message, ...rest);
+      });
+      const control = new AbortController();
+      const pin = withDbAbortSignal(control.signal, () =>
+        db.withPinnedReadView((view) => view.prepare("SELECT 1 AS exact_stage").get())
+      );
+      const failure = expect(pin).rejects.toBeInstanceOf(
+        stage === "ROLLBACK" ? WorkerDbTimeoutError : WorkerDbAbortError
+      );
+      let terminating: ReturnType<typeof vi.spyOn> | undefined;
+      try {
+        await vi.waitFor(() => expect(Atomics.load(flags, 0)).toBe(1));
+        terminating = vi.spyOn(held!, "terminate");
+        if (stage !== "ROLLBACK") control.abort();
+        await failure;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(terminating).not.toHaveBeenCalled();
+        await expect(db.withPinnedReadView(async () => 1)).rejects.toThrow(/unavailable/);
       } finally {
-        // db is already closed; a second close() must still be harmless. The
-        // real (unmocked) terminate() runs here, so this is what actually
-        // reclaims the still-running worker from the mocked call above.
+        posting.mockRestore();
+        Atomics.store(flags, 1, 1);
+        Atomics.notify(flags, 1);
         await db.close();
+        terminating?.mockRestore();
       }
-    },
-    30_000
+      const next = makeDb();
+      try {
+        expect(
+          await next.withPinnedReadView((view) => view.prepare("SELECT 1 AS n").get())
+        ).toEqual({ n: 1 });
+      } finally {
+        await next.close();
+      }
+    }
   );
+
+  it("withholds exact work through ordinary retirement and apparent termination until true exit", async () => {
+    counter += 1;
+    const db = new WorkerFileDatabase(path.join(workDir, `resource-${counter}.db`), {
+      readerWorkers: 2,
+      statementTimeoutMs: 0,
+      orphanGraceMs: 20,
+    });
+    await db.exec("CREATE TABLE resource_control (n INTEGER)");
+    await db.prepare("SELECT 1").get();
+    const control = new AbortController();
+    const held = holdOrdinaryWorker(db, control.signal);
+    const terminate = held.worker.terminate.bind(held.worker);
+    const requested = vi.spyOn(held.worker, "terminate").mockResolvedValue(0);
+    let exited = false;
+    held.worker.once("exit", () => {
+      exited = true;
+    });
+    try {
+      await vi.waitFor(() => expect(Atomics.load(held.flags, 0)).toBe(1));
+      const rejected = expect(held.pending).rejects.toBeInstanceOf(WorkerDbAbortError);
+      control.abort();
+      control.abort();
+      await rejected;
+      // Past the (now close()-only) grace window the worker must still NOT be
+      // terminated while it is inside its native call; that is what aborted
+      // production on 2026-11-12.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(requested).not.toHaveBeenCalled();
+      expect(exited).toBe(false);
+      const scans = vi.fn();
+      for (let attempt = 0; attempt < 4; attempt++)
+        await expect(
+          db.withPinnedReadView(async () => {
+            scans();
+            return 1;
+          })
+        ).rejects.toThrow(/unavailable/);
+      expect(scans).not.toHaveBeenCalled();
+      await db.prepare("INSERT INTO resource_control VALUES (9)").run();
+      expect(await db.prepare("SELECT n FROM resource_control").get()).toEqual({ n: 9 });
+      let closed = false;
+      const closing = db.close();
+      closing.then(() => {
+        closed = true;
+      });
+      expect(db.close()).toBe(closing);
+      expect(closed).toBe(false);
+      held.release();
+      // Terminated only once it has drained (back in JavaScript).
+      await vi.waitFor(() => expect(requested).toHaveBeenCalled());
+      requested.mockRestore();
+      await terminate();
+      await closing;
+      expect(exited).toBe(true);
+      expect(closed).toBe(true);
+    } finally {
+      held.release();
+      requested.mockRestore();
+      await terminate();
+      await db.close();
+    }
+    const fresh = makeDb();
+    try {
+      expect(await fresh.withPinnedReadView((view) => view.prepare("SELECT 3 AS n").get())).toEqual(
+        { n: 3 }
+      );
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  it("reserves within the pool, expires the view, and leaves other traffic free", async () => {
+    const db = makeDb();
+    let release!: () => void;
+    let entered!: () => void;
+    let former: { prepare(sql: string): { get(): Promise<unknown> } } | undefined;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      const pin = db.withPinnedReadView(async (view) => {
+        former = view;
+        expect(await view.prepare("SELECT COUNT(*) AS n FROM t").get()).toEqual({ n: 0 });
+        expect(() => view.prepare("ATTACH DATABASE 'unexpected' AS outside")).toThrow(
+          /only SELECT/
+        );
+        await expect(view.exec("DELETE FROM t")).rejects.toThrow(/only SELECT/);
+        entered();
+        await held;
+        return view.prepare("SELECT COUNT(*) AS n FROM t").get();
+      });
+      try {
+        await ready;
+        await expect(db.withPinnedReadView(async () => "unused")).rejects.toThrow(/unavailable/);
+        await db.prepare("INSERT INTO t VALUES (1)").run();
+        expect(await db.prepare("SELECT COUNT(*) AS n FROM t").get()).toEqual({ n: 1 });
+        expect(db.readerPoolStats().size).toBe(2);
+      } finally {
+        release();
+      }
+      expect(await pin).toEqual({ n: 0 });
+      await expect(former!.prepare("SELECT 1").get()).rejects.toThrow(/expired/);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses when both ordinary reader slots are busy", async () => {
+    const db = makeDb();
+    const control = new AbortController();
+    const readers: Promise<unknown>[] = [];
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      const sql =
+        "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<2500000) SELECT sum(x) FROM n";
+      readers.push(
+        ...withDbAbortSignal(control.signal, () => [db.prepare(sql).get(), db.prepare(sql).get()])
+      );
+      await vi.waitFor(() => expect(db.readerPoolStats().busy).toBe(2));
+      await expect(db.withPinnedReadView(async () => "unused")).rejects.toThrow(/unavailable/);
+      expect(await db.prepare("INSERT INTO t VALUES (1)").run()).toMatchObject({ changes: 1 });
+    } finally {
+      control.abort();
+      await Promise.allSettled(readers);
+      await db.close();
+    }
+  });
+
+  it("releases the reservation at the whole-read deadline between statements", async () => {
+    const db = makeDb();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await expect(
+        db.withPinnedReadView(async (view) => {
+          await view.prepare("SELECT 1 AS n").get();
+          return new Promise<never>(() => {});
+        }, 150)
+      ).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses a result that exceeds the budget before the timer callback runs", async () => {
+    const db = makeDb();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await db.prepare("SELECT 1 AS n").get();
+      let entered = false;
+      await expect(
+        db.withPinnedReadView(async () => {
+          entered = true;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+          return "late";
+        }, 100)
+      ).rejects.toBeInstanceOf(WorkerDbTimeoutError);
+      expect(entered).toBe(true);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+        n: 2,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("retires an aborted pinned worker without routing its statement to the writer", async () => {
+    const db = makeDb();
+    const control = new AbortController();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      const pin = withDbAbortSignal(control.signal, () =>
+        db.withPinnedReadView(async (view) => {
+          const query = view
+            .prepare(
+              "SELECT sum(x) FROM (WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<2500000) SELECT x FROM n)"
+            )
+            .get();
+          control.abort();
+          return query;
+        })
+      );
+      await expect(pin).rejects.toBeInstanceOf(WorkerDbAbortError);
+      await vi.waitFor(async () =>
+        expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+          n: 2,
+        })
+      );
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("rejects an unfinished statement before releasing the view", async () => {
+    const db = makeDb();
+    let statement: Promise<unknown> | undefined;
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await expect(
+        db.withPinnedReadView(async (view) => {
+          statement = view.prepare("SELECT 1 AS n").get();
+          return "unfinished";
+        })
+      ).rejects.toThrow(/unfinished statement/);
+      await expect(statement).rejects.toBeInstanceOf(WorkerDbAbortError);
+      await vi.waitFor(async () =>
+        expect(await db.withPinnedReadView((view) => view.prepare("SELECT 2 AS n").get())).toEqual({
+          n: 2,
+        })
+      );
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("never resumes a read view on a replacement after a worker exits", async () => {
+    const db = makeDb();
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+      await expect(
+        db.withPinnedReadView(async (view) => {
+          await view.prepare("SELECT 1 AS n").get();
+          await expect(db.__crashWorkerForTest("pinned")).rejects.toBeInstanceOf(
+            WorkerDbCrashError
+          );
+          await expect(view.prepare("SELECT 2 AS n").get()).rejects.toBeInstanceOf(
+            WorkerDbCrashError
+          );
+          return "unproved";
+        })
+      ).rejects.toBeInstanceOf(WorkerDbCrashError);
+      expect(await db.withPinnedReadView((view) => view.prepare("SELECT 3 AS n").get())).toEqual({
+        n: 3,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("WorkerFileDatabase read-your-writes under write-gate contention", () => {
+  // A non-transaction write used to await a snapshot of the gate tail taken when
+  // it was issued. A transaction enqueued after that snapshot (a second client's
+  // correction) began on the single writer connection first, so the write
+  // executed INSIDE that transaction: its promise resolved before COMMIT, and a
+  // read dispatched to a reader worker (reads no longer wait for the gate) did
+  // not see it. The completion-marker read-back in `markStoreWriteComplete`
+  // hit exactly this and reported a committed store as a 500.
+  async function contend(db: WorkerFileDatabase) {
+    await db.exec("CREATE TABLE rw_t (id INTEGER PRIMARY KEY, v TEXT)");
+    let releaseA!: () => void;
+    const heldA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    let aStarted!: () => void;
+    const aStartedSignal = new Promise<void>((resolve) => {
+      aStarted = resolve;
+    });
+    const txA = db.transaction(async (conn) => {
+      await conn.prepare("INSERT INTO rw_t (v) VALUES (?)").run("a");
+      aStarted();
+      await heldA;
+    });
+    await aStartedSignal;
+
+    // The write is issued while only A is open...
+    const write = db.prepare("INSERT INTO rw_t (v) VALUES (?)").run("marker");
+    // ...and a second transaction (another client's correction) queues after it.
+    let releaseC!: () => void;
+    const heldC = new Promise<void>((resolve) => {
+      releaseC = resolve;
+    });
+    let cStarted!: () => void;
+    const cStartedSignal = new Promise<void>((resolve) => {
+      cStarted = resolve;
+    });
+    const txC = db.transaction(async (conn) => {
+      await conn.prepare("INSERT INTO rw_t (v) VALUES (?)").run("c");
+      cStarted();
+      await heldC;
+    });
+    return { write, txA, txC, releaseA, releaseC, cStartedSignal };
+  }
+
+  it("never resolves a write that a reader cannot yet see, while a later transaction is open", async () => {
+    const db = makeDb(2);
+    try {
+      const { write, txA, txC, releaseA, releaseC, cStartedSignal } = await contend(db);
+      releaseA();
+      await txA;
+      await cStartedSignal;
+      // C is open and held. The write was issued before C, so it runs ahead of
+      // it in the gate's order. Whatever the order, a write that has resolved
+      // must be visible to a reader: it must not have been absorbed into C.
+      let writeDone = false;
+      void write.then(() => {
+        writeDone = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const visible = (await db
+        .prepare("SELECT COUNT(*) AS n FROM rw_t WHERE v = 'marker'")
+        .get()) as { n: number };
+      expect(writeDone).toBe(true);
+      expect(visible.n).toBe(1);
+      releaseC();
+      await txC;
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("a write that resolved is visible to the next read, even when a transaction was queued behind it", async () => {
+    const db = makeDb(2);
+    try {
+      const { write, txA, txC, releaseA, releaseC } = await contend(db);
+      releaseA();
+      await txA;
+      // The write now waits for C; C commits shortly after.
+      setTimeout(releaseC, 50);
+      await write;
+      const row = (await db.prepare("SELECT v FROM rw_t WHERE v = 'marker'").get()) as
+        | { v: string }
+        | undefined;
+      expect(row?.v).toBe("marker");
+      await txC;
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("WorkerFileDatabase reads do not wait for write transactions", () => {
+  it("completes a read outside a transaction while a write transaction is still open", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.prepare("INSERT INTO gate_t (v) VALUES (?)").run("committed");
+
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      let committed = false;
+      const tx = db
+        .transaction(async (conn) => {
+          await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("uncommitted");
+          inserted();
+          await held;
+        })
+        .then(() => {
+          committed = true;
+        });
+
+      await insertedSignal;
+      // Read outside the transaction: must not wait for it, and must not see its row.
+      const rows = (await db.prepare("SELECT v FROM gate_t ORDER BY id").all()) as { v: string }[];
+      expect(committed).toBe(false);
+      expect(rows.map((r) => r.v)).toEqual(["committed"]);
+
+      release();
+      await tx;
+      const after = (await db.prepare("SELECT COUNT(*) AS n FROM gate_t").get()) as { n: number };
+      expect(after.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("still lets a read inside the transaction see its own uncommitted write", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("mine");
+        const row = (await conn.prepare("SELECT v FROM gate_t").get()) as { v: string };
+        expect(row.v).toBe("mine");
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps waiting for the open transaction when the pool has no readers", async () => {
+    const db = makeDb(0);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      const tx = db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("x");
+        inserted();
+        await held;
+      });
+      await insertedSignal;
+      let readDone = false;
+      const read = db
+        .prepare("SELECT COUNT(*) AS n FROM gate_t")
+        .get()
+        .then((r) => {
+          readDone = true;
+          return r as { n: number };
+        });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(readDone).toBe(false);
+      release();
+      await tx;
+      expect((await read).n).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("logs a transaction that holds the gate over three seconds, without bound values", async () => {
+    const db = makeDb(2);
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await db.exec("CREATE TABLE gate_t (id INTEGER PRIMARY KEY, v TEXT)");
+      await db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO gate_t (v) VALUES (?)").run("secret-value");
+        await new Promise((resolve) => setTimeout(resolve, 3300));
+      });
+      const msg = warn.mock.calls.map((c) => String(c[0])).find((m) => m.includes("held the gate"));
+      expect(msg).toBeDefined();
+      expect(msg).toContain("First statement: INSERT INTO gate_t");
+      expect(msg).toContain("waited for gate");
+      expect(msg).toContain("A long write transaction delays other writes.");
+      expect(msg).not.toContain("reads are not affected");
+      expect(msg).not.toContain("secret-value");
+    } finally {
+      warn.mockRestore();
+      await db.close();
+    }
+  }, 30_000);
+
+  it("reports event-loop delay and oldest queued wait in the pool snapshot", async () => {
+    const db = makeDb(2);
+    try {
+      await db.prepare("SELECT 1 AS ok").get();
+      const stats = db.readerPoolStats();
+      expect(stats.oldestQueuedWaitMs).toBe(0);
+      expect(stats.eventLoopDelaySinceLastSnapshotMs).not.toBeNull();
+      expect(stats.eventLoopDelaySinceLastSnapshotMs?.max).toBeGreaterThanOrEqual(0);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("WorkerFileDatabase retry of a read that writes", () => {
+  it("waits for an open transaction before running the retried write on the writer", async () => {
+    const db = makeDb(2);
+    try {
+      await db.exec("CREATE TABLE rt (id INTEGER PRIMARY KEY, v TEXT)");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inserted!: () => void;
+      const insertedSignal = new Promise<void>((resolve) => {
+        inserted = resolve;
+      });
+      const tx = db.transaction(async (conn) => {
+        await conn.prepare("INSERT INTO rt (id, v) VALUES (1, 'tx')").run();
+        inserted();
+        await held;
+      });
+      await insertedSignal;
+
+      // Read-shaped call that writes: rejected read-only on a reader, then
+      // retried on the writer, which must not run inside the open transaction.
+      // The rejection is injected because some worker drivers let the reader
+      // block on the write lock instead of rejecting, which would never reach
+      // the retry path this test pins.
+      const dispatch = vi
+        .spyOn(
+          db as unknown as { dispatchRead: (...a: unknown[]) => Promise<unknown> },
+          "dispatchRead"
+        )
+        .mockRejectedValueOnce(
+          Object.assign(new Error("attempt to write a readonly database"), {
+            code: "SQLITE_READONLY",
+          })
+        );
+      let done = false;
+      const retried = db
+        .prepare("INSERT INTO rt (id, v) VALUES (2, 'retry') RETURNING id, v")
+        .get()
+        .then((r) => {
+          done = true;
+          return r;
+        });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(done).toBe(false);
+
+      release();
+      await tx;
+      expect(await retried).toEqual({ id: 2, v: "retry" });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      const n = (await db.prepare("SELECT COUNT(*) AS n FROM rt").get()) as { n: number };
+      expect(n.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+  }, 30_000);
+});
+
+describe("oldestQueuedWaitMs", () => {
+  it("reports the age of the oldest waiting statement, not the executing one or episode age", () => {
+    // Reader A: executing since 1000 (not waiting), one waiting since 4000.
+    // Reader B: only an executing statement since 500 (nothing waiting).
+    expect(oldestQueuedWaitMs([[1000, 4000], [500]], 5000)).toBe(1000);
+    expect(oldestQueuedWaitMs([[1000], [500]], 5000)).toBe(0);
+    expect(
+      oldestQueuedWaitMs(
+        [
+          [1000, 4500, 4900],
+          [2000, 3000],
+        ],
+        5000
+      )
+    ).toBe(2000);
+    expect(oldestQueuedWaitMs([], 5000)).toBe(0);
+  });
 });

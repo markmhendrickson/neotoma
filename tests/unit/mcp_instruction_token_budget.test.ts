@@ -86,7 +86,17 @@ import {
  * Baseline after that merge: measured 151,984 chars (~32,840 tokens),
  * leaving 16 chars of headroom.
  */
-const FULL_BLOCK_MAX_CHARS = 152_000;
+// Planning declarations must be in the delivered canonical fence (PR #2803).
+// Existing rules are unchanged: 151,886 -> 152,932 chars (+1,046, ~226 tokens).
+// Raise only 1,000 chars to 153,000 after condensing the new behavior; this
+// leaves 68 chars. Moving it outside the fence would conceal the runtime cost.
+// Store reply `write_committed` / `store_write_completion: "unconfirmed"` (PR #2824):
+// one mirrored rule line (+~240 chars) so agents treat a committed store with an
+// unconfirmed marker as success instead of retrying it. Raised 200 chars to 153,200.
+// CLI user-scope rule: one existing sentence now states that a different user_id is
+// only honoured for local requests without a token, otherwise 403 (+21 chars, to
+// 153,215). Raised 50 chars to 153,250.
+const FULL_BLOCK_MAX_CHARS = 153_250;
 
 /**
  * Ceiling for the compact payload served when NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1.

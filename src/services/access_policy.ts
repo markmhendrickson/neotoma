@@ -22,8 +22,8 @@
 
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 import { logger } from "../utils/logger.js";
+import { runtimeEnv, userStateDir } from "../config_embedded.js";
 
 export type AccessPolicyMode = "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
 
@@ -53,8 +53,7 @@ export interface AccessPolicyEntry extends AccessPolicyResolution {
 }
 
 function configFilePath(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-  return path.join(home, ".config", "neotoma", "config.json");
+  return path.join(userStateDir(), "config.json");
 }
 
 interface ConfigShape {
@@ -131,7 +130,7 @@ export async function loadAccessPolicyEntries(): Promise<Record<string, AccessPo
 
   // 3. Env vars (highest priority)
   const envPrefix = "NEOTOMA_ACCESS_POLICY_";
-  for (const [key, value] of Object.entries(process.env)) {
+  for (const [key, value] of Object.entries(runtimeEnv())) {
     if (key.startsWith(envPrefix) && value) {
       const entityType = key.slice(envPrefix.length).toLowerCase();
       const mode = parseMode(value);
@@ -166,7 +165,7 @@ export async function resolveAccessPolicyWithSource(
 ): Promise<AccessPolicyResolution> {
   // 1. Env var override (highest priority — operator escape hatch)
   const envKey = `NEOTOMA_ACCESS_POLICY_${entityType.toUpperCase()}`;
-  const envMode = parseMode(process.env[envKey]);
+  const envMode = parseMode(runtimeEnv()[envKey]);
   if (envMode) return { mode: envMode, source: "env" };
 
   // 2. SchemaMetadata.guest_access_policy on the active schema row
@@ -423,9 +422,8 @@ export class AccessPolicyError extends Error {
       mode: this.mode,
       reason: this.policyReason,
       hint:
-        `Entity type "${this.entityType}" has access policy "${this.mode}" which ` +
-        `does not allow guest "${this.op}". Ask the instance operator to update ` +
-        `the policy with: neotoma access set ${this.entityType} <mode>`,
+        `This link does not grant access here. It may be for a different page, or ` +
+        `it may have been revoked or expired. Ask the person who sent it for a new link.`,
     };
   }
 }

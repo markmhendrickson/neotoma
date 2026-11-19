@@ -314,6 +314,15 @@
   .mdx-site-page-content pre {
     @apply rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-base whitespace-pre-wrap break-words mb-6;
   }
+  /* Legal prose contains long endpoint URLs in inline code and links. Keep pre blocks scrollable. */
+  .post-prose :where(p, li) a,
+  .post-prose :where(p, li) code:not(pre code) {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .post-prose :where(p, li) code:not(pre code) {
+    white-space: normal;
+  }
   /* Links: use `.post-prose` (paired on `MdxSitePage` detail shell) for underline + CTA exclusions. */
 
   .dark .code-block-palette {

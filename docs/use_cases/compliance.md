@@ -1,6 +1,6 @@
 # Vendor risk & compliance
 
-Vendor risk management demands knowing exactly what was assessed, when, and under which criteria — yet most compliance teams rely on scattered spreadsheets, email threads, and point-in-time PDFs that lose their temporal context the moment they're filed. Neotoma provides a deterministic state layer that versions every vendor profile, screening result, questionnaire response, and risk assessment as immutable observations with full provenance, enabling compliance officers and AI agents to reconstruct the precise risk picture that existed at any approval decision point.
+Vendor risk management demands knowing exactly what was assessed, when, and under which criteria — yet most compliance teams rely on scattered spreadsheets, email threads, and single-date PDFs that lose their temporal context the moment they're filed. Neotoma provides a deterministic state layer that versions every vendor profile, screening result, questionnaire response, and risk assessment as immutable observations with full provenance, enabling compliance officers and AI agents to reconstruct the precise risk picture as recorded by any approval decision.
 
 ## Entity examples
 
@@ -11,7 +11,7 @@ Vendor risk management demands knowing exactly what was assessed, when, and unde
 
 ## Key question
 
-> "What did we know about this vendor when we approved them?"
+> "What had we recorded about this vendor by the time we approved them?"
 
 ## Data sources
 

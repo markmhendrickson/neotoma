@@ -457,6 +457,19 @@
       ]
     },
     {
+      "path": "/entities/{id}/html",
+      "method": "GET",
+      "operation_id": "getEntityHtml",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/entities/{id}/observations",
       "method": "GET",
       "operation_id": "getEntityObservations",
@@ -942,6 +955,20 @@
       "expected_invalid_auth_status": [
         401
       ]
+    },
+    {
+      "path": "/mcp/oauth/sign-out",
+      "method": "POST",
+      "operation_id": "mcpOAuthSignOut",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200
+      ],
+      "expected_invalid_auth_status": [
+        200
+      ],
+      "override_applied": true
     },
     {
       "path": "/mcp/oauth/status",
@@ -1815,6 +1842,19 @@
         "expected_invalid_auth_status": [
           200,
           503
+        ]
+      }
+    },
+    {
+      "path": "/mcp/oauth/sign-out",
+      "method": "POST",
+      "reason": "Deliberately unauthenticated (openapi.yaml security: []): the route only ends the caller's own key-session and clears the caller's own cookie, and a browser caller may hold only the HttpOnly session cookie. It returns 200 with or without credentials, so it never answers 401.",
+      "fields": {
+        "expected_no_auth_status": [
+          200
+        ],
+        "expected_invalid_auth_status": [
+          200
         ]
       }
     }

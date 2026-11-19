@@ -40,7 +40,14 @@ function extractMarkdownFromIframeDocument(doc: Document): string | null {
   return htmlElementToMarkdown(root);
 }
 
-export function SiteMarkdownMirrorPage() {
+interface SiteMarkdownMirrorPageProps {
+  /** Exact routes have no splat; their caller supplies the default-locale original. */
+  sourcePath?: string;
+}
+
+export function SiteMarkdownMirrorPage({
+  sourcePath: originalSourcePath,
+}: SiteMarkdownMirrorPageProps = {}) {
   const { "*": splat } = useParams();
   const location = useLocation();
   const { hash } = location;
@@ -49,7 +56,7 @@ export function SiteMarkdownMirrorPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const sourcePath = markdownSplatToSourcePath(splat);
+  const sourcePath = originalSourcePath ?? markdownSplatToSourcePath(splat);
   const valid = isFullPageMarkdownSourcePath(sourcePath);
   const fetchPath = localizePath(`${sourcePath}${hash}`, locale);
 
@@ -106,6 +113,8 @@ export function SiteMarkdownMirrorPage() {
         // Dev server shell: use iframe.
       }
 
+      if (!alive) return;
+
       const iframe = iframeRef.current;
       if (!iframe) {
         finishError("Missing iframe target.");
@@ -117,6 +126,7 @@ export function SiteMarkdownMirrorPage() {
       }, IFRAME_TIMEOUT_MS);
 
       const onLoad = () => {
+        if (!alive) return;
         const idoc = iframe.contentDocument;
         if (!idoc) {
           finishError("Could not read iframe document.");

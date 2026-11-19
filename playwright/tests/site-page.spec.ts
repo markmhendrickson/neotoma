@@ -434,5 +434,7 @@ test.describe("sitePage coverage", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("button", { name: /toggle sidebar/i })).toBeVisible();
+    // The "Developer preview" header badge was removed from the shell (operator ruling 2026-10-20).
+    await expect(page.getByText(/developer preview/i)).toHaveCount(0);
   });
 });

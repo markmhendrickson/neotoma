@@ -43,7 +43,7 @@ export const BUNDLED_DOCS_FOOTER_COLUMNS: readonly BundledDocsFooterColumn[] = [
       { label: "Install", to: "/docs/site/pages/en/install" },
       { label: "Architecture", to: "/docs/architecture/architecture" },
       { label: "Memory guarantees", to: "/docs/site/pages/en/memory-guarantees" },
-      { label: "FAQ", to: "/faq" },
+      { label: "FAQ", to: "/docs/site/pages/en/faq" },
     ],
   },
   {
@@ -53,6 +53,8 @@ export const BUNDLED_DOCS_FOOTER_COLUMNS: readonly BundledDocsFooterColumn[] = [
       { label: "API", to: "/docs/site/pages/en/api" },
       { label: "MCP", to: "/docs/site/pages/en/mcp" },
       { label: "CLI", to: "/docs/site/pages/en/cli" },
+      { label: "TypeScript SDK", to: "/docs/site/pages/en/sdk-agent" },
+      { label: "Python SDK", to: "/docs/site/pages/en/sdk-python" },
     ],
   },
   {

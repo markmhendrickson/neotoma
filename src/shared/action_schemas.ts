@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlanningDeclarationSchema } from "./schema_planning.js";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
 import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
@@ -48,17 +49,20 @@ export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
   include_cleared_fields: z.boolean().optional(),
   /**
-   * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
-   * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,
-   * regardless of when the observation was ingested.
+   * Observation-time cutoff (ISO 8601). Reconstructs the snapshot from
+   * observations whose `observed_at` ≤ this timestamp. Public store and correct
+   * stamp `observed_at` with the server clock at write time, so this answers
+   * "what had been asserted by T", not "what was true in the world at T".
+   * Domain date fields are ordinary fields, not a reducer time axis.
    */
   at: z.string().optional(),
   /**
    * Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from
    * observations whose `created_at` (row-insertion time) ≤ this timestamp.
-   * Use this for "what did we actually KNOW at time T" semantics: backfilled
-   * or late-arriving observations with a past `observed_at` are excluded if
-   * they arrived after this cutoff.
+   * Public store and correct assign both timestamps during the write, but
+   * assertion stamping and row insertion can occur at different moments.
+   * The timestamps are not guaranteed to be identical. Neither cutoff
+   * filters domain date fields.
    *
    * When both `at` and `at_ingested` are supplied, both bounds are applied
    * simultaneously (most conservative knowledge-as-of: an observation must
@@ -190,8 +194,28 @@ export const StoreRelationshipInputSchema = z
     }
   });
 
+/**
+ * Record-wide as-of cutoffs (#2700). Same names and meaning as the
+ * single-entity snapshot read (`EntitySnapshotRequestSchema`): `at` bounds an
+ * observation's `observed_at`, `at_ingested` bounds its `created_at`, and
+ * supplying both applies both (AND).
+ */
+const asOfTimestamp = (name: "at" | "at_ingested") =>
+  z
+    .string()
+    .refine((value) => !isNaN(new Date(value).getTime()), {
+      message: `Invalid timestamp format for '${name}'. Expected ISO 8601 format.`,
+    })
+    .optional();
+
+export const AsOfCutoffFields = {
+  at: asOfTimestamp("at"),
+  at_ingested: asOfTimestamp("at_ingested"),
+};
+
 export const ListRelationshipsRequestSchema = z
   .object({
+    ...AsOfCutoffFields,
     entity_id: z.string().optional(),
     source_entity_id: z.string().optional(),
     target_entity_id: z.string().optional(),
@@ -922,6 +946,12 @@ export const ExternalActorInputSchema = z
 export const StoreRequestSchema = z
   .object({
     expected_entity_absent: z.boolean().optional(),
+    /**
+     * MCP `store` response shape: full snapshots in `related_entities` instead
+     * of the compact `{id, entity_type, canonical_name}` default. No effect on
+     * what is written.
+     */
+    include_related_snapshots: z.boolean().optional(),
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),
@@ -1115,6 +1145,7 @@ export const RetrieveEntityByIdentifierSchema = z.object({
 });
 
 export const RetrieveRelatedEntitiesSchema = z.object({
+  ...AsOfCutoffFields,
   entity_id: z.string(),
   relationship_types: z.array(RelationshipTypeSchema).optional(),
   direction: z.enum(["inbound", "outbound", "both"]).optional().default("both"),
@@ -1187,7 +1218,7 @@ export const GetSchemaRecommendationsRequestSchema = z.object({
 
 export const UpdateSchemaIncrementalRequestSchema = z
   .object({
-    entity_type: z.string(),
+    entity_type: z.string().min(1),
     fields_to_add: z
       .array(
         z.object({
@@ -1214,6 +1245,7 @@ export const UpdateSchemaIncrementalRequestSchema = z
     canonical_name_fields: z
       .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
       .optional(),
+    planning: PlanningDeclarationSchema.optional(),
     schema_version: z.string().optional(),
     // #2374: stays OPTIONAL with no `.default()`. Whether the caller stated
     // an explicit scope intent is itself meaningful — `updateSchemaIncremental`
@@ -1233,10 +1265,11 @@ export const UpdateSchemaIncrementalRequestSchema = z
     (data) =>
       (data.fields_to_add && data.fields_to_add.length > 0) ||
       (data.fields_to_remove && data.fields_to_remove.length > 0) ||
-      data.canonical_name_fields !== undefined,
+      data.canonical_name_fields !== undefined ||
+      data.planning !== undefined,
     {
       message:
-        "At least one of fields_to_add, fields_to_remove, or canonical_name_fields must be provided",
+        "At least one of fields_to_add, fields_to_remove, canonical_name_fields, or planning must be provided",
     }
   )
   .superRefine((data, ctx) => {
@@ -1252,8 +1285,16 @@ export const UpdateSchemaIncrementalRequestSchema = z
   });
 
 export const RegisterSchemaRequestSchema = z.object({
-  entity_type: z.string(),
-  schema_definition: z.record(z.unknown()),
+  entity_type: z.string().min(1),
+  schema_definition: z.record(z.unknown()).superRefine((value, ctx) => {
+    if (Object.prototype.hasOwnProperty.call(value, "planning")) {
+      const result = PlanningDeclarationSchema.safeParse(value.planning);
+      if (!result.success)
+        for (const issue of result.error.issues) {
+          ctx.addIssue({ ...issue, path: ["planning", ...issue.path] });
+        }
+    }
+  }),
   reducer_config: z.record(z.unknown()),
   schema_version: z.string().default("1.0"),
   user_specific: z.boolean().default(false),

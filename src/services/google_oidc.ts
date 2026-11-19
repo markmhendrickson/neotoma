@@ -33,6 +33,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { runtimeEnv } from "../config_embedded.js";
 
 const GOOGLE_ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -123,7 +124,7 @@ function parseCsvEmailSet(value: string | undefined): ReadonlySet<string> {
 
 function ensureAllowlistLoaded(): ReadonlySet<string> {
   if (cachedAllowlist) return cachedAllowlist;
-  cachedAllowlist = parseCsvEmailSet(process.env.NEOTOMA_APPROVED_EMAILS);
+  cachedAllowlist = parseCsvEmailSet(runtimeEnv().NEOTOMA_APPROVED_EMAILS);
   return cachedAllowlist;
 }
 
@@ -141,8 +142,8 @@ export function isEmailApproved(email: string): boolean {
  * behavior is unchanged.
  */
 export function isGoogleSigninEnabled(): boolean {
-  const clientId = (process.env.NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
-  const approved = (process.env.NEOTOMA_APPROVED_EMAILS || "").trim();
+  const clientId = (runtimeEnv().NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
+  const approved = (runtimeEnv().NEOTOMA_APPROVED_EMAILS || "").trim();
   return clientId.length > 0 && approved.length > 0;
 }
 
@@ -180,7 +181,7 @@ const NIL_UUID = "00000000-0000-0000-0000-000000000000";
  * than honored.
  */
 export function getSharedGraphUserId(): string | null {
-  const raw = (process.env.NEOTOMA_SHARED_GRAPH_USER_ID || "").trim();
+  const raw = (runtimeEnv().NEOTOMA_SHARED_GRAPH_USER_ID || "").trim();
   if (!raw) return null;
   if (!UUID_RE.test(raw)) return null;
   const normalized = raw.toLowerCase();
@@ -201,7 +202,7 @@ function getJwks(): ReturnType<typeof createRemoteJWKSet> {
  * origin) and `nonce` must be a value from `createGoogleSigninNonce`.
  */
 export function buildGoogleAuthorizeUrl(params: { redirectUri: string; nonce: string }): string {
-  const clientId = (process.env.NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
+  const clientId = (runtimeEnv().NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
   if (!clientId) {
     throw new GoogleIdTokenError("NEOTOMA_GOOGLE_CLIENT_ID is not configured", "NOT_CONFIGURED");
   }
@@ -226,8 +227,8 @@ export async function exchangeGoogleAuthorizationCode(params: {
   code: string;
   redirectUri: string;
 }): Promise<{ idToken: string }> {
-  const clientId = (process.env.NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
-  const clientSecret = (process.env.NEOTOMA_GOOGLE_CLIENT_SECRET || "").trim();
+  const clientId = (runtimeEnv().NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
+  const clientSecret = (runtimeEnv().NEOTOMA_GOOGLE_CLIENT_SECRET || "").trim();
   if (!clientId || !clientSecret) {
     throw new GoogleIdTokenError(
       "NEOTOMA_GOOGLE_CLIENT_ID / NEOTOMA_GOOGLE_CLIENT_SECRET are not configured",
@@ -279,7 +280,7 @@ export async function exchangeGoogleAuthorizationCode(params: {
  * returns a partially-trusted result.
  */
 export async function verifyGoogleIdToken(idToken: string): Promise<VerifiedGoogleIdentity> {
-  const clientId = (process.env.NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
+  const clientId = (runtimeEnv().NEOTOMA_GOOGLE_CLIENT_ID || "").trim();
   if (!clientId) {
     throw new GoogleIdTokenError("NEOTOMA_GOOGLE_CLIENT_ID is not configured", "NOT_CONFIGURED");
   }

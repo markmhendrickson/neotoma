@@ -43,6 +43,48 @@ function rawSqliteHandle(db: DbDatabase): SqliteDatabase | null {
   return db instanceof AsyncSqliteDatabase ? db.rawDb() : null;
 }
 
+/** Why local semantic search cannot run on this process, or null when it can. */
+export type LocalSemanticUnavailableReason =
+  | "storage_backend_not_local"
+  | "no_in_process_sqlite_handle"
+  | "vector_extension_load_failed";
+
+/**
+ * Explain why no local vector backend is available. The worker-thread and
+ * libSQL drivers expose no in-process SQLite handle, so sqlite-vec is never
+ * loaded and no vectors are stored there.
+ */
+export async function localSemanticSearchUnavailableReason(): Promise<LocalSemanticUnavailableReason | null> {
+  if (config.storageBackend !== "local") return "storage_backend_not_local";
+  const rawDb = rawSqliteHandle(await getDb());
+  if (!rawDb) return "no_in_process_sqlite_handle";
+  if (!ensureSqliteVecLoaded(rawDb)) return "vector_extension_load_failed";
+  return null;
+}
+
+/**
+ * True only when the database is the in-process SQLite driver and sqlite-vec
+ * loaded. Callers check this before paying for an embedding provider call
+ * whose result could neither be stored nor searched.
+ */
+export async function isLocalSemanticSearchAvailable(): Promise<boolean> {
+  return (await localSemanticSearchUnavailableReason()) === null;
+}
+
+/** Operator-facing text naming the real reason semantic search is skipped. */
+export function describeLocalSemanticUnavailableReason(
+  reason: LocalSemanticUnavailableReason
+): string {
+  switch (reason) {
+    case "no_in_process_sqlite_handle":
+      return "the database backend (worker-thread or libSQL driver) has no in-process SQLite handle to load the sqlite-vec extension into";
+    case "vector_extension_load_failed":
+      return "the sqlite-vec extension failed to load on the in-process SQLite driver";
+    case "storage_backend_not_local":
+      return "the storage backend is not local";
+  }
+}
+
 /**
  * Ensure vec0 virtual table exists. Call after ensureSqliteVecLoaded.
  * entity_embedding_rows is created by sqlite_client schema.
@@ -175,7 +217,11 @@ export async function searchLocalEntityEmbeddings(options: {
   const db = await getDb();
   const rawDb = rawSqliteHandle(db);
   if (!rawDb || !ensureSqliteVecLoaded(rawDb)) {
-    logger.warn("[searchLocalEntityEmbeddings] sqlite-vec not loaded");
+    logger.warn(
+      `[searchLocalEntityEmbeddings] semantic search unavailable: ${describeLocalSemanticUnavailableReason(
+        rawDb ? "vector_extension_load_failed" : "no_in_process_sqlite_handle"
+      )}`
+    );
     options.readTrace?.reasons.add("semantic_backend_unavailable");
     return { entityIds: [], total: 0, fallbackReason: "unknown" };
   }

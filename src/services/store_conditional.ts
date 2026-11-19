@@ -1,5 +1,6 @@
 /** One declared entity, one authoritative transaction, and an immutable operation receipt. */
 import { db } from "../db.js";
+import { withPatternBudget } from "./safe_pattern.js";
 import { withConditionalStoreMutation } from "./store_mutation_authority.js";
 import { getDb } from "../repositories/db/connection.js";
 import type { DbConnection } from "../repositories/db/driver.js";
@@ -61,7 +62,12 @@ export interface ConditionalStoreOptions {
   dataOrigin?: DataOrigin;
 }
 
-export async function storeConditionalStructured(options: ConditionalStoreOptions) {
+export function storeConditionalStructured(options: ConditionalStoreOptions) {
+  // One pattern-evaluation budget per store request.
+  return withPatternBudget(() => storeConditionalStructuredUnbudgeted(options));
+}
+
+async function storeConditionalStructuredUnbudgeted(options: ConditionalStoreOptions) {
   assertConditionalStoreRequest({
     entities: options.entities,
     idempotency_key: options.idempotencyKey,
@@ -220,7 +226,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
           });
         const violations = collectConstraintViolations(
           prepared.validFields,
-          schema.schema_definition.fields
+          schema.schema_definition.fields,
+          { entityType, schemaVersion: schema.schema_version }
         );
         if (
           violations.length &&
@@ -287,7 +294,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
                 unknown_fields: Object.keys(prepared.unknownFields).sort(),
                 constraint_warnings: collectConstraintViolations(
                   prepared.validFields,
-                  schema.schema_definition.fields
+                  schema.schema_definition.fields,
+                  { entityType, schemaVersion: schema.schema_version }
                 ).map((v) => ({ field: v.field, constraint: v.constraint })),
               },
             };

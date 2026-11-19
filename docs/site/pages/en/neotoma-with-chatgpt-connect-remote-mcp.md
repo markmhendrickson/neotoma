@@ -12,5 +12,6 @@ shell: detail
 translation_status: canonical
 ---
 
-# Neotoma with ChatGPT connect remote MCP
+# Neotoma with Chatgpt Connect Remote Mcp
 
+This legacy address is retained for existing links. Follow the [current Chatgpt Connect Remote Mcp connection guide](https://neotoma.io/install/chatgpt/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

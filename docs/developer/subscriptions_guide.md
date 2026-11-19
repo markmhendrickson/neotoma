@@ -26,6 +26,12 @@ Every subscription must specify at least one filter. There is no firehose mode.
 - `entity_ids` (array of strings): receive events for these specific entities.
 - `event_types` (array of strings): receive only these event types.
 
+### Entity event semantics
+
+- `entity.created` is emitted for a new entity even when the snapshot step fails, so it is the reliable "a new entity appeared" signal. Do not rely on `observation.created` for that.
+- On `entity.updated`, an absent `fields_changed` means "changed, fields unknown", not "nothing changed". Re-read the entity if you need the fields.
+- On `entity.created`, `fields_changed` is not applicable.
+
 ## Webhook delivery
 
 Webhook subscriptions receive an HTTP POST for each matching event:

@@ -308,6 +308,8 @@ SELECT * FROM schema_registry
 WHERE entity_type = 'invoice'
   AND active = true;
 ```
+**Active-schema lookup cache:**
+A running server keeps active-schema lookups in memory (`src/repositories/db/schema_registry_cache.ts`), keyed by scope and, for a user-scoped lookup, by user, so one user's schema never answers another user's lookup. A schema change made through the server is visible to the next lookup at once. A change made by another process on the same database file, such as `neotoma access set` from the CLI, is visible within about 250 ms. Set `NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS=0` to re-check on every lookup, or `NEOTOMA_SCHEMA_REGISTRY_CACHE=off` to disable the cache (see [configuration](../operations/configuration.md)). Reads inside a schema change, or inside a transaction that has written `schema_registry`, always go to the database.
 **Public Schema Snapshots:**
 Schema snapshots are automatically exported to [`docs/subsystems/schema_snapshots/`](./schema_snapshots/) whenever schemas are registered, activated, or deactivated. The export runs asynchronously in the background and does not block schema operations.
 You can also manually export all schemas:

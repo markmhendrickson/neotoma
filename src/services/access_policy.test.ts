@@ -312,7 +312,8 @@ describe("Access Policy Service", () => {
       expect(envelope.code).toBe("access_policy_denied");
       expect(envelope.entity_type).toBe("issue");
       expect(envelope.mode).toBe("closed");
-      expect(envelope.hint).toContain("neotoma access set");
+      expect(envelope.hint).toContain("Ask the person who sent it for a new link");
+      expect(envelope.hint).not.toContain("neotoma access set");
     });
   });
 

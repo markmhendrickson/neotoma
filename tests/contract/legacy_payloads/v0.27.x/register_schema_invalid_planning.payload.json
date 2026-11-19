@@ -1,0 +1,9 @@
+{
+  "entity_type": "legacy_invalid_planning_declaration",
+  "schema_version": "1.0.0",
+  "schema_definition": {
+    "fields": { "label": { "type": "string" } },
+    "planning": { "level": "high" }
+  },
+  "reducer_config": {}
+}

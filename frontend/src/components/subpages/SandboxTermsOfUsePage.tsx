@@ -8,6 +8,8 @@ import {
 import { DetailPage } from "../DetailPage";
 import { LEGAL_PAGE_LINK_CLASS } from "@/site/legal_page_link";
 import { SANDBOX_TERMS_JSON_URL } from "@/site/sandbox_doc_paths";
+import { SANDBOX_TERMS_ES_MARKDOWN } from "@/site/sandbox_terms_es";
+import { useLocale } from "@/i18n/LocaleContext";
 
 const h2Class = "text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3";
 const pClass = "text-[15px] leading-7 mb-4";
@@ -122,16 +124,17 @@ function SandboxTermsMarkdownBody({ md }: { md: string }): ReactNode {
 }
 
 export function SandboxTermsOfUsePage() {
+  const es = useLocale().locale === "es";
   return (
-    <DetailPage title="Neotoma Public Sandbox - Terms of Use">
+    <DetailPage title={es ? "Entorno público de pruebas de Neotoma: condiciones de uso" : "Neotoma Public Sandbox - Terms of Use"}>
       <p className="text-[13px] text-muted-foreground mb-6">
-        Version {SANDBOX_TERMS_VERSION} &middot; effective {SANDBOX_TERMS_EFFECTIVE_DATE}
+        {es ? "Versión" : "Version"} {SANDBOX_TERMS_VERSION} &middot; {es ? "vigente desde" : "effective"} {SANDBOX_TERMS_EFFECTIVE_DATE}
       </p>
 
-      <SandboxTermsMarkdownBody md={SANDBOX_TERMS_MARKDOWN} />
+      <SandboxTermsMarkdownBody md={es ? SANDBOX_TERMS_ES_MARKDOWN : SANDBOX_TERMS_MARKDOWN} />
 
       <p className="text-[13px] text-muted-foreground mt-10 leading-6">
-        For agents and tools, the same text is returned as JSON from{" "}
+        {es ? "Para agentes y herramientas, la versión normativa original se devuelve como JSON en " : "For agents and tools, the same text is returned as JSON from "}{" "}
         <a
           href={SANDBOX_TERMS_JSON_URL}
           target="_blank"
@@ -140,17 +143,17 @@ export function SandboxTermsOfUsePage() {
         >
           {SANDBOX_TERMS_JSON_URL}
         </a>
-        . Also see the{" "}
-        <Link to="/sandbox" className={LEGAL_PAGE_LINK_CLASS}>
-          sandbox overview
+        {es ? ". Consulta también la " : ". Also see the "}{" "}
+        <Link to={es ? "/es/sandbox" : "/sandbox"} className={LEGAL_PAGE_LINK_CLASS}>
+          {es ? "presentación del entorno" : "sandbox overview"}
         </Link>
-        , the site{" "}
-        <Link to="/privacy" className={LEGAL_PAGE_LINK_CLASS}>
-          privacy notice
+        {es ? ", el " : ", the site "}{" "}
+        <Link to={es ? "/es/privacy" : "/privacy"} className={LEGAL_PAGE_LINK_CLASS}>
+          {es ? "aviso de privacidad" : "privacy notice"}
         </Link>
-        , and{" "}
-        <Link to="/terms" className={LEGAL_PAGE_LINK_CLASS}>
-          terms of use
+        {es ? " y las " : ", and "}{" "}
+        <Link to={es ? "/es/terms" : "/terms"} className={LEGAL_PAGE_LINK_CLASS}>
+          {es ? "condiciones de uso" : "terms of use"}
         </Link>
         .
       </p>

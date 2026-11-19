@@ -353,10 +353,11 @@ app = 'neotoma-sandbox'
     // rather than "the last deploy shrank the machine".
     //
     // Pinned to the verified running state of the largest operator instance
-    // (performance / 2 CPU / 8GB, read from the live machine 2026-09-01).
+    // (performance / 2 CPU / 8GB, read from the live machine 2026-09-01), with
+    // the memory raised to 16GB on 2026-11-18 by operator decision.
     const vm = vmsOf(readFlyConfig("fly.operator.toml"))[0];
     expect(vm.cpu_kind).toBe("performance");
     expect(vm.cpus).toBe(2);
-    expect(memoryToMb(vm.memory)).toBe(8192);
+    expect(memoryToMb(vm.memory)).toBe(16384);
   });
 });

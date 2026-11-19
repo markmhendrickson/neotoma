@@ -3,7 +3,7 @@ import {
   isSupportedLocale,
   LOCALE_STORAGE_KEY,
   type SupportedLocale,
-} from "@/i18n/config";
+} from "./config";
 
 function stripQueryAndHash(pathname: string): string {
   const [withoutQuery] = pathname.split("?");
@@ -32,10 +32,16 @@ export function stripLocaleFromPath(pathname: string): string {
 export function localizePath(pathname: string, locale: SupportedLocale): string {
   const hashIndex = pathname.indexOf("#");
   const hash = hashIndex >= 0 ? pathname.slice(hashIndex) : "";
-  const basePath = stripLocaleFromPath(pathname);
-  if (locale === DEFAULT_LOCALE) return `${basePath}${hash}`;
+  const beforeHash = hashIndex >= 0 ? pathname.slice(0, hashIndex) : pathname;
+  const queryIndex = beforeHash.indexOf("?");
+  const query = queryIndex >= 0 ? beforeHash.slice(queryIndex) : "";
+  const stripped = stripLocaleFromPath(pathname);
+  const basePath = stripQueryAndHash(pathname).endsWith("/") && stripped !== "/" && !stripped.endsWith("/")
+    ? `${stripped}/`
+    : stripped;
+  if (locale === DEFAULT_LOCALE) return `${basePath}${query}${hash}`;
   const localized = basePath === "/" ? `/${locale}` : `/${locale}${basePath}`;
-  return `${localized}${hash}`;
+  return `${localized}${query}${hash}`;
 }
 
 export function localizeHashHref(hashHref: string, locale: SupportedLocale): string {
@@ -52,13 +58,21 @@ export function normalizeToDefaultRoute(pathname: string): string {
 
 export function readSavedLocale(): SupportedLocale | null {
   if (typeof window === "undefined") return null;
-  const value = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-  return isSupportedLocale(value) ? value : null;
+  try {
+    const value = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    return value === "en" || value === "es" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 export function saveLocale(locale: SupportedLocale): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  try {
+    if (locale === "en" || locale === "es") window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // A blocked storage API cannot prevent an ordinary language link from navigating.
+  }
 }
 
 export function resolvePreferredLocale(): SupportedLocale {
@@ -69,7 +83,7 @@ export function resolvePreferredLocale(): SupportedLocale {
     .filter(Boolean)
     .map((entry) => entry.toLowerCase().split("-")[0]);
   for (const candidate of preferred) {
-    if (isSupportedLocale(candidate)) {
+    if (candidate === "en" || candidate === "es") {
       return candidate;
     }
   }

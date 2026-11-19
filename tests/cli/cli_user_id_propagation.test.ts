@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { execSync } from "node:child_process";
+import { execSyncLocal } from "../helpers/cli_local_target.js";
 import path from "node:path";
 
 import { resolveEffectiveUserId } from "../../src/cli/index.ts";
@@ -127,7 +128,7 @@ describe("CLI user_id propagation", () => {
     it("rejects an empty-string NEOTOMA_USER_ID with a clear error", () => {
       let caught: Error | undefined;
       try {
-        execSync(`${CLI_PATH} stats --json`, {
+        execSyncLocal(`${CLI_PATH} stats --json`, {
           cwd: REPO_ROOT,
           encoding: "utf-8",
           timeout: 8000,
@@ -145,7 +146,7 @@ describe("CLI user_id propagation", () => {
     it("accepts a populated NEOTOMA_USER_ID without error", () => {
       // Any non-empty value is accepted; the server may return its own data,
       // but the preAction hook MUST NOT reject it.
-      const result = execSync(`${CLI_PATH} stats --json`, {
+      const result = execSyncLocal(`${CLI_PATH} stats --json`, {
         cwd: REPO_ROOT,
         encoding: "utf-8",
         timeout: 10000,

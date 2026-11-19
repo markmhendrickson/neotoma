@@ -1,6 +1,6 @@
 # Financial operations & reconciliation
 
-Financial operations require deterministic, auditable state — every ledger entry, reconciliation, and invoice must be traceable to its source and reconstructable at any point for audit, regulatory, or dispute purposes. Neotoma provides deterministic state for every financial record by versioning transactions, reconciliation events, and ledger mutations as immutable observations with provenance chains back to source documents. This enables finance teams and AI agents to answer temporal questions about liability existence, payment timing, and reconciliation status with the same precision expected of a double-entry ledger.
+Financial operations require deterministic, auditable state — every ledger entry, reconciliation, and invoice must be traceable to its source and reconstructable as recorded by any write-time cutoff for audit, regulatory, or dispute purposes. Neotoma provides deterministic state for every financial record by versioning transactions, reconciliation events, and ledger mutations as immutable observations with provenance chains back to source documents. This enables finance teams and AI agents to answer temporal questions about liability existence, payment timing, and reconciliation status with the same precision expected of a double-entry ledger.
 
 ## Entity examples
 
@@ -11,7 +11,7 @@ Financial operations require deterministic, auditable state — every ledger ent
 
 ## Key question
 
-> "Did this liability exist in our books on the audit date?"
+> "Had this liability been recorded in our books by the audit date?"
 
 ## Data sources
 

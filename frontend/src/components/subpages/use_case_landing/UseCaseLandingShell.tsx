@@ -19,7 +19,6 @@ import { SeoHead } from "../../SeoHead";
 import { CodexIcon } from "../../icons/CodexIcon";
 import { CursorIcon } from "../../icons/CursorIcon";
 import { OpenClawIcon } from "../../icons/OpenClawIcon";
-import { SiteFooterUtilities } from "@/components/SiteTailpiece";
 import { sendCtaClick, type CtaName } from "@/utils/analytics";
 import { UseCaseIconTile } from "./UseCaseIconTile";
 
@@ -1591,10 +1590,10 @@ export function UseCaseLandingShell({
                   Install Neotoma
                 </Link>
                 <Link
-                  to="/docs"
+                  to="/readme/"
                   className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                 >
-                  Read the docs
+                  Read the overview
                 </Link>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-4 text-[12px] text-muted-foreground">
@@ -1628,11 +1627,6 @@ export function UseCaseLandingShell({
             </div>
           </div>
         </section>
-        <div className="shrink-0 border-t border-border bg-background md:snap-start md:snap-always">
-          <div className="mx-auto max-w-6xl px-6 py-5 md:px-10">
-            <SiteFooterUtilities />
-          </div>
-        </div>
       </div>
     </>
   );

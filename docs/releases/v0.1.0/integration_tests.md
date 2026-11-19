@@ -171,7 +171,7 @@ Define the **integration test suite** for Release `v0.1.0` (Internal MCP Release
 **Expected Results:**
 - All state changes emit events to `state_events` table.
 - Reducers reconstruct state correctly (matches direct DB state).
-- Historical replay functional (can view record state at any timestamp).
+- Historical replay functional (can view record state at any timestamp). _(Later correction: historical snapshot cutoffs filter write time, not event time; see `docs/known_limitations.md`.)_
 - Event schema includes all required fields (reducer_version, crypto/hash fields if implemented).
 **Machine-Checkable:**
 - Query: `SELECT COUNT(*) FROM state_events WHERE record_id = '{record_id}'` returns expected count.

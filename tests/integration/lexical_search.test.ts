@@ -15,6 +15,7 @@ describe("Lexical retrieval fallback", () => {
 
   async function cleanupEntities() {
     if (testEntityIds.length === 0) return;
+    await db.from("raw_fragments").delete().in("entity_id", testEntityIds);
     await db.from("entity_snapshots").delete().in("entity_id", testEntityIds);
     await db.from("entities").delete().in("id", testEntityIds);
     testEntityIds.length = 0;
@@ -457,5 +458,327 @@ describe("Lexical retrieval fallback", () => {
     expect(ids).toContain(canonicalFirstId);
     expect(ids).toContain(snapshotFirstId);
     expect(ids.indexOf(canonicalFirstId)).toBeLessThan(ids.indexOf(snapshotFirstId));
+  });
+
+  it("object-valued raw_fragment is searchable", async () => {
+    const entityId = `ent_lex_obj_fragment_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "research_report",
+      canonicalName: "doc_obj_fragment",
+      snapshot: { title: "Untitled" },
+    });
+    await serviceRoleClient.from("raw_fragments").insert({
+      id: `frag_lex_obj_${Date.now()}`,
+      entity_id: entityId,
+      user_id: testUserId,
+      entity_type: "research_report",
+      fragment_key: "details",
+      fragment_value: { venue: "Quartzhollow Annex", floor: 3 },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "quartzhollow annex",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+  });
+
+  it("yields to the event loop at least 3 times while scanning 2,000 candidates", async () => {
+    const runId = Date.now();
+    const bulkEntities = Array.from({ length: 2000 }, (_, index) => ({
+      id: `ent_lex_yield_${runId}_${String(index).padStart(4, "0")}`,
+      user_id: testUserId,
+      entity_type: "research_report",
+      canonical_name: `yield_doc_${String(index).padStart(4, "0")}`,
+    }));
+    await serviceRoleClient.from("entities").insert(bulkEntities);
+    for (const entity of bulkEntities) {
+      testEntityIds.push(entity.id);
+    }
+
+    // Count event-loop turns that run while the search is in flight. A scan
+    // that never yields lets at most one turn through; one that yields every
+    // 500 candidates lets a turn through at each yield.
+    let turns = 0;
+    let searching = true;
+    const tick = () => {
+      if (!searching) return;
+      turns += 1;
+      setImmediate(tick);
+    };
+    const searchPromise = queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "yield doc 1999",
+      limit: 25,
+      offset: 0,
+    });
+    setImmediate(tick);
+    const result = await searchPromise.finally(() => {
+      searching = false;
+    });
+
+    expect(turns).toBeGreaterThanOrEqual(3);
+    expect(result.entities[0]?.entity_id).toBe(bulkEntities[1999].id);
+  });
+});
+
+// Ranking-equivalence guard for the per-snapshot clean-once change: the
+// expected ranked ids below were captured from main before the haystack was
+// built once per entity. Any drift in scoring, matching or tie-breaking shows
+// up as a changed literal.
+describe("Lexical retrieval ranking baseline", () => {
+  const baselineUserId = "lexical-ranking-baseline-user";
+
+  type Seed = {
+    id: string;
+    entityType: string;
+    canonicalName: string;
+    snapshot: Record<string, unknown>;
+  };
+
+  const SEEDS: Seed[] = [
+    {
+      id: "ent_lrb_01",
+      entityType: "task",
+      canonicalName: "Quarterly budget review",
+      snapshot: { title: "Quarterly budget review", status: "open", tags: ["finance", "q3"] },
+    },
+    {
+      id: "ent_lrb_02",
+      entityType: "task",
+      canonicalName: "budget_draft_02",
+      snapshot: { title: "Draft budget for quarterly offsite", status: "open" },
+    },
+    {
+      id: "ent_lrb_03",
+      entityType: "task",
+      canonicalName: "Review vendor contracts",
+      snapshot: { title: "Review vendor contracts", notes: "Budget impact: medium" },
+    },
+    {
+      id: "ent_lrb_04",
+      entityType: "task",
+      canonicalName: "",
+      snapshot: { title: "Quarterly budget reconciliation", owner: "team-alpha" },
+    },
+    {
+      id: "ent_lrb_05",
+      entityType: "task",
+      canonicalName: "Archive old tickets",
+      snapshot: { title: "Archive old tickets" },
+    },
+    {
+      id: "ent_lrb_06",
+      entityType: "task",
+      canonicalName: "Budget",
+      snapshot: { title: "Budget" },
+    },
+    {
+      id: "ent_lrb_07",
+      entityType: "note",
+      canonicalName: "Quarterly budget review notes",
+      snapshot: { body: "Notes from the quarterly budget review meeting." },
+    },
+    {
+      id: "ent_lrb_08",
+      entityType: "note",
+      canonicalName: "note_08",
+      snapshot: { body: "Garden layout: tomatoes, basil & peppers." },
+    },
+    {
+      id: "ent_lrb_09",
+      entityType: "note",
+      canonicalName: "Truth-Layer design notes",
+      snapshot: { body: "Design notes for the truth_layer; see appendix (v2)." },
+    },
+    {
+      id: "ent_lrb_10",
+      entityType: "note",
+      canonicalName: "note_10",
+      snapshot: { body: "Truth layer: design review follow-ups" },
+    },
+    {
+      id: "ent_lrb_11",
+      entityType: "note",
+      canonicalName: "Release checklist",
+      snapshot: { body: "Release checklist for v1.2: build, test, publish." },
+    },
+    { id: "ent_lrb_12", entityType: "note", canonicalName: "note_12", snapshot: {} },
+    {
+      id: "ent_lrb_13",
+      entityType: "research_report",
+      canonicalName: "doc_13",
+      snapshot: { title: "Ideal customer profile analysis", summary: "Target audience research" },
+    },
+    {
+      id: "ent_lrb_14",
+      entityType: "research_report",
+      canonicalName: "Ideal customer profile",
+      snapshot: { title: "Profile" },
+    },
+    {
+      id: "ent_lrb_15",
+      entityType: "research_report",
+      canonicalName: "doc_15",
+      snapshot: { title: "Customer interviews", summary: "Ideal profile emerges from interviews" },
+    },
+    {
+      id: "ent_lrb_16",
+      entityType: "research_report",
+      canonicalName: "doc_16",
+      snapshot: { title: "Market sizing", summary: "TAM / SAM / SOM" },
+    },
+    {
+      id: "ent_lrb_17",
+      entityType: "research_report",
+      canonicalName: "doc_17",
+      snapshot: { title: "Competitive landscape", summary: "Customer churn drivers" },
+    },
+    {
+      id: "ent_lrb_18",
+      entityType: "contact",
+      canonicalName: "Alex Example",
+      snapshot: { first_name: "Alex", last_name: "Example", company: "Example Widgets" },
+    },
+    {
+      id: "ent_lrb_19",
+      entityType: "contact",
+      canonicalName: "Sam Sample",
+      snapshot: { first_name: "Sam", last_name: "Sample", company: "Sample Widgets Co" },
+    },
+    {
+      id: "ent_lrb_20",
+      entityType: "contact",
+      canonicalName: "Widget Buyer",
+      snapshot: { first_name: "Jo", last_name: "Buyer", role: "procurement" },
+    },
+    {
+      id: "ent_lrb_21",
+      entityType: "contact",
+      canonicalName: "contact_21",
+      snapshot: { first_name: "Riley", last_name: "Placeholder", company: "Widgets & Gadgets" },
+    },
+    {
+      id: "ent_lrb_22",
+      entityType: "contact",
+      canonicalName: "Example Widgets",
+      snapshot: { note: "duplicate company card" },
+    },
+    {
+      id: "ent_lrb_23",
+      entityType: "transaction",
+      canonicalName: "txn_23",
+      snapshot: { merchant: "Example Widgets", amount: 42.5, currency: "EUR" },
+    },
+    {
+      id: "ent_lrb_24",
+      entityType: "transaction",
+      canonicalName: "txn_24",
+      snapshot: { merchant: "Coffee Shop", amount: 3.2, currency: "EUR" },
+    },
+    {
+      id: "ent_lrb_25",
+      entityType: "transaction",
+      canonicalName: "txn_25",
+      snapshot: { merchant: "Widget Supply", amount: 120, currency: "USD", memo: "budget line 7" },
+    },
+    {
+      id: "ent_lrb_26",
+      entityType: "transaction",
+      canonicalName: "Quarterly budget transfer",
+      snapshot: { amount: 5000, currency: "EUR" },
+    },
+    {
+      id: "ent_lrb_27",
+      entityType: "event",
+      canonicalName: "Budget kickoff",
+      snapshot: { title: "Budget kickoff", date: "2026-01-05" },
+    },
+    {
+      id: "ent_lrb_28",
+      entityType: "event",
+      canonicalName: "event_28",
+      snapshot: { title: "Quarterly review", location: "Room 4" },
+    },
+    {
+      id: "ent_lrb_29",
+      entityType: "event",
+      canonicalName: "event_29",
+      snapshot: { title: "Release party", notes: "After v1.2 release" },
+    },
+    {
+      id: "ent_lrb_30",
+      entityType: "event",
+      canonicalName: "Truth layer workshop",
+      snapshot: { title: "Workshop", agenda: ["design", "review"] },
+    },
+  ];
+
+  async function cleanupSeeds() {
+    await db.from("entity_snapshots").delete().eq("user_id", baselineUserId);
+    await db.from("entities").delete().eq("user_id", baselineUserId);
+  }
+
+  beforeEach(async () => {
+    await cleanupSeeds();
+    const now = "2026-01-01T00:00:00.000Z";
+    for (const seed of SEEDS) {
+      await serviceRoleClient.from("entities").insert({
+        id: seed.id,
+        user_id: baselineUserId,
+        entity_type: seed.entityType,
+        canonical_name: seed.canonicalName,
+      });
+      await serviceRoleClient.from("entity_snapshots").upsert({
+        entity_id: seed.id,
+        user_id: baselineUserId,
+        entity_type: seed.entityType,
+        schema_version: "1.0",
+        canonical_name: seed.canonicalName,
+        snapshot: seed.snapshot,
+        provenance: {},
+        observation_count: 1,
+        last_observation_at: now,
+        computed_at: now,
+      });
+    }
+  });
+
+  afterEach(async () => {
+    await cleanupSeeds();
+  });
+
+  async function rankedIds(search: string, entityType?: string): Promise<string[]> {
+    const result = await queryEntitiesWithCount({
+      userId: baselineUserId,
+      entityType,
+      search,
+      limit: 100,
+      offset: 0,
+    });
+    return result.entities.map((entity) => entity.entity_id);
+  }
+
+  it("ranked ids identical to baseline fixture", async () => {
+    const actual = {
+      typedBudget: await rankedIds("quarterly budget", "task"),
+      untypedBudget: await rankedIds("quarterly budget"),
+      truthLayer: await rankedIds("truth-layer design"),
+      widgets: await rankedIds("Example Widgets"),
+      partialProfile: await rankedIds("ideal customer profile interviews churn"),
+    };
+    expect(actual).toEqual({
+      typedBudget: ["ent_lrb_01", "ent_lrb_04", "ent_lrb_02"],
+      untypedBudget: ["ent_lrb_01", "ent_lrb_07", "ent_lrb_26", "ent_lrb_04", "ent_lrb_02"],
+      truthLayer: ["ent_lrb_09", "ent_lrb_10", "ent_lrb_30"],
+      widgets: ["ent_lrb_22", "ent_lrb_18", "ent_lrb_23"],
+      partialProfile: ["ent_lrb_14", "ent_lrb_15", "ent_lrb_13"],
+    });
   });
 });

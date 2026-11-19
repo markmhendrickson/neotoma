@@ -14,3 +14,4 @@ translation_status: canonical
 
 # Neotoma with Opencode
 
+This legacy address is retained for existing links. Follow the [current Opencode connection guide](https://neotoma.io/install/opencode/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

@@ -15,6 +15,7 @@ import {
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
+import { assertCurrentAgentMayWriteLifecycleMarker } from "./mutation_capability.js";
 import { enforceOverridePolicy } from "./override_validation.js";
 import { assertAgentGrantFieldValid } from "./agent_grants.js";
 import { assertNoOwnerConflict } from "./entity_resolution.js";
@@ -101,6 +102,9 @@ export async function createObservation(
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
+  // The reserved lifecycle marker makes this write a delete or restore; an
+  // agent needs that grant op, whichever entry point reached this insert.
+  assertCurrentAgentMayWriteLifecycleMarker(params.entity_type, params.fields);
   // Pre-persist shape guard for agent_grant fields (no-op for every other
   // entity_type). Throws before any row is written — see
   // assertAgentGrantFieldValid's doc comment for why this must sit at this

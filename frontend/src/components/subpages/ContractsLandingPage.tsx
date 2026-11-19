@@ -28,7 +28,7 @@ const CONFIG: UseCaseConfig = {
   heroTitle: "Contract intelligence that survives",
   heroHighlight: "negotiation, amendments, and multi-agent edits",
   heroDesc:
-    "Contracts accumulate redlines, amendments, and multi-party approvals. Neotoma versions clause-level state so you can answer what the terms were on any date and what changed in each amendment.",
+    "Contracts accumulate redlines, amendments, and multi-party approvals. Neotoma versions clause-level state so you can answer what the terms had been recorded as by any date and what changed in each amendment.",
   heroTags: [
     { tag: "contract", Icon: FileText },
     { tag: "clause", Icon: ListChecks },
@@ -40,7 +40,7 @@ const CONFIG: UseCaseConfig = {
   analyticsPrefix: "contracts",
   problemTitle: "CLM tools store files; they do not preserve negotiable truth",
   problemDesc:
-    "Contract terms change through negotiation. Amendments modify specific clauses while multiple agents update the same agreement in parallel. Without immutable observations and temporal snapshots, auditors and finance cannot reconstruct the terms at signature, after each amendment, or on any historical date.",
+    "Contract terms change through negotiation. Amendments modify specific clauses while multiple agents update the same agreement in parallel. Without immutable observations and temporal snapshots, auditors and finance cannot reconstruct the terms as recorded at signature, after each amendment, or by any historical date.",
   problemCards: [
     {
       Icon: History,
@@ -65,7 +65,7 @@ const CONFIG: UseCaseConfig = {
   ],
   problemCallout: 'Regulators and finance do not accept "we have the latest PDF."',
   problemCalloutDesc:
-    "Material contracts drive revenue recognition, vendor spend, and risk disclosures. When an audit asks what was in effect on March 14, or whether Amendment No. 3 changed the payment schedule, you need clause-level diffs and provenance, not a search over email attachments.",
+    "Material contracts drive revenue recognition, vendor spend, and risk disclosures. When an audit asks what had been recorded as in effect by March 14, or whether Amendment No. 3 changed the payment schedule, you need clause-level diffs and provenance, not a search over email attachments.",
   scenarios: [
     {
       category: "Amendment tracking",
@@ -108,21 +108,21 @@ const CONFIG: UseCaseConfig = {
     {
       category: "Temporal state",
       human:
-        "What were the payment terms for the Sterling Logistics order form on February 15, 2025?",
+        "What payment terms had we recorded for the Sterling Logistics order form by February 15, 2025?",
       fail: "Sterling Logistics order form: payment net-30, 1.5% monthly late fee, cap on late fees at 5% of invoice.",
       succeed:
-        "As of 2025-02-15, Sterling order form OF-884 showed net-60 and no late-fee cap (clause 3.2 per contract\u00B7v7 snapshot). Amendment No. 2 (effective Feb 28) moved to net-30 and introduced the 1.5%/5% cap language you see today in contract\u00B7v9. The assistant returned the historical snapshot, not the post-amendment text.",
-      version: "contract\u00B7v7 @ 2025-02-15",
+        "As recorded by 2025-02-15, Sterling order form OF-884 showed net-60 and no late-fee cap (clause 3.2 per contract\u00B7v7 snapshot). Amendment No. 2 (effective Feb 28) moved to net-30 and introduced the 1.5%/5% cap language you see today in contract\u00B7v9. The assistant returned the historical snapshot, not the post-amendment text.",
+      version: "contract\u00B7v7 recorded by 2025-02-15",
       Icon: History,
       failTitle: "Current terms returned for a historical question",
       failDesc:
-        "Finance asked what governed revenue triggers on the close date. Surfacing today's net-30 terms would misstate when cash was contractually due, compounding in ASC 606 memos.",
+        "Finance asked which terms had been recorded for revenue triggers by the close. Surfacing today's net-30 terms would misstate when cash was contractually due, compounding in ASC 606 memos.",
     },
   ],
   outcomeTitle: "From brittle documents to explainable contract state",
   outcomeSubtitle: "Before and after Neotoma",
   outcomeDesc:
-    "Each scenario pairs the same question with two outcomes: one where only the latest text is visible, and one where amendments, obligations, and as-of snapshots are first-class queryable state.",
+    "Each scenario pairs the same question with two outcomes: one where only the latest text is visible, and one where amendments, obligations, and snapshots as recorded by a date are first-class queryable state.",
   howTitle: "How Neotoma hardens contract operations",
   steps: [
     {
@@ -136,7 +136,7 @@ const CONFIG: UseCaseConfig = {
       Icon: Layers,
       title: "Project clause-level state through time",
       desc: "Amendments apply as diffs against specific clauses and schedules. Obligations inherit deadline changes when linked amendments land, with supersession edges you can traverse in one query.",
-      detail: "Temporal queries return the state valid on the as-of date, not the last save.",
+      detail: "Temporal queries return the state as recorded by the cutoff time, not the last save.",
     },
     {
       Icon: Search,
@@ -177,8 +177,8 @@ const CONFIG: UseCaseConfig = {
     },
     {
       Icon: FileText,
-      title: "As-of and point-in-time queries",
-      desc: 'Answer "what were the terms when we signed?" and "what changed in amendment 3?" with the same API. Finance, legal, and agents share one temporal model.',
+      title: "Queries as recorded by a date",
+      desc: 'Answer "what terms had been recorded when we signed?" and "what changed in amendment 3?" with the same API. Finance, legal, and agents share one temporal model.',
       tags: ["contract", "temporal", "reporting"],
     },
     {
@@ -219,7 +219,7 @@ const CONFIG: UseCaseConfig = {
     },
     {
       label: "Compute snapshots",
-      desc: "Project the latest state per entity, or reconstruct historical state for any timestamp relevant to reporting or litigation.",
+      desc: "Project the latest state per entity, or reconstruct state as recorded up to any timestamp relevant to reporting or litigation.",
     },
     {
       label: "Serve agents & auditors",
@@ -229,7 +229,7 @@ const CONFIG: UseCaseConfig = {
   caseStudy: {
     headline: "How contract intelligence teams use Neotoma as their integrity layer",
     desc:
-      "AI-native contract platforms automate review, redlining, and obligation tracking for global procurement teams. Neotoma versions every clause change, amendment, and approval so you can reconstruct contract state at any close date or audit point.",
+      "AI-native contract platforms automate review, redlining, and obligation tracking for global procurement teams. Neotoma versions every clause change, amendment, and approval so you can reconstruct contract state as recorded up to any close date or audit point.",
     featuresHeading: "What contract intelligence teams build",
     features: [
       "Parallel drafting and risk agents that propose clause edits across hundreds of active MSAs",
@@ -238,7 +238,7 @@ const CONFIG: UseCaseConfig = {
     ],
     guarantees: [
       "Immutable observations for every model- or human-generated clause change",
-      "Temporal snapshots so as-of answers match financial close dates, not upload dates",
+      "Temporal snapshots so answers as recorded by financial close dates match them, not upload dates",
       "Relationship integrity between counterparties, contracts, and downstream obligations",
       "Audit-oriented exports that list reviewers, amendments, and clause versions in one graph",
     ],

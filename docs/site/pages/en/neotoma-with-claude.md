@@ -14,3 +14,4 @@ translation_status: canonical
 
 # Neotoma with Claude
 
+This legacy address is retained for existing links. Follow the [current Claude connection path](https://neotoma.io/install/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

@@ -1,0 +1,5 @@
+endpoint: POST /register_schema
+outcome: rejected
+error_code: VALIDATION_INVALID_FORMAT
+hint_match: /finite number/
+notes: Previously arbitrary schema_definition.planning values are now validated as a declaration. Rename unrelated metadata or use a finite numeric level; other schema fields remain unchanged.

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES, sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
-import { CopyableCodeBlock } from "../CopyableCodeBlock";
+import { EvaluationCard } from "../onepager/EvaluationCard";
 import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 import { useLocale } from "@/i18n/LocaleContext";
@@ -52,37 +52,6 @@ export function EvaluatePage() {
       </section>
 
       <section>
-        <h2 className="text-xl font-medium mb-4">{ev.taxHeading}</h2>
-        <p className="text-[15px] leading-7 mb-3">{ev.taxIntro}</p>
-        <ul className="list-disc pl-6 space-y-2 text-[15px] leading-7 mb-4">
-          <li>
-            <strong>{ev.taxLi1Strong}</strong>
-            {ev.taxLi1BeforeLink}
-            <a href={localizePath("/memory-models", locale)} className="underline">
-              {ev.taxLi1LinkMemoryModels}
-            </a>
-            .
-          </li>
-          <li>
-            <strong>{ev.taxLi2Strong}</strong>
-            {ev.taxLi2BeforeLink}
-            <a href={localizePath("/architecture", locale)} className="underline">
-              {ev.taxLi2LinkArchitecture}
-            </a>
-            .
-          </li>
-          <li>
-            <strong>{ev.taxLi3Strong}</strong>
-            {ev.taxLi3BeforeLink}
-            <a href={localizePath("/memory-guarantees", locale)} className="underline">
-              {ev.taxLi3LinkGuarantees}
-            </a>
-            .
-          </li>
-        </ul>
-      </section>
-
-      <section>
         <h2 className="text-xl font-medium mb-4">{ev.storeFirstHeading}</h2>
         <p className="text-[15px] leading-7 mb-3">{ev.storeFirstIntro}</p>
         <ol className="list-decimal pl-6 space-y-2 text-[15px] leading-7 mb-4">
@@ -93,24 +62,7 @@ export function EvaluatePage() {
       </section>
 
       <section>
-        <h2 className="text-xl font-medium mb-4">{ev.comparesHeading}</h2>
-        <p className="text-[15px] leading-7 mb-3">{ev.comparesIntro}</p>
-        <ul className="list-disc pl-6 space-y-2 text-[15px] leading-7 mb-4">
-          {ev.comparesItems.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section>
-        <h2 className="text-xl font-medium mb-4">{ev.assessHeading}</h2>
-        <p className="text-[15px] leading-7 mb-4">{ev.assessIntro}</p>
-        <CopyableCodeBlock
-          code={ev.agentEvaluationPrompt}
-          className="mb-6"
-          variant="emerald"
-          onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")}
-        />
+        <EvaluationCard id="evaluate-page-prompt" title={ev.assessHeading} body={ev.assessIntro} onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")} />
         <div className="rounded-lg border border-border bg-card p-4">
           <Link to={localizePath("/evaluate/agent-instructions", locale)} className="group no-underline">
             <span className="text-[15px] font-medium text-foreground group-hover:underline block mb-1">
@@ -144,15 +96,6 @@ export function EvaluatePage() {
           </TrackedProductLink>
           {ev.nextStepsP1After}
         </p>
-        <p className="text-[15px] leading-7 mb-3">
-          {locale === "es" ? "Antes de desplegar una implementación completa, ofrece " : "Before rolling out a full implementation, offer "}
-          <Link to={localizePath("/non-destructive-testing", locale)} className="underline">
-            {locale === "es" ? "Probar con seguridad" : "Test safely"}
-          </Link>
-          {locale === "es"
-            ? ": una prueba no destructiva en modo sombra que permita comparar con la configuración actual antes de adoptar Neotoma del todo."
-            : ": a non-destructive shadow-mode trial that lets the user compare against their current setup before adopting Neotoma fully."}
-        </p>
         <ol className="list-decimal pl-6 space-y-2 text-[15px] leading-7 mb-4">
           <li>{ev.nextStepsOlEvaluation}</li>
           <li>
@@ -176,12 +119,8 @@ export function EvaluatePage() {
             {ev.nextStepsInstallGuideLink}
           </TrackedProductLink>
           {ev.nextStepsP2Between}
-          <a href={localizePath("/architecture", locale)} className="underline">
+          <a href="https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md" className="underline">
             {ev.nextStepsArchLink}
-          </a>
-          {ev.nextStepsP2And}
-          <a href={localizePath("/memory-guarantees", locale)} className="underline">
-            {ev.nextStepsGuaranteesLink}
           </a>
           {ev.nextStepsP2End}
         </p>

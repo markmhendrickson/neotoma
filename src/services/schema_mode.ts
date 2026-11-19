@@ -24,6 +24,7 @@
  */
 
 import { logger } from "../utils/logger.js";
+import { runtimeEnv } from "../config_embedded.js";
 
 export type SchemaMode = "evolving" | "guided" | "locked";
 
@@ -56,8 +57,8 @@ function parseSchemaMode(raw: string | undefined): SchemaMode {
  */
 export function getSchemaMode(): SchemaMode {
   if (cached !== undefined) return cached;
-  cached = parseSchemaMode(process.env.NEOTOMA_SCHEMA_MODE);
-  if (process.env.NEOTOMA_DEBUG_SCHEMA_MODE === "1") {
+  cached = parseSchemaMode(runtimeEnv().NEOTOMA_SCHEMA_MODE);
+  if (runtimeEnv().NEOTOMA_DEBUG_SCHEMA_MODE === "1") {
     logger.debug(`[schema_mode] resolved schema mode: ${cached}`);
   }
   return cached;

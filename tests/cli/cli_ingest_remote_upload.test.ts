@@ -13,6 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 import { isLocalhostBaseUrl } from "../../src/cli/index.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
 describe("isLocalhostBaseUrl helper", () => {
   it("returns true for localhost variants", () => {
@@ -38,9 +39,6 @@ describe("isLocalhostBaseUrl helper", () => {
 
 describe("ingest command help surface (audit)", () => {
   it("documents --source-upload, --source-content, and auto-upload behavior", async () => {
-    const { exec } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const execAsync = promisify(exec);
     const { stdout } = await execAsync("node dist/cli/index.js ingest --help");
     expect(stdout).toMatch(/--source-upload/);
     expect(stdout).toMatch(/--source-content/);

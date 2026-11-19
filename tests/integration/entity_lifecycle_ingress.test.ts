@@ -14,8 +14,6 @@ const isolated = await vi.hoisted(async () => {
 });
 
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
@@ -25,6 +23,7 @@ import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { execFileLocal } from "../helpers/cli_local_target.js";
 describe("ordinary lifecycle metadata boundaries", () => {
   const owner = randomUUID();
   const entity = "ent_ingress_" + randomUUID();
@@ -146,7 +145,7 @@ describe("ordinary lifecycle metadata boundaries", () => {
         } else
           await source.prepare("INSERT INTO observations VALUES (?,?,?,?,?,?,?,?,?)").run(...input);
         const root = fileURLToPath(new URL("../../", import.meta.url));
-        const result = await promisify(execFile)(
+        const result = await execFileLocal(
           process.execPath,
           [
             path.join(root, "dist/cli/bootstrap.js"),
@@ -243,7 +242,7 @@ describe("ordinary lifecycle metadata boundaries", () => {
         expect(entitiesBefore).toHaveLength(1);
         expect(relationshipsBefore).toHaveLength(1);
         const root = fileURLToPath(new URL("../../", import.meta.url));
-        const result = await promisify(execFile)(
+        const result = await execFileLocal(
           process.execPath,
           [
             path.join(root, "dist/cli/bootstrap.js"),

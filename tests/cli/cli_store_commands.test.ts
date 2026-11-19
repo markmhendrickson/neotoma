@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { randomUUID } from "crypto";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { db } from "../../src/db.js";
+import { execAsync } from "../helpers/cli_local_target.js";
 
-const execAsync = promisify(exec);
 
 const CLI_PATH = "node dist/cli/index.js";
 const TEST_USER_ID = "test-user-cli-store";

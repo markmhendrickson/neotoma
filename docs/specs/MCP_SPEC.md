@@ -782,6 +782,7 @@ The server handles all interpretation automatically. Agents should only pass the
     target_index: number;             // 0-based index into entities
   }>;                                 // One-call chat: [conversation, agent_message] + [{ PART_OF, source_index: 1, target_index: 0 }]
   source_priority?: number;           // Optional: Source priority (default: 100)
+  include_related_snapshots?: boolean; // Optional: default false. true returns full rows + snapshots in related_entities (see Response Schema)
   observation_source?:                 // Optional: classifies the KIND of write (v0.12+)
     | "sensor"                         //   deterministic tool / telemetry emission
     | "workflow_state"                 //   state machine transitions
@@ -881,7 +882,11 @@ When the type is one of the common types (contact, person, company, task, invoic
     observation_id: string;
   }>;
   unknown_fields_count?: number;       // Number of fields stored in raw_fragments (structured storage only)
-  related_entities?: Array<Entity>;    // Entities connected to stored entities via relationships (structured storage only)
+  related_entities?: Array<{           // Entities connected to stored entities via relationships (structured storage only; a file-only store returns the entities extracted from the file, in full)
+    id: string;                        // Compact by default: id, entity_type, canonical_name only.
+    entity_type: string;               // With include_related_snapshots: true, each entry is instead the full
+    canonical_name: string | null;     // entity row plus its current `snapshot` (the previous shape). Retrieve by id for a snapshot.
+  }>;
   related_relationships?: Array<{      // Relationships involving stored entities (structured storage only)
     id: string;
     relationship_type: string;
@@ -1030,7 +1035,7 @@ list_entity_types({ keyword: "date" });
 **Use Cases:**
 
 - Get current state of an [entity](../vocabulary/canonical_terms.md#entity) (company, person, invoice)
-- **Historical state (primary):** Get [entity](../vocabulary/canonical_terms.md#entity) state at any point in time by filtering [observations](../vocabulary/canonical_terms.md#observation) up to a timestamp and recomputing [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot). This enables tracking how [entities](../vocabulary/canonical_terms.md#entity) evolved as new [observations](../vocabulary/canonical_terms.md#observation) arrived.
+- **Historical state (primary):** Get [entity](../vocabulary/canonical_terms.md#entity) state as recorded by a cutoff: filter [observations](../vocabulary/canonical_terms.md#observation) written by a timestamp (`at`, on `observed_at`, stamped from the server clock at write time) and recompute the [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot). `at_ingested` filters row-insertion time (`created_at`) the same way, and both bounds apply when both are set. This enables tracking how [entities](../vocabulary/canonical_terms.md#entity) evolved as new [observations](../vocabulary/canonical_terms.md#observation) arrived. Both cutoffs are write time, not event or valid time: a fact written after the cutoff is excluded even when it describes an earlier date, and native valid-time queries are not supported ([#2034](https://github.com/markmhendrickson/neotoma/issues/2034), `docs/known_limitations.md`).
 - Trace which [source](../vocabulary/canonical_terms.md#source) contributed to current truth
 - Track how multiple sources were merged over time
 
@@ -1039,7 +1044,8 @@ list_entity_types({ keyword: "date" });
 ```typescript
 {
   entity_id: string; // Required: Entity ID (hash-based)
-  at?: string; // Optional: ISO 8601 timestamp to get historical snapshot state
+  at?: string; // Optional: ISO 8601 cutoff on observed_at (write time); returns the snapshot as recorded by then
+  at_ingested?: string; // Optional: ISO 8601 cutoff on created_at (row-insertion time); ANDed with `at` when both are set
   format?: "markdown" | "json"; // Optional: text response format (default: markdown)
 }
 ```
@@ -1413,7 +1419,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.12 `correct`
 
-**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
+**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. A correction stays authoritative on its field, whatever the field's merge rule and whatever the priority or source kind of any other write, until a later correction replaces it; among corrections the later one wins by deterministic recency, and on a merge_array field it replaces the whole array (merge_array_by_key fields excepted: corrections combine by key). This is how the [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) is computed. Read the snapshot and field provenance back before claiming the correction took effect.
 
 **Request Schema:**
 

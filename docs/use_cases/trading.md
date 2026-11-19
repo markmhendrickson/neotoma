@@ -18,7 +18,7 @@ Multi-agent trading systems make thousands of decisions per day — including de
 ## Data sources
 
 - Agent decision logs and reasoning traces
-- Market data feeds at decision time
+- Market data feeds as recorded by decision time
 - Strategy configuration and parameter snapshots
 - Risk model outputs and limit evaluations
 - Analyst agent recommendations and confidence scores

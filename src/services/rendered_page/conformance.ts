@@ -23,6 +23,16 @@
  * conformance result — these are advisory, like `store_warnings`.
  */
 
+import { logger } from "../../utils/logger.js";
+import {
+  safePatternTest,
+  MAX_CONFORMANCE_RULES_PER_PAGE,
+  CONFORMANCE_TOTAL_BUDGET_MS,
+} from "../safe_pattern.js";
+
+/** Subject cap for rendered-page rules (page bodies exceed the field-value cap). */
+const CONFORMANCE_MAX_SUBJECT_LENGTH = 1_000_000;
+
 export type ConformanceSeverity = "warn" | "block";
 
 export interface RenderedPageWarning {
@@ -94,18 +104,27 @@ function universalChecks(html: string): RenderedPageWarning[] {
 function evaluateRule(
   html: string,
   css: string,
-  rule: ConformanceRule
+  rule: ConformanceRule,
+  ruleIndex = -1
 ): RenderedPageWarning | null {
   if (!rule || typeof rule.pattern !== "string" || typeof rule.code !== "string") return null;
   const target = rule.target ?? "both";
   const haystack = target === "html" ? html : target === "css" ? css : `${css}\n${html}`;
-  let re: RegExp;
-  try {
-    re = new RegExp(rule.pattern, rule.flags ?? "i");
-  } catch {
-    return null; // malformed rule → skip (fail-open)
+  // Page bodies are far larger than field values, so this sink has a larger
+  // subject cap. Unusable rules and oversized pages skip the rule.
+  const res = safePatternTest(rule.pattern, haystack, {
+    flags: rule.flags ?? "i",
+    maxSubjectLength: CONFORMANCE_MAX_SUBJECT_LENGTH,
+  });
+  if (res.status !== "match" && res.status !== "no_match") {
+    // The rule does not apply to this page. Name the rule, never its pattern.
+    logger.warn(
+      `[RENDERED_PAGE_CONFORMANCE] Rule skipped (code=${String(rule.code)}, index=${ruleIndex}): ` +
+        `${res.status}${res.status === "invalid_pattern" ? ` (${res.reason})` : ""}.`
+    );
+    return null;
   }
-  const present = re.test(haystack);
+  const present = res.status === "match";
   const violated = rule.mode === "require_absent" ? present : !present;
   if (!violated) return null;
   return {
@@ -131,8 +150,24 @@ export function checkRenderedPageConformance(
   const out = universalChecks(html);
   const rules = policy?.rules;
   if (Array.isArray(rules)) {
-    for (const rule of rules) {
-      const w = evaluateRule(html, css, rule);
+    // Rules are tenant data: evaluate at most a fixed number per page, within a
+    // shared time budget. Rules beyond either limit do not apply to this page.
+    const started = performance.now();
+    if (rules.length > MAX_CONFORMANCE_RULES_PER_PAGE) {
+      logger.warn(
+        `[RENDERED_PAGE_CONFORMANCE] ${rules.length - MAX_CONFORMANCE_RULES_PER_PAGE} rule(s) beyond ` +
+          `the per-page limit of ${MAX_CONFORMANCE_RULES_PER_PAGE} were not evaluated.`
+      );
+    }
+    const limited = rules.slice(0, MAX_CONFORMANCE_RULES_PER_PAGE);
+    for (let i = 0; i < limited.length; i++) {
+      if (performance.now() - started > CONFORMANCE_TOTAL_BUDGET_MS) {
+        logger.warn(
+          `[RENDERED_PAGE_CONFORMANCE] Evaluation budget reached; rules from index ${i} were not evaluated.`
+        );
+        break;
+      }
+      const w = evaluateRule(html, css, limited[i], i);
       if (w) out.push(w);
     }
   }

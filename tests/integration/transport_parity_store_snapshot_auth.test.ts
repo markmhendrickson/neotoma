@@ -18,7 +18,7 @@
  *
  * The five curated behaviors (and the issues they lock in):
  *   1. at_ingested ingestion-time snapshot cutoff           (#1819) — MCP + offline
- *   2. at event-time snapshot cutoff                        (#1819) — MCP + offline
+ *   2. at observed_at snapshot cutoff                       (#1819) — MCP + offline
  *   3. dedup store: identical re-store keeps obs count = 1  (#1840) — MCP + offline
  *      (MCP additionally returns deduplicated:true + populated snapshot_after)
  *   4. NULL_CLEARED_FIELD warning under highest_priority    (#1839) — offline (by design)
@@ -90,7 +90,7 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
   it("matrix declares the five curated transport-parity behaviors", () => {
     expect(TRANSPORT_PARITY_MATRIX.map((s) => s.id)).toEqual([
       "snapshot_at_ingested_cutoff",
-      "snapshot_at_event_time_cutoff",
+      "snapshot_at_observed_at_cutoff",
       "store_dedup_observation_count",
       "null_cleared_field_warning",
       "issue_submit_local_auth_fallback",
@@ -144,9 +144,9 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
   });
 
   // -------------------------------------------------------------------------
-  // Cell 2 (#1819) — at event-time cutoff: MCP ↔ offline parity.
+  // Cell 2 (#1819) — at observed_at cutoff: MCP ↔ offline parity.
   // -------------------------------------------------------------------------
-  it("at event-time cutoff excludes a future observation — IDENTICAL effect on MCP and offline (#1819)", async () => {
+  it("at observed_at cutoff excludes a later assertion — IDENTICAL effect on MCP and offline (#1819)", async () => {
     const entityId = `ent_parity_at_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     createdEntityIds.push(entityId);
     const sourceId = await insertSource("at");
@@ -171,7 +171,7 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
       fields: { title: "Future", status: "done" },
     });
 
-    // at = yesterday: the future-observed obs must be excluded on BOTH transports
+    // at = yesterday: the later-stamped observation must be excluded on BOTH transports
     // → observation_count=1, status="pending".
     const mcp = await snapshotAtCutoff("mcp", mcpServer, offline.base, { entityId, at: yesterday });
     const off = await snapshotAtCutoff("offline", mcpServer, offline.base, {
@@ -181,7 +181,7 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
 
     expect(mcp.observationCount).toBe(1);
     expect(mcp.status).toBe("pending");
-    assertIdenticalEffect("at event-time cutoff", mcp, off);
+    assertIdenticalEffect("at observed_at cutoff", mcp, off);
   });
 
   // -------------------------------------------------------------------------
@@ -379,7 +379,7 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
   // Local no-Bearer must be ALLOWED; remote (untrusted X-Forwarded-For) no-Bearer
   // must still be REJECTED with AUTH_REQUIRED.
   // -------------------------------------------------------------------------
-  it("issue-submit: local no-bearer allowed, remote no-bearer still rejected (#1842)", async () => {
+  it("issue-submit: local no-bearer allowed, remote anonymous submit allowed, append rejected (#1842, #1953)", async () => {
     // The fallback is scoped to exactly the issue-write routes.
     expect(routeAllowsLocalIssueWriteFallback({ method: "POST", path: "/issues/submit" })).toBe(
       true

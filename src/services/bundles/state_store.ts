@@ -33,6 +33,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { logger } from "../../utils/logger.js";
+import { isEmbeddedMode, runtimeEnv, userStateDir } from "../../config_embedded.js";
 
 /**
  * The default-install bundles. These ship in every Neotoma install, are always
@@ -67,9 +68,13 @@ const STATE_VERSION = 1 as const;
 
 /** Resolves the bundle state file path (overridable for tests). */
 export function bundleStatePath(): string {
-  const override = process.env.NEOTOMA_BUNDLE_STATE_PATH?.trim();
+  const override = runtimeEnv().NEOTOMA_BUNDLE_STATE_PATH?.trim();
   if (override) return override;
-  return path.join(os.homedir(), ".config", "neotoma", "bundle_state.json");
+  // Standard mode resolves the home directory through the operating system, exactly as
+  // before; embedded mode keeps the file under the explicit data directory.
+  // home-read-ok: the operating-system lookup applies in standard mode only
+  const dir = isEmbeddedMode() ? userStateDir() : path.join(os.homedir(), ".config", "neotoma");
+  return path.join(dir, "bundle_state.json");
 }
 
 let cached: BundleStateFile | undefined;
