@@ -324,6 +324,11 @@ import {
 } from "./services/record_as_of.js";
 import { isProductionEnvironment } from "./shared/environment.js";
 import { isLoopbackHost, resolveBindHostFromEnv } from "./shared/bind_host.js";
+import {
+  jsonAccessLog,
+  resolveAccessLogFormat,
+  setRequestAuthMethod,
+} from "./services/access_log.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -469,7 +474,7 @@ const corsOptions = {
     "X-Connection-Id",
     "mcp-session-id",
   ],
-  exposedHeaders: ["Content-Type"],
+  exposedHeaders: ["Content-Type", "x-request-id"],
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 app.use(cors(corsOptions));
@@ -486,12 +491,23 @@ app.use(
     },
   })
 );
-app.use(
-  morgan<express.Request, express.Response>("dev", {
-    // Suppress identity-bearing URLs independently of route spelling or method.
-    skip: (req) => exactIdentityRequested(req.query),
-  })
-);
+// Per-request access log. `NEOTOMA_ACCESS_LOG` selects `json` (one structured
+// line per request, written on response finish so it sees the resolved user),
+// `dev` (morgan's compact format) or `off`. The default is `json` when the
+// server binds beyond loopback and `dev` for a loopback bind. See
+// docs/operations/configuration.md "Access log".
+const accessLogBindHost = resolveHttpBindHost();
+const accessLogFormat = resolveAccessLogFormat(runtimeEnv().NEOTOMA_ACCESS_LOG, accessLogBindHost);
+if (accessLogFormat === "json") {
+  app.use(jsonAccessLog({ trustForwarded: !isLoopbackHost(accessLogBindHost) }));
+} else if (accessLogFormat === "dev") {
+  app.use(
+    morgan<express.Request, express.Response>("dev", {
+      // Suppress identity-bearing URLs independently of route spelling or method.
+      skip: (req) => exactIdentityRequested(req.query),
+    })
+  );
+}
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
 
@@ -4224,6 +4240,7 @@ function stampAdmittedAAuthPrincipal(req: express.Request): boolean {
     return false;
   }
   stampUserPrincipal(req, admission.user_id);
+  setRequestAuthMethod(req, "aauth_admitted");
   logger.info(
     `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admission.user_id} grant_id=${admission.grant_id ?? "?"}`
   );
@@ -4969,12 +4986,14 @@ app.use(async (req, res, next) => {
   ) {
     if (maybeStampAdmittedEntityReader(req)) return next();
     if (await maybeStampGuestPrincipal(req)) {
+      setRequestAuthMethod(req, "guest_capability");
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
     }
     if (_localSandboxActive) {
       const sandboxUser = await ensureLocalSandboxUser();
       stampUserPrincipal(req, sandboxUser.id);
+      setRequestAuthMethod(req, "local_sandbox");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
       );
@@ -4983,6 +5002,7 @@ app.use(async (req, res, next) => {
     const devUser = await ensureLocalDevUser();
     stampUserPrincipal(req, devUser.id);
     markLocalNoTokenSignIn(req);
+    setRequestAuthMethod(req, "local_no_bearer");
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
     );
@@ -4995,6 +5015,7 @@ app.use(async (req, res, next) => {
     const sessionInfo = await resolveSessionFromRequest(req);
     if (sessionInfo) {
       stampUserPrincipal(req, sessionInfo.userId);
+      setRequestAuthMethod(req, "sandbox_session");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=sandbox_session user_id=${sessionInfo.userId}`
       );
@@ -5021,6 +5042,7 @@ app.use(async (req, res, next) => {
     if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
       const aauthUser = await ensureSandboxAauthUser(aauthCtx.thumbprint);
       stampUserPrincipal(req, aauthUser.id);
+      setRequestAuthMethod(req, "sandbox_aauth");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=sandbox_aauth user_id=${aauthUser.id} thumbprint=${aauthCtx.thumbprint}`
       );
@@ -5028,6 +5050,7 @@ app.use(async (req, res, next) => {
     }
     const sandboxUser = await ensureSandboxPublicUser();
     stampUserPrincipal(req, sandboxUser.id);
+    setRequestAuthMethod(req, "sandbox_public");
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=sandbox_public user_id=${sandboxUser.id}`
     );
@@ -5044,6 +5067,7 @@ app.use(async (req, res, next) => {
     if (safeCompareTokens(token, mcpExpectedToken)) {
       const devUser = await ensureLocalDevUser();
       stampUserPrincipal(req, devUser.id);
+      setRequestAuthMethod(req, "bearer_mcp_token");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
       );
@@ -5057,6 +5081,7 @@ app.use(async (req, res, next) => {
     if (!headerAuth.startsWith("Bearer ")) {
       if (maybeStampAdmittedEntityReader(req)) return next();
       if (await maybeStampGuestPrincipal(req)) {
+        setRequestAuthMethod(req, "guest_capability");
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }
@@ -5064,6 +5089,7 @@ app.use(async (req, res, next) => {
         if (_localSandboxActive) {
           const sandboxUser = await ensureLocalSandboxUser();
           stampUserPrincipal(req, sandboxUser.id);
+          setRequestAuthMethod(req, "local_sandbox");
           logger.info(
             `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
           );
@@ -5072,6 +5098,7 @@ app.use(async (req, res, next) => {
         const devUser = await ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         markLocalNoTokenSignIn(req);
+        setRequestAuthMethod(req, "local_no_bearer");
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
         );
@@ -5101,6 +5128,7 @@ app.use(async (req, res, next) => {
         if (getSharedGraphUserId() && staticBearerUserId === getSharedGraphUserId()) {
           (req as any).signedInSharedGraph = true;
         }
+        setRequestAuthMethod(req, slot === "previous" ? "bearer_env_previous" : "bearer_env");
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${staticBearerUserId}`
         );
@@ -5121,6 +5149,7 @@ app.use(async (req, res, next) => {
   // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
     if (await maybeStampGuestPrincipal(req)) {
+      setRequestAuthMethod(req, "guest_capability");
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
     }
@@ -5200,6 +5229,7 @@ app.use(async (req, res, next) => {
     // stamped principal, and the Ed25519 fall-through that trusted a
     // caller-supplied user_id has been removed.
     stampUserPrincipal(req, registeredUserId);
+    setRequestAuthMethod(req, "ed25519_bearer");
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=ed25519_bearer user_id=${registeredUserId}`
     );
@@ -5219,11 +5249,13 @@ app.use(async (req, res, next) => {
       (req as any).signedInSharedGraph = validated.sharedGraph === true;
       (req as any).bearerToken = bearerToken;
       sessionActorId = validated.actorId;
+      setRequestAuthMethod(req, "session_bearer");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
     } catch (authError) {
       if (await maybeStampGuestPrincipal(req)) {
+        setRequestAuthMethod(req, "guest_capability");
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }
@@ -5242,6 +5274,7 @@ app.use(async (req, res, next) => {
         res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
         const sandboxUser = await ensureSandboxPublicUser();
         stampUserPrincipal(req, sandboxUser.id);
+        setRequestAuthMethod(req, "sandbox_public_stale_bearer");
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=sandbox_public_stale_bearer user_id=${sandboxUser.id}`
         );
