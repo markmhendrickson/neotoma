@@ -66,6 +66,10 @@ const malformedId = newId("mal");
 const injectionId = newId("inj");
 const hostileNameId = newId("host");
 const retiredNameId = newId("ret");
+const undescribedId = newId("undesc");
+
+/** A skill stored with an empty description but a markdown body. */
+const UNDESCRIBED_SKILL = "test-undescribed-skill";
 
 /**
  * A graph-stored row reusing the name of a package skill retired with
@@ -74,7 +78,15 @@ const retiredNameId = newId("ret");
  */
 const RETIRED_PACKAGE_NAME = "store-data";
 
-const allIds = [enabledId, disabledId, malformedId, injectionId, hostileNameId, retiredNameId];
+const allIds = [
+  enabledId,
+  disabledId,
+  malformedId,
+  injectionId,
+  hostileNameId,
+  retiredNameId,
+  undescribedId,
+];
 
 /**
  * Invoke the server's real `initialize` handler.
@@ -188,6 +200,14 @@ describe("instance skills reach the agent through MCP initialize (#2046)", () =>
       enabled: true,
     });
 
+    await seedSkill(undescribedId, UNDESCRIBED_SKILL, {
+      name: UNDESCRIBED_SKILL,
+      description: "",
+      content:
+        "---\nname: test-undescribed-skill\n---\n# Heading\n\nTidy synthetic notes into a list. More detail follows.",
+      enabled: true,
+    });
+
     server = new NeotomaServer();
   });
 
@@ -224,6 +244,15 @@ describe("instance skills reach the agent through MCP initialize (#2046)", () =>
 
     // And the agent must be told how to get the body, or the list is a dead end.
     expect(instructions.includes("retrieve_entity_by_identifier")).toBe(true);
+  });
+
+  it("lists a description-less skill by a description derived from its body", async () => {
+    const result = await callInitialize(server);
+    const line = (result.instructions ?? "")
+      .split("\n")
+      .find((l) => l.startsWith(`- ${UNDESCRIBED_SKILL} `));
+
+    expect(line).toBe(`- ${UNDESCRIBED_SKILL} — Tidy synthetic notes into a list.…`);
   });
 
   it("delivers an enabled skill in serverInfo._neotoma.available_skills", async () => {
