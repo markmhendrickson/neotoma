@@ -9,7 +9,7 @@ This document covers:
 - The `submission_config` entity that operators seed to enable a target entity type.
 - `submitEntity` flow (validation, idempotency, conversation threading, guest tokens).
 - Mirror dispatch to GitHub Issues and generic webhooks.
-- Inbound webhook ingest from external mirrors.
+- Inbound webhook ingest from GitHub (the only shipped inbound provider).
 - Defaults seeding for fresh installs.
 
 It does NOT cover:
@@ -45,8 +45,8 @@ Hardcoding those flows per integration would scatter validation, threading, and 
 - `seed_schema.ts` — registers the global `submission_config` schema (canonical_name_field: `config_key`).
 - `seed_submission_defaults.ts` — first-run seeder that installs default `submission_config` rows for `issue` (and any future canonical types) so a fresh install can accept feedback without operator intervention.
 - `ingest/`:
-  - `webhook_ingest.ts` — Express handler for inbound `POST /submissions/webhook/:provider` payloads from external mirrors.
-  - `github_handler.ts` — provider-specific normalization for GitHub issue / comment payloads, delegating to `submitEntity`.
+  - `webhook_ingest.ts` — the `WebhookIngestHandler` interface only. No route, no dispatcher; see [Inbound webhook ingest](#inbound-webhook-ingest).
+  - `github_handler.ts` — signature verification and GitHub issue / comment payload → `store` mapping, consumed by the `POST /github/webhook` route in `src/actions.ts`. Exports `githubWebhookIngestHandler` as a compile-time conformance check against `WebhookIngestHandler`.
 - `mirrors/`:
   - `mirror_interface.ts` — `Mirror` shape (provider id, `dispatch(entity, config)`).
   - `github_mirror.ts` — pushes the new entity into a configured GitHub repo via the issues service.
@@ -99,20 +99,51 @@ After `ops.store` commits, each `external_mirrors[]` entry dispatches in declara
 - `provider: "linear"` — placeholder; current implementation is a no-op stub awaiting the Linear adapter.
 - `provider: "custom_webhook"` — `webhook_mirror.postEntityToWebhookMirror` performs an HMAC-signed POST to `config.url` with the entity payload.
 
-Mirror errors are logged but never block the response. Operators can re-trigger a mirror by issuing a `correct` that touches the entity (which re-emits a substrate event consumed by the mirror dispatcher), or manually via the inbound webhook ingest endpoint.
+Mirror errors are logged but never block the response. Operators can re-trigger a mirror by issuing a `correct` that touches the entity, which re-emits a substrate event consumed by the mirror dispatcher.
 
 ## Inbound webhook ingest
 
-`ingest/webhook_ingest.ts` registers `POST /submissions/webhook/:provider`. The provider key dispatches:
+**GitHub is the only inbound provider that ships.** There is no generic
+`POST /submissions/webhook/:provider` route, and none is planned until a second
+provider justifies one. `ingest/webhook_ingest.ts` declares the
+`WebhookIngestHandler` interface and nothing else — no route registration, no
+provider dispatcher, no runtime registry.
 
-- `github` → `github_handler.handleGithubInboundIssue` / `handleGithubInboundComment`. Both validate the HMAC header, normalize the payload to `SubmitEntityParams`, then call `submitEntity` under a `runWithExternalActor` wrapper that records the originating GitHub user as the external actor. See [`agent_attribution_integration.md`](agent_attribution_integration.md).
-- Other providers can be added by registering a new handler module.
+The shipped path is `POST /github/webhook`, registered in `src/actions.ts`:
 
-The ingest path enforces:
+1. Requires `GITHUB_WEBHOOK_SECRET`; returns `503 WEBHOOK_NOT_CONFIGURED` when unset.
+2. Verifies the `X-Hub-Signature-256` HMAC via `github_handler.verifyGithubSignature`.
+3. Maps the event with `github_handler.mapGithubWebhookEventToStore`, which handles
+   `issues` (`opened`, `edited`, `closed`, `reopened`, `labeled`, `unlabeled`) and
+   `issue_comment` (`created`, `edited`). Unhandled events return `200 {"status":"ignored"}`.
+4. Writes through `storeStructuredForApi` inside `runWithExternalActor`, recording the
+   originating GitHub user as the external actor. See
+   [`agent_attribution_integration.md`](agent_attribution_integration.md).
 
-- HMAC signature verification using the per-mirror secret stored in `submission_config.external_mirrors[*].config.shared_secret`.
-- Idempotency through the same `idempotencyForSubmit` hash so re-delivery from GitHub does not duplicate the entity.
-- Provider-specific dedupe — for GitHub issues, the upstream `issue.number` is folded into the canonical fields so subsequent comments thread into the same Neotoma `conversation`.
+Two properties of this path differ from the `submitEntity` flow described above,
+and matter when reasoning about it:
+
+- **It does not call `submitEntity`.** The route composes a store payload and
+  writes directly. It therefore does not consult `submission_config`, does not
+  apply `assertGuestWriteAllowed`, and does not mint guest read-back tokens.
+  Its trust boundary is the webhook HMAC, not the guest access policy.
+- **It does not use `idempotencyForSubmit`.** `github_handler` builds its own keys
+  (`webhook-issue-<repo>-<number>-<delivery>` and
+  `webhook-comment-<repo>-<number>-<comment>-<delivery>`), so re-delivery with a
+  new delivery id creates a new observation rather than deduplicating. Entity
+  identity still converges: `github_number` resolves the same `issue` entity, and
+  comments thread into the same `conversation`.
+
+### Adding a second provider
+
+`WebhookIngestHandler` is the shape to write against, not a plug-in socket — a
+new provider needs its own route registration in `src/actions.ts` today.
+`githubWebhookIngestHandler` in `github_handler.ts` binds the GitHub functions to
+the interface so the compiler catches divergence; do the same for a new provider.
+Registering a shared `/submissions/webhook/:provider` route becomes worthwhile
+once a second provider exists, and would require the transport-parity work in
+[`change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc)
+(OpenAPI entry, contract mapping, `protected_routes_manifest.json`).
 
 ## Operations
 
@@ -123,9 +154,9 @@ The ingest path enforces:
 
 ## Testing
 
-- Unit: `src/services/entity_submission/__tests__/` (when present); `tests/services/sync_webhook_outbound.test.ts` exercises the mirror dispatch path.
+- Unit: `src/services/entity_submission/submission_service.test.ts` covers `submitEntity` write-integrity and submission-path steering. `tests/services/sync_webhook_outbound.test.ts` exercises the outbound mirror dispatch path.
 - Integration: `tests/integration/cross_instance_issues.test.ts` covers the GitHub mirror loop end-to-end.
-- Contract: `tests/contract/openclaw_plugin.test.ts` and the legacy-payload corpus exercise the inbound webhook handlers.
+- The inbound `POST /github/webhook` route has no dedicated test at present.
 
 ## Related
 
@@ -133,4 +164,4 @@ The ingest path enforces:
 - [`guest_access_policy.md`](guest_access_policy.md) — the policy model that gates guest writes.
 - [`agent_attribution_integration.md`](agent_attribution_integration.md) — external-actor attribution applied to inbound submissions.
 - [`subscriptions.md`](subscriptions.md) — substrate events that trigger downstream mirror re-dispatch.
-- [`docs/plans/observer_wire_feedback_channel.md`](../plans/observer_wire_feedback_channel.md) — design history of the submission pipeline.
+- `observer_wire_feedback_channel` — design history of the submission pipeline; the markdown plan was removed in `3ce1a332c` and its content now lives as a `plan` entity in Neotoma.
