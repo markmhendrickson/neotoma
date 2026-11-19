@@ -84,29 +84,6 @@ export function resolveRequestId(req: Request): string {
   return randomUUID();
 }
 
-function firstHeaderValue(req: Request, name: string): string | null {
-  const raw = req.headers[name];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof value !== "string") return null;
-  const first = value.split(",")[0]?.trim();
-  return first ? first : null;
-}
-
-/**
- * Client address. Proxy-supplied headers are honoured only when the server is
- * bound beyond loopback (i.e. behind the platform proxy); the platform's
- * client-ip header wins over the first forwarded-for entry.
- */
-export function resolveClientIp(req: Request, trustForwarded: boolean): string | null {
-  if (trustForwarded) {
-    const platform = firstHeaderValue(req, "fly-client-ip");
-    if (platform) return platform;
-    const forwarded = firstHeaderValue(req, "x-forwarded-for");
-    if (forwarded) return forwarded;
-  }
-  return req.socket?.remoteAddress ?? null;
-}
-
 function pathAndQueryKeys(req: Request): { path: string; query_keys: string[] } {
   const url = req.originalUrl || req.url || "/";
   const queryIndex = url.indexOf("?");
@@ -120,7 +97,12 @@ function pathAndQueryKeys(req: Request): { path: string; query_keys: string[] } 
 export function buildAccessLogRecord(
   req: Request,
   res: Response,
-  opts: { startedAt: bigint; startedAtMs: number; trustForwarded: boolean; now?: bigint }
+  opts: {
+    startedAt: bigint;
+    startedAtMs: number;
+    clientIp: (req: Request) => string | null;
+    now?: bigint;
+  }
 ): AccessLogRecord {
   const r = req as AccessLogRequest;
   const { path, query_keys } = pathAndQueryKeys(req);
@@ -145,7 +127,7 @@ export function buildAccessLogRecord(
     user_id: typeof r.authenticatedUserId === "string" ? r.authenticatedUserId : null,
     auth_method: r.authMethod ?? "none",
     agent: admission?.admitted && admission.agent_label ? admission.agent_label : null,
-    client_ip: resolveClientIp(req, opts.trustForwarded),
+    client_ip: opts.clientIp(req),
     user_agent: userAgent,
     service: ACCESS_LOG_SERVICE,
     health: HEALTH_PATHS.has(path),
@@ -166,7 +148,12 @@ function firstUserAgent(req: Request): string | null {
  * auth has run because it waits for the response to finish.
  */
 export function jsonAccessLog(opts: {
-  trustForwarded: boolean;
+  /**
+   * Resolves the client address. Supplied by `src/actions.ts`, which owns
+   * every read of proxy-supplied address headers (see
+   * docs/architecture/change_guardrails_rules.mdc, MUST NOT 15).
+   */
+  clientIp: (req: Request) => string | null;
   write?: (line: string) => void;
 }): RequestHandler {
   const write = opts.write ?? ((line: string) => process.stdout.write(line));
@@ -184,7 +171,7 @@ export function jsonAccessLog(opts: {
         const record = buildAccessLogRecord(req, res, {
           startedAt,
           startedAtMs,
-          trustForwarded: opts.trustForwarded,
+          clientIp: opts.clientIp,
         });
         write(JSON.stringify(record) + "\n");
       } catch {

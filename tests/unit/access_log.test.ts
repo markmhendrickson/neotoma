@@ -5,6 +5,7 @@ import { join } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { accessLogClientIp } from "../../src/actions.js";
 import {
   ACCESS_LOG_SERVICE,
   jsonAccessLog,
@@ -23,12 +24,16 @@ afterEach(async () => {
 async function startApp(trustForwarded: boolean) {
   const lines: string[] = [];
   const app = express();
-  app.use(jsonAccessLog({ trustForwarded, write: (line) => lines.push(line) }));
+  app.use(
+    jsonAccessLog({
+      clientIp: (req) => accessLogClientIp(req, trustForwarded),
+      write: (line) => lines.push(line),
+    })
+  );
   app.use((req, _res, next) => {
     if (req.headers.authorization === "Bearer tok-SYNTHETIC-abcdef123456") {
       setRequestAuthMethod(req, "bearer_env");
-      (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId =
-        "user-0001";
+      (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId = "user-0001";
       (req as express.Request & { aauthAdmission?: unknown }).aauthAdmission = {
         admitted: true,
         agent_label: "synthetic-agent",

@@ -499,7 +499,8 @@ app.use(
 const accessLogBindHost = resolveHttpBindHost();
 const accessLogFormat = resolveAccessLogFormat(runtimeEnv().NEOTOMA_ACCESS_LOG, accessLogBindHost);
 if (accessLogFormat === "json") {
-  app.use(jsonAccessLog({ trustForwarded: !isLoopbackHost(accessLogBindHost) }));
+  const trustForwardedForAccessLog = !isLoopbackHost(accessLogBindHost);
+  app.use(jsonAccessLog({ clientIp: (req) => accessLogClientIp(req, trustForwardedForAccessLog) }));
 } else if (accessLogFormat === "dev") {
   app.use(
     morgan<express.Request, express.Response>("dev", {
@@ -1507,6 +1508,23 @@ function forwardedForValues(req: express.Request): string[] {
     .flatMap((value) => String(value).split(","))
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+/**
+ * Client address for the access log (src/services/access_log.ts). The
+ * platform proxy's `fly-client-ip` header, then the first forwarded-for
+ * entry, are honoured only when `trustForwarded` is true (the server is bound
+ * beyond loopback, i.e. behind the platform proxy); otherwise the socket
+ * address is used. Logging only: this value never feeds a trust decision.
+ */
+export function accessLogClientIp(req: express.Request, trustForwarded: boolean): string | null {
+  if (trustForwarded) {
+    const platform = req.header("fly-client-ip")?.split(",")[0]?.trim();
+    if (platform) return platform;
+    const forwarded = forwardedForValues(req)[0];
+    if (forwarded) return forwarded;
+  }
+  return req.socket?.remoteAddress ?? null;
 }
 
 // isProductionEnvironment is imported from ./shared/environment.js — see that
