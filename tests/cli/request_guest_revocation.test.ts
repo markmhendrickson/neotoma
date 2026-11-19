@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import Database from "better-sqlite3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -9,7 +7,9 @@ import {
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
-const exec = promisify(execFile);
+import { execFileLocal } from "../helpers/cli_local_target.js";
+
+const exec = execFileLocal;
 let server: IsolatedServer;
 let database: Database.Database;
 const entityId = "ent_synthetic_guest_revocation_cli";
