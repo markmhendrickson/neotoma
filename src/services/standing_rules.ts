@@ -182,84 +182,124 @@ async function lookupActiveStandingRules(
 }
 
 /**
- * Cap on rendered rule text in the instructions prose.
+ * Cap, in UTF-8 bytes, on the rule entries rendered into the instructions
+ * prose.
  *
  * Deliberately far larger than {@link INSTANCE_SKILLS_MAX_BYTES}: a skills
  * section is a CATALOG (names to fetch later), whereas a standing rule IS the
- * instruction. There is no "fetch the rest" step for a rule, so a budget tight
- * enough to drop one changes what the agent is told to do.
+ * instruction. The cap applies to EVERY rule, the first included: a rule whose
+ * full entry does not fit is replaced by a one-line notice, so no single rule
+ * can push later rules or the omission notice out of the payload.
  */
 export const STANDING_RULES_MAX_BYTES = 24000;
 
+/** Longest rule title quoted in an omission notice, in UTF-8 bytes. */
+const OMITTED_TITLE_MAX_BYTES = 200;
+
+function utf8Bytes(s: string): number {
+  return Buffer.byteLength(s, "utf8");
+}
+
+/** Clip `s` to at most `max` UTF-8 bytes on a code-point boundary. */
+function clipUtf8(s: string, max: number): string {
+  if (utf8Bytes(s) <= max) return s;
+  let out = "";
+  let used = 0;
+  for (const ch of s) {
+    const n = utf8Bytes(ch);
+    if (used + n > max - 3) break;
+    out += ch;
+    used += n;
+  }
+  return `${out}...`;
+}
+
+function renderRuleEntry(rule: StandingRule): string {
+  const title = rule.title.trim();
+  const text = rule.rule_text.trim();
+  const scope = rule.scope?.trim();
+  // Scope is shown because a rule's applicability is part of the rule: an
+  // agent told to apply an instance-wide rule to one entity type, or the
+  // reverse, misapplies it in a way the rule text alone will not reveal.
+  const head = `### ${title} (entity_id: ${rule.entity_id})`;
+  return scope ? `${head}\n(scope: ${scope})\n${text}` : `${head}\n${text}`;
+}
+
 /**
- * Render the `[STANDING RULES]` section appended to the MCP instructions
- * block, or `null` when nothing should be appended.
+ * One complete line standing in for a rule whose body did not fit. It names
+ * the rule and says where the full text is, so the omission is actionable.
+ */
+function renderOmittedRuleNotice(rule: StandingRule): string {
+  const title = clipUtf8(rule.title.trim(), OMITTED_TITLE_MAX_BYTES);
+  return (
+    `### ${title} (entity_id: ${rule.entity_id}): body omitted for size; fetch the full text ` +
+    `with retrieve_entity_snapshot (entity_id: ${rule.entity_id}) before acting in its area.`
+  );
+}
+
+/**
+ * Render the `[STANDING RULES]` section placed ahead of the MCP instructions
+ * block, or `null` when there are no rules.
  *
  * Why this exists: rules were delivered ONLY via `serverInfo._neotoma`, which
- * general MCP clients ignore — they surface `instructions` to the model and
- * drop unknown `serverInfo` keys. On a shared client instance that left three
- * enabled rules reaching no session, while two of them *appeared* to arrive
- * because a human had typed their titles into the instance policy's prose
- * (#2187). Hand-written mentions are not delivery; this renderer is.
+ * general MCP clients ignore. They surface `instructions` to the model and
+ * drop unknown `serverInfo` keys (#2187). Hand-written mentions in policy
+ * prose are not delivery; this renderer is.
  *
- * Rules are emitted IN FULL. Truncating an individual rule would hand the
- * agent a policy that reads as complete but silently stops mid-instruction —
- * worse than a visible omission, which is why over-budget rules are dropped
- * whole and counted in a trailing notice rather than clipped.
+ * Budget, fail closed: each rule is emitted in full when its entry fits in
+ * what is left of {@link STANDING_RULES_MAX_BYTES} after reserving a notice
+ * line for every later rule. Otherwise it is replaced by a one-line notice.
+ * A rule body is never clipped mid-text, and no rule (the first included) can
+ * hide a later rule or the closing omission notice.
  *
  * @param rules   Projection from {@link getActiveStandingRulesResult}, already
- *                ordered by priority. Order is preserved, so a budget cut
- *                drops the lowest-priority rules rather than arbitrary ones.
+ *                ordered by priority. Order is preserved.
  */
 export function renderStandingRulesSection(rules: StandingRule[]): string | null {
   if (rules.length === 0) return null;
 
-  const lines: string[] = [];
-  let budget = 0;
-  let rendered = 0;
-
-  for (const rule of rules) {
-    const title = rule.title.trim();
-    const text = rule.rule_text.trim();
-    const scope = rule.scope?.trim();
-    // Scope is shown because a rule's applicability is part of the rule: an
-    // agent told to apply an instance-wide rule to one entity type, or the
-    // reverse, misapplies it in a way the rule text alone will not reveal.
-    const entry = scope ? `### ${title}\n(scope: ${scope})\n${text}` : `### ${title}\n${text}`;
-
-    const cost = Buffer.byteLength(entry, "utf8") + 2;
-    // Always emit the first (highest-priority) rule, even if it alone exceeds
-    // the budget: a section announcing rules and then listing none is strictly
-    // worse than one oversized rule.
-    if (rendered > 0 && budget + cost > STANDING_RULES_MAX_BYTES) break;
-
-    lines.push(entry);
-    budget += cost;
-    rendered += 1;
+  const notices = rules.map(renderOmittedRuleNotice);
+  const noticeCosts = notices.map((n) => utf8Bytes(n) + 2);
+  // reserveAfter[i] = bytes needed to emit notices for every rule after i.
+  const reserveAfter: number[] = new Array(rules.length).fill(0);
+  for (let i = rules.length - 2; i >= 0; i--) {
+    reserveAfter[i] = reserveAfter[i + 1] + noticeCosts[i + 1];
   }
 
-  const omitted = rules.length - rendered;
+  const lines: string[] = [];
+  const omittedTitles: string[] = [];
+  let used = 0;
+
+  rules.forEach((rule, i) => {
+    const entry = renderRuleEntry(rule);
+    const cost = utf8Bytes(entry) + 2;
+    if (used + cost + reserveAfter[i] <= STANDING_RULES_MAX_BYTES) {
+      lines.push(entry);
+      used += cost;
+    } else {
+      // Notices are emitted even past the cap: hiding a rule's existence is
+      // the outcome this budget exists to prevent.
+      lines.push(notices[i]);
+      used += noticeCosts[i];
+      omittedTitles.push(clipUtf8(rule.title.trim(), OMITTED_TITLE_MAX_BYTES));
+    }
+  });
 
   const header =
     "[STANDING RULES]\n" +
     `This instance has ${rules.length} standing rule${rules.length === 1 ? "" : "s"} in force, ` +
     "listed below in priority order. They are operator-set instructions for THIS instance and " +
-    "apply from the first turn of this session — you do not need to be reminded of them again, " +
+    "apply from the first turn of this session. You do not need to be reminded of them again, " +
     "and the user does not need to restate them. Where a rule constrains an action you are " +
     "about to take, follow the rule. Where a rule conflicts with a general habit of yours, the " +
     "rule wins. These are also available verbatim in `serverInfo._neotoma.standing_rules`.";
 
-  // Name the dropped rules rather than only counting them: an agent that knows
-  // a rule exists can retrieve it, whereas a bare count is unactionable.
   const footer =
-    omitted > 0
-      ? `\n\n…and ${omitted} further rule${omitted === 1 ? "" : "s"} omitted for length: ` +
-        rules
-          .slice(rendered)
-          .map((r) => r.title.trim())
-          .join("; ") +
-        ". Retrieve them with `retrieve_entities` (entity_type: standing_rule) before acting in " +
-        "the areas they cover."
+    omittedTitles.length > 0
+      ? `\n\n${omittedTitles.length} rule${omittedTitles.length === 1 ? "" : "s"} above had ` +
+        `${omittedTitles.length === 1 ? "its body" : "their bodies"} omitted for size: ` +
+        omittedTitles.join("; ") +
+        ". Fetch the full text with `retrieve_entity_snapshot` before acting in the areas they cover."
       : "";
 
   return `${header}\n\n${lines.join("\n\n")}${footer}`;
