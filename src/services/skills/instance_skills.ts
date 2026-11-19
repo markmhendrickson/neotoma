@@ -16,7 +16,9 @@
  * body on demand via the documented retrieval path (see
  * {@link INSTANCE_SKILL_FETCH_HINT}). Materializing executable assets is out
  * of scope by design — execution consent is per-artifact and hash-pinned
- * elsewhere.
+ * elsewhere. A skill stored without a description gets a short excerpt of
+ * its body's first paragraph instead (see {@link deriveDescriptionFromBody}),
+ * capped well below a body's size, so it can still be matched to intent.
  *
  * This service is read-only and must never issue writes or side effects.
  */
@@ -32,6 +34,13 @@ export interface InstanceSkill {
   name: string;
   /** One-sentence description used for intent matching. May be empty. */
   description: string;
+  /**
+   * Short text derived from the skill body, set only when `description` is
+   * empty and the body has a usable first paragraph. At most
+   * {@link DERIVED_DESCRIPTION_MAX_CHARS} characters plus an ellipsis: an
+   * excerpt for intent matching, never the body itself.
+   */
+  derived_description?: string;
 }
 
 /**
@@ -49,6 +58,12 @@ export const INSTANCE_SKILLS_MAX_BYTES = 4000;
 
 /** Per-skill description cap, so one pathological row cannot dominate the budget. */
 const DESCRIPTION_MAX_CHARS = 300;
+
+/** Cap on a description derived from the skill body. */
+const DERIVED_DESCRIPTION_MAX_CHARS = 160;
+
+/** Literal shown for a skill with neither a description nor a usable body. */
+const NO_DESCRIPTION = "(no description)";
 
 /**
  * Per-skill name cap. A name is a kebab-case identifier, so anything near
@@ -69,7 +84,7 @@ const NAME_MAX_CHARS = 80;
  * actually use removes the entire injection question for this field rather
  * than trying to neutralise it character by character. A description is
  * free-form human prose and cannot be whitelisted without mangling ordinary
- * text, so it is sanitised instead (see {@link sanitiseDescription}).
+ * text, so it is sanitised instead (see {@link sanitiseDisplayText}).
  */
 const SKILL_NAME_PATTERN = /^[a-zA-Z0-9]+(?:[-_.:/][a-zA-Z0-9]+)*$/;
 
@@ -161,6 +176,74 @@ function sanitiseDisplayText(value: string): string {
   }
 
   return out.trim();
+}
+
+/**
+ * Derive a one-line description from a skill's markdown body, for skills
+ * stored without one. Returns `""` when the body yields nothing usable.
+ *
+ * Skips a leading front matter block and heading lines, takes the first
+ * non-empty paragraph, collapses whitespace, and cuts at the first sentence
+ * end or {@link DERIVED_DESCRIPTION_MAX_CHARS} characters on a word boundary,
+ * ending with an ellipsis when cut. The result goes through
+ * {@link sanitiseDisplayText}, the same function a stored description goes
+ * through, so body text cannot reach the instructions block by a weaker path.
+ */
+export function deriveDescriptionFromBody(body: unknown): string {
+  if (typeof body !== "string") return "";
+  const lines = body.replace(/\r\n?/g, "\n").split("\n");
+
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === "") i += 1;
+  if (i < lines.length && lines[i].trim() === "---") {
+    const close = lines.findIndex((l, j) => j > i && l.trim() === "---");
+    // An unterminated front matter block is not front matter; read it as text.
+    if (close !== -1) i = close + 1;
+  }
+
+  const paragraph: string[] = [];
+  for (; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (/^#{1,6}(\s|$)/.test(trimmed)) {
+      if (paragraph.length > 0) break;
+      continue;
+    }
+    if (trimmed === "") {
+      if (paragraph.length > 0) break;
+      continue;
+    }
+    paragraph.push(trimmed);
+  }
+
+  const text = sanitiseDisplayText(paragraph.join(" "));
+  if (!text) return "";
+
+  const sentenceEnd = text.search(/[.!?](\s|$)/);
+  if (sentenceEnd !== -1 && sentenceEnd + 1 <= DERIVED_DESCRIPTION_MAX_CHARS) {
+    const sentence = text.slice(0, sentenceEnd + 1);
+    return sentence.length < text.length ? `${sentence}…` : sentence;
+  }
+  if (text.length <= DERIVED_DESCRIPTION_MAX_CHARS) return text;
+
+  const window = text.slice(0, DERIVED_DESCRIPTION_MAX_CHARS + 1);
+  const lastSpace = window.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? window.slice(0, lastSpace) : window.slice(0, DERIVED_DESCRIPTION_MAX_CHARS);
+  return `${cut.trimEnd()}…`;
+}
+
+/**
+ * The description text rendered for a skill: the stored description when it
+ * is non-empty, otherwise the description derived from its body, otherwise
+ * the literal `(no description)` so the gap stays visible.
+ */
+export function describeSkill(
+  skill: Pick<InstanceSkill, "description" | "derived_description">
+): string {
+  if (skill.description.trim()) return skill.description;
+  if (skill.derived_description && skill.derived_description.trim()) {
+    return skill.derived_description;
+  }
+  return NO_DESCRIPTION;
 }
 
 /**
@@ -371,7 +454,12 @@ export async function getInstanceSkillsResult(userId: string): Promise<InstanceS
           ? `${cleanedDescription.slice(0, DESCRIPTION_MAX_CHARS).trimEnd()}…`
           : cleanedDescription;
 
-      skills.push({ entity_id: row.entity_id, name: candidate, description });
+      const skill: InstanceSkill = { entity_id: row.entity_id, name: candidate, description };
+      if (!description) {
+        const derived = deriveDescriptionFromBody(snap["content"]);
+        if (derived) skill.derived_description = derived;
+      }
+      skills.push(skill);
     }
 
     skills.sort((a, b) => a.name.localeCompare(b.name));
@@ -433,7 +521,7 @@ export function renderInstanceSkillsSection(
     // construction, so the marker would be noise on every row.
     const line = compact
       ? `- ${skill.name}`
-      : `- ${skill.name} — ${skill.description || "(no description)"}`;
+      : `- ${skill.name} — ${describeSkill(skill)}`;
 
     const cost = Buffer.byteLength(line, "utf8") + 1;
     if (rendered > 0 && budget + cost > INSTANCE_SKILLS_MAX_BYTES) break;
