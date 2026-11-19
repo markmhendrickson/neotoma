@@ -98,8 +98,65 @@ Before flipping the variable on an existing database, run `npx tsx scripts/valid
 | `WS_PORT`                            | WebSocket MCP bridge port                  | `8280`                  |
 | `NEOTOMA_WS_HOST`                    | WebSocket MCP bridge bind address (explicit opt-in for non-loopback). Prefer `127.0.0.1` for loopback; write an IPv6 loopback bare (`::1`, not `[::1]`, which fails to start with exit 1). `localhost` resolves to a single address family on some hosts (for example IPv6 `::1` only), so IPv4 clients may not reach it. | `127.0.0.1` |
 | `NEOTOMA_MCP_INSTANCE_SKILL_HINTS`   | Append an `[INSTANCE SKILLS]` section to the MCP instructions listing the instance's enabled graph-stored `skill` rows, so MCP-only clients can discover them. Set `0` or `false` to omit the section entirely. | on (`0` / `false` disables) |
+| `NEOTOMA_ACCESS_LOG`                 | Per-request access log format: `json`, `dev` or `off`. See [Access log](#access-log) | `json` beyond loopback, `dev` on loopback |
 
 The server binds loopback-only by default so a self-hosted install is never reachable from the LAN unless you opt in. Set `NEOTOMA_HTTP_HOST=0.0.0.0` for a Fly/Docker deployment fronted by its own network boundary or auth, or for a tunnel client — see [Deployment Modes](deployment.md). The WebSocket MCP bridge follows the same convention with `NEOTOMA_WS_HOST`: it listens on loopback by default, so a client on another host can reach it only after you set that variable (for example `NEOTOMA_WS_HOST=0.0.0.0` behind a network boundary or auth of your own).
+
+### Access log
+
+The HTTP server writes one access line per request to standard output. `NEOTOMA_ACCESS_LOG` selects the format:
+
+- `json`: one JSON object per line, written when the response finishes.
+- `dev`: morgan's compact `dev` format (method, path, status, timing).
+- `off`: no access line.
+
+Unset or unrecognised values default to `json` when `NEOTOMA_HTTP_HOST` is beyond loopback and `dev` on a loopback bind.
+
+Each `json` line carries these fields:
+
+| Field         | Type           | Value                                                                                                                                          |
+| ------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ts`          | string         | Request start, ISO 8601 UTC                                                                                                                    |
+| `request_id`  | string         | Incoming `x-request-id` when well formed (8-128 of `A-Za-z0-9._-`), else a generated UUID. Returned in the `x-request-id` response header      |
+| `method`      | string         | HTTP method                                                                                                                                    |
+| `path`        | string         | Request path without the query string                                                                                                          |
+| `query_keys`  | string[]       | Query parameter names, sorted. Values are never logged                                                                                         |
+| `status`      | number         | Response status                                                                                                                                |
+| `duration_ms` | number         | Time from request start to response finish                                                                                                     |
+| `bytes`       | number or null | Response `Content-Length`; null for streamed or chunked responses                                                                              |
+| `user_id`     | string or null | Authenticated user id; null when the request resolved none                                                                                     |
+| `auth_method` | string         | Label the auth middleware recorded (for example `bearer_env`, `session_bearer`, `aauth_admitted`, `guest_capability`); `none` when no auth ran |
+| `agent`       | string or null | Admitted AAuth grant label; null otherwise                                                                                                     |
+| `client_ip`   | string or null | Beyond loopback: `fly-client-ip`, then the first `x-forwarded-for` entry, then the socket address. On loopback: the socket address             |
+| `user_agent`  | string or null | `User-Agent`, truncated to 120 characters                                                                                                      |
+| `service`     | string         | `neotoma-api`                                                                                                                                  |
+| `health`      | boolean        | True for `/health` and `/ready`. These requests are logged, not skipped                                                                        |
+
+Example (synthetic values):
+
+```json
+{
+  "ts": "2026-01-02T03:04:05.678Z",
+  "request_id": "3f2a9c1e-0b4d-4e8a-9f61-2c7d5e8a1b90",
+  "method": "POST",
+  "path": "/store",
+  "query_keys": [],
+  "status": 200,
+  "duration_ms": 41.27,
+  "bytes": 512,
+  "user_id": "00000000-0000-0000-0000-000000000001",
+  "auth_method": "bearer_env",
+  "agent": null,
+  "client_ip": "203.0.113.7",
+  "user_agent": "example-client/1.0",
+  "service": "neotoma-api",
+  "health": false
+}
+```
+
+Redaction rule: the line never carries request or response bodies, header values other than the truncated user agent, cookie values, tokens, keys or query values. `tests/unit/access_log.test.ts` sends a bearer token, a cookie, a key header and secret-shaped query values and asserts none appear in the line.
+
+The `json` line includes the client address and user id so a hosted log can answer who made a request, from where and when. Apply the hosted log destination's retention to it accordingly.
 
 See [Running the Server](running_the_server.md) for transports and processes.
 
