@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **883**
-- Backend and repo Vitest files: **829**
+- Total automated test files: **885**
+- Backend and repo Vitest files: **831**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -71,9 +71,9 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 251 |
 | Vitest service tests | 69 |
-| Source-adjacent tests | 71 |
+| Source-adjacent tests | 72 |
 | Vitest integration tests | 263 |
-| Vitest CLI tests | 98 |
+| Vitest CLI tests | 99 |
 | Vitest contract tests | 31 |
 | Vitest security tests | 26 |
 | Vitest subscription tests | 7 |
@@ -444,7 +444,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (71):**
+**Files (72):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -484,6 +484,7 @@ flowchart TD
 - `src/services/entity_cursor.test.ts`
 - `src/services/entity_signal_resolver.test.ts`
 - `src/services/entity_submission/submission_service.test.ts`
+- `src/services/guest_access_token_revoke.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/body_newline_decode.test.ts`
 - `src/services/issues/inspector_bulk.test.ts`
@@ -792,7 +793,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (98):**
+**Files (99):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_aauth_bearer.test.ts`
@@ -876,6 +877,7 @@ flowchart TD
 - `tests/cli/reporter_setup.test.ts`
 - `tests/cli/request_atomic_transaction.test.ts`
 - `tests/cli/request_conditional_store.test.ts`
+- `tests/cli/request_guest_revocation.test.ts`
 - `tests/cli/request_guest_subscription.test.ts`
 - `tests/cli/request_snapshot_temporal_cutoff.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`

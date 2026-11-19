@@ -12,6 +12,15 @@ export interface OpenApiOperationMapping {
 
 export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   {
+    operationId: "revokeGuestAccessToken",
+    method: "post",
+    path: "/guest-access-tokens/{id}/revoke",
+    adapter: "cli",
+    cliCommand: "request --operation revokeGuestAccessToken",
+    notes:
+      "Owner-only HTTP surface reached from the CLI generic `request` operation; no MCP tool. Guest principals are refused.",
+  },
+  {
     operationId: "correctTransaction",
     method: "post",
     path: "/corrections/transaction",

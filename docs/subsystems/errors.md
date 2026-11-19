@@ -148,6 +148,9 @@ Waxwing ADR (`ent_4b41bb83a4faf4428a73bfc8`, "Prevent lost updates when concurre
 | `ERR_ARRAY_ITEM_POLICY_REQUIRED` | `patch_array_item` targeted a field that is not an array with an active `merge_array_by_key` policy and declared `key_field`. The operation refuses rather than silently falling back to whole-field last-write semantics. | 400 | No; register or update the keyed reducer policy first |
 | `ERR_ARRAY_ITEM_KEY_FIELD_MISMATCH` | The request's `key_field` differs from the active schema's declared key for the field. No observation was written. | 400 | No; use the declared key field |
 | `ERR_ARRAY_ITEM_ENTITY_TYPE_MISMATCH` | The request's `entity_type` differs from the target entity's stored type. The stored type, not caller input, is used for authorization checks. No observation was written. | 400 | No; correct the request type |
+| `ERR_GUEST_TOKEN_ORIGINAL_STALE` | `POST /guest-access-tokens/{id}/revoke`: `expected_observation_id` does not name a complete, unrevoked original record of this token. No observation was written. | 409 | No; read the token's observations and send the id of its original grant record |
+| `ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT` | `POST /guest-access-tokens/{id}/revoke`: the `idempotency_key` already committed a revocation for a different token or original record. The committed revocation is unchanged and no observation was written. | 409 | No; use a new key for a different request |
+| `ERR_GUEST_TOKEN_HISTORY_UNREADABLE` | `POST /guest-access-tokens/{id}/revoke`: a record on the token cannot be read, names a different token hash, or carries an unreadable revocation time, so the token's state cannot be determined. The guest token is refused in the same case. No observation was written. | 409 | No; repair or remove the unreadable record first |
 
 ### MCP Transport Errors (`POST /mcp`)
 
