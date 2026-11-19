@@ -2347,6 +2347,35 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/guest-access-tokens/{id}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke an owned guest access token
+     * @description Owner-authenticated administration of one existing token. The request
+     *     binds an original immutable observation, not a bearer value or digest.
+     *     Appends one immutable revocation observation in one transaction and
+     *     returns metadata only. The token history is read by the same rules as
+     *     guest-token validation: partial correction records narrow the token,
+     *     lifecycle (`_deleted`) records are honoured, and a token that already
+     *     carries `revoked_at` replays its earliest revoking record without a new
+     *     observation. The same idempotency key and target replay the committed
+     *     receipt; that key used for a different target or original conflicts.
+     *     Does not create a replacement token, schema, or grant.
+     */
+    post: operations["revokeGuestAccessToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/rendered-pages/publish": {
     parameters: {
       query?: never;
@@ -10479,6 +10508,113 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SessionInfo"];
+        };
+      };
+    };
+  };
+  revokeGuestAccessToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          idempotency_key: string;
+          expected_observation_id: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Complete revocation evidence committed or replayed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {boolean} */
+            revoked: true;
+            replayed: boolean;
+            token_entity_id: string;
+            revocation_observation_id: string;
+            /** Format: date-time */
+            revoked_at: string;
+          };
+        };
+      };
+      /**
+       * @description `VALIDATION_INVALID_FORMAT` for malformed or unknown request fields
+       *     or query parameters. `ERR_STORE_POLICY_DENIED` when this instance's
+       *     configured data policy refuses writes to `guest_access_token`; no
+       *     observation is written.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description An authenticated owner is required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest administration is forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description `RESOURCE_NOT_FOUND`: owned token entity not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description No observation was written. `ERR_GUEST_TOKEN_ORIGINAL_STALE`: the
+       *     expected original record is missing, incomplete or revoked.
+       *     `ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT`: the key already committed a
+       *     different request. `ERR_GUEST_TOKEN_HISTORY_UNREADABLE`: a token
+       *     record cannot be read or names a different token.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `DB_CONNECTION_FAILED`: token storage or the atomic commit is
+       *     unavailable; nothing was committed. Retry the identical request.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

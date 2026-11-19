@@ -12,6 +12,18 @@
 
 import { randomUUID, createHash } from "node:crypto";
 import { db } from "../db.js";
+import { getDb } from "../repositories/db/connection.js";
+import { stableSerialize } from "./stable_serialize.js";
+import { generateObservationId } from "./observation_identity.js";
+import {
+  getCurrentAgentIdentity,
+  getCurrentAttribution,
+  getCurrentAAuthAdmission,
+} from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { enforceAgentCapability, contextFromAgentIdentity } from "./agent_capabilities.js";
+import { assertCanWriteProtected } from "./protected_entity_types.js";
+import { emitObservationCreated } from "../events/substrate_store_emit.js";
 import { runtimeEnv } from "../config_embedded.js";
 
 export interface GuestAccessToken {
@@ -54,7 +66,9 @@ function parseObservationPayload(obs: {
             ? JSON.parse(obs.payload)
             : obs.payload;
 
-    return payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
@@ -343,4 +357,306 @@ async function issueRecordsToken(
  */
 export async function tokenGrantsAccessTo(token: string, entityId: string): Promise<boolean> {
   return (await checkGuestTokenForEntity(token, entityId)).state === "granted";
+}
+
+/** Error codes for owner revocation; each is listed in docs/subsystems/errors.md. */
+const REVOCATION_ERROR_CODES = {
+  400: "VALIDATION_INVALID_FORMAT",
+  404: "RESOURCE_NOT_FOUND",
+  503: "DB_CONNECTION_FAILED",
+} as const;
+export type GuestTokenRevocationConflictCode =
+  | "ERR_GUEST_TOKEN_ORIGINAL_STALE"
+  | "ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT"
+  | "ERR_GUEST_TOKEN_HISTORY_UNREADABLE";
+
+export class GuestTokenRevocationError extends Error {
+  public readonly code: string;
+  constructor(
+    public readonly status: 400 | 404 | 409 | 503,
+    message: string,
+    conflictCode?: GuestTokenRevocationConflictCode
+  ) {
+    super(message);
+    this.name = "GuestTokenRevocationError";
+    this.code =
+      status === 409
+        ? (conflictCode ?? "ERR_GUEST_TOKEN_HISTORY_UNREADABLE")
+        : REVOCATION_ERROR_CODES[status];
+  }
+}
+
+type TokenObservation = Record<string, any>;
+async function readTokenRecord(
+  entityId: string,
+  owner?: string
+): Promise<{ owner: string; observations: TokenObservation[] } | null> {
+  let query = db
+    .from("entities")
+    .select("id,user_id,entity_type")
+    .eq("id", entityId)
+    .eq("entity_type", "guest_access_token");
+  if (owner !== undefined) query = query.eq("user_id", owner);
+  const entity = await query.maybeSingle();
+  if (entity.error) throw new GuestTokenRevocationError(503, "Token storage is unavailable.");
+  if (!entity.data || typeof entity.data.user_id !== "string") return null;
+  const result = await db
+    .from("observations")
+    .select("*")
+    .eq("entity_id", entityId)
+    .eq("user_id", entity.data.user_id)
+    .order("observed_at", { ascending: false });
+  if (result.error) throw new GuestTokenRevocationError(503, "Token storage is unavailable.");
+  return { owner: entity.data.user_id, observations: result.data ?? [] };
+}
+
+function isCompleteTokenPayload(
+  payload: Record<string, unknown> | null,
+  entityId: string
+): payload is Record<string, unknown> & { token_hash: string; revoked_at: string | null } {
+  return (
+    !!payload &&
+    typeof payload.token_hash === "string" &&
+    /^[a-f0-9]{64}$/.test(payload.token_hash) &&
+    entityId === `guest_token_${payload.token_hash.slice(0, 16)}` &&
+    Array.isArray(payload.entity_ids) &&
+    payload.entity_ids.length > 0 &&
+    payload.entity_ids.every((id) => typeof id === "string" && id.length > 0) &&
+    (payload.thumbprint === null || typeof payload.thumbprint === "string") &&
+    typeof payload.created_at === "string" &&
+    Number.isFinite(Date.parse(payload.created_at)) &&
+    typeof payload.ttl_seconds === "number" &&
+    Number.isFinite(payload.ttl_seconds) &&
+    payload.ttl_seconds > 0 &&
+    (payload.revoked_at === null ||
+      (typeof payload.revoked_at === "string" && Number.isFinite(Date.parse(payload.revoked_at))))
+  );
+}
+
+export interface GuestTokenRevocationReceipt {
+  revoked: true;
+  replayed: boolean;
+  token_entity_id: string;
+  revocation_observation_id: string;
+  revoked_at: string;
+}
+
+/** Revokes one owned token by appending an immutable observation that repeats
+ * the bound original record with `revoked_at` set.
+ *
+ * The token history is read by the same rules as `validateGuestAccessToken`:
+ * partial rows written by corrections narrow the token and are accepted; a row
+ * that cannot be read, or that names a different token hash, refuses the
+ * request; `_deleted` lifecycle rows are accepted (the token stays refused).
+ * When any row already carries `revoked_at`, the call writes nothing and
+ * replays the earliest revoking row as the receipt. The same idempotency key
+ * and target replay the committed receipt; the key bound to a different
+ * request conflicts. */
+export async function revokeGuestAccessToken(
+  owner: string,
+  entityId: string,
+  input: unknown
+): Promise<GuestTokenRevocationReceipt> {
+  if (
+    !owner ||
+    !/^guest_token_[a-f0-9]{16}$/.test(entityId) ||
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input)
+  )
+    throw new GuestTokenRevocationError(400, "Invalid revocation request.");
+  const body = input as Record<string, unknown>;
+  if (
+    Object.keys(body).length !== 2 ||
+    !Object.keys(body).every((key) =>
+      ["idempotency_key", "expected_observation_id"].includes(key)
+    ) ||
+    ![body.idempotency_key, body.expected_observation_id].every(
+      (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 200
+    )
+  )
+    throw new GuestTokenRevocationError(
+      400,
+      "Expected an idempotency key and original observation ID only."
+    );
+  const identity = getCurrentAgentIdentity();
+  enforceAttributionPolicy("corrections", identity);
+  assertCanWriteProtected({
+    entity_type: "guest_access_token",
+    op: "correct",
+    identity,
+    admission: getCurrentAAuthAdmission(),
+  });
+  const capabilityContext = contextFromAgentIdentity(identity);
+  if (capabilityContext)
+    enforceAgentCapability("correct", ["guest_access_token"], capabilityContext);
+  const requestedAt = new Date().toISOString();
+  const { assertStorePolicyAllows } = await import("./instance_policy.js");
+  const { schemaRegistry } = await import("./schema_registry.js");
+  await assertStorePolicyAllows(
+    [{ entity_type: "guest_access_token", fields: { revoked_at: requestedAt } }],
+    async (entityType) => {
+      const entry = await schemaRegistry.loadActiveSchema(entityType, owner);
+      return entry?.schema_definition ?? null;
+    }
+  );
+  const key =
+    "guest-token-revoke:" +
+    createHash("sha256")
+      .update(stableSerialize([owner, body.idempotency_key]))
+      .digest("hex");
+  const fingerprint = createHash("sha256")
+    .update(stableSerialize([owner, entityId, body.expected_observation_id]))
+    .digest("hex");
+  const receipt = await (async () => {
+    try {
+      const connection = await getDb();
+      return await connection.transaction(async () => {
+        const record = await readTokenRecord(entityId, owner);
+        if (!record) throw new GuestTokenRevocationError(404, "Token record not found.");
+        const history: Array<{ row: TokenObservation; payload: Record<string, unknown> }> = [];
+        for (const row of record.observations) {
+          const payload = parseObservationPayload(row);
+          if (!payload)
+            throw new GuestTokenRevocationError(409, "Token history has an unreadable record.");
+          history.push({ row, payload });
+        }
+        const original = history.find(({ row }) => row.id === body.expected_observation_id);
+        const originalPayload = original?.payload ?? null;
+        if (
+          !original ||
+          original.row.entity_type !== "guest_access_token" ||
+          !isCompleteTokenPayload(originalPayload, entityId) ||
+          originalPayload.revoked_at !== null
+        )
+          throw new GuestTokenRevocationError(
+            409,
+            "Expected a complete original token observation.",
+            "ERR_GUEST_TOKEN_ORIGINAL_STALE"
+          );
+        if (
+          history.some(
+            ({ payload }) =>
+              isSet(payload.token_hash) && payload.token_hash !== originalPayload.token_hash
+          )
+        )
+          throw new GuestTokenRevocationError(
+            409,
+            "Token history names a different token.",
+            "ERR_GUEST_TOKEN_HISTORY_UNREADABLE"
+          );
+        const retained = await db
+          .from("observations")
+          .select("*")
+          .eq("user_id", owner)
+          .eq("idempotency_key", key);
+        if (retained.error)
+          throw new GuestTokenRevocationError(503, "Token storage is unavailable.");
+        if (retained.data?.length) {
+          const prior = retained.data[0];
+          const priorPayload = parseObservationPayload(prior);
+          if (
+            retained.data.length !== 1 ||
+            prior.canonical_hash !== fingerprint ||
+            prior.entity_id !== entityId
+          )
+            throw new GuestTokenRevocationError(
+              409,
+              "Idempotency key conflicts with a different request.",
+              "ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT"
+            );
+          if (
+            prior.entity_type !== "guest_access_token" ||
+            !isCompleteTokenPayload(priorPayload, entityId) ||
+            !priorPayload.revoked_at
+          )
+            throw new GuestTokenRevocationError(409, "Stored revocation receipt is invalid.");
+          return {
+            revoked: true as const,
+            replayed: true,
+            token_entity_id: entityId,
+            revocation_observation_id: prior.id as string,
+            revoked_at: priorPayload.revoked_at,
+          };
+        }
+        const revoking = history
+          .filter(({ payload }) => isSet(payload.revoked_at))
+          .sort(
+            (x, y) =>
+              String(x.row.observed_at).localeCompare(String(y.row.observed_at)) ||
+              String(x.row.id).localeCompare(String(y.row.id))
+          )[0];
+        if (revoking) {
+          const at = revoking.payload.revoked_at;
+          if (typeof at !== "string" || !Number.isFinite(Date.parse(at)))
+            throw new GuestTokenRevocationError(409, "Token revocation time is unreadable.");
+          return {
+            revoked: true as const,
+            replayed: true,
+            token_entity_id: entityId,
+            revocation_observation_id: revoking.row.id as string,
+            revoked_at: at,
+          };
+        }
+        const now = requestedAt;
+        const revokedAt = now;
+        const fields = { ...originalPayload, revoked_at: revokedAt };
+        const observationId = generateObservationId(null, null, entityId, fields, key);
+        const inserted = await db.from("observations").insert({
+          id: observationId,
+          entity_id: entityId,
+          entity_type: "guest_access_token",
+          user_id: owner,
+          fields,
+          observed_at: now,
+          source_priority: 100,
+          observation_source: "workflow_state",
+          idempotency_key: key,
+          canonical_hash: fingerprint,
+          provenance: getCurrentAttribution(),
+        });
+        if (inserted.error)
+          throw new GuestTokenRevocationError(503, "Revocation could not be committed.");
+        const readback = await db
+          .from("observations")
+          .select("*")
+          .eq("id", observationId)
+          .eq("entity_id", entityId)
+          .eq("user_id", owner)
+          .maybeSingle();
+        if (
+          readback.error ||
+          !readback.data ||
+          readback.data.entity_type !== "guest_access_token" ||
+          readback.data.idempotency_key !== key ||
+          readback.data.canonical_hash !== fingerprint ||
+          stableSerialize(parseObservationPayload(readback.data)) !== stableSerialize(fields)
+        )
+          throw new GuestTokenRevocationError(503, "Revocation readback failed.");
+        return {
+          revoked: true as const,
+          replayed: false,
+          token_entity_id: entityId,
+          revocation_observation_id: observationId,
+          revoked_at: revokedAt,
+        };
+      });
+    } catch (error) {
+      if (error instanceof GuestTokenRevocationError) throw error;
+      throw new GuestTokenRevocationError(
+        503,
+        "Revocation storage outcome is unavailable; retry the identical request."
+      );
+    }
+  })();
+  if (!receipt.replayed)
+    emitObservationCreated({
+      user_id: owner,
+      entity_id: entityId,
+      entity_type: "guest_access_token",
+      observation_id: receipt.revocation_observation_id,
+      timestamp: receipt.revoked_at,
+      observation_source: "workflow_state",
+    });
+  return receipt;
 }
