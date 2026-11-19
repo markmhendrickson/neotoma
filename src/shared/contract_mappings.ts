@@ -56,6 +56,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     notes: "Server info is infrastructure only.",
   },
   {
+    operationId: "getMcpInteractionInstructions",
+    method: "get",
+    path: "/mcp-interaction-instructions",
+    adapter: "infra",
+    notes:
+      "Instruction text served over HTTP; the MCP handshake and `neotoma instructions print` carry the same composition.",
+  },
+  {
     operationId: "oauthServerMetadata",
     method: "get",
     path: "/.well-known/oauth-authorization-server",

@@ -33,6 +33,7 @@ import {
   type BootedMcpApp,
   type McpTestEnv,
 } from "../helpers/mcp_http_modern.js";
+import { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } from "../../src/services/standing_rules.js";
 
 const USER_A = "aaaaaaaa-2070-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_B = "bbbbbbbb-2070-4bbb-8bbb-bbbbbbbbbbbb";
@@ -102,7 +103,14 @@ describe("POST /mcp server/discover (#2070)", () => {
     expect(typeof result.instructions).toBe("string");
     const publicInstructions = await fetch(`${app.baseUrl}/mcp-interaction-instructions`);
     expect(publicInstructions.status).toBe(200);
-    expect(result.instructions).toBe(await publicInstructions.text());
+    // The unauthenticated public text leads with the fixed notice that standing
+    // rules are served after authentication; this discover call is authenticated
+    // and the instance has no rules, so it carries the same text without it.
+    const publicText = await publicInstructions.text();
+    const withoutNotice = publicText.startsWith(STANDING_RULES_AFTER_AUTHENTICATION_NOTICE)
+      ? publicText.slice(STANDING_RULES_AFTER_AUTHENTICATION_NOTICE.length).replace(/^\n+/, "")
+      : publicText;
+    expect(result.instructions).toBe(withoutNotice);
   });
 
   it("carries no caller identity or tenant data", async () => {
@@ -136,9 +144,11 @@ describe("POST /mcp server/discover (#2070)", () => {
       expect(Object.keys(result._meta as Record<string, unknown>)).toEqual([
         "io.modelcontextprotocol/serverInfo",
       ]);
-      expect((result._meta as Record<string, Record<string, unknown>>)[
-        "io.modelcontextprotocol/serverInfo"
-      ]).not.toHaveProperty("_neotoma");
+      expect(
+        (result._meta as Record<string, Record<string, unknown>>)[
+          "io.modelcontextprotocol/serverInfo"
+        ]
+      ).not.toHaveProperty("_neotoma");
     }
   });
 
