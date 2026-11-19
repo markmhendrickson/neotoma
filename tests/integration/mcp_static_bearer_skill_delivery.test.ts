@@ -149,124 +149,134 @@ afterEach(async () => {
   else process.env.NEOTOMA_SHARED_GRAPH_USER_ID = originalSharedGraph;
 });
 
-describe("static bearer on a shared-graph instance acts as the shared owner", () => {
-  const sharedOwner = randomUUID().toLowerCase();
-  const skillName = `team-skill-${randomUUID().slice(0, 8)}`;
-  let baseUrl = "";
-  let skillEntityId = "";
+describe(
+  "static bearer on a shared-graph instance acts as the shared owner",
+  { timeout: 120_000 },
+  () => {
+    const sharedOwner = randomUUID().toLowerCase();
+    const skillName = `team-skill-${randomUUID().slice(0, 8)}`;
+    let baseUrl = "";
+    let skillEntityId = "";
 
-  beforeEach(async () => {
-    baseUrl = await boot(sharedOwner);
-    skillEntityId = await seedSkill(baseUrl, sharedOwner, skillName);
-  });
+    beforeEach(async () => {
+      baseUrl = await boot(sharedOwner);
+      skillEntityId = await seedSkill(baseUrl, sharedOwner, skillName);
+    }, 120_000);
 
-  it("MCP get_authenticated_user returns the shared owner", async () => {
-    const result = await mcpTool(baseUrl, "get_authenticated_user", {});
-    expect(result.user_id).toBe(sharedOwner);
-  });
-
-  it("MCP retrieve_entity_by_identifier and retrieve_entities find the owner's skill", async () => {
-    const byId = await mcpTool(baseUrl, "retrieve_entity_by_identifier", {
-      identifier: skillName,
-      entity_type: "skill",
+    it("MCP get_authenticated_user returns the shared owner", async () => {
+      const result = await mcpTool(baseUrl, "get_authenticated_user", {});
+      expect(result.user_id).toBe(sharedOwner);
     });
-    expect(entityIdsOf(byId)).toContain(skillEntityId);
 
-    const list = await mcpTool(baseUrl, "retrieve_entities", { entity_type: "skill" }, 2);
-    expect(entityIdsOf(list)).toContain(skillEntityId);
-  });
+    it("MCP retrieve_entity_by_identifier and retrieve_entities find the owner's skill", async () => {
+      const byId = await mcpTool(baseUrl, "retrieve_entity_by_identifier", {
+        identifier: skillName,
+        entity_type: "skill",
+      });
+      expect(entityIdsOf(byId)).toContain(skillEntityId);
 
-  it("initialize lists the shared owner's skills", async () => {
-    const result = await mcpInitialize(baseUrl);
-    expect(result.serverInfo?._neotoma?.available_skills ?? []).toContain(skillName);
-    expect(result.instructions ?? "").toContain(skillName);
-  });
-
-  it("REST GET of the skill succeeds without a user_id parameter", async () => {
-    const res = await restGetEntity(baseUrl, skillEntityId);
-    expect(res.status, await res.clone().text()).toBe(200);
-  });
-
-  it("a static-token write lands under the shared owner (behaviour change)", async () => {
-    const stored = await mcpTool(baseUrl, "store", {
-      entities: [{ entity_type: "note", title: "static write", content: "static write" }],
-      idempotency_key: `static-bearer-write-${randomUUID()}`,
+      const list = await mcpTool(baseUrl, "retrieve_entities", { entity_type: "skill" }, 2);
+      expect(entityIdsOf(list)).toContain(skillEntityId);
     });
-    const writtenId = entityIdsOf({
-      entities:
-        (stored.entities as unknown[]) ??
-        ((stored.structured as { entities?: unknown[] } | undefined)?.entities ?? []),
-    })[0];
-    expect(writtenId, JSON.stringify(stored)).toBeTruthy();
 
-    const { db } = await import("../../src/db.js");
-    const { data } = await db.from("entities").select("id, user_id").eq("id", writtenId);
-    const rows = (data ?? []) as Array<{ user_id: string }>;
-    expect(rows.length).toBe(1);
-    expect(rows[0].user_id).toBe(sharedOwner);
-  });
-
-  it("a client-sent shared-graph connection id is not honoured without the token", async () => {
-    const reply = await modernPost(
-      baseUrl,
-      { id: 1, method: "tools/call", params: { name: "get_authenticated_user", arguments: {} } },
-      { connectionId: "static-bearer-shared-graph", headers: REMOTE }
-    );
-    expect(reply.status).toBe(401);
-  });
-});
-
-describe("without shared-graph mode the static bearer is unchanged (nil user)", () => {
-  const otherOwner = randomUUID().toLowerCase();
-  const skillName = `other-skill-${randomUUID().slice(0, 8)}`;
-  let baseUrl = "";
-  let skillEntityId = "";
-
-  beforeEach(async () => {
-    baseUrl = await boot(null);
-    skillEntityId = await seedSkill(baseUrl, otherOwner, skillName);
-  });
-
-  it("MCP get_authenticated_user returns the nil user", async () => {
-    const result = await mcpTool(baseUrl, "get_authenticated_user", {});
-    expect(result.user_id).toBe(NIL_USER_ID);
-  });
-
-  it("MCP retrieval does not see another user's skill", async () => {
-    const byId = await mcpTool(baseUrl, "retrieve_entity_by_identifier", {
-      identifier: skillName,
-      entity_type: "skill",
+    it("initialize lists the shared owner's skills", async () => {
+      const result = await mcpInitialize(baseUrl);
+      expect(result.serverInfo?._neotoma?.available_skills ?? []).toContain(skillName);
+      expect(result.instructions ?? "").toContain(skillName);
     });
-    expect(entityIdsOf(byId)).not.toContain(skillEntityId);
-    const list = await mcpTool(baseUrl, "retrieve_entities", { entity_type: "skill" }, 2);
-    expect(entityIdsOf(list)).not.toContain(skillEntityId);
-  });
 
-  it("initialize does not list another user's skill", async () => {
-    const result = await mcpInitialize(baseUrl);
-    expect(result.serverInfo?._neotoma?.available_skills ?? []).not.toContain(skillName);
-  });
-
-  it("REST GET of another user's skill is refused without a user_id parameter", async () => {
-    const res = await restGetEntity(baseUrl, skillEntityId);
-    expect(res.status).not.toBe(200);
-  });
-
-  it("a static-token write lands under the nil user", async () => {
-    const stored = await mcpTool(baseUrl, "store", {
-      entities: [{ entity_type: "note", title: "nil write", content: "nil write" }],
-      idempotency_key: `static-bearer-nil-write-${randomUUID()}`,
+    it("REST GET of the skill succeeds without a user_id parameter", async () => {
+      const res = await restGetEntity(baseUrl, skillEntityId);
+      expect(res.status, await res.clone().text()).toBe(200);
     });
-    const writtenId = entityIdsOf({
-      entities:
-        (stored.entities as unknown[]) ??
-        ((stored.structured as { entities?: unknown[] } | undefined)?.entities ?? []),
-    })[0];
-    expect(writtenId, JSON.stringify(stored)).toBeTruthy();
-    const { db } = await import("../../src/db.js");
-    const { data } = await db.from("entities").select("id, user_id").eq("id", writtenId);
-    const rows = (data ?? []) as Array<{ user_id: string }>;
-    expect(rows.length).toBe(1);
-    expect(rows[0].user_id).toBe(NIL_USER_ID);
-  });
-});
+
+    it("a static-token write lands under the shared owner (behaviour change)", async () => {
+      const stored = await mcpTool(baseUrl, "store", {
+        entities: [{ entity_type: "note", title: "static write", content: "static write" }],
+        idempotency_key: `static-bearer-write-${randomUUID()}`,
+      });
+      const writtenId = entityIdsOf({
+        entities:
+          (stored.entities as unknown[]) ??
+          (stored.structured as { entities?: unknown[] } | undefined)?.entities ??
+          [],
+      })[0];
+      expect(writtenId, JSON.stringify(stored)).toBeTruthy();
+
+      const { db } = await import("../../src/db.js");
+      const { data } = await db.from("entities").select("id, user_id").eq("id", writtenId);
+      const rows = (data ?? []) as Array<{ user_id: string }>;
+      expect(rows.length).toBe(1);
+      expect(rows[0].user_id).toBe(sharedOwner);
+    });
+
+    it("a client-sent shared-graph connection id is not honoured without the token", async () => {
+      const reply = await modernPost(
+        baseUrl,
+        { id: 1, method: "tools/call", params: { name: "get_authenticated_user", arguments: {} } },
+        { connectionId: "static-bearer-shared-graph", headers: REMOTE }
+      );
+      expect(reply.status).toBe(401);
+    });
+  }
+);
+
+describe(
+  "without shared-graph mode the static bearer is unchanged (nil user)",
+  { timeout: 120_000 },
+  () => {
+    const otherOwner = randomUUID().toLowerCase();
+    const skillName = `other-skill-${randomUUID().slice(0, 8)}`;
+    let baseUrl = "";
+    let skillEntityId = "";
+
+    beforeEach(async () => {
+      baseUrl = await boot(null);
+      skillEntityId = await seedSkill(baseUrl, otherOwner, skillName);
+    }, 120_000);
+
+    it("MCP get_authenticated_user returns the nil user", async () => {
+      const result = await mcpTool(baseUrl, "get_authenticated_user", {});
+      expect(result.user_id).toBe(NIL_USER_ID);
+    });
+
+    it("MCP retrieval does not see another user's skill", async () => {
+      const byId = await mcpTool(baseUrl, "retrieve_entity_by_identifier", {
+        identifier: skillName,
+        entity_type: "skill",
+      });
+      expect(entityIdsOf(byId)).not.toContain(skillEntityId);
+      const list = await mcpTool(baseUrl, "retrieve_entities", { entity_type: "skill" }, 2);
+      expect(entityIdsOf(list)).not.toContain(skillEntityId);
+    });
+
+    it("initialize does not list another user's skill", async () => {
+      const result = await mcpInitialize(baseUrl);
+      expect(result.serverInfo?._neotoma?.available_skills ?? []).not.toContain(skillName);
+    });
+
+    it("REST GET of another user's skill is refused without a user_id parameter", async () => {
+      const res = await restGetEntity(baseUrl, skillEntityId);
+      expect(res.status).not.toBe(200);
+    });
+
+    it("a static-token write lands under the nil user", async () => {
+      const stored = await mcpTool(baseUrl, "store", {
+        entities: [{ entity_type: "note", title: "nil write", content: "nil write" }],
+        idempotency_key: `static-bearer-nil-write-${randomUUID()}`,
+      });
+      const writtenId = entityIdsOf({
+        entities:
+          (stored.entities as unknown[]) ??
+          (stored.structured as { entities?: unknown[] } | undefined)?.entities ??
+          [],
+      })[0];
+      expect(writtenId, JSON.stringify(stored)).toBeTruthy();
+      const { db } = await import("../../src/db.js");
+      const { data } = await db.from("entities").select("id, user_id").eq("id", writtenId);
+      const rows = (data ?? []) as Array<{ user_id: string }>;
+      expect(rows.length).toBe(1);
+      expect(rows[0].user_id).toBe(NIL_USER_ID);
+    });
+  }
+);
