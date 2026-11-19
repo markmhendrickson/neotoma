@@ -173,6 +173,23 @@ Before enabling writes, call `GET /session` (or `get_session_identity` over MCP,
 - Fleet quickstart (AAuth key setup, fleet schemas, snapshot export + drift): [`docs/developer/fleet_onboarding.md`](../developer/fleet_onboarding.md).
 - Capability scoping (per-agent `(op, entity_type)` allow-lists): [`docs/subsystems/agent_capabilities.md`](./agent_capabilities.md).
 
+## Agent grants: retrieve scope
+
+An agent grant lists capabilities as `(op, entity_types)` entries. Writes have always been checked against `store`, `correct` and the other write ops. The `retrieve` op is checked on entity reads only when the setting `NEOTOMA_ENFORCE_AGENT_RETRIEVE=1` is set. It is off by default, and any other value is off. With it off, reads behave exactly as before and run no extra check.
+
+Only a request signed with a key pinned to an active grant (an admitted grant) is bound by the grant's `retrieve` list. A plain bearer token, OAuth, local or unsigned caller is never limited by a grant. This is by design: a grant scopes an agent, not the account owner.
+
+With the setting on and an admitted grant:
+
+- A grant with no `retrieve` entry refuses every entity read (fail closed). A `retrieve` entry that names no types also refuses.
+- A read of one named entity (by id, by identifier, snapshot, observations, field provenance) resolves the entity's type first and refuses unless the type is listed. A `"*"` entry allows every type.
+- A typed query (`entity_type` or `entity_types`) is refused if any requested type is not listed.
+- An untyped query is narrowed to the listed types before it runs, so `total` and pagination describe the narrowed result. The response then carries `narrowed_by_capability: true`.
+
+A refusal is HTTP 403 `capability_denied` with `op: "retrieve"` and the refused `entity_type`, the same envelope writes use. Over MCP the same envelope arrives as the error `data`. One shared helper, `enforceAgentRetrieveScope` in `src/services/agent_capabilities.ts`, makes the decision for both surfaces.
+
+Covered in this round: `GET /entities`, `POST /entities/query`, `GET /entities/{id}` and its `/markdown`, `/html` and `/observations` reads, `POST /get_entity_snapshot`, `POST /list_observations`, `POST /get_field_provenance`, `POST /retrieve_entity_by_identifier`, `GET /observations`, `POST /observations/query`, and the MCP tools `retrieve_entities`, `retrieve_entity_snapshot`, `retrieve_entity_by_identifier`, `list_observations` and `retrieve_field_provenance`. A second round covers the remaining read paths: relationships, graph, timeline, search, counts and exports.
+
 ## MCP Authentication
 
 MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE (recommended) or session tokens (deprecated).

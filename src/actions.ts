@@ -289,6 +289,11 @@ import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import {
+  currentRetrieveScope,
+  enforceRetrieveForEntityIds,
+  enforceRetrieveForEntityTypes,
+} from "./services/retrieve_capability.js";
+import {
   EXACT_IDENTITY_REQUEST_MESSAGE,
   exactIdentityRequested,
   readExactIdentity,
@@ -5661,33 +5666,40 @@ async function runEntitiesQuery(
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies, search_mode, next_cursor, read_contract } =
-      await queryEntitiesWithCount({
-        readRequest: {
-          raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
-          surface: req.method === "GET" ? "http_get" : "http_post",
-          consumed: [...Object.keys(parsed.data), "query", "search_query"],
-        },
-        userId,
-        entityType: entity_type,
-        entityTypes: entity_types,
-        includeMerged: include_merged,
-        includeSnapshots: include_snapshots,
-        sortBy: sort_by,
-        sortOrder: sort_order,
-        published,
-        publishedAfter: published_after,
-        publishedBefore: published_before,
-        search,
-        limit,
-        offset,
-        cursor,
-        updatedSince: updated_since,
-        createdSince: created_since,
-        identityBasis: identity_basis,
-        snapshotFilters: snapshot_filters,
-        excludeBookkeeping: exclude_bookkeeping,
-      });
+    const {
+      entities,
+      total,
+      applied_search_strategies,
+      search_mode,
+      next_cursor,
+      read_contract,
+      narrowed_by_capability,
+    } = await queryEntitiesWithCount({
+      readRequest: {
+        raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
+        surface: req.method === "GET" ? "http_get" : "http_post",
+        consumed: [...Object.keys(parsed.data), "query", "search_query"],
+      },
+      userId,
+      entityType: entity_type,
+      entityTypes: entity_types,
+      includeMerged: include_merged,
+      includeSnapshots: include_snapshots,
+      sortBy: sort_by,
+      sortOrder: sort_order,
+      published,
+      publishedAfter: published_after,
+      publishedBefore: published_before,
+      search,
+      limit,
+      offset,
+      cursor,
+      updatedSince: updated_since,
+      createdSince: created_since,
+      identityBasis: identity_basis,
+      snapshotFilters: snapshot_filters,
+      excludeBookkeeping: exclude_bookkeeping,
+    });
 
     return res.json({
       entities,
@@ -5698,6 +5710,7 @@ async function runEntitiesQuery(
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
+      ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
     });
   } catch (error) {
     return handleApiError(
@@ -5896,6 +5909,7 @@ app.get("/entities/:id", async (req, res) => {
     if (entityError || !entity) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
+    await enforceRetrieveForEntityIds([entityId], userId);
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const entityWithProvenance = await getEntityWithProvenance(entityId, false);
@@ -5937,6 +5951,7 @@ app.get("/entities/:id/markdown", async (req, res) => {
     if (entityError || !entity) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
+    await enforceRetrieveForEntityIds([entityId], userId);
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const current = await getEntityWithProvenance(entityId);
@@ -6018,6 +6033,7 @@ app.get("/entities/:id/html", async (req, res) => {
       if (entityError || !entity) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
+      await enforceRetrieveForEntityIds([entityId], userId);
       const { getEntityWithProvenance } = await import("./services/entity_queries.js");
       current = await getEntityWithProvenance(entityId, false);
     }
@@ -6168,6 +6184,7 @@ app.get("/entities/:id/observations", async (req, res) => {
       if (entityError || !entity) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
+      await enforceRetrieveForEntityIds([entityId], userId);
     }
 
     const limit = parseInt(req.query.limit as string) || 100;
@@ -8192,6 +8209,15 @@ app.get("/observations", async (req, res) => {
       query = query.eq("entity_id", entityId);
     }
 
+    // Opt-in agent-grant retrieve scope: a named entity must be covered;
+    // otherwise the grant's types become the filter before the query runs.
+    if (entityId) await enforceRetrieveForEntityIds([entityId], userId);
+    const retrieveScope = currentRetrieveScope();
+    const narrowedByCapability = retrieveScope?.kind === "types" && !entityId;
+    if (retrieveScope?.kind === "types") {
+      query = query.in("entity_type", retrieveScope.types);
+    }
+
     query = query.order("observed_at", { ascending: false });
     query = query.range(offset, offset + limit - 1);
 
@@ -8207,6 +8233,7 @@ app.get("/observations", async (req, res) => {
       total: count || 0,
       limit,
       offset,
+      ...(narrowedByCapability ? { narrowed_by_capability: true } : {}),
     });
   } catch (error) {
     return handleApiError(
@@ -10891,6 +10918,17 @@ app.post("/observations/query", async (req, res) => {
       query = query.eq("source_id", source_id);
     }
 
+    // Opt-in agent-grant retrieve scope: requested types and a named entity
+    // must be covered; otherwise the grant's types become the filter before
+    // the query runs, so `total` matches the rows.
+    if (entity_type) enforceRetrieveForEntityTypes([entity_type]);
+    if (entity_id) await enforceRetrieveForEntityIds([entity_id], userId);
+    const retrieveScope = currentRetrieveScope();
+    const narrowedByCapability = retrieveScope?.kind === "types" && !entity_type && !entity_id;
+    if (retrieveScope?.kind === "types") {
+      query = query.in("entity_type", retrieveScope.types);
+    }
+
     if (updated_since) {
       // Observations are immutable; treat updated_since as a synonym for
       // observed_at >= updated_since so clients have a single "since" knob.
@@ -10912,10 +10950,14 @@ app.post("/observations/query", async (req, res) => {
       total: count || 0,
       limit,
       offset,
+      ...(narrowedByCapability ? { narrowed_by_capability: true } : {}),
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "Failed to query observations");
     }
     logError("APIError:observations_query", req, error);
     const message = error instanceof Error ? error.message : "Failed to query observations";
@@ -11082,6 +11124,12 @@ app.post("/get_entity_snapshot", async (req, res) => {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
   }
 
+  try {
+    await enforceRetrieveForEntityIds([entity_id], userId);
+  } catch (err) {
+    return handleApiError(req, res, err, "Failed to read entity");
+  }
+
   // When at/at_ingested cutoffs are requested, use the shared observation-replay
   // helper so the offline path honours them with the same semantics as the MCP
   // path in server.ts. Without cutoffs, fall through to the fast materialized
@@ -11182,6 +11230,12 @@ app.post("/list_observations", async (req, res) => {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
   }
 
+  try {
+    await enforceRetrieveForEntityIds([entity_id], userId);
+  } catch (err) {
+    return handleApiError(req, res, err, "Failed to read entity");
+  }
+
   let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
 
   if (updated_since) {
@@ -11224,6 +11278,12 @@ app.post("/get_field_provenance", async (req, res) => {
     userId = await getAuthenticatedUserId(req);
   } catch (err) {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
+  try {
+    await enforceRetrieveForEntityIds([entity_id], userId);
+  } catch (err) {
+    return handleApiError(req, res, err, "Failed to read entity");
   }
 
   try {
