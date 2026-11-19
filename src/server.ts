@@ -141,6 +141,7 @@ import {
 import {
   getActiveStandingRulesResult,
   renderStandingRulesSection,
+  STANDING_RULES_END_MARKER,
   type StandingRule,
 } from "./services/standing_rules.js";
 import {
@@ -1268,7 +1269,8 @@ export class NeotomaServer {
       ? "[STANDING RULES]\nThis instance's standing rules could not be read for this session. " +
         "Do NOT tell the user this instance has no standing rules, and do not proceed as though " +
         "none are in force. Treat them as unknown, retry on a later connection, and check the " +
-        "server logs for the `[standing_rules]` error if this persists."
+        "server logs for the `[standing_rules]` error if this persists.\n" +
+        STANDING_RULES_END_MARKER
       : renderStandingRulesSection(standingRules);
     // Nested rather than variadic: each helper takes one section and no-ops on
     // an empty one, so an instance with no policy, no rules and no skill rows

@@ -203,6 +203,67 @@ export const STANDING_RULES_SCOPE_GUIDANCE =
   "Scope: rules with global or empty scope apply to every request. Rules with any other " +
   "scope apply only when the current context matches that scope.";
 
+/** Closing line of the rules block; the opening line is `[STANDING RULES]`. */
+export const STANDING_RULES_END_MARKER = "[END STANDING RULES]";
+
+// Control and invisible formatting characters that can reorder or hide text:
+// C0 (except line feed and tab, handled separately), DEL, C1, zero-width
+// characters, bidirectional embeddings/overrides/isolates, word joiner range
+// and the byte-order mark.
+// eslint-disable-next-line no-control-regex
+const STRIP_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+/** Every line-break form a renderer might honour. */
+const LINE_BREAKS = /\r\n|[\r\n\u0085\u2028\u2029]/g;
+/**
+ * An all-caps bracketed tag such as `[STANDING RULES]`, `[END STANDING RULES]`
+ * or `[TURN LIFECYCLE]`. The instructions prose uses these as section
+ * delimiters, so rule content may not carry one verbatim.
+ */
+const SECTION_TAG = /\[(\/?[A-Z][A-Z0-9 _-]*)\]/g;
+
+function neutralizeTags(s: string): string {
+  return s.replace(SECTION_TAG, "($1)");
+}
+
+/**
+ * Single-line field (title, scope, entity id): NFC-normalized, control and
+ * invisible formatting characters removed, every line break and tab turned
+ * into a space, section tags neutralized. A title therefore cannot start a
+ * new line, so it cannot forge a rule heading or close the block.
+ */
+export function sanitizeStandingRuleInline(value: string): string {
+  return neutralizeTags(
+    value
+      .normalize("NFC")
+      .replace(LINE_BREAKS, " ")
+      .replace(/\t/g, " ")
+      .replace(STRIP_CHARS, "")
+      .replace(/ {2,}/g, " ")
+      .trim()
+  );
+}
+
+/**
+ * Multi-line rule body: NFC-normalized, line breaks unified to `\n`, tabs to
+ * spaces, control and invisible formatting characters removed, section tags
+ * neutralized, and every line quoted with `> `. No body line can then begin
+ * at column 0, so a body cannot open a rule heading, close the rules block or
+ * pose as a section of the base instructions.
+ */
+export function sanitizeStandingRuleBody(value: string): string {
+  return neutralizeTags(
+    value
+      .normalize("NFC")
+      .replace(LINE_BREAKS, "\n")
+      .replace(/\t/g, " ")
+      .replace(STRIP_CHARS, "")
+      .trim()
+  )
+    .split("\n")
+    .map((line) => (line.length > 0 ? `> ${line}` : ">"))
+    .join("\n");
+}
+
 /** Longest rule title quoted in an omission notice, in UTF-8 bytes. */
 const OMITTED_TITLE_MAX_BYTES = 200;
 
@@ -225,13 +286,13 @@ function clipUtf8(s: string, max: number): string {
 }
 
 function renderRuleEntry(rule: StandingRule): string {
-  const title = rule.title.trim();
-  const text = rule.rule_text.trim();
-  const scope = rule.scope?.trim();
+  const title = sanitizeStandingRuleInline(rule.title);
+  const text = sanitizeStandingRuleBody(rule.rule_text);
+  const scope = rule.scope ? sanitizeStandingRuleInline(rule.scope) : "";
   // Scope is shown because a rule's applicability is part of the rule: an
   // agent told to apply an instance-wide rule to one entity type, or the
   // reverse, misapplies it in a way the rule text alone will not reveal.
-  const head = `### ${title} (entity_id: ${rule.entity_id})`;
+  const head = `### ${title} (entity_id: ${sanitizeStandingRuleInline(rule.entity_id)})`;
   return scope ? `${head}\n(scope: ${scope})\n${text}` : `${head}\n${text}`;
 }
 
@@ -240,10 +301,11 @@ function renderRuleEntry(rule: StandingRule): string {
  * the rule and says where the full text is, so the omission is actionable.
  */
 function renderOmittedRuleNotice(rule: StandingRule): string {
-  const title = clipUtf8(rule.title.trim(), OMITTED_TITLE_MAX_BYTES);
+  const title = clipUtf8(sanitizeStandingRuleInline(rule.title), OMITTED_TITLE_MAX_BYTES);
+  const id = sanitizeStandingRuleInline(rule.entity_id);
   return (
-    `### ${title} (entity_id: ${rule.entity_id}): body omitted for size; fetch the full text ` +
-    `with retrieve_entity_snapshot (entity_id: ${rule.entity_id}) before acting in its area.`
+    `### ${title} (entity_id: ${id}): body omitted for size; fetch the full text ` +
+    `with retrieve_entity_snapshot (entity_id: ${id}) before acting in its area.`
   );
 }
 
@@ -291,7 +353,7 @@ export function renderStandingRulesSection(rules: StandingRule[]): string | null
       // the outcome this budget exists to prevent.
       lines.push(notices[i]);
       used += noticeCosts[i];
-      omittedTitles.push(clipUtf8(rule.title.trim(), OMITTED_TITLE_MAX_BYTES));
+      omittedTitles.push(clipUtf8(sanitizeStandingRuleInline(rule.title), OMITTED_TITLE_MAX_BYTES));
     }
   });
 
@@ -303,7 +365,9 @@ export function renderStandingRulesSection(rules: StandingRule[]): string | null
     "apply from the first turn of this session. You do not need to be reminded of them again, " +
     "and the user does not need to restate them. Where a rule constrains an action you are " +
     "about to take, follow the rule. Where a rule conflicts with a general habit of yours, the " +
-    "rule wins. These are also available verbatim in `serverInfo._neotoma.standing_rules`.";
+    "rule wins. Each rule body is quoted with `> ` and the block ends at " +
+    `\`${STANDING_RULES_END_MARKER}\`. ` +
+    "These are also available verbatim in `serverInfo._neotoma.standing_rules`.";
 
   const footer =
     omittedTitles.length > 0
@@ -313,5 +377,5 @@ export function renderStandingRulesSection(rules: StandingRule[]): string | null
         ". Fetch the full text with `retrieve_entity_snapshot` before acting in the areas they cover."
       : "";
 
-  return `${header}\n\n${lines.join("\n\n")}${footer}`;
+  return `${header}\n\n${lines.join("\n\n")}${footer}\n${STANDING_RULES_END_MARKER}`;
 }
