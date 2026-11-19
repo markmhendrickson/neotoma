@@ -1106,7 +1106,50 @@ app.get("/server-info", (req, res) => {
   });
 });
 
-app.get("/mcp-interaction-instructions", async (_req, res) => {
+/**
+ * Response header on GET /mcp-interaction-instructions naming the composition
+ * served: `user` when the caller authenticated and the text is the one a
+ * session initialize returns for that user (standing rules first). Absent on
+ * the global text, so an unauthenticated response is unchanged.
+ */
+export const INSTRUCTIONS_COMPOSITION_HEADER = "X-Neotoma-Instructions-Composition";
+
+/**
+ * Resolve the caller of a public route that serves more to an authenticated
+ * caller. Only a request carrying a Bearer header is attempted, and it goes
+ * through {@link restAuthMiddleware} itself, so a token is accepted here
+ * exactly when it is accepted on a protected route. Any request the
+ * middleware would refuse (or that resolves to no user principal) returns
+ * null and is served as unauthenticated; nothing is written to `res`.
+ */
+async function resolveOptionalBearerUserId(req: express.Request): Promise<string | null> {
+  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
+  if (!headerAuth.startsWith("Bearer ")) return null;
+  // Absorbs whatever the middleware would send on refusal; the route then
+  // answers as it does for an unauthenticated caller.
+  const discard: express.Response = new Proxy({} as express.Response, {
+    // `then` stays undefined: the middleware returns `sendError(res, ...)`,
+    // and a callable `then` would make that awaited value a never-settling
+    // thenable.
+    get: (_target, prop) => {
+      if (prop === "then") return undefined;
+      if (prop === "headersSent") return false;
+      return () => discard;
+    },
+  });
+  let accepted = false;
+  try {
+    await restAuthMiddleware(req, discard, () => {
+      accepted = true;
+    });
+    if (!accepted) return null;
+    return await getAuthenticatedUserId(req);
+  } catch {
+    return null;
+  }
+}
+
+app.get("/mcp-interaction-instructions", async (req, res) => {
   // Uses the shared extractor rather than an inlined fence regex, and appends
   // the instance policy through the shared composer (#1974), so this surface
   // cannot drift from the MCP handshake and the CLI.
@@ -1127,6 +1170,16 @@ app.get("/mcp-interaction-instructions", async (_req, res) => {
 
   if (!text) {
     res.status(404).json({ error: "instructions_not_found" });
+    return;
+  }
+
+  // An authenticated caller gets the text a session initialize returns for
+  // it, built by the same server composition, so the two cannot drift.
+  const userId = await resolveOptionalBearerUserId(req);
+  if (userId) {
+    const composed = await new NeotomaServer().buildInstructionsForUser(userId);
+    res.setHeader(INSTRUCTIONS_COMPOSITION_HEADER, "user");
+    res.type("text/plain").send(composed);
     return;
   }
 
@@ -4927,7 +4980,17 @@ installInspectorSpaShellEarly(app, runtimeEnv(), logger);
 
 // Public key-based authentication middleware
 // MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token
-app.use(async (req, res, next) => {
+/**
+ * REST principal resolution for every route registered after it. Named (not
+ * inline) so GET /mcp-interaction-instructions, which is public and registered
+ * before it, can resolve an optional Bearer caller through this same function
+ * rather than a second resolver (see {@link resolveOptionalBearerUserId}).
+ */
+async function restAuthMiddleware(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): Promise<unknown> {
   // Bypass auth only for truly public endpoints (no user data)
   if (
     req.method === "OPTIONS" ||
@@ -5242,7 +5305,8 @@ app.use(async (req, res, next) => {
     return runWithAuthenticatedPrincipal({ actorId: sessionActorId }, () => next());
   }
   return next();
-});
+}
+app.use(restAuthMiddleware);
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
