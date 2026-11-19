@@ -560,34 +560,59 @@ export const ORPHAN_ENTITY_FTS_TRIGGERS = [
   "entity_fts_entities_ad",
 ] as const;
 
+/**
+ * The leftover full-text table and its helper table. The delete and update
+ * triggers are the only thing that ever removed rows from them, so they are
+ * dropped together with the triggers: dropping the triggers alone would leave
+ * deleted or corrected text behind with nothing to remove it.
+ */
+export const ORPHAN_ENTITY_FTS_TABLES = ["entity_search_fts", "entity_fts_rows"] as const;
+
 function orphanEntityFtsTriggerDropEnabled(): boolean {
   return runtimeEnv().NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS === "1";
 }
 
-/** Drop the present ORPHAN_ENTITY_FTS_TRIGGERS on an open transaction. */
+/**
+ * Drop the present ORPHAN_ENTITY_FTS_TRIGGERS and then the present
+ * ORPHAN_ENTITY_FTS_TABLES on an open transaction. Any failure rolls the whole
+ * transaction back, so a deletion is never left with its cleanup removed.
+ */
 async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<number> {
-  let dropped = 0;
+  const presentTables: string[] = [];
+  for (const name of ORPHAN_ENTITY_FTS_TABLES) {
+    const present = await db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(name);
+    if (present) presentTables.push(name);
+  }
+  const presentTriggers: string[] = [];
   for (const name of ORPHAN_ENTITY_FTS_TRIGGERS) {
     const present = await db
       .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'trigger' AND name = ?")
       .get(name);
-    if (!present) continue;
+    if (present) presentTriggers.push(name);
+  }
+  if (presentTriggers.length === 0 && presentTables.length === 0) return 0;
+  // Triggers first (a trigger that names a dropped table would fail on the next
+  // write), then the tables.
+  for (const name of presentTriggers) {
     await db.prepare(`DROP TRIGGER IF EXISTS ${name}`).run();
-    dropped += 1;
   }
-  if (dropped > 0) {
-    logger.warn(
-      `Dropped ${dropped} leftover entity_fts_* trigger(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS=1); ` +
-        "the entity_search_fts and entity_fts_rows tables are left in place"
-    );
+  for (const name of presentTables) {
+    await db.prepare(`DROP TABLE IF EXISTS ${name}`).run();
   }
-  return dropped;
+  logger.warn(
+    `Dropped ${presentTriggers.length} leftover entity_fts_* trigger(s) and ${presentTables.length} unused ` +
+      "full-text table(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS=1)"
+  );
+  return presentTriggers.length;
 }
 
 /**
- * Opt-in removal of ORPHAN_ENTITY_FTS_TRIGGERS, in one transaction. Returns the
- * number dropped; 0 and no statement at all when not enabled. Never touches the
- * entity_search_fts or entity_fts_rows tables. Runs at open inside ensureSchema.
+ * Opt-in removal of ORPHAN_ENTITY_FTS_TRIGGERS and of the unused tables they
+ * maintain (ORPHAN_ENTITY_FTS_TABLES), in one transaction. Returns the number of
+ * triggers dropped; 0 and no statement at all when not enabled. Runs at open
+ * inside ensureSchema.
  */
 export async function dropOrphanEntityFtsTriggers(
   db: DbDatabase,

@@ -88,7 +88,7 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
     expect(await ftsTriggerNames(db)).toHaveLength(5);
   });
 
-  it("drops the five triggers when enabled, leaving the tables and writes working", async () => {
+  it("drops the five triggers and the unused full-text tables when enabled, leaving writes working", async () => {
     const db = await freshDb(open);
     await addLeftovers(db);
     await db
@@ -103,8 +103,8 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
       .prepare("UPDATE entity_snapshots SET snapshot = ? WHERE entity_id = ?")
       .run('{"a":1}', "ent_synthetic_1");
     expect(result.changes).toBe(1);
-    expect(await tableExists(db, "entity_search_fts")).toBe(true);
-    expect(await tableExists(db, "entity_fts_rows")).toBe(true);
+    expect(await tableExists(db, "entity_search_fts")).toBe(false);
+    expect(await tableExists(db, "entity_fts_rows")).toBe(false);
     // Repository triggers on the same tables are untouched.
     const own = await db
       .prepare(
@@ -127,7 +127,26 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
     process.env[ENV] = "1";
     await ensureSchema(db);
     expect(await ftsTriggerNames(db)).toEqual([]);
-    expect(await tableExists(db, "entity_search_fts")).toBe(true);
+    expect(await tableExists(db, "entity_search_fts")).toBe(false);
+  });
+
+  it("leaves no copy of a deleted snapshot's text anywhere once opted in", async () => {
+    const db = await freshDb(open);
+    await addLeftovers(db);
+    await db
+      .prepare(
+        "INSERT INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run("ent_synthetic_2", "note", "1.0", "to be deleted", '{"text":"synthetic-sentinel-text"}');
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toBe(5);
+    await db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run("ent_synthetic_2");
+    // The full-text tables are gone, so no copy of the deleted text can remain in them.
+    expect(await tableExists(db, "entity_search_fts")).toBe(false);
+    expect(await tableExists(db, "entity_fts_rows")).toBe(false);
+    const leftover = await db
+      .prepare("SELECT 1 AS present FROM entity_snapshots WHERE entity_id = ?")
+      .get("ent_synthetic_2");
+    expect(leftover).toBeFalsy();
   });
 });
 
