@@ -89,6 +89,11 @@ import {
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
+import {
+  resolveGateAssignedConnectionUserId,
+  STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+  dropGateOnlyConnectionId,
+} from "./services/static_bearer_identity.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { AgentCapabilityError } from "./services/agent_capabilities.js";
@@ -597,7 +602,9 @@ export class NeotomaServer {
     let connectionId =
       this.sessionConnectionId ||
       (authInfo as any)?.connectionId ||
-      (isHTTPTransport ? getCurrentMcpConnectionId() : runtimeEnv().NEOTOMA_CONNECTION_ID) ||
+      (isHTTPTransport
+        ? getCurrentMcpConnectionId()
+        : dropGateOnlyConnectionId(runtimeEnv().NEOTOMA_CONNECTION_ID)) ||
       undefined;
 
     // If no connection ID header, try to get it from Bearer token
@@ -691,6 +698,29 @@ export class NeotomaServer {
           token: "dev-local",
         });
         logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
+        return "authenticated";
+      }
+
+      // Static bearer under shared-graph mode: act as the shared graph owner.
+      // Fails closed when shared-graph mode is no longer configured.
+      if (connectionId === STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID) {
+        let sharedOwnerId: string | null;
+        try {
+          sharedOwnerId = await resolveGateAssignedConnectionUserId(connectionId);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          logger.error(`[MCP Server] Static bearer shared-graph identity unavailable: ${msg}`);
+          return "unauthenticated";
+        }
+        if (!sharedOwnerId) return "unauthenticated";
+        this.setAuthenticatedIdentity(sharedOwnerId, null);
+        this.requestAuth.set(requestId, {
+          userId: sharedOwnerId,
+          token: STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+        });
+        logger.info(
+          `[MCP Server] Using static bearer as shared graph owner (user: ${this.authenticatedUserId})`
+        );
         return "authenticated";
       }
 
@@ -1164,10 +1194,10 @@ export class NeotomaServer {
     if (!connectionId) return null;
 
     try {
-      if (connectionId === "dev-local") {
-        const devUser = await ensureLocalDevUser();
-        this.setAuthenticatedIdentity(devUser.id, null);
-        return devUser.id;
+      const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+      if (gateAssignedUserId) {
+        this.setAuthenticatedIdentity(gateAssignedUserId, null);
+        return gateAssignedUserId;
       }
       const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
       const { userId, authenticatedUserId } = await getAccessTokenForConnection(connectionId);
@@ -2561,8 +2591,9 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             let principalUserId: string | undefined;
-            if (connectionId === "dev-local") {
-              userId = (await ensureLocalDevUser()).id;
+            const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+            if (gateAssignedUserId) {
+              userId = gateAssignedUserId;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId, authenticatedUserId } =
@@ -3043,8 +3074,9 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             let principalUserId: string | undefined;
-            if (connectionId === "dev-local") {
-              userId = (await ensureLocalDevUser()).id;
+            const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+            if (gateAssignedUserId) {
+              userId = gateAssignedUserId;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId, authenticatedUserId } =
