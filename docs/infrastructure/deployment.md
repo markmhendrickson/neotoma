@@ -345,6 +345,8 @@ flyctl logs --limit 100
 flyctl logs --follow
 ```
 
+Each HTTP request produces one JSON access line (`NEOTOMA_ACCESS_LOG=json`, the default when the server binds beyond loopback). Its fields and redaction rule are in [Access log](../operations/configuration.md#access-log). Set `NEOTOMA_ACCESS_LOG=dev` for the compact format or `off` to disable it.
+
 ### Check Metrics
 
 ```bash
