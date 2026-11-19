@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   renderStandingRulesSection,
   STANDING_RULES_MAX_BYTES,
+  STANDING_RULES_SCOPE_GUIDANCE,
   type StandingRule,
 } from "../../src/services/standing_rules.js";
 import { prependClientInstructionsSection } from "../../src/mcp_instruction_doc.js";
@@ -41,6 +42,31 @@ describe("renderStandingRulesSection", () => {
     expect(out).not.toContain("yyyy");
     expect(out).toMatch(/### Dropped Rule \(entity_id: 2\): body omitted for size; fetch the full text/);
     expect(out).toContain("1 rule above had its body omitted for size: Dropped Rule");
+  });
+});
+
+describe("renderStandingRulesSection scope guidance", () => {
+  it("states scope semantics in the leading lines, before any rule", () => {
+    const out = renderStandingRulesSection([
+      ...rules,
+      { entity_id: "ent_g", title: "Global rule", rule_text: "global body", scope: "global", priority: 1 },
+      { entity_id: "ent_e", title: "Unscoped rule", rule_text: "unscoped body", priority: 0 },
+    ])!;
+    const [tag, guidance] = out.split("\n");
+    expect(tag).toBe("[STANDING RULES]");
+    expect(guidance).toBe(STANDING_RULES_SCOPE_GUIDANCE);
+    expect(guidance).toMatch(/global or empty scope apply to every request/);
+    expect(guidance).toMatch(/any other scope apply only when the current context matches that scope/);
+    // Ahead of the first rule entry, so truncation after the opening lines keeps it.
+    expect(out.indexOf(STANDING_RULES_SCOPE_GUIDANCE)).toBeLessThan(out.indexOf("### "));
+    expect(Buffer.byteLength(out.slice(0, out.indexOf(STANDING_RULES_SCOPE_GUIDANCE)), "utf8")).toBeLessThan(64);
+  });
+
+  it("leads with the guidance even when the first rule is omitted for size", () => {
+    const out = renderStandingRulesSection([
+      { entity_id: "h", title: "Huge", rule_text: "z".repeat(40000), scope: "billing", priority: 1 },
+    ])!;
+    expect(out.split("\n")[1]).toBe(STANDING_RULES_SCOPE_GUIDANCE);
   });
 });
 

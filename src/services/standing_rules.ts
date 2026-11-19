@@ -193,6 +193,16 @@ async function lookupActiveStandingRules(
  */
 export const STANDING_RULES_MAX_BYTES = 24000;
 
+/**
+ * Scope guidance, emitted as the first line after the section tag. It stands
+ * on its own (it does not depend on anything after it) and sits ahead of every
+ * rule, so a client that truncates the payload anywhere after the opening
+ * lines still tells the agent how to apply whatever rules it did receive.
+ */
+export const STANDING_RULES_SCOPE_GUIDANCE =
+  "Scope: rules with global or empty scope apply to every request. Rules with any other " +
+  "scope apply only when the current context matches that scope.";
+
 /** Longest rule title quoted in an omission notice, in UTF-8 bytes. */
 const OMITTED_TITLE_MAX_BYTES = 200;
 
@@ -287,6 +297,7 @@ export function renderStandingRulesSection(rules: StandingRule[]): string | null
 
   const header =
     "[STANDING RULES]\n" +
+    `${STANDING_RULES_SCOPE_GUIDANCE}\n` +
     `This instance has ${rules.length} standing rule${rules.length === 1 ? "" : "s"} in force, ` +
     "listed below in priority order. They are operator-set instructions for THIS instance and " +
     "apply from the first turn of this session. You do not need to be reminded of them again, " +
