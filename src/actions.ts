@@ -499,8 +499,7 @@ app.use(
 const accessLogBindHost = resolveHttpBindHost();
 const accessLogFormat = resolveAccessLogFormat(runtimeEnv().NEOTOMA_ACCESS_LOG, accessLogBindHost);
 if (accessLogFormat === "json") {
-  const trustForwardedForAccessLog = !isLoopbackHost(accessLogBindHost);
-  app.use(jsonAccessLog({ clientIp: (req) => accessLogClientIp(req, trustForwardedForAccessLog) }));
+  app.use(jsonAccessLog({ addresses: (req) => accessLogAddresses(req) }));
 } else if (accessLogFormat === "dev") {
   app.use(
     morgan<express.Request, express.Response>("dev", {
@@ -1510,21 +1509,49 @@ function forwardedForValues(req: express.Request): string[] {
     .filter(Boolean);
 }
 
+/** Strip the IPv4-mapped IPv6 prefix so `::ffff:a.b.c.d` redacts as IPv4. */
+function unmapIPv4(ip: string): string {
+  return ip.trim().replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
+}
+
 /**
- * Client address for the access log (src/services/access_log.ts). The
- * platform proxy's `fly-client-ip` header, then the first forwarded-for
- * entry, are honoured only when `trustForwarded` is true (the server is bound
- * beyond loopback, i.e. behind the platform proxy); otherwise the socket
- * address is used. Logging only: this value never feeds a trust decision.
+ * Client and peer addresses for the access log (src/services/access_log.ts).
+ *
+ * `peer_ip` is always the connecting socket address. `client_ip` starts as the
+ * peer and is replaced from a header only when the header's source is trusted:
+ * - `fly-client-ip` only when the process runs on Fly (`FLY_APP_NAME` set),
+ *   where the platform proxy sets that header;
+ * - `x-forwarded-for` only when the peer is a configured trusted proxy
+ *   (`NEOTOMA_TRUSTED_PROXY_IPS`), taking the nearest untrusted hop from the
+ *   right.
+ * Both values are redacted with `redactIpForLog` unless
+ * `NEOTOMA_ACCESS_LOG_FULL_IP=1`. Logging only: never feeds a trust decision.
  */
-export function accessLogClientIp(req: express.Request, trustForwarded: boolean): string | null {
-  if (trustForwarded) {
-    const platform = req.header("fly-client-ip")?.split(",")[0]?.trim();
-    if (platform) return platform;
-    const forwarded = forwardedForValues(req)[0];
-    if (forwarded) return forwarded;
+export function accessLogAddresses(
+  req: express.Request,
+  env: NodeJS.ProcessEnv = runtimeEnv()
+): { client_ip: string | null; peer_ip: string | null } {
+  const rawPeer = req.socket?.remoteAddress;
+  const peer = rawPeer ? unmapIPv4(rawPeer) : null;
+  let client = peer;
+  if (peer) {
+    const onFly = Boolean(env.FLY_APP_NAME?.trim());
+    const platform = onFly ? req.header("fly-client-ip")?.split(",")[0]?.trim() : undefined;
+    if (platform && isIP(unmapIPv4(platform))) {
+      client = unmapIPv4(platform);
+    } else if (isTrustedProxyIP(peer, env)) {
+      const hops = forwardedForValues(req);
+      for (let i = hops.length - 1; i >= 0; i--) {
+        const hop = unmapIPv4(hops[i]!);
+        if (isTrustedProxyIP(hop, env)) continue;
+        if (isIP(hop)) client = hop;
+        break;
+      }
+    }
   }
-  return req.socket?.remoteAddress ?? null;
+  const full = env.NEOTOMA_ACCESS_LOG_FULL_IP === "1";
+  const shown = (ip: string | null) => (ip === null ? null : full ? ip : redactIpForLog(ip));
+  return { client_ip: shown(client), peer_ip: shown(peer) };
 }
 
 // isProductionEnvironment is imported from ./shared/environment.js — see that

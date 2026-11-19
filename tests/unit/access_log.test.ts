@@ -5,7 +5,7 @@ import { join } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { accessLogClientIp } from "../../src/actions.js";
+import { accessLogAddresses } from "../../src/actions.js";
 import {
   ACCESS_LOG_SERVICE,
   jsonAccessLog,
@@ -14,6 +14,7 @@ import {
 } from "../../src/services/access_log.js";
 
 type Server = ReturnType<express.Express["listen"]>;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const servers: Server[] = [];
 
 afterEach(async () => {
@@ -21,12 +22,12 @@ afterEach(async () => {
 });
 
 /** Start an app with the access log in front of a stand-in auth middleware. */
-async function startApp(trustForwarded: boolean) {
+async function startApp(env: NodeJS.ProcessEnv = {}) {
   const lines: string[] = [];
   const app = express();
   app.use(
     jsonAccessLog({
-      clientIp: (req) => accessLogClientIp(req, trustForwarded),
+      addresses: (req) => accessLogAddresses(req, env),
       write: (line) => lines.push(line),
     })
   );
@@ -68,8 +69,10 @@ function expectFieldTypes(line: Record<string, unknown>) {
       "client_ip",
       "duration_ms",
       "health",
+      "incoming_request_id",
       "method",
       "path",
+      "peer_ip",
       "query_keys",
       "request_id",
       "service",
@@ -95,7 +98,7 @@ function expectFieldTypes(line: Record<string, unknown>) {
 
 describe("jsonAccessLog", () => {
   it("logs an authenticated request with user, auth method and agent", async () => {
-    const { base, waitForLine } = await startApp(false);
+    const { base, waitForLine } = await startApp();
     const res = await fetch(`${base}/entities?limit=5`, {
       headers: { authorization: "Bearer tok-SYNTHETIC-abcdef123456", "user-agent": "ua-test" },
     });
@@ -116,7 +119,7 @@ describe("jsonAccessLog", () => {
   });
 
   it("logs an unauthenticated request with null user and auth_method none", async () => {
-    const { base, waitForLine } = await startApp(false);
+    const { base, waitForLine } = await startApp();
     await fetch(`${base}/store`, { method: "POST" });
     const line = await waitForLine();
     expectFieldTypes(line);
@@ -132,28 +135,34 @@ describe("jsonAccessLog", () => {
   });
 
   it("logs the health path with health: true", async () => {
-    const { base, waitForLine } = await startApp(false);
+    const { base, waitForLine } = await startApp();
     await fetch(`${base}/health`);
     const line = await waitForLine();
     expectFieldTypes(line);
     expect(line).toMatchObject({ path: "/health", status: 200, health: true });
   });
 
-  it("reuses a well-formed incoming request id and replaces a malformed one", async () => {
-    const app = await startApp(false);
+  it("always logs a server-generated request id and keeps a supplied one separately", async () => {
+    const app = await startApp();
     const res = await fetch(`${app.base}/health`, {
       headers: { "x-request-id": "req-synthetic-0001" },
     });
-    expect(res.headers.get("x-request-id")).toBe("req-synthetic-0001");
-    expect((await app.waitForLine()).request_id).toBe("req-synthetic-0001");
+    const line = await app.waitForLine();
+    expect(line.request_id).toMatch(UUID_PATTERN);
+    expect(line.request_id).not.toBe("req-synthetic-0001");
+    expect(line.incoming_request_id).toBe("req-synthetic-0001");
+    expect(res.headers.get("x-request-id")).toBe(line.request_id);
 
-    const other = await startApp(false);
+    const other = await startApp();
     const res2 = await fetch(`${other.base}/health`, { headers: { "x-request-id": "bad id!" } });
-    expect(res2.headers.get("x-request-id")).not.toBe("bad id!");
+    const line2 = await other.waitForLine();
+    expect(line2.request_id).toMatch(UUID_PATTERN);
+    expect(line2.incoming_request_id).toBeNull();
+    expect(res2.headers.get("x-request-id")).toBe(line2.request_id);
   });
 
   it("never writes tokens, cookies, header values or query values", async () => {
-    const { base, lines, waitForLine } = await startApp(true);
+    const { base, lines, waitForLine } = await startApp();
     await fetch(`${base}/entities?api_key=sk-SYNTHETIC-QUERYSECRET-999&q=private-term`, {
       headers: {
         authorization: "Bearer tok-SYNTHETIC-abcdef123456",
@@ -177,26 +186,65 @@ describe("jsonAccessLog", () => {
   });
 
   it("truncates the user agent to 120 characters", async () => {
-    const { base, waitForLine } = await startApp(false);
+    const { base, waitForLine } = await startApp();
     await fetch(`${base}/health`, { headers: { "user-agent": "a".repeat(300) } });
     expect(((await waitForLine()).user_agent as string).length).toBe(120);
   });
 
-  it("honours forwarded-for only when bound beyond loopback", async () => {
-    const headers = { "x-forwarded-for": "203.0.113.7, 10.0.0.1" };
-    const loopback = await startApp(false);
-    await fetch(`${loopback.base}/health`, { headers });
-    expect((await loopback.waitForLine()).client_ip).toMatch(/127\.0\.0\.1/);
+  // Replaces the earlier "honours forwarded-for only when bound beyond
+  // loopback" test, which pinned the behaviour corrected here: header values
+  // decided the logged address whenever the bind host was not loopback.
+  const spoofHeaders = {
+    "fly-client-ip": "198.51.100.9",
+    "x-forwarded-for": "203.0.113.7, 192.0.2.44",
+  };
 
-    const exposed = await startApp(true);
-    await fetch(`${exposed.base}/health`, { headers });
-    expect((await exposed.waitForLine()).client_ip).toBe("203.0.113.7");
+  it("derives client_ip and peer_ip from the socket on a direct connection", async () => {
+    const app = await startApp({ NEOTOMA_ACCESS_LOG_FULL_IP: "1" });
+    await fetch(`${app.base}/health`, { headers: spoofHeaders });
+    const line = await app.waitForLine();
+    expect(line.client_ip).toBe("127.0.0.1");
+    expect(line.peer_ip).toBe("127.0.0.1");
+    expect(JSON.stringify(line)).not.toMatch(/198\.51\.100|203\.0\.113|192\.0\.2/);
+  });
 
-    const platform = await startApp(true);
-    await fetch(`${platform.base}/health`, {
-      headers: { ...headers, "fly-client-ip": "198.51.100.9" },
+  it("takes the right-most untrusted forwarded hop when the peer is a trusted proxy", async () => {
+    const app = await startApp({
+      NEOTOMA_ACCESS_LOG_FULL_IP: "1",
+      NEOTOMA_TRUSTED_PROXY_IPS: "127.0.0.1,10.0.0.0/8",
     });
-    expect((await platform.waitForLine()).client_ip).toBe("198.51.100.9");
+    await fetch(`${app.base}/health`, {
+      headers: { "x-forwarded-for": "203.0.113.7, 192.0.2.44, 10.1.2.3" },
+    });
+    const line = await app.waitForLine();
+    expect(line.client_ip).toBe("192.0.2.44");
+    expect(line.peer_ip).toBe("127.0.0.1");
+  });
+
+  it("honours fly-client-ip only when running on Fly", async () => {
+    const app = await startApp({ NEOTOMA_ACCESS_LOG_FULL_IP: "1", FLY_APP_NAME: "synthetic-app" });
+    await fetch(`${app.base}/health`, { headers: spoofHeaders });
+    const line = await app.waitForLine();
+    expect(line.client_ip).toBe("198.51.100.9");
+    expect(line.peer_ip).toBe("127.0.0.1");
+  });
+
+  it("logs redacted prefixes by default and full addresses only with the opt-in", async () => {
+    const env = { FLY_APP_NAME: "synthetic-app" };
+    const redacted = await startApp(env);
+    await fetch(`${redacted.base}/health`, { headers: spoofHeaders });
+    const line = await redacted.waitForLine();
+    expect(line.client_ip).toBe("198.51.100.x/24");
+    expect(line.peer_ip).toBe("127.0.0.x/24");
+    expect(JSON.stringify(line)).not.toContain("198.51.100.9");
+
+    const off = await startApp({ ...env, NEOTOMA_ACCESS_LOG_FULL_IP: "0" });
+    await fetch(`${off.base}/health`, { headers: spoofHeaders });
+    expect((await off.waitForLine()).client_ip).toBe("198.51.100.x/24");
+
+    const full = await startApp({ ...env, NEOTOMA_ACCESS_LOG_FULL_IP: "1" });
+    await fetch(`${full.base}/health`, { headers: spoofHeaders });
+    expect((await full.waitForLine()).client_ip).toBe("198.51.100.9");
   });
 });
 

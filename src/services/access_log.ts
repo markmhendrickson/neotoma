@@ -8,7 +8,9 @@
  *
  * Redaction rule: the line never carries request or response bodies, header
  * values (other than a truncated user agent), cookie values, tokens, keys or
- * query values. Query parameters are logged by name only.
+ * query values. Query parameters are logged by name only. Client and peer
+ * addresses are redacted prefixes unless `NEOTOMA_ACCESS_LOG_FULL_IP=1`
+ * (resolved in src/actions.ts `accessLogAddresses`).
  *
  * Format selection (`NEOTOMA_ACCESS_LOG`): `json` (this line), `dev` (the
  * previous morgan "dev" format) or `off`. Unset or unrecognised values fall
@@ -28,12 +30,15 @@ export const USER_AGENT_MAX_LENGTH = 120;
 /** Readiness and liveness paths; logged with `health: true`. */
 export const HEALTH_PATHS: ReadonlySet<string> = new Set(["/health", "/ready"]);
 
-/** Incoming request ids are reused only when they match this shape. */
+/** Incoming request ids are logged (as `incoming_request_id`) only when they match this shape. */
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{8,128}$/;
 
 export interface AccessLogRecord {
   ts: string;
+  /** Server-generated id, also returned in the `x-request-id` response header. */
   request_id: string;
+  /** Caller-supplied `x-request-id` when well formed; never used as `request_id`. */
+  incoming_request_id: string | null;
   method: string;
   path: string;
   query_keys: string[];
@@ -44,6 +49,8 @@ export interface AccessLogRecord {
   auth_method: string;
   agent: string | null;
   client_ip: string | null;
+  /** Connecting socket address, so a supplied header never replaces the real source. */
+  peer_ip: string | null;
   user_agent: string | null;
   service: string;
   health: boolean;
@@ -53,6 +60,7 @@ export interface AccessLogRecord {
 
 type AccessLogRequest = Request & {
   requestId?: string;
+  incomingRequestId?: string | null;
   authMethod?: string;
   authenticatedUserId?: string;
   aauthAdmission?: { admitted?: boolean; agent_label?: string } | null;
@@ -76,14 +84,19 @@ export function setRequestAuthMethod(req: Request, label: string): void {
   (req as AccessLogRequest).authMethod = label;
 }
 
-/** Reuse a well-formed incoming request id, otherwise generate one. */
-export function resolveRequestId(req: Request): string {
+/** The caller-supplied request id when well formed, otherwise null. */
+export function resolveIncomingRequestId(req: Request): string | null {
   const raw = req.headers[REQUEST_ID_HEADER];
   const incoming = Array.isArray(raw) ? raw[0] : raw;
   if (typeof incoming === "string" && REQUEST_ID_PATTERN.test(incoming.trim())) {
     return incoming.trim();
   }
-  return randomUUID();
+  return null;
+}
+
+export interface AccessLogAddresses {
+  client_ip: string | null;
+  peer_ip: string | null;
 }
 
 function pathAndQueryKeys(req: Request): { path: string; query_keys: string[] } {
@@ -102,7 +115,7 @@ export function buildAccessLogRecord(
   opts: {
     startedAt: bigint;
     startedAtMs: number;
-    clientIp: (req: Request) => string | null;
+    addresses: (req: Request) => AccessLogAddresses;
     now?: bigint;
   }
 ): AccessLogRecord {
@@ -117,9 +130,12 @@ export function buildAccessLogRecord(
       : Number(lengthHeader);
   const userAgent = firstUserAgent(req);
   const admission = r.aauthAdmission;
+  const { client_ip, peer_ip } = opts.addresses(req);
   return {
     ts: new Date(opts.startedAtMs).toISOString(),
-    request_id: r.requestId ?? resolveRequestId(req),
+    request_id: r.requestId ?? randomUUID(),
+    incoming_request_id:
+      r.incomingRequestId !== undefined ? r.incomingRequestId : resolveIncomingRequestId(req),
     method: req.method,
     path,
     query_keys,
@@ -129,7 +145,8 @@ export function buildAccessLogRecord(
     user_id: typeof r.authenticatedUserId === "string" ? r.authenticatedUserId : null,
     auth_method: r.authMethod ?? "none",
     agent: admission?.admitted && admission.agent_label ? admission.agent_label : null,
-    client_ip: opts.clientIp(req),
+    client_ip,
+    peer_ip,
     user_agent: userAgent,
     service: ACCESS_LOG_SERVICE,
     health: HEALTH_PATHS.has(path),
@@ -145,26 +162,27 @@ function firstUserAgent(req: Request): string | null {
 }
 
 /**
- * Express middleware: assigns the request id (echoed in `x-request-id`) and
+ * Express middleware: assigns a server-generated request id (returned in `x-request-id`) and
  * writes the JSON line on response `finish`. Install before the auth
  * middleware so the id exists for every request; the line is written after
  * auth has run because it waits for the response to finish.
  */
 export function jsonAccessLog(opts: {
   /**
-   * Resolves the client address. Supplied by `src/actions.ts`, which owns
-   * every read of proxy-supplied address headers (see
+   * Resolves the client and peer addresses. Supplied by `src/actions.ts`,
+   * which owns every read of proxy-supplied address headers (see
    * docs/architecture/change_guardrails_rules.mdc, MUST NOT 15).
    */
-  clientIp: (req: Request) => string | null;
+  addresses: (req: Request) => AccessLogAddresses;
   write?: (line: string) => void;
 }): RequestHandler {
   const write = opts.write ?? ((line: string) => process.stdout.write(line));
   return (req: Request, res: Response, next: NextFunction): void => {
     const startedAt = process.hrtime.bigint();
     const startedAtMs = Date.now();
-    const requestId = resolveRequestId(req);
+    const requestId = randomUUID();
     (req as AccessLogRequest).requestId = requestId;
+    (req as AccessLogRequest).incomingRequestId = resolveIncomingRequestId(req);
     res.setHeader(REQUEST_ID_HEADER, requestId);
     let written = false;
     const emit = () => {
@@ -174,7 +192,7 @@ export function jsonAccessLog(opts: {
         const record = buildAccessLogRecord(req, res, {
           startedAt,
           startedAtMs,
-          clientIp: opts.clientIp,
+          addresses: opts.addresses,
         });
         write(JSON.stringify(record) + "\n");
       } catch {
