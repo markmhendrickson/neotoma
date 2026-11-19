@@ -10,6 +10,10 @@
  *   - Global default `security: [ { bearerAuth: [] } ]` → every operation
  *     requires bearer unless it explicitly opts out with `security: []`.
  *   - Operation-level `security: []` → unauth allow-listed.
+ *   - Operation-level security listing the empty requirement `{}` (optional
+ *     authentication, e.g. `[ { bearerAuth: [] }, {} ]`) → public: the route
+ *     answers without credentials, so it is recorded with
+ *     `requires_auth: false` and expected status 200.
  *
  * The script also captures a small "matrix-relevant" set of fields per row
  * (operationId, expected statuses for bearer-absent / bearer-invalid, and
@@ -98,7 +102,7 @@ function loadExistingManifest() {
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"];
 
-function generateRoutes(openapi) {
+export function generateRoutes(openapi) {
   const globalSecurity = Array.isArray(openapi.security) ? openapi.security : [];
   const globalRequiresBearer = globalSecurity.some(
     (block) => block && Object.prototype.hasOwnProperty.call(block, "bearerAuth"),
@@ -111,11 +115,18 @@ function generateRoutes(openapi) {
       const op = pathItem[method];
       if (!op) continue;
       const sec = op.security;
+      // An empty requirement object `{}` in the list means credentials are
+      // optional: the route answers anonymously, so it is public here.
+      const optionalAuth =
+        Array.isArray(sec) &&
+        sec.some((b) => b && typeof b === "object" && Object.keys(b).length === 0);
       let requiresAuth;
       if (Array.isArray(sec) && sec.length === 0) requiresAuth = false;
+      else if (optionalAuth) requiresAuth = false;
       else if (Array.isArray(sec) && sec.length > 0)
         requiresAuth = sec.some((b) => b && Object.prototype.hasOwnProperty.call(b, "bearerAuth"));
       else requiresAuth = globalRequiresBearer;
+      const openStatuses = optionalAuth ? [200] : [200, 400, 404, 405];
 
       routes.push({
         path: apiPath,
@@ -133,8 +144,8 @@ function generateRoutes(openapi) {
         // via the `overrides` array (e.g. routes that legitimately allow guest
         // tokens via `?guest_access_token=` should set
         // `accepts_guest_token: true`).
-        expected_no_auth_status: requiresAuth ? [401] : [200, 400, 404, 405],
-        expected_invalid_auth_status: requiresAuth ? [401] : [200, 400, 404, 405],
+        expected_no_auth_status: requiresAuth ? [401] : openStatuses,
+        expected_invalid_auth_status: requiresAuth ? [401] : openStatuses,
       });
     }
   }
@@ -246,4 +257,7 @@ function main() {
   process.exit(0);
 }
 
-main();
+// Run only when executed as a script, so tests can import generateRoutes.
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main();
+}
