@@ -2333,13 +2333,14 @@ export interface paths {
      * Revoke an owned guest access token
      * @description Owner-authenticated administration of one existing token. The request
      *     binds an original immutable observation, not a bearer value or digest.
-     *     Appends complete immutable revocation evidence in one transaction and
-     *     returns metadata only. The same idempotency key and target replay the
-     *     committed receipt without another observation; a different target or original
-     *     under that key conflicts. Each new successful key retains one complete
-     *     observation witness, preserving the first revocation timestamp even when
-     *     the token is already revoked. Zero growth applies to same-key replays,
-     *     not arbitrary new keys. Does not create a replacement token, schema, or grant.
+     *     Appends one immutable revocation observation in one transaction and
+     *     returns metadata only. The token history is read by the same rules as
+     *     guest-token validation: partial correction records narrow the token,
+     *     lifecycle (`_deleted`) records are honoured, and a token that already
+     *     carries `revoked_at` replays its earliest revoking record without a new
+     *     observation. The same idempotency key and target replay the committed
+     *     receipt; that key used for a different target or original conflicts.
+     *     Does not create a replacement token, schema, or grant.
      */
     post: operations["revokeGuestAccessToken"];
     delete?: never;
@@ -10486,13 +10487,20 @@ export interface operations {
           };
         };
       };
-      /** @description Malformed or unknown request fields */
+      /**
+       * @description `VALIDATION_INVALID_FORMAT` for malformed or unknown request fields
+       *     or query parameters. `ERR_STORE_POLICY_DENIED` when this instance's
+       *     configured data policy refuses writes to `guest_access_token`; no
+       *     observation is written.
+       */
       400: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
         };
       };
       /** @description An authenticated owner is required */
@@ -10513,7 +10521,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Owned token entity not found */
+      /** @description `RESOURCE_NOT_FOUND`: owned token entity not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -10522,7 +10530,13 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Original observation or idempotency key conflicts */
+      /**
+       * @description No observation was written. `ERR_GUEST_TOKEN_ORIGINAL_STALE`: the
+       *     expected original record is missing, incomplete or revoked.
+       *     `ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT`: the key already committed a
+       *     different request. `ERR_GUEST_TOKEN_HISTORY_UNREADABLE`: a token
+       *     record cannot be read or names a different token.
+       */
       409: {
         headers: {
           [name: string]: unknown;
@@ -10531,7 +10545,10 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Complete token history or atomic commit is unavailable */
+      /**
+       * @description `DB_CONNECTION_FAILED`: token storage or the atomic commit is
+       *     unavailable; nothing was committed. Retry the identical request.
+       */
       503: {
         headers: {
           [name: string]: unknown;
