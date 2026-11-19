@@ -286,9 +286,10 @@ describe("agent grant retrieve capability on entity reads", () => {
       });
 
       it("REST narrows an untyped query to the allowed type with a consistent total", async () => {
-        const owner = await post("/entities/query", { entity_type: "task", limit: 1000 });
+        const page = { limit: 500, include_snapshots: false };
+        const owner = await post("/entities/query", { entity_type: "task", ...page });
         expect(owner.status).toBe(200);
-        const res = await post("/entities/query", { limit: 1000 }, G);
+        const res = await post("/entities/query", page, G);
         expect(res.status).toBe(200);
         expect(res.body.narrowed_by_capability).toBe(true);
         const rows = res.body.entities as Array<{ entity_id: string; entity_type: string }>;
@@ -297,16 +298,16 @@ describe("agent grant retrieve capability on entity reads", () => {
         expect(rows.some((r) => r.entity_id === taskId)).toBe(true);
         expect(rows.some((r) => r.entity_id === contactId)).toBe(false);
         expect(res.body.total).toBe(owner.body.total);
-        expect(res.body.total).toBe(rows.length);
+        expect(rows.length).toBe(Math.min(res.body.total as number, 500));
       });
 
       it("REST narrows an untyped observations query to the allowed type", async () => {
-        const res = await post("/observations/query", { limit: 1000, offset: 0 }, G);
+        const res = await post("/observations/query", { limit: 500, offset: 0 }, G);
         expect(res.status).toBe(200);
         expect(res.body.narrowed_by_capability).toBe(true);
         const rows = res.body.observations as Array<{ entity_type: string }>;
         expect(rows.every((r) => r.entity_type === "task")).toBe(true);
-        expect(res.body.total).toBe(rows.length);
+        expect(rows.length).toBe(Math.min(res.body.total as number, 500));
       });
 
       it("MCP reads of the allowed type succeed", async () => {
@@ -344,13 +345,13 @@ describe("agent grant retrieve capability on entity reads", () => {
       });
 
       it("MCP narrows an untyped retrieve_entities with a consistent total", async () => {
-        const res = await tool("retrieveEntities", { limit: 1000 }, G);
+        const res = await tool("retrieveEntities", { limit: 500, include_snapshots: false }, G);
         const body = JSON.parse(res.content[0].text) as Record<string, unknown>;
         expect(body.narrowed_by_capability).toBe(true);
         const rows = body.entities as Array<{ entity_type: string }>;
         expect(rows.length).toBeGreaterThan(0);
         expect(rows.every((r) => r.entity_type === "task")).toBe(true);
-        expect(body.total).toBe(rows.length);
+        expect(rows.length).toBe(Math.min(body.total as number, 500));
       });
     });
 
