@@ -2116,22 +2116,7 @@ components:
         the complete immutable row. Other fields, internal operation receipts and
         unrecognised provenance keys are withheld. Metadata is recorded evidence,
         not a credibility score. Nullable metadata remains unknown for legacy rows.
-      required:
-        [
-          id,
-          entity_id,
-          entity_type,
-          schema_version,
-          source_id,
-          interpretation_id,
-          observed_at,
-          created_at,
-          specificity_score,
-          source_priority,
-          observation_source,
-          idempotency_key,
-          fields,
-        ]
+      required: [id, entity_id, entity_type, schema_version, source_id, interpretation_id, observed_at, created_at, specificity_score, source_priority, observation_source, idempotency_key, fields]
       properties:
         id:
           type: string
@@ -2162,18 +2147,7 @@ components:
         observation_source:
           type: string
           nullable: true
-          enum:
-            [
-              sensor,
-              llm_summary,
-              workflow_state,
-              human,
-              import,
-              sync,
-              unspecified,
-              correction,
-              null,
-            ]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified, correction, null]
         idempotency_key:
           type: string
           nullable: true
@@ -2222,18 +2196,7 @@ components:
         select the most recent contributor, not a single winner of a merged field.
         source is that contributor's source or null, a legal source-less state.
         Any unresolved contributor or non-null source refuses the entire chain.
-      required:
-        [
-          field,
-          entity_id,
-          value,
-          observation_ids,
-          observations,
-          sources,
-          source_observation,
-          source,
-          observed_at,
-        ]
+      required: [field, entity_id, value, observation_ids, observations, sources, source_observation, source, observed_at]
       properties:
         field:
           type: string
