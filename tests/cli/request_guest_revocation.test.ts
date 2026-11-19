@@ -141,11 +141,17 @@ describe("owner revocation through actual HTTP, SQLite and built generic CLI", (
   it("rejects wrong owner, guest, unresolved auth, stale original and owner substitution without effects", async () => {
     const s = seed();
     const foreign = seed("synthetic-other-owner");
-    expect((await request(foreign.id, foreign.body)).status).toBe(404);
+    const notFound = await request(foreign.id, foreign.body);
+    expect(notFound.status).toBe(404);
+    expect((await notFound.json()).error_code).toBe("RESOURCE_NOT_FOUND");
     expect((await request(s.id, s.body, s.token)).status).toBe(401);
     expect((await request(s.id, s.body, "invalid-synthetic-bearer")).status).toBe(401);
-    expect((await request(s.id, { ...s.body, expected_observation_id: "stale" })).status).toBe(409);
-    expect((await request(s.id, { ...s.body, user_id: LOCAL_DEV_USER_ID })).status).toBe(400);
+    const stale = await request(s.id, { ...s.body, expected_observation_id: "stale" });
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).error_code).toBe("ERR_GUEST_TOKEN_ORIGINAL_STALE");
+    const extra = await request(s.id, { ...s.body, user_id: LOCAL_DEV_USER_ID });
+    expect(extra.status).toBe(400);
+    expect((await extra.json()).error_code).toBe("ERR_UNKNOWN_FIELD");
     expect(
       (await request(s.id, s.body, server.token, "?user_id=synthetic-other-owner")).status
     ).toBe(400);
@@ -153,6 +159,50 @@ describe("owner revocation through actual HTTP, SQLite and built generic CLI", (
       database.prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id=?").get(s.id)
     ).toEqual({ n: 1 });
     expect((await read(s.token)).status).toBe(200);
+  });
+  it("revokes a correction-narrowed token and replays a correction-revoked one over HTTP", async () => {
+    const narrowed = seed();
+    database
+      .prepare(
+        "INSERT INTO observations (id,entity_id,entity_type,schema_version,user_id,fields,observed_at) VALUES (?,?,'guest_access_token','1.0',?,?,?)"
+      )
+      .run(
+        randomUUID(),
+        narrowed.id,
+        LOCAL_DEV_USER_ID,
+        JSON.stringify({ ttl_seconds: 600 }),
+        "2098-01-01T00:00:00.000Z"
+      );
+    expect((await read(narrowed.token)).status).toBe(200);
+    const first = await request(narrowed.id, narrowed.body);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ revoked: true, replayed: false });
+    expect((await read(narrowed.token)).status).toBe(401);
+    const revoked = seed();
+    const correctionId = randomUUID();
+    database
+      .prepare(
+        "INSERT INTO observations (id,entity_id,entity_type,schema_version,user_id,fields,observed_at) VALUES (?,?,'guest_access_token','1.0',?,?,?)"
+      )
+      .run(
+        correctionId,
+        revoked.id,
+        LOCAL_DEV_USER_ID,
+        JSON.stringify({ revoked_at: "2026-01-01T00:00:00.000Z" }),
+        "2098-01-01T00:00:00.000Z"
+      );
+    const replay = await request(revoked.id, revoked.body);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({
+      revoked: true,
+      replayed: true,
+      token_entity_id: revoked.id,
+      revocation_observation_id: correctionId,
+      revoked_at: "2026-01-01T00:00:00.000Z",
+    });
+    expect(
+      database.prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id=?").get(revoked.id)
+    ).toEqual({ n: 2 });
   });
   it("serializes real HTTP replay and rolls back a post-insert readback failure", async () => {
     const s = seed();
