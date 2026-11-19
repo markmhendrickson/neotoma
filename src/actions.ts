@@ -245,6 +245,10 @@ import {
   verifyGoogleIdToken,
 } from "./services/google_oidc.js";
 import {
+  resolveStaticBearerUserId,
+  STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+} from "./services/static_bearer_identity.js";
+import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
@@ -2208,7 +2212,12 @@ app.all("/mcp", async (req, res) => {
     // header had been omitted. The MCP server takes its connection id from the
     // gate's resolved value (request context and session mint below), not from
     // the header; the header is removed from both header views as well.
-    if (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req)) {
+    // The static-bearer shared-graph id is only ever assigned by this gate
+    // (below), never honoured from a client, local or not.
+    if (
+      connectionIdHeader === STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID ||
+      (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req))
+    ) {
       setGateConnectionIdHeader(req, undefined);
       connectionIdHeader = undefined;
     }
@@ -2259,8 +2268,14 @@ app.all("/mcp", async (req, res) => {
               clientName: req.headers["x-client-name"],
             });
           }
-          setGateConnectionIdHeader(req, "dev-local");
-          connectionIdHeader = "dev-local";
+          // Shared-graph mode: the static token acts as the shared graph owner
+          // (see src/services/static_bearer_identity.ts). Otherwise dev-local,
+          // unchanged.
+          const staticBearerConnectionId = getSharedGraphUserId()
+            ? STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID
+            : "dev-local";
+          setGateConnectionIdHeader(req, staticBearerConnectionId);
+          connectionIdHeader = staticBearerConnectionId;
           bearerValidated = true;
         }
       }
@@ -5078,10 +5093,12 @@ app.use(async (req, res, next) => {
             clientName: req.headers["x-client-name"],
           });
         }
-        const devUser = await ensureLocalDevUser();
-        stampUserPrincipal(req, devUser.id);
+        // Shared-graph mode resolves the static token to the shared graph
+        // owner; otherwise the local dev user, as before.
+        const staticBearerUserId = await resolveStaticBearerUserId();
+        stampUserPrincipal(req, staticBearerUserId);
         logger.info(
-          `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${devUser.id}`
+          `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${staticBearerUserId}`
         );
         return next();
       }
