@@ -6229,6 +6229,13 @@ export interface operations {
             )[];
             /** @enum {string} */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+            /**
+             * @description Present (`true`) only when this untyped query was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -6454,6 +6461,13 @@ export interface operations {
              * @enum {string}
              */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+            /**
+             * @description Present (`true`) only when this untyped query was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -6931,6 +6945,13 @@ export interface operations {
         content: {
           "application/json": {
             observations?: components["schemas"]["Observation"][];
+            /**
+             * @description Present (`true`) only when this untyped listing was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -6978,6 +6999,13 @@ export interface operations {
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Present (`true`) only when this untyped query was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
