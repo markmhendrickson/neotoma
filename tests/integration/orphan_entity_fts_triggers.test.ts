@@ -1,5 +1,5 @@
 /**
- * NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS: opt-in removal at open of the
+ * NEOTOMA_DROP_ORPHAN_ENTITY_FTS: opt-in removal at open of the
  * leftover entity_fts_* triggers, whose `DELETE FROM entity_search_fts WHERE
  * entity_id = ...` reads the whole full-text store on every snapshot write.
  * Runs on both the synchronous sqlite driver and the libsql driver.
@@ -30,7 +30,7 @@ const TRIGGER_SQL = [
   "CREATE TRIGGER entity_fts_snapshot_au AFTER UPDATE ON entity_snapshots BEGIN DELETE FROM entity_search_fts WHERE entity_id = new.entity_id; INSERT INTO entity_search_fts(entity_id, name, body) VALUES (new.entity_id, COALESCE(new.canonical_name,''), COALESCE(new.snapshot,'')); INSERT OR IGNORE INTO entity_fts_rows(entity_id) VALUES (new.entity_id); END;",
 ];
 
-const ENV = "NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS";
+const ENV = "NEOTOMA_DROP_ORPHAN_ENTITY_FTS";
 
 const dirs: string[] = [];
 const handles: DbDatabase[] = [];
@@ -81,7 +81,7 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
     delete process.env[ENV];
     const db = await freshDb(open);
     await addLeftovers(db);
-    expect(await dropOrphanEntityFtsTriggers(db)).toBe(0);
+    expect(await dropOrphanEntityFtsTriggers(db)).toEqual({ triggers: 0, tables: 0 });
     expect(await ftsTriggerNames(db)).toEqual([...ORPHAN_ENTITY_FTS_TRIGGERS].sort());
     // Re-opening schema initialisation with the variable unset keeps them too.
     await ensureSchema(db);
@@ -97,7 +97,7 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
       )
       .run("ent_synthetic_1", "note", "1.0", "first", "{}");
 
-    expect(await dropOrphanEntityFtsTriggers(db, true)).toBe(5);
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toEqual({ triggers: 5, tables: 2 });
     expect(await ftsTriggerNames(db)).toEqual([]);
     const result = await db
       .prepare("UPDATE entity_snapshots SET snapshot = ? WHERE entity_id = ?")
@@ -117,8 +117,8 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
   it("returns 0 on a second call", async () => {
     const db = await freshDb(open);
     await addLeftovers(db);
-    expect(await dropOrphanEntityFtsTriggers(db, true)).toBe(5);
-    expect(await dropOrphanEntityFtsTriggers(db, true)).toBe(0);
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toEqual({ triggers: 5, tables: 2 });
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toEqual({ triggers: 0, tables: 0 });
   });
 
   it("runs during schema initialisation when the variable is 1", async () => {
@@ -130,6 +130,23 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
     expect(await tableExists(db, "entity_search_fts")).toBe(false);
   });
 
+  it("drops the tables even when no trigger is left, and says so", async () => {
+    const db = await freshDb(open);
+    await addLeftovers(db);
+    for (const name of [
+      "entity_fts_entities_ad",
+      "entity_fts_entities_au",
+      "entity_fts_snapshot_ad",
+      "entity_fts_snapshot_ai",
+      "entity_fts_snapshot_au",
+    ]) {
+      await db.prepare(`DROP TRIGGER IF EXISTS ${name}`).run();
+    }
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toEqual({ triggers: 0, tables: 2 });
+    expect(await tableExists(db, "entity_search_fts")).toBe(false);
+    expect(await tableExists(db, "entity_fts_rows")).toBe(false);
+  });
+
   it("leaves no copy of a deleted snapshot's text anywhere once opted in", async () => {
     const db = await freshDb(open);
     await addLeftovers(db);
@@ -138,7 +155,7 @@ describe.each(backends)("dropOrphanEntityFtsTriggers (%s)", (_name, open) => {
         "INSERT INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot) VALUES (?, ?, ?, ?, ?)"
       )
       .run("ent_synthetic_2", "note", "1.0", "to be deleted", '{"text":"synthetic-sentinel-text"}');
-    expect(await dropOrphanEntityFtsTriggers(db, true)).toBe(5);
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toEqual({ triggers: 5, tables: 2 });
     await db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run("ent_synthetic_2");
     // The full-text tables are gone, so no copy of the deleted text can remain in them.
     expect(await tableExists(db, "entity_search_fts")).toBe(false);
@@ -176,7 +193,7 @@ describe("orphan entity_fts triggers: write cost", () => {
     };
     await timeUpdate(0); // warm the page cache
     const before = await timeUpdate(1);
-    expect(await dropOrphanEntityFtsTriggers(db, true)).toBe(5);
+    expect(await dropOrphanEntityFtsTriggers(db, true)).toEqual({ triggers: 5, tables: 2 });
     await timeUpdate(2);
     const after = await timeUpdate(3);
     console.info(

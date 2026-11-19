@@ -568,8 +568,14 @@ export const ORPHAN_ENTITY_FTS_TRIGGERS = [
  */
 export const ORPHAN_ENTITY_FTS_TABLES = ["entity_search_fts", "entity_fts_rows"] as const;
 
+/** What the opt-in removal dropped: leftover triggers and leftover tables. */
+export interface OrphanEntityFtsDropResult {
+  triggers: number;
+  tables: number;
+}
+
 function orphanEntityFtsTriggerDropEnabled(): boolean {
-  return runtimeEnv().NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS === "1";
+  return runtimeEnv().NEOTOMA_DROP_ORPHAN_ENTITY_FTS === "1";
 }
 
 /**
@@ -577,7 +583,7 @@ function orphanEntityFtsTriggerDropEnabled(): boolean {
  * ORPHAN_ENTITY_FTS_TABLES on an open transaction. Any failure rolls the whole
  * transaction back, so a deletion is never left with its cleanup removed.
  */
-async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<number> {
+async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<OrphanEntityFtsDropResult> {
   const presentTables: string[] = [];
   for (const name of ORPHAN_ENTITY_FTS_TABLES) {
     const present = await db
@@ -592,7 +598,7 @@ async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<number> 
       .get(name);
     if (present) presentTriggers.push(name);
   }
-  if (presentTriggers.length === 0 && presentTables.length === 0) return 0;
+  if (presentTriggers.length === 0 && presentTables.length === 0) return { triggers: 0, tables: 0 };
   // Triggers first (a trigger that names a dropped table would fail on the next
   // write), then the tables.
   for (const name of presentTriggers) {
@@ -603,22 +609,22 @@ async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<number> 
   }
   logger.warn(
     `Dropped ${presentTriggers.length} leftover entity_fts_* trigger(s) and ${presentTables.length} unused ` +
-      "full-text table(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS=1)"
+      "full-text table(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS=1)"
   );
-  return presentTriggers.length;
+  return { triggers: presentTriggers.length, tables: presentTables.length };
 }
 
 /**
  * Opt-in removal of ORPHAN_ENTITY_FTS_TRIGGERS and of the unused tables they
- * maintain (ORPHAN_ENTITY_FTS_TABLES), in one transaction. Returns the number of
- * triggers dropped; 0 and no statement at all when not enabled. Runs at open
+ * maintain (ORPHAN_ENTITY_FTS_TABLES), in one transaction. Returns how many of
+ * each were dropped; zeros and no statement at all when not enabled. Runs at open
  * inside ensureSchema.
  */
 export async function dropOrphanEntityFtsTriggers(
   db: DbDatabase,
   enabled: boolean = orphanEntityFtsTriggerDropEnabled()
-): Promise<number> {
-  if (!enabled) return 0;
+): Promise<OrphanEntityFtsDropResult> {
+  if (!enabled) return { triggers: 0, tables: 0 };
   return db.transaction((tx) => dropOrphanEntityFtsTriggersIn(tx));
 }
 
