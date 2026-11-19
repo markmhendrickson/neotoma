@@ -97,6 +97,7 @@ import {
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { AgentCapabilityError } from "./services/agent_capabilities.js";
+import { enforceRetrieveForEntityIds } from "./services/retrieve_capability.js";
 import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
@@ -3755,6 +3756,8 @@ export class NeotomaServer {
     // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
     // ownership; this MCP path historically did not.
     const userId = this.getAuthenticatedUserId();
+    // Opt-in agent-grant retrieve scope (no-op when off); same helper as REST.
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
     if (parsed.include_cleared_fields && parsed.format !== "json") {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -3931,6 +3934,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
 
     let obsQuery = db
       .from("observations")
@@ -3970,6 +3974,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
     try {
       return this.buildTextResponse(
         await getFieldProvenance(parsed.entity_id, parsed.field, userId)
@@ -4426,6 +4431,7 @@ export class NeotomaServer {
       search_mode,
       next_cursor,
       read_contract,
+      narrowed_by_capability,
     } = await queryEntitiesWithCount({
       readRequest: {
         raw: rawArgs,
@@ -4517,6 +4523,8 @@ export class NeotomaServer {
         ...(applied_search_strategies ? { applied_search_strategies } : {}),
         search_mode,
         ...(next_cursor ? { next_cursor } : {}),
+      ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
+        ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
       });
     }
 
@@ -4528,6 +4536,7 @@ export class NeotomaServer {
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
+      ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
     });
   }
 

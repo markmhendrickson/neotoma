@@ -1,4 +1,5 @@
 import { db } from "../../db.js";
+import { enforceRetrieveForEntityTypes } from "../../services/retrieve_capability.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import { queryEntities } from "../../services/entity_queries.js";
 import {
@@ -180,7 +181,25 @@ async function attachObservations(
   return results;
 }
 
+/**
+ * Identifier lookup under the opt-in agent-grant retrieve scope (shared by
+ * REST `/retrieve_entity_by_identifier` and the MCP tool). A typed lookup is
+ * refused up front when the grant does not cover the type; an untyped lookup
+ * resolves the matched entities' types and is refused unless the grant
+ * covers each. A no-op when the setting is off or no admitted grant applies.
+ */
 export async function retrieveEntityByIdentifierWithFallback(
+  params: RetrieveEntityByIdentifierParams
+): Promise<RetrieveEntityByIdentifierResult> {
+  if (params.entityType) enforceRetrieveForEntityTypes([params.entityType]);
+  const result = await retrieveEntityByIdentifierUnscoped(params);
+  if (!params.entityType && result.entities.length > 0) {
+    enforceRetrieveForEntityTypes(result.entities.map((entity) => entity.entity_type));
+  }
+  return result;
+}
+
+async function retrieveEntityByIdentifierUnscoped(
   params: RetrieveEntityByIdentifierParams
 ): Promise<RetrieveEntityByIdentifierResult> {
   const {
