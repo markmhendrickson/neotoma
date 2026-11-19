@@ -827,6 +827,19 @@
       ]
     },
     {
+      "path": "/mcp-interaction-instructions",
+      "method": "GET",
+      "operation_id": "getMcpInteractionInstructions",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200
+      ],
+      "expected_invalid_auth_status": [
+        200
+      ]
+    },
+    {
       "path": "/mcp/oauth/authorization-details",
       "method": "GET",
       "operation_id": "mcpOAuthAuthorizationDetails",

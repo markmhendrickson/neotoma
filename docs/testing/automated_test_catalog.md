@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **886**
-- Backend and repo Vitest files: **832**
+- Total automated test files: **889**
+- Backend and repo Vitest files: **835**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,10 +72,10 @@ flowchart TD
 | Vitest unit tests | 252 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 72 |
-| Vitest integration tests | 263 |
+| Vitest integration tests | 265 |
 | Vitest CLI tests | 99 |
 | Vitest contract tests | 31 |
-| Vitest security tests | 26 |
+| Vitest security tests | 27 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -524,7 +524,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (263):**
+**Files (265):**
 - `tests/integration/aauth_admission_lookup_failed.test.ts`
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
@@ -739,10 +739,12 @@ flowchart TD
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
+- `tests/integration/standing_rules_cli_instructions_print.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
 - `tests/integration/standing_rules_initialize_lookup_failure.test.ts`
 - `tests/integration/standing_rules_initialize_parity.test.ts`
 - `tests/integration/standing_rules_isolated_server_initialize.test.ts`
+- `tests/integration/standing_rules_stateless_entrances.test.ts`
 - `tests/integration/store_abort_context_2144.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
@@ -938,7 +940,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (26):**
+**Files (27):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
@@ -963,6 +965,7 @@ flowchart TD
 - `tests/security/ssrf_outbound_host_guard.test.ts`
 - `tests/security/ssrf_sink_wiring.test.ts`
 - `tests/security/store_external_actor_claim.test.ts`
+- `tests/security/sync_protected_routes_manifest.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 - `tests/security/ws_bridge_bind_host.test.ts`
 

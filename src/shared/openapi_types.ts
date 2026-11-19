@@ -98,6 +98,33 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp-interaction-instructions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get the MCP interaction instructions
+     * @description The agent instruction text a session receives at initialize. Public: with no
+     *     credentials, or with credentials that do not resolve to a user, it returns the
+     *     global instructions (with the instance data policy) led by a fixed line saying
+     *     standing rules are served only after authentication. With a bearer token that
+     *     resolves to a user it returns the text a session initialize returns for that
+     *     user (standing rules first, then the global instructions and the user's
+     *     instance skills) and sets `X-Neotoma-Instructions-Composition: user`.
+     *     Clients branch only on that header; its absence means the global text.
+     */
+    get: operations["getMcpInteractionInstructions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp": {
     parameters: {
       query?: never;
@@ -5483,6 +5510,39 @@ export interface operations {
             neotoma_env?: string;
           } & {
             [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  getMcpInteractionInstructions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Instruction text */
+      200: {
+        headers: {
+          /** @description Present with the value `user` when the text was composed for the authenticated caller; absent for the global text. */
+          "X-Neotoma-Instructions-Composition"?: "user";
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /** @description The instruction document could not be found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error?: string;
           };
         };
       };
