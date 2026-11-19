@@ -359,13 +359,30 @@ export async function tokenGrantsAccessTo(token: string, entityId: string): Prom
   return (await checkGuestTokenForEntity(token, entityId)).state === "granted";
 }
 
+/** Error codes for owner revocation; each is listed in docs/subsystems/errors.md. */
+const REVOCATION_ERROR_CODES = {
+  400: "VALIDATION_INVALID_FORMAT",
+  404: "RESOURCE_NOT_FOUND",
+  503: "DB_CONNECTION_FAILED",
+} as const;
+export type GuestTokenRevocationConflictCode =
+  | "ERR_GUEST_TOKEN_ORIGINAL_STALE"
+  | "ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT"
+  | "ERR_GUEST_TOKEN_HISTORY_UNREADABLE";
+
 export class GuestTokenRevocationError extends Error {
+  public readonly code: string;
   constructor(
     public readonly status: 400 | 404 | 409 | 503,
-    message: string
+    message: string,
+    conflictCode?: GuestTokenRevocationConflictCode
   ) {
     super(message);
     this.name = "GuestTokenRevocationError";
+    this.code =
+      status === 409
+        ? (conflictCode ?? "ERR_GUEST_TOKEN_HISTORY_UNREADABLE")
+        : REVOCATION_ERROR_CODES[status];
   }
 }
 
@@ -424,8 +441,17 @@ export interface GuestTokenRevocationReceipt {
   revoked_at: string;
 }
 
-/** Every new successful key retains one complete immutable witness. Replaying
- * that key adds nothing; a different key preserves the first revocation time. */
+/** Revokes one owned token by appending an immutable observation that repeats
+ * the bound original record with `revoked_at` set.
+ *
+ * The token history is read by the same rules as `validateGuestAccessToken`:
+ * partial rows written by corrections narrow the token and are accepted; a row
+ * that cannot be read, or that names a different token hash, refuses the
+ * request; `_deleted` lifecycle rows are accepted (the token stays refused).
+ * When any row already carries `revoked_at`, the call writes nothing and
+ * replays the earliest revoking row as the receipt. The same idempotency key
+ * and target replay the committed receipt; the key bound to a different
+ * request conflicts. */
 export async function revokeGuestAccessToken(
   owner: string,
   entityId: string,
@@ -488,38 +514,37 @@ export async function revokeGuestAccessToken(
       return await connection.transaction(async () => {
         const record = await readTokenRecord(entityId, owner);
         if (!record) throw new GuestTokenRevocationError(404, "Token record not found.");
-        const original = record.observations.find((row) => row.id === body.expected_observation_id);
-        const originalPayload = original ? parseObservationPayload(original) : null;
+        const history: Array<{ row: TokenObservation; payload: Record<string, unknown> }> = [];
+        for (const row of record.observations) {
+          const payload = parseObservationPayload(row);
+          if (!payload)
+            throw new GuestTokenRevocationError(409, "Token history has an unreadable record.");
+          history.push({ row, payload });
+        }
+        const original = history.find(({ row }) => row.id === body.expected_observation_id);
+        const originalPayload = original?.payload ?? null;
         if (
           !original ||
-          original.entity_type !== "guest_access_token" ||
+          original.row.entity_type !== "guest_access_token" ||
           !isCompleteTokenPayload(originalPayload, entityId) ||
           originalPayload.revoked_at !== null
         )
           throw new GuestTokenRevocationError(
             409,
-            "Expected a complete original token observation."
+            "Expected a complete original token observation.",
+            "ERR_GUEST_TOKEN_ORIGINAL_STALE"
           );
-        const unchanged = (payload: Record<string, unknown>) =>
-          stableSerialize({ ...payload, revoked_at: null });
-        const full = record.observations.map((row) => ({
-          row,
-          payload: parseObservationPayload(row),
-        }));
         if (
-          full.some(
-            ({ row, payload }) =>
-              row.entity_type !== "guest_access_token" ||
-              !isCompleteTokenPayload(payload, entityId) ||
-              unchanged(payload) !== unchanged(originalPayload)
+          history.some(
+            ({ payload }) =>
+              isSet(payload.token_hash) && payload.token_hash !== originalPayload.token_hash
           )
         )
-          throw new GuestTokenRevocationError(409, "Token history is incomplete or ambiguous.");
-        const times = new Set(
-          full.map(({ payload }) => payload!.revoked_at).filter((value) => value !== null)
-        );
-        if (times.size > 1)
-          throw new GuestTokenRevocationError(409, "Token revocation history is ambiguous.");
+          throw new GuestTokenRevocationError(
+            409,
+            "Token history names a different token.",
+            "ERR_GUEST_TOKEN_HISTORY_UNREADABLE"
+          );
         const retained = await db
           .from("observations")
           .select("*")
@@ -537,13 +562,13 @@ export async function revokeGuestAccessToken(
           )
             throw new GuestTokenRevocationError(
               409,
-              "Idempotency key conflicts with a different request."
+              "Idempotency key conflicts with a different request.",
+              "ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT"
             );
           if (
             prior.entity_type !== "guest_access_token" ||
             !isCompleteTokenPayload(priorPayload, entityId) ||
-            !priorPayload.revoked_at ||
-            unchanged(priorPayload) !== unchanged(originalPayload)
+            !priorPayload.revoked_at
           )
             throw new GuestTokenRevocationError(409, "Stored revocation receipt is invalid.");
           return {
@@ -554,8 +579,27 @@ export async function revokeGuestAccessToken(
             revoked_at: priorPayload.revoked_at,
           };
         }
+        const revoking = history
+          .filter(({ payload }) => isSet(payload.revoked_at))
+          .sort(
+            (x, y) =>
+              String(x.row.observed_at).localeCompare(String(y.row.observed_at)) ||
+              String(x.row.id).localeCompare(String(y.row.id))
+          )[0];
+        if (revoking) {
+          const at = revoking.payload.revoked_at;
+          if (typeof at !== "string" || !Number.isFinite(Date.parse(at)))
+            throw new GuestTokenRevocationError(409, "Token revocation time is unreadable.");
+          return {
+            revoked: true as const,
+            replayed: true,
+            token_entity_id: entityId,
+            revocation_observation_id: revoking.row.id as string,
+            revoked_at: at,
+          };
+        }
         const now = requestedAt;
-        const revokedAt = (times.values().next().value as string | undefined) ?? now;
+        const revokedAt = now;
         const fields = { ...originalPayload, revoked_at: revokedAt };
         const observationId = generateObservationId(null, null, entityId, fields, key);
         const inserted = await db.from("observations").insert({

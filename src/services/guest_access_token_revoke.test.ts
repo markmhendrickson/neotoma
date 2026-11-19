@@ -90,26 +90,23 @@ describe("immutable owner guest-token revocation", () => {
       "token_entity_id",
     ]);
   });
-  it("durably binds each new key without changing the original revocation time", async () => {
+  it("replays an already revoked token under a new key without another witness", async () => {
     const s = await seed();
     const first = await tokens.revokeGuestAccessToken(owner, s.id, s.request);
     const nextRequest = { ...s.request, idempotency_key: "another-key" };
-    const next = await tokens.revokeGuestAccessToken(owner, s.id, nextRequest);
-    expect(next.revoked_at).toBe(first.revoked_at);
-    expect(next.revocation_observation_id).not.toBe(first.revocation_observation_id);
-    expect(await rows(s.id)).toHaveLength(3);
     expect(await tokens.revokeGuestAccessToken(owner, s.id, nextRequest)).toEqual({
-      ...next,
+      ...first,
       replayed: true,
     });
-    expect(await rows(s.id)).toHaveLength(3);
+    expect(await rows(s.id)).toHaveLength(2);
     const second = await seed();
     await expect(
       tokens.revokeGuestAccessToken(owner, second.id, {
         ...second.request,
-        idempotency_key: nextRequest.idempotency_key,
+        idempotency_key: s.request.idempotency_key,
       })
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({ status: 409, code: "ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT" });
+    expect(await rows(second.id)).toHaveLength(1);
   });
   it("serializes concurrent identical calls into one append and one replay", async () => {
     const s = await seed();
@@ -125,10 +122,11 @@ describe("immutable owner guest-token revocation", () => {
     const s = await seed();
     await expect(tokens.revokeGuestAccessToken(other, s.id, s.request)).rejects.toMatchObject({
       status: 404,
+      code: "RESOURCE_NOT_FOUND",
     });
     await expect(
       tokens.revokeGuestAccessToken(owner, s.id, { ...s.request, expected_observation_id: "stale" })
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({ status: 409, code: "ERR_GUEST_TOKEN_ORIGINAL_STALE" });
     expect(await rows(s.id)).toHaveLength(1);
     expect(events).toHaveLength(0);
   });
@@ -153,18 +151,69 @@ describe("immutable owner guest-token revocation", () => {
     expect(await tokens.validateGuestAccessToken(s.token)).not.toBeNull();
     expect(events).toHaveLength(0);
   });
-  it.each([{}, { revoked_at: "2026-01-01T00:00:00.000Z" }, { token_hash: "ambiguous" }])(
-    "refuses incomplete or ambiguous raw history",
-    async (fields) => {
-      const s = await seed();
-      await db.from("observations").insert({ ...s.original, id: randomUUID(), fields });
-      await expect(tokens.revokeGuestAccessToken(owner, s.id, s.request)).rejects.toMatchObject({
-        status: 409,
-      });
-      expect(await rows(s.id)).toHaveLength(2);
-      expect(events).toHaveLength(0);
-    }
-  );
+  it.each([
+    [{ token_hash: "f".repeat(64) }, "a different token hash"],
+    ["{not json", "an unreadable record"],
+  ])("refuses a history row with %s", async (fields) => {
+    const s = await seed();
+    await db.from("observations").insert({ ...s.original, id: randomUUID(), fields });
+    await expect(tokens.revokeGuestAccessToken(owner, s.id, s.request)).rejects.toMatchObject({
+      status: 409,
+      code: "ERR_GUEST_TOKEN_HISTORY_UNREADABLE",
+    });
+    expect(await rows(s.id)).toHaveLength(2);
+    expect(events).toHaveLength(0);
+  });
+  it("revokes a token narrowed by a partial correction row", async () => {
+    const s = await seed();
+    await db.from("observations").insert({
+      ...s.original,
+      id: randomUUID(),
+      fields: { ttl_seconds: 600 },
+      observed_at: "2098-01-01T00:00:00.000Z",
+    });
+    expect(await tokens.validateGuestAccessToken(s.token)).toMatchObject({ ttl_seconds: 600 });
+    const receipt = await tokens.revokeGuestAccessToken(owner, s.id, s.request);
+    expect(receipt).toMatchObject({ revoked: true, replayed: false, token_entity_id: s.id });
+    expect(await rows(s.id)).toHaveLength(3);
+    expect(await tokens.validateGuestAccessToken(s.token)).toBeNull();
+    expect(events).toHaveLength(1);
+  });
+  it("replays a token already revoked by a correction as an idempotent receipt", async () => {
+    const s = await seed();
+    const correctionId = randomUUID();
+    await db.from("observations").insert({
+      ...s.original,
+      id: correctionId,
+      fields: { revoked_at: "2026-01-01T00:00:00.000Z" },
+      observed_at: "2098-01-01T00:00:00.000Z",
+    });
+    const receipt = await tokens.revokeGuestAccessToken(owner, s.id, s.request);
+    expect(receipt).toEqual({
+      revoked: true,
+      replayed: true,
+      token_entity_id: s.id,
+      revocation_observation_id: correctionId,
+      revoked_at: "2026-01-01T00:00:00.000Z",
+    });
+    expect(await rows(s.id)).toHaveLength(2);
+    expect(events).toHaveLength(0);
+  });
+  it("honours a lifecycle-deleted record: revocation is accepted and the token stays refused", async () => {
+    const s = await seed();
+    for (const [fields, observed_at] of [
+      [{ _deleted: true, deleted_at: "2098-01-01T00:00:00.000Z" }, "2098-01-01T00:00:00.000Z"],
+      [{ _deleted: false, restored_at: "2098-01-02T00:00:00.000Z" }, "2098-01-02T00:00:00.000Z"],
+    ] as const)
+      await db
+        .from("observations")
+        .insert({ ...s.original, id: randomUUID(), fields, observed_at });
+    expect(await tokens.validateGuestAccessToken(s.token)).toBeNull();
+    const receipt = await tokens.revokeGuestAccessToken(owner, s.id, s.request);
+    expect(receipt).toMatchObject({ revoked: true, replayed: false });
+    expect(await rows(s.id)).toHaveLength(4);
+    expect(await tokens.validateGuestAccessToken(s.token)).toBeNull();
+  });
   it("honors the real stored instance policy before a revocation witness or event", async () => {
     const s = await seed();
     const policyId = "ent_test_guest_revoke_policy";

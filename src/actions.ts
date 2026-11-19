@@ -7275,20 +7275,7 @@ app.post("/guest-access-tokens/:id/revoke", async (req, res) => {
       return res.json(await revokeGuestAccessToken(userId, req.params.id, req.body));
     } catch (error) {
       if (error instanceof GuestTokenRevocationError)
-        return res
-          .status(error.status)
-          .json(
-            buildErrorEnvelope(
-              error.status === 400
-                ? "VALIDATION_ERROR"
-                : error.status === 404
-                  ? "NOT_FOUND"
-                  : error.status === 409
-                    ? "CONFLICT"
-                    : "SERVICE_UNAVAILABLE",
-              error.message
-            )
-          );
+        return res.status(error.status).json(buildErrorEnvelope(error.code, error.message));
       throw error;
     }
   } catch (error) {

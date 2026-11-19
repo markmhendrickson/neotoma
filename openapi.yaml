@@ -2116,7 +2116,22 @@ components:
         the complete immutable row. Other fields, internal operation receipts and
         unrecognised provenance keys are withheld. Metadata is recorded evidence,
         not a credibility score. Nullable metadata remains unknown for legacy rows.
-      required: [id, entity_id, entity_type, schema_version, source_id, interpretation_id, observed_at, created_at, specificity_score, source_priority, observation_source, idempotency_key, fields]
+      required:
+        [
+          id,
+          entity_id,
+          entity_type,
+          schema_version,
+          source_id,
+          interpretation_id,
+          observed_at,
+          created_at,
+          specificity_score,
+          source_priority,
+          observation_source,
+          idempotency_key,
+          fields,
+        ]
       properties:
         id:
           type: string
@@ -2147,7 +2162,18 @@ components:
         observation_source:
           type: string
           nullable: true
-          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified, correction, null]
+          enum:
+            [
+              sensor,
+              llm_summary,
+              workflow_state,
+              human,
+              import,
+              sync,
+              unspecified,
+              correction,
+              null,
+            ]
         idempotency_key:
           type: string
           nullable: true
@@ -2196,7 +2222,18 @@ components:
         select the most recent contributor, not a single winner of a merged field.
         source is that contributor's source or null, a legal source-less state.
         Any unresolved contributor or non-null source refuses the entire chain.
-      required: [field, entity_id, value, observation_ids, observations, sources, source_observation, source, observed_at]
+      required:
+        [
+          field,
+          entity_id,
+          value,
+          observation_ids,
+          observations,
+          sources,
+          source_observation,
+          source,
+          observed_at,
+        ]
       properties:
         field:
           type: string
@@ -10087,13 +10124,14 @@ paths:
       description: |
         Owner-authenticated administration of one existing token. The request
         binds an original immutable observation, not a bearer value or digest.
-        Appends complete immutable revocation evidence in one transaction and
-        returns metadata only. The same idempotency key and target replay the
-        committed receipt without another observation; a different target or original
-        under that key conflicts. Each new successful key retains one complete
-        observation witness, preserving the first revocation timestamp even when
-        the token is already revoked. Zero growth applies to same-key replays,
-        not arbitrary new keys. Does not create a replacement token, schema, or grant.
+        Appends one immutable revocation observation in one transaction and
+        returns metadata only. The token history is read by the same rules as
+        guest-token validation: partial correction records narrow the token,
+        lifecycle (`_deleted`) records are honoured, and a token that already
+        carries `revoked_at` replays its earliest revoking record without a new
+        observation. The same idempotency key and target replay the committed
+        receipt; that key used for a different target or original conflicts.
+        Does not create a replacement token, schema, or grant.
       operationId: revokeGuestAccessToken
       parameters:
         - in: path
@@ -10143,11 +10181,17 @@ paths:
                     type: string
                     format: date-time
         "400":
-          description: Malformed or unknown request fields
+          description: |
+            `VALIDATION_INVALID_FORMAT` for malformed or unknown request fields
+            or query parameters. `ERR_STORE_POLICY_DENIED` when this instance's
+            configured data policy refuses writes to `guest_access_token`; no
+            observation is written.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
         "401":
           description: An authenticated owner is required
           content:
@@ -10161,19 +10205,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "404":
-          description: Owned token entity not found
+          description: "`RESOURCE_NOT_FOUND`: owned token entity not found"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "409":
-          description: Original observation or idempotency key conflicts
+          description: |
+            No observation was written. `ERR_GUEST_TOKEN_ORIGINAL_STALE`: the
+            expected original record is missing, incomplete or revoked.
+            `ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT`: the key already committed a
+            different request. `ERR_GUEST_TOKEN_HISTORY_UNREADABLE`: a token
+            record cannot be read or names a different token.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "503":
-          description: Complete token history or atomic commit is unavailable
+          description: |
+            `DB_CONNECTION_FAILED`: token storage or the atomic commit is
+            unavailable; nothing was committed. Retry the identical request.
           content:
             application/json:
               schema:
