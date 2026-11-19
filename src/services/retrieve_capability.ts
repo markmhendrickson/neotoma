@@ -13,7 +13,9 @@
  */
 
 import { db } from "../db.js";
+import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import {
+  AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentRetrieveScope,
   isAgentRetrieveEnforcementEnabled,
@@ -44,6 +46,15 @@ export function enforceRetrieveForEntityTypes(entityTypes: string[]): void {
  * Resolve the types of the named entities (owned by `userId`) and refuse
  * unless the grant covers each. Ids that resolve to nothing are left to the
  * caller's own not-found handling.
+ *
+ * A merged-away id is read through to its surviving entity (the entity
+ * readers follow `merged_to_entity_id`), and a merge does not require both
+ * sides to share a type. So each id is resolved through the merge chain with
+ * {@link resolveAttachmentTarget}, the resolution the readers use, and the
+ * grant must cover the type of the requested row AND of every entity on the
+ * chain. That resolver carries the cycle guard and the depth cap; a chain it
+ * could not resolve to a fixed point is refused unless the grant covers every
+ * type.
  */
 export async function enforceRetrieveForEntityIds(
   entityIds: Array<string | null | undefined>,
@@ -55,16 +66,34 @@ export async function enforceRetrieveForEntityIds(
     new Set(entityIds.filter((id): id is string => typeof id === "string" && id.length > 0))
   );
   if (ids.length === 0) return;
+  const chainIds = new Set<string>(ids);
+  let unresolvedChainFrom: string | null = null;
+  for (const id of ids) {
+    const target = await resolveAttachmentTarget(id, userId);
+    for (const hop of target.path) chainIds.add(hop);
+    if (target.truncated && unresolvedChainFrom === null) unresolvedChainFrom = id;
+  }
   const { data, error } = await db
     .from("entities")
     .select("id, entity_type")
-    .in("id", ids)
+    .in("id", Array.from(chainIds))
     .eq("user_id", userId);
   if (error) throw error;
   const types = ((data ?? []) as Array<{ entity_type?: string | null }>)
     .map((row) => row.entity_type)
     .filter((t): t is string => typeof t === "string" && t.length > 0);
-  enforceAgentRetrieveScope(ctx, types);
+  const scope = enforceAgentRetrieveScope(ctx, types);
+  if (unresolvedChainFrom !== null && scope !== null && scope.kind !== "all") {
+    throw new AgentCapabilityError({
+      op: "retrieve",
+      entityType: types[0] ?? "*",
+      agentLabel: ctx.agentLabel,
+      hint:
+        `The merge chain of entity ${unresolvedChainFrom} could not be resolved to its ` +
+        `surviving entity, so its type cannot be checked against the "retrieve" ` +
+        `capability of agent "${ctx.agentLabel}".`,
+    });
+  }
 }
 
 /**

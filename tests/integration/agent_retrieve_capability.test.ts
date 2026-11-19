@@ -28,6 +28,9 @@ const GRANTS = vi.hoisted(
     "no-retrieve": [{ op: "store", entity_types: ["*"] }],
     "retrieve-star": [{ op: "retrieve", entity_types: ["*"] }],
     "retrieve-empty": [{ op: "retrieve", entity_types: [] }],
+    "retrieve-task-contact-page": [
+      { op: "retrieve", entity_types: ["task", "contact", "rendered_page"] },
+    ],
   })
 );
 
@@ -84,6 +87,7 @@ import {
   type AgentCapabilityEntry,
 } from "../../src/services/agent_capabilities.js";
 import type { AgentIdentity } from "../../src/crypto/agent_identity.js";
+import { mergeEntities } from "../../src/services/entity_merge.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
 
@@ -385,6 +389,103 @@ describe("agent grant retrieve capability on entity reads", () => {
         await tool("retrieveEntitySnapshot", { entity_id: contactId }, G);
         const m = await tool("retrieveEntities", {}, G);
         expect(JSON.parse(m.content[0].text).narrowed_by_capability).toBeUndefined();
+      });
+    });
+
+    describe("an id merged into an entity of another type", () => {
+      // A task merged into a contact, and a task merged into a rendered_page:
+      // the source rows keep entity_type "task", but the readers follow
+      // merged_to_entity_id and answer with the surviving entity.
+      let mergedIntoContact: string;
+      let mergedIntoPage: string;
+      const AT = "2999-01-01T00:00:00.000Z";
+
+      beforeAll(async () => {
+        const tag = randomBytes(5).toString("hex");
+        mergedIntoContact = await seed({ entity_type: "task", title: `retrcap-m1-${tag}` });
+        const contactTarget = await seed({ entity_type: "contact", name: `retrcap-mt-${tag}` });
+        mergedIntoPage = await seed({ entity_type: "task", title: `retrcap-m2-${tag}` });
+        const pageTarget = await seed({
+          entity_type: "rendered_page",
+          title: `retrcap-page-${tag}`,
+          html_body: "<p>synthetic page</p>",
+        });
+        await mergeEntities({
+          fromEntityId: mergedIntoContact,
+          toEntityId: contactTarget,
+          userId: USER_ID,
+          mergedBy: "retrieve-capability-test",
+        });
+        await mergeEntities({
+          fromEntityId: mergedIntoPage,
+          toEntityId: pageTarget,
+          userId: USER_ID,
+          mergedBy: "retrieve-capability-test",
+        });
+      });
+
+      it("REST refuses under a grant that covers only the requested row's type", async () => {
+        const G = "retrieve-task";
+        const id = mergedIntoContact;
+        expectRest403(await get(`/entities/${id}`, G), "contact");
+        expectRest403(await get(`/entities/${id}/markdown`, G), "contact");
+        expectRest403(await get(`/entities/${mergedIntoPage}/html`, G), "rendered_page");
+        expectRest403(await post("/get_entity_snapshot", { entity_id: id, at: AT }, G), "contact");
+        expectRest403(
+          await post("/get_entity_snapshot", { entity_id: id, at_ingested: AT }, G),
+          "contact"
+        );
+        expectRest403(
+          await post(
+            "/get_entity_snapshot",
+            { entity_id: id, include_cleared_fields: true, format: "json" },
+            G
+          ),
+          "contact"
+        );
+      });
+
+      it("MCP retrieve_entity_snapshot refuses with and without at / at_ingested", async () => {
+        const G = "retrieve-task";
+        const id = mergedIntoContact;
+        for (const extra of [{}, { at: AT }, { at_ingested: AT }]) {
+          expectDenied(
+            await capture(() => tool("retrieveEntitySnapshot", { entity_id: id, ...extra }, G)),
+            "contact"
+          );
+        }
+      });
+
+      it("a grant covering both types reads through the merge", async () => {
+        const G = "retrieve-task-contact-page";
+        const id = mergedIntoContact;
+        expect((await get(`/entities/${id}`, G)).status).toBe(200);
+        expect((await get(`/entities/${id}/markdown`, G)).status).toBe(200);
+        expect((await get(`/entities/${mergedIntoPage}/html`, G)).status).toBe(200);
+        expect((await post("/get_entity_snapshot", { entity_id: id, at: AT }, G)).status).toBe(200);
+        expect(
+          (await post("/get_entity_snapshot", { entity_id: id, at_ingested: AT }, G)).status
+        ).toBe(200);
+        for (const extra of [{}, { at: AT }, { at_ingested: AT }]) {
+          await tool("retrieveEntitySnapshot", { entity_id: id, ...extra }, G);
+        }
+      });
+
+      it("a caller without a grant reads through the merge", async () => {
+        expect((await get(`/entities/${mergedIntoContact}`)).status).toBe(200);
+        expect((await get(`/entities/${mergedIntoPage}/html`)).status).toBe(200);
+        await tool("retrieveEntitySnapshot", { entity_id: mergedIntoContact, at: AT });
+      });
+
+      it("with the setting off the one-type grant reads through the merge as before", async () => {
+        delete process.env[SETTING];
+        const G = "retrieve-task";
+        expect((await get(`/entities/${mergedIntoContact}`, G)).status).toBe(200);
+        expect((await get(`/entities/${mergedIntoPage}/html`, G)).status).toBe(200);
+        expect(
+          (await post("/get_entity_snapshot", { entity_id: mergedIntoContact, at: AT }, G)).status
+        ).toBe(200);
+        await tool("retrieveEntitySnapshot", { entity_id: mergedIntoContact, at: AT }, G);
       });
     });
 
