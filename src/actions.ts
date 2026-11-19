@@ -1179,10 +1179,15 @@ app.get("/mcp-interaction-instructions", async (req, res) => {
 
   // An authenticated caller gets the text a session initialize returns for
   // it, built by the same server composition, so the two cannot drift.
+  // The body depends on the Authorization header, so every response varies
+  // on it; the per-user text is private to that caller (matching the
+  // discover result's cacheScope "private") and must not sit in a shared cache.
+  res.setHeader("Vary", "Authorization");
   const userId = await resolveOptionalBearerUserId(req);
   if (userId) {
     const composed = await new NeotomaServer().buildInstructionsForUser(userId);
     res.setHeader(INSTRUCTIONS_COMPOSITION_HEADER, "user");
+    res.setHeader("Cache-Control", "private");
     res.type("text/plain").send(composed);
     return;
   }
@@ -5013,6 +5018,11 @@ installInspectorSpaShellEarly(app, runtimeEnv(), logger);
  * inline) so GET /mcp-interaction-instructions, which is public and registered
  * before it, can resolve an optional Bearer caller through this same function
  * rather than a second resolver (see {@link resolveOptionalBearerUserId}).
+ *
+ * That public route calls this function with a throwaway response object
+ * whose methods do nothing. Code here must therefore not rely on side effects
+ * of a real response (cookies, `res.locals`, headers set for later handlers):
+ * only the `next()` call and the principal it establishes reach the route.
  */
 async function restAuthMiddleware(
   req: express.Request,

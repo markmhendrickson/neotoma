@@ -226,6 +226,8 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     return {
       status: response.status,
       composition: response.headers.get("x-neotoma-instructions-composition"),
+      cacheControl: response.headers.get("cache-control"),
+      vary: response.headers.get("vary"),
       text: await response.text(),
     };
   }
@@ -239,6 +241,14 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     expect(served.text).toContain("> Body of synthetic rule one.");
     expect(served.text).toContain("> Body of synthetic rule two.");
     expect(served.text).toBe(await initializeInstructions());
+  });
+
+  it("the per-user response is marked private and varies on Authorization", async () => {
+    state.rules = TWO_RULES;
+    const served = await rest(true);
+    expect(served.composition).toBe("user");
+    expect(served.cacheControl).toBe("private");
+    expect(served.vary).toContain("Authorization");
   });
 
   it("authenticated text with no rules is identical to initialize and has no rules block", async () => {
@@ -265,6 +275,8 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     const served = await rest(false);
     expect(served.status).toBe(200);
     expect(served.composition).toBeNull();
+    expect(served.cacheControl).toBeNull();
+    expect(served.vary).toContain("Authorization");
     expect(
       served.text.startsWith("[STANDING RULES] Standing rules are served only after authentication")
     ).toBe(true);
