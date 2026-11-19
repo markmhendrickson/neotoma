@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **877**
-- Backend and repo Vitest files: **823**
+- Total automated test files: **882**
+- Backend and repo Vitest files: **828**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 249 |
+| Vitest unit tests | 251 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 71 |
-| Vitest integration tests | 259 |
+| Vitest integration tests | 262 |
 | Vitest CLI tests | 98 |
 | Vitest contract tests | 31 |
 | Vitest security tests | 26 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (249):**
+**Files (251):**
 - `tests/unit/aauth_admission_middleware_lookup_failed.test.ts`
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
@@ -339,7 +339,9 @@ flowchart TD
 - `tests/unit/sqlite_connection_pragmas.test.ts`
 - `tests/unit/sqlite_driver_pragma.test.ts`
 - `tests/unit/sqlite_schema_init_concurrency.test.ts`
+- `tests/unit/standing_rules_prose.test.ts`
 - `tests/unit/standing_rules.test.ts`
+- `tests/unit/static_bearer_gate_only_id.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
 - `tests/unit/store_data_origin.test.ts`
 - `tests/unit/store_path_write_indexes.test.ts`
@@ -520,7 +522,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (259):**
+**Files (262):**
 - `tests/integration/aauth_admission_lookup_failed.test.ts`
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
@@ -735,6 +737,9 @@ flowchart TD
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
+- `tests/integration/standing_rules_initialize_lookup_failure.test.ts`
+- `tests/integration/standing_rules_initialize_parity.test.ts`
+- `tests/integration/standing_rules_isolated_server_initialize.test.ts`
 - `tests/integration/store_abort_context_2144.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
