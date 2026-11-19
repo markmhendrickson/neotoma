@@ -157,8 +157,9 @@ describe("standing rules on server/discover", { timeout: 60_000 }, () => {
     const { NeotomaServer } = await import("../../src/server.js");
     const server = new NeotomaServer();
     // Authenticated request, identity not resolvable: no user id, no connection.
-    (server as unknown as { statelessRequestAuthenticated: boolean }).statelessRequestAuthenticated =
-      true;
+    (
+      server as unknown as { statelessRequestAuthenticated: boolean }
+    ).statelessRequestAuthenticated = true;
     const result = await server.buildDiscoverResult();
     const instructions = String(result.instructions);
     expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
