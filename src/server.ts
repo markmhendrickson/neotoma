@@ -829,9 +829,7 @@ export class NeotomaServer {
     // cannot be resolved reports the rules as unknown, never as none.
     const standingRulesSection = this.statelessRequestAuthenticated
       ? renderStandingRulesSectionForLookup(
-          await this.lookupStandingRulesForInstructions(
-            await this.resolveInstructionLookupUserId()
-          )
+          await this.lookupStandingRulesForInstructions(await this.resolveInstructionLookupUserId())
         )
       : STANDING_RULES_AFTER_AUTHENTICATION_NOTICE;
     return {
@@ -1271,7 +1269,6 @@ export class NeotomaServer {
     availableSkills: string[];
     instanceSkillsLookupFailed: boolean;
   }> {
-
     // Append this instance's declared data policy (#1974) so a cooperating
     // agent knows what this instance is for before its first write, rather than
     // discovering the rules by being rejected. A read failure or an unset
