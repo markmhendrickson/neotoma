@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **885**
-- Backend and repo Vitest files: **831**
+- Total automated test files: **886**
+- Backend and repo Vitest files: **832**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -75,7 +75,7 @@ flowchart TD
 | Vitest integration tests | 265 |
 | Vitest CLI tests | 98 |
 | Vitest contract tests | 31 |
-| Vitest security tests | 26 |
+| Vitest security tests | 27 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -937,7 +937,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (26):**
+**Files (27):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
@@ -962,6 +962,7 @@ flowchart TD
 - `tests/security/ssrf_outbound_host_guard.test.ts`
 - `tests/security/ssrf_sink_wiring.test.ts`
 - `tests/security/store_external_actor_claim.test.ts`
+- `tests/security/sync_protected_routes_manifest.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 - `tests/security/ws_bridge_bind_host.test.ts`
 
