@@ -561,7 +561,7 @@ export const ORPHAN_ENTITY_FTS_TRIGGERS = [
 ] as const;
 
 function orphanEntityFtsTriggerDropEnabled(): boolean {
-  return process.env.NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS === "1";
+  return runtimeEnv().NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS === "1";
 }
 
 /** Drop the present ORPHAN_ENTITY_FTS_TRIGGERS on an open transaction. */
