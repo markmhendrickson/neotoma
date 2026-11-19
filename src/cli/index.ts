@@ -8195,6 +8195,18 @@ instructionsCommand
       }
     }
 
+    if (composition === "global") {
+      // Lead the global text with the fixed notice, as the REST endpoint and
+      // server/discover do, so missing rules read as unknown, not absent.
+      const { prependClientInstructionsSection } = await import("../mcp_instruction_doc.js");
+      const { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } =
+        await import("../services/standing_rules.js");
+      composed = prependClientInstructionsSection(
+        composed,
+        STANDING_RULES_AFTER_AUTHENTICATION_NOTICE
+      );
+    }
+
     const compositionNote =
       composition === "user"
         ? "Printed: instructions composed for the configured identity (standing rules included)."

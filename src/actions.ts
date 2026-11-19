@@ -1193,7 +1193,20 @@ app.get("/mcp-interaction-instructions", async (req, res) => {
     // failing the request.
   }
 
-  res.type("text/plain").send(composeClientInstructions(text, policySection));
+  // A caller whose credentials did not resolve gets the global text led by the
+  // fixed notice that standing rules are served after authentication, so the
+  // absence of rules is never read as "none" (same line server/discover carries).
+  const { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } =
+    await import("./services/standing_rules.js");
+  const { prependClientInstructionsSection } = await import("./mcp_instruction_doc.js");
+  res
+    .type("text/plain")
+    .send(
+      prependClientInstructionsSection(
+        composeClientInstructions(text, policySection),
+        STANDING_RULES_AFTER_AUTHENTICATION_NOTICE
+      )
+    );
 });
 
 // ============================================================================

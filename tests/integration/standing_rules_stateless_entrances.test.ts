@@ -260,12 +260,15 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     expect(served.text).toBe(await initializeInstructions());
   });
 
-  it("unauthenticated text is unchanged: no rules, no composition header", async () => {
+  it("unauthenticated text carries no rules and no composition header, and says rules come after authentication", async () => {
     state.rules = TWO_RULES;
     const served = await rest(false);
     expect(served.status).toBe(200);
     expect(served.composition).toBeNull();
-    expect(served.text.startsWith("[STANDING RULES]")).toBe(false);
+    expect(
+      served.text.startsWith("[STANDING RULES] Standing rules are served only after authentication")
+    ).toBe(true);
+    expect(served.text).toContain("as unknown, not absent");
     expect(served.text).not.toContain("Body of synthetic rule");
   });
 
@@ -278,6 +281,7 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     expect(response.headers.get("x-neotoma-instructions-composition")).toBeNull();
     const text = await response.text();
     expect(text).not.toContain("Body of synthetic rule");
+    expect(text).toContain("Standing rules are served only after authentication");
     expect(text).toBe((await rest(false)).text);
   });
 });
