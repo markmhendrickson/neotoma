@@ -18,15 +18,17 @@ Neotoma v0.29.2 is a patch release. This draft supplement collects upgrade notes
 - **Who is affected:** a self-hosted server with `NEOTOMA_HTTP_HOST` set to a non-loopback address, such as `0.0.0.0`, that sends webhooks or peer sync to private or internal addresses. A typical case is two instances on a home network. One listens on `0.0.0.0`, and its peer or webhook target is `http://192.168.1.20:3180`.
 - **What you will see:** these requests are refused before they are sent. The signal depends on where the request comes from:
   - **Existing webhook subscriptions to private hosts stop delivering, and are then switched off for good.** After the upgrade every delivery goes through the guard. Each refused delivery counts as a failure. After `max_failures` failures (10 by default) the subscription is deactivated and stays inactive, even if you later rebind to loopback. The only traces are the server log lines `[subscriptions] webhook POST failed` and `subscription auto-deactivated`. A server that already has such subscriptions sees this first.
-  - Creating a webhook subscription fails with `webhook_url must be a public host: private, loopback, link-local, and platform-internal targets are rejected`.   - An inbound peer sync webhook whose configured peer host is private is refused: the receiving server logs `SENDER_PEER_URL_PRIVATE_HOST`, and the sending peer sees `http_500`. `REMOTE_FETCH_FAILED:refused` appears only when a snapshot fetch is redirected to a private host or fails on the network.
+  - Creating a webhook subscription fails with `webhook_url must be a public host: private, loopback, link-local, and platform-internal targets are rejected`.
+  - An inbound peer sync webhook whose configured peer host is private is refused: the receiving server logs `SENDER_PEER_URL_PRIVATE_HOST`, and the sending peer sees `http_500`. `REMOTE_FETCH_FAILED:refused` appears only when a snapshot fetch is redirected to a private host or fails on the network.
   - An outbound peer sync push, a bilateral pull and a peer health check return `peer_url_not_public`. None of them names the refused host.
+  - Peer sync subscriptions are switched off the same way: after `max_failures` refused pushes (10 by default) the subscription becomes inactive, with no log line, and stays inactive after you rebind or repoint.
   - Conflict resolution with `prefer_remote` is refused with ``prefer_remote: `sender_peer_url` must be a public host.``
   - Repo-discovery manifest resolution returns `peer_url_private_host`.
   - A webhook mirror URL is dropped without an error to the caller. Look for `webhook mirror URL rejected as non-public` in the server log.
   - To confirm the guard is on, look for the startup log line that starts with `[outbound_host_guard] on because NEOTOMA_HTTP_HOST is not loopback`.
   - Only `127.0.0.1`, `localhost` and `::1` count as loopback. A bind such as `127.0.0.2` or `[::1]` is treated as non-loopback and turns the guard on.
 - **What to do:**
-  - After you change the bind or the targets, list your webhook subscriptions and re-activate any that were switched off.
+  - After you change the bind or the targets, list your webhook subscriptions and your peer sync subscriptions and re-activate any that were switched off.
   - For a local-only setup, bind to loopback: unset `NEOTOMA_HTTP_HOST` or set it to `127.0.0.1`. The guard is then off unless `NEOTOMA_HOSTED_MODE` turns it on.
   - To keep a non-loopback bind, point webhooks and peers at publicly routable addresses.
   - No setting turns the guard off on a non-loopback bind. Setting `NEOTOMA_HOSTED_MODE=0` or `false` does not restore the old behavior.
