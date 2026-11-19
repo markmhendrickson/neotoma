@@ -546,6 +546,58 @@ async function ensureEntitySearchTextColumn(db: DbConnection): Promise<void> {
 }
 
 /**
+ * Full-text triggers an old unmerged branch left on some databases. Each body
+ * starts with `DELETE FROM entity_search_fts WHERE entity_id = ...`; that
+ * column is UNINDEXED in the fts5 table, so every snapshot insert or update
+ * reads the whole full-text store. Nothing on main creates or reads that table,
+ * so removing the triggers does not change search results.
+ */
+export const ORPHAN_ENTITY_FTS_TRIGGERS = [
+  "entity_fts_snapshot_ai",
+  "entity_fts_snapshot_au",
+  "entity_fts_snapshot_ad",
+  "entity_fts_entities_au",
+  "entity_fts_entities_ad",
+] as const;
+
+function orphanEntityFtsTriggerDropEnabled(): boolean {
+  return process.env.NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS === "1";
+}
+
+/** Drop the present ORPHAN_ENTITY_FTS_TRIGGERS on an open transaction. */
+async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<number> {
+  let dropped = 0;
+  for (const name of ORPHAN_ENTITY_FTS_TRIGGERS) {
+    const present = await db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+      .get(name);
+    if (!present) continue;
+    await db.prepare(`DROP TRIGGER IF EXISTS ${name}`).run();
+    dropped += 1;
+  }
+  if (dropped > 0) {
+    logger.warn(
+      `Dropped ${dropped} leftover entity_fts_* trigger(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS_TRIGGERS=1); ` +
+        "the entity_search_fts and entity_fts_rows tables are left in place"
+    );
+  }
+  return dropped;
+}
+
+/**
+ * Opt-in removal of ORPHAN_ENTITY_FTS_TRIGGERS, in one transaction. Returns the
+ * number dropped; 0 and no statement at all when not enabled. Never touches the
+ * entity_search_fts or entity_fts_rows tables. Runs at open inside ensureSchema.
+ */
+export async function dropOrphanEntityFtsTriggers(
+  db: DbDatabase,
+  enabled: boolean = orphanEntityFtsTriggerDropEnabled()
+): Promise<number> {
+  if (!enabled) return 0;
+  return db.transaction((tx) => dropOrphanEntityFtsTriggersIn(tx));
+}
+
+/**
  * Create an index, logging only when it is actually built. On a large existing
  * table the first build blocks the single connection (and so all writes) until it
  * finishes, so the operator needs a visible start and end line. Silent when the
@@ -719,6 +771,7 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
     await ensureEntitySearchTextColumn(db);
+    if (orphanEntityFtsTriggerDropEnabled()) await dropOrphanEntityFtsTriggersIn(db);
     await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
