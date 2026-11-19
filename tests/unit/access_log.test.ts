@@ -61,6 +61,7 @@ async function startApp(trustForwarded: boolean) {
 function expectFieldTypes(line: Record<string, unknown>) {
   expect(Object.keys(line).sort()).toEqual(
     [
+      "aborted",
       "agent",
       "auth_method",
       "bytes",
@@ -89,6 +90,7 @@ function expectFieldTypes(line: Record<string, unknown>) {
   expect(typeof line.auth_method).toBe("string");
   expect(line.service).toBe(ACCESS_LOG_SERVICE);
   expect(typeof line.health).toBe("boolean");
+  expect(line.aborted).toBe(false);
 }
 
 describe("jsonAccessLog", () => {

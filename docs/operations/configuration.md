@@ -131,8 +131,9 @@ Each `json` line carries these fields:
 | `user_agent`  | string or null | `User-Agent`, truncated to 120 characters                                                                                                      |
 | `service`     | string         | `neotoma-api`                                                                                                                                  |
 | `health`      | boolean        | True for `/health` and `/ready`. These requests are logged, not skipped                                                                        |
+| `aborted`     | boolean        | True when the client closed the connection before the response finished; `status` is then not a sent status |
 
-Example (synthetic values):
+Example (synthetic values, shown indented; the written line is a single line):
 
 ```json
 {
@@ -150,7 +151,8 @@ Example (synthetic values):
   "client_ip": "203.0.113.7",
   "user_agent": "example-client/1.0",
   "service": "neotoma-api",
-  "health": false
+  "health": false,
+  "aborted": false
 }
 ```
 

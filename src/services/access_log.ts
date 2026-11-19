@@ -47,6 +47,8 @@ export interface AccessLogRecord {
   user_agent: string | null;
   service: string;
   health: boolean;
+  /** True when the client closed the connection before the response finished. */
+  aborted: boolean;
 }
 
 type AccessLogRequest = Request & {
@@ -131,6 +133,7 @@ export function buildAccessLogRecord(
     user_agent: userAgent,
     service: ACCESS_LOG_SERVICE,
     health: HEALTH_PATHS.has(path),
+    aborted: !res.writableFinished,
   };
 }
 
