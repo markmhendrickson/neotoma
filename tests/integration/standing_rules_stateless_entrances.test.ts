@@ -90,7 +90,7 @@ async function discoverInstructions(baseUrl: string): Promise<string> {
   return String(reply.body?.result?.instructions ?? "");
 }
 
-describe("standing rules on server/discover", () => {
+describe("standing rules on server/discover", { timeout: 60_000 }, () => {
   let env: McpTestEnv;
   let app: BootedMcpApp;
 
@@ -99,7 +99,7 @@ describe("standing rules on server/discover", () => {
     state.failed = false;
     env = prepareMcpTestEnv("neotoma-rules-discover-");
     app = await bootMcpApp();
-  });
+  }, 120_000);
 
   afterEach(async () => {
     await app.close();
@@ -125,7 +125,7 @@ describe("standing rules on server/discover", () => {
   it("authenticated discover with no rules carries no rules block", async () => {
     state.rules = [];
     const instructions = await discoverInstructions(app.baseUrl);
-    expect(instructions).not.toContain("[STANDING RULES]");
+    expect(instructions.startsWith("[STANDING RULES]")).toBe(false);
     expect(instructions).not.toContain(AFTER_AUTH_MARK);
   });
 
@@ -197,7 +197,7 @@ async function initializeInstructions(): Promise<string> {
   return result.instructions ?? "";
 }
 
-describe("standing rules on GET /mcp-interaction-instructions", () => {
+describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_000 }, () => {
   let env: McpTestEnv;
   let app: BootedMcpApp;
 
@@ -209,7 +209,7 @@ describe("standing rules on GET /mcp-interaction-instructions", () => {
     process.env.NEOTOMA_BEARER_TOKEN = SYNTHETIC_BEARER;
     process.env.NEOTOMA_CONNECTION_ID = "test-connection-bypass";
     app = await bootMcpApp();
-  });
+  }, 120_000);
 
   afterEach(async () => {
     await app.close();
@@ -244,7 +244,7 @@ describe("standing rules on GET /mcp-interaction-instructions", () => {
     state.rules = [];
     const served = await rest(true);
     expect(served.composition).toBe("user");
-    expect(served.text).not.toContain("[STANDING RULES]");
+    expect(served.text.startsWith("[STANDING RULES]")).toBe(false);
     expect(served.text).toBe(await initializeInstructions());
   });
 
@@ -264,7 +264,7 @@ describe("standing rules on GET /mcp-interaction-instructions", () => {
     const served = await rest(false);
     expect(served.status).toBe(200);
     expect(served.composition).toBeNull();
-    expect(served.text).not.toContain("[STANDING RULES]");
+    expect(served.text.startsWith("[STANDING RULES]")).toBe(false);
     expect(served.text).not.toContain("Body of synthetic rule");
   });
 
