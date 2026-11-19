@@ -227,7 +227,8 @@ export function deriveDescriptionFromBody(body: unknown): string {
 
   const window = text.slice(0, DERIVED_DESCRIPTION_MAX_CHARS + 1);
   const lastSpace = window.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? window.slice(0, lastSpace) : window.slice(0, DERIVED_DESCRIPTION_MAX_CHARS);
+  const cut =
+    lastSpace > 0 ? window.slice(0, lastSpace) : window.slice(0, DERIVED_DESCRIPTION_MAX_CHARS);
   return `${cut.trimEnd()}…`;
 }
 
@@ -519,9 +520,7 @@ export function renderInstanceSkillsSection(
     // so an agent scanning the list can tell "nobody wrote a description" from
     // "descriptions are switched off". In compact mode every line is bare by
     // construction, so the marker would be noise on every row.
-    const line = compact
-      ? `- ${skill.name}`
-      : `- ${skill.name} — ${describeSkill(skill)}`;
+    const line = compact ? `- ${skill.name}` : `- ${skill.name} — ${describeSkill(skill)}`;
 
     const cost = Buffer.byteLength(line, "utf8") + 1;
     if (rendered > 0 && budget + cost > INSTANCE_SKILLS_MAX_BYTES) break;

@@ -323,7 +323,12 @@ describe("getInstanceSkills — descriptions only", () => {
   it("never returns the skill body, even when the snapshot carries one", async () => {
     const body = "# Secret Body\nStep 1: do the thing.";
     setRows([
-      row("ent_1", { name: "has-body", description: "A description.", content: body, enabled: true }),
+      row("ent_1", {
+        name: "has-body",
+        description: "A description.",
+        content: body,
+        enabled: true,
+      }),
     ]);
 
     const skills = await getInstanceSkills("user-a");
@@ -373,7 +378,9 @@ describe("renderInstanceSkillsSection — fetch hint", () => {
 
     expect(section).toContain(INSTANCE_SKILL_FETCH_HINT);
     expect(section).toContain("Match ordinary user intent against this catalog");
-    expect(section).toContain("does not need to say Neotoma, Ateles, a skill name, or an entity id");
+    expect(section).toContain(
+      "does not need to say Neotoma, Ateles, a skill name, or an entity id"
+    );
     expect(section).toContain("readback requirements");
     // The hint must direct agents at a tool that actually exists.
     expect(section).toContain("retrieve_entity_by_identifier");
@@ -583,9 +590,7 @@ describe("getInstanceSkills — graph text is rendered as data, not instructions
   });
 
   it("strips leading markdown structure so a description cannot continue the bullet", async () => {
-    setRows([
-      row("ent_1", { name: "a-skill", description: "### Not a heading", enabled: true }),
-    ]);
+    setRows([row("ent_1", { name: "a-skill", description: "### Not a heading", enabled: true })]);
 
     const [skill] = await getInstanceSkills("user-a");
 
@@ -719,9 +724,7 @@ describe("describeSkill", () => {
 
   it("uses the derived description when the stored one is empty or whitespace", () => {
     expect(describeSkill({ description: "", derived_description: "Derived." })).toBe("Derived.");
-    expect(describeSkill({ description: "   ", derived_description: "Derived." })).toBe(
-      "Derived."
-    );
+    expect(describeSkill({ description: "   ", derived_description: "Derived." })).toBe("Derived.");
   });
 
   it("keeps the literal (no description) when there is nothing to derive from", () => {
