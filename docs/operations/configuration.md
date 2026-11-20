@@ -169,29 +169,33 @@ See [Running the Server](running_the_server.md) for transports and processes.
 
 ### Read log
 
-Every read call also writes one `read` line to standard output, listing which entities the call returned. A log shipper can keep these lines outside the instance; see [neotoma#1872](https://github.com/markmhendrickson/neotoma/issues/1872) for the in-database read record. The line is written whenever `NEOTOMA_ACCESS_LOG` is not `off`, in both `json` and `dev` modes. There is no separate setting.
+The HTTP server writes one `read` line to standard output for every entity read it serves, listing which entities the call returned. A log shipper can keep these lines outside the instance; see [neotoma#1872](https://github.com/markmhendrickson/neotoma/issues/1872) for the in-database read record. The line is written whenever `NEOTOMA_ACCESS_LOG` is not `off`, in both `json` and `dev` modes. There is no separate setting.
 
-Read calls are the entity query, list, detail, snapshot, search, observation, timeline, field provenance, relationship and graph neighborhood operations, over REST (`surface: "rest"`), MCP (`"mcp"`) and the CLI tool path (`"cli"`). There is one line per call, not per entity. A failed or refused read also writes a line, with `count: 0`.
+Only the HTTP server process writes the line, over REST (`surface: "rest"`) and over MCP served at `/mcp` (`"mcp"`). The stdio MCP transport writes nothing, because its standard output carries the protocol messages. In-process callers of the tool dispatcher (the CLI's local transport and plugins) also write nothing. A CLI command that talks to a server over HTTP is logged there as a `rest` read.
+
+The logged reads are the operations marked `readLog` in `src/shared/contract_mappings.ts`, on both their REST route and their MCP tool: entity query and list, entity detail, snapshot, identifier and signal lookup, contacts at a company, observations, field provenance, relationships and relationship snapshots, related entities, graph neighborhood, timeline, potential duplicates, and recent changes (`GET /record_activity`, `list_recent_changes`). Route matching ignores letter case and a trailing slash, as the server's routing does. There is one line per call, not per entity. A failed or refused read also writes a line, with `count: 0`.
+
+These reads are not logged, because they return sources, interpretations, conversations or rendered pages rather than entity records: `GET /sources`, `GET /sources/{id}`, `GET /sources/{id}/content`, `GET /interpretations` and `list_interpretations`, `GET /recent_conversations`, `GET /turns`, `GET /entities/{id}/markdown` and `GET /entities/{id}/html`. Schema, policy, health and statistics endpoints are not logged either. The read log does not cover every route that returns stored data.
 
 The line never carries entity contents, snapshot fields, search text or query values. A search term is logged only as its length.
 
-| Field          | Type           | Value                                                                                                                                   |
-| -------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `ts`           | string         | Time the line was written, ISO 8601 UTC                                                                                                 |
-| `event`        | string         | Always `read`                                                                                                                           |
-| `request_id`   | string or null | The access log's `request_id` for the HTTP request carrying the call; null for stdio and CLI calls or when the access log is not `json` |
-| `user_id`      | string or null | Authenticated user id                                                                                                                   |
-| `surface`      | string         | `rest`, `mcp` or `cli`                                                                                                                  |
-| `operation`    | string         | REST operation name (for example `entities_query`) or MCP tool name (for example `retrieve_entities`)                                   |
-| `agent`        | string or null | Admitted AAuth grant label, the same value the access log carries; null otherwise                                                       |
-| `auth_method`  | string         | The access log's auth label; `none` when none was recorded                                                                              |
-| `status`       | string         | `ok`, `refused` (401, 403 or a capability refusal) or `error`                                                                           |
-| `http_status`  | number or null | Response status for REST calls; null for MCP and CLI                                                                                    |
-| `entity_types` | object         | Entity type to number of returned entities of that type, for example `{"task": 3, "issue": 1}`; `{}` when nothing was returned          |
-| `count`        | number         | Number of distinct entities returned                                                                                                    |
-| `entity_ids`   | string[]       | Returned entity ids, at most 50                                                                                                         |
-| `truncated`    | boolean        | True when more than 50 entities were returned                                                                                           |
-| `query_length` | number or null | Length of the `search` or `query` argument; null when the call had none                                                                 |
+| Field          | Type           | Value                                                                                                                          |
+| -------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ts`           | string         | Time the line was written, ISO 8601 UTC                                                                                        |
+| `event`        | string         | Always `read`                                                                                                                  |
+| `request_id`   | string or null | The access log's `request_id` for the HTTP request carrying the call; null when the access log is not `json`                   |
+| `user_id`      | string or null | Authenticated user id                                                                                                          |
+| `surface`      | string         | `rest` or `mcp`                                                                                                                |
+| `operation`    | string         | REST `operationId` (for example `queryEntities`) or MCP tool name (for example `retrieve_entities`)                            |
+| `agent`        | string or null | Admitted AAuth grant label, the same value the access log carries; null otherwise                                              |
+| `auth_method`  | string         | The access log's auth label; `none` when none was recorded                                                                     |
+| `status`       | string         | `ok`, `refused` (401, 403 or a capability refusal) or `error`                                                                  |
+| `http_status`  | number or null | Response status for REST calls; null for MCP                                                                                   |
+| `entity_types` | object         | Entity type to number of returned entities of that type, for example `{"task": 3, "issue": 1}`; `{}` when nothing was returned |
+| `count`        | number         | Number of distinct entities returned                                                                                           |
+| `entity_ids`   | string[]       | Returned entity ids, at most 50                                                                                                |
+| `truncated`    | boolean        | True when more than 50 entities were returned                                                                                  |
+| `query_length` | number or null | Length of the `search` or `query` argument; null when the call had none                                                        |
 
 An entity counts as returned when the result holds an object with an `entity_type` and an `entity_id`. Ids referenced from inside a returned entity (for example in its snapshot) are not counted.
 

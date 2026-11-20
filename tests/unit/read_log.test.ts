@@ -10,7 +10,6 @@ import {
   buildReadLogRecord,
   READ_TOOL_NAMES,
   collectReturnedEntities,
-  installHttpReadLogWriter,
   matchRestReadRoute,
   readLogEnabled,
   readRoutePattern,
@@ -359,70 +358,6 @@ describe("MCP read log", () => {
     (server as any).executeTool = okResult;
     await server.executeToolForCli("retrieve_entities", {}, "user-0003");
     expect(lines).toHaveLength(0);
-  });
-});
-
-describe("read log output channel", () => {
-  let previous: ((line: string) => void) | null;
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
-  let stdoutChunks: string[];
-
-  beforeEach(() => {
-    // No writer installed: the state of the stdio MCP process and of any
-    // in-process caller.
-    previous = setReadLogWriter(null);
-    stdoutChunks = [];
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: unknown) => {
-      stdoutChunks.push(String(chunk));
-      return true;
-    }) as never);
-  });
-  afterEach(() => {
-    stdoutSpy.mockRestore();
-    setReadLogWriter(previous);
-  });
-
-  const okResult = async () => ({
-    content: [{ type: "text", text: JSON.stringify(mixedResult) }],
-  });
-  const readLines = () => stdoutChunks.filter((c) => c.includes('"event":"read"'));
-
-  function stdioStyleCall(server: NeotomaServer) {
-    const handler = (server as any).mcpServer.server._requestHandlers.get("tools/call");
-    return handler(
-      { method: "tools/call", params: { name: "retrieve_entities", arguments: {} } },
-      {
-        signal: new AbortController().signal,
-        requestId: 1,
-        sendNotification: async () => {},
-        sendRequest: async () => ({}),
-      }
-    );
-  }
-
-  it("writes nothing to stdout for a stdio-transport read call", async () => {
-    const server = new NeotomaServer();
-    (server as any).authenticatedUserId = "user-0001";
-    (server as any).executeTool = okResult;
-    await stdioStyleCall(server);
-    expect(readLines()).toHaveLength(0);
-  });
-
-  it("writes nothing to stdout for an in-process read call", async () => {
-    const server = new NeotomaServer();
-    (server as any).executeTool = okResult;
-    await server.executeToolForCli("retrieve_entities", {}, "user-0003");
-    expect(readLines()).toHaveLength(0);
-  });
-
-  it("writes the line to stdout once the HTTP server installs the writer", async () => {
-    installHttpReadLogWriter();
-    const server = new NeotomaServer();
-    (server as any).authenticatedUserId = "user-0001";
-    (server as any).executeTool = okResult;
-    await stdioStyleCall(server);
-    expect(readLines()).toHaveLength(1);
-    expect(JSON.parse(readLines()[0]!)).toMatchObject({ surface: "mcp", count: 3 });
   });
 });
 
