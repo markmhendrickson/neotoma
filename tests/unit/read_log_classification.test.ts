@@ -1,12 +1,15 @@
 /**
  * Classification guard for the structured read log (src/services/read_log.ts).
  *
- * Every read the server serves must be either logged or listed, with a reason,
- * in the read log exclusions table in docs/operations/configuration.md. Reads
- * are: GET routes (declared in openapi.yaml or registered in src/actions.ts),
- * read-type MCP tools, and MCP `resources/read` kinds. A new read that is in
- * neither place fails here, so a missing read path is found by this test
- * rather than by review.
+ * Every operation the server serves is classified as exactly one of: a logged
+ * read, an excluded read (a row with a reason in the read log exclusions table
+ * in docs/operations/configuration.md), or a write or operation that returns
+ * no entity data (by the write rule in `isWriteRoute` / `isWriteTool`, or a row
+ * in the non-reads table). Operations are: every method of every path in
+ * openapi.yaml, every `app.get/post/put/patch/delete` registration in
+ * src/actions.ts, every MCP tool and every MCP `resources/read` kind. A new
+ * operation in none of these fails here, so a missing read path is found by
+ * this test rather than by review.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -60,27 +63,99 @@ function routeKey(method: string, routePath: string): string {
   return `${method.toUpperCase()} ${normalized}`;
 }
 
-function openApiGetRoutes(): string[] {
-  const spec = yaml.load(fs.readFileSync(path.join(ROOT, "openapi.yaml"), "utf8")) as {
-    paths: Record<string, Record<string, unknown>>;
-  };
-  return Object.entries(spec.paths)
-    .filter(([, methods]) => methods.get !== undefined)
-    .map(([p]) => `GET ${p}`);
+/** HTTP methods the guard inventories. */
+const METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+/** One HTTP operation: method, path and, when declared in openapi.yaml, its operationId. */
+interface RouteOp {
+  method: string;
+  path: string;
+  operationId?: string;
 }
 
-/** Literal `app.get("...")` and `app.get(["...", ...])` registrations in src/actions.ts. */
-function expressGetRoutes(): string[] {
-  const source = fs.readFileSync(path.join(ROOT, "src/actions.ts"), "utf8");
-  const routes: string[] = [];
-  const call = /^\s*app\.get\(\s*(\[[^\]]*\]|(["'`])[^"'`]+\2)/gm;
-  let match: RegExpExecArray | null;
-  while ((match = call.exec(source)) !== null) {
-    for (const literal of match[1]!.matchAll(/["'`]([^"'`]+)["'`]/g)) {
-      routes.push(`GET ${literal[1]!.replace(/:([A-Za-z_]+)/g, "{$1}")}`);
+/** Every operation in openapi.yaml, all methods. */
+function openApiRoutes(): RouteOp[] {
+  const spec = yaml.load(fs.readFileSync(path.join(ROOT, "openapi.yaml"), "utf8")) as {
+    paths: Record<string, Record<string, { operationId?: string } | undefined>>;
+  };
+  const routes: RouteOp[] = [];
+  for (const [p, methods] of Object.entries(spec.paths)) {
+    for (const method of METHODS) {
+      const op = methods[method];
+      if (op !== undefined)
+        routes.push({ method: method.toUpperCase(), path: p, operationId: op.operationId });
     }
   }
   return routes;
+}
+
+/**
+ * Literal `app.<method>("...")` and `app.<method>(["...", ...])` registrations
+ * in src/actions.ts, for get, post, put, patch and delete.
+ */
+function expressRoutes(): RouteOp[] {
+  const source = fs.readFileSync(path.join(ROOT, "src/actions.ts"), "utf8");
+  const routes: RouteOp[] = [];
+  const call = /^\s*app\.(get|post|put|patch|delete)\(\s*(\[[^\]]*\]|(["'`])[^"'`]+\3)/gm;
+  let match: RegExpExecArray | null;
+  while ((match = call.exec(source)) !== null) {
+    for (const literal of match[2]!.matchAll(/["'`]([^"'`]+)["'`]/g)) {
+      routes.push({
+        method: match[1]!.toUpperCase(),
+        path: literal[1]!.replace(/:([A-Za-z_]+)/g, "{$1}"),
+      });
+    }
+  }
+  return routes;
+}
+
+/** OpenAPI and Express operations merged on method and path; the OpenAPI operationId wins. */
+function allRoutes(): RouteOp[] {
+  const byKey = new Map<string, RouteOp>();
+  for (const route of [...openApiRoutes(), ...expressRoutes()]) {
+    const key = routeKey(route.method, route.path);
+    const existing = byKey.get(key);
+    if (existing === undefined) byKey.set(key, route);
+    else if (existing.operationId === undefined && route.operationId !== undefined)
+      byKey.set(key, route);
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Leading verbs that mark a POST operation as a write that returns no entity
+ * records for an agent to read. The verb is the first word of the
+ * operationId (`createAgentGrant` gives `create`) or, for a route that
+ * openapi.yaml does not declare, the first word of its last literal path
+ * segment (`/issues/bulk_close` gives `bulk`, `/entities/merge` gives `merge`).
+ */
+const WRITE_ROUTE_VERBS = new Set([
+  ...WRITE_VERBS,
+  "revoke",
+  "suspend",
+  "batch",
+  "bulk",
+  "recompute",
+  "apply",
+]);
+
+/**
+ * True for an operation the guard treats as a write: PUT, PATCH and DELETE
+ * always, and POST when its leading verb is in WRITE_ROUTE_VERBS. GET is
+ * never a write. Any other POST must be logged or listed in a table.
+ */
+function isWriteRoute(route: RouteOp): boolean {
+  const method = route.method.toUpperCase();
+  if (method === "PUT" || method === "PATCH" || method === "DELETE") return true;
+  if (method !== "POST") return false;
+  let verb: string | undefined;
+  if (route.operationId) {
+    verb = /^[a-z]+/.exec(route.operationId)?.[0];
+  } else {
+    const segments = route.path.split("/").filter((s) => s.length > 0 && !s.startsWith("{"));
+    verb = segments.at(-1)?.split(/[_-]/)[0]?.toLowerCase();
+  }
+  return verb !== undefined && WRITE_ROUTE_VERBS.has(verb);
 }
 
 /** Every `type` parseResourceUri in src/server.ts can return. */
@@ -92,11 +167,18 @@ function resourceKinds(): string[] {
   return [...new Set([...body.matchAll(/return \{ type: "([a-z_]+)"/g)].map((m) => m[1]!))];
 }
 
-/** Operations listed in the docs exclusions table (first column). */
-function parseExclusions(markdown: string): Map<string, string> {
-  const start = markdown.indexOf("<!-- read-log-exclusions:start -->");
-  const end = markdown.indexOf("<!-- read-log-exclusions:end -->");
-  if (start < 0 || end < start) throw new Error("read log exclusions table markers not found");
+/**
+ * Operations listed in a marked docs table (first column), with their reasons:
+ * `read-log-exclusions` (reads that are not logged) or `read-log-non-reads`
+ * (writes and operations that return no entity data).
+ */
+function parseExclusions(
+  markdown: string,
+  table: "read-log-exclusions" | "read-log-non-reads" = "read-log-exclusions"
+): Map<string, string> {
+  const start = markdown.indexOf(`<!-- ${table}:start -->`);
+  const end = markdown.indexOf(`<!-- ${table}:end -->`);
+  if (start < 0 || end < start) throw new Error(`${table} table markers not found`);
   const rows = new Map<string, string>();
   for (const line of markdown.slice(start, end).split("\n")) {
     const cells = line.split("|").map((c) => c.trim());
@@ -110,7 +192,7 @@ function parseExclusions(markdown: string): Map<string, string> {
 }
 
 interface Inventory {
-  routes: string[];
+  routes: RouteOp[];
   tools: string[];
   resourceKinds: string[];
 }
@@ -120,6 +202,8 @@ interface Classification {
   loggedTools: ReadonlySet<string>;
   loggedResourceKinds: ReadonlySet<string>;
   exclusions: Map<string, string>;
+  /** Operations in the non-reads table: writes and operations returning no entity data. */
+  nonReads: Map<string, string>;
 }
 
 /**
@@ -134,16 +218,27 @@ function unclassifiedReads(inv: Inventory, cls: Classification): string[] {
     if (m) excludedRoutes.add(routeKey(m[1]!, m[2]!));
     else excludedOther.add(op);
   }
+  const nonReadRoutes = new Set<string>();
+  for (const op of cls.nonReads.keys()) {
+    const m = /^([A-Z]+) (\/.*)$/.exec(op);
+    if (!m) throw new Error(`non-read row is not an HTTP operation: ${op}`);
+    nonReadRoutes.add(routeKey(m[1]!, m[2]!));
+  }
   const problems: string[] = [];
   const seenRoutes = new Set<string>();
   for (const route of inv.routes) {
-    const [method, p] = route.split(" ") as [string, string];
-    const key = routeKey(method, p);
+    const key = routeKey(route.method, route.path);
+    const label = `${route.method.toUpperCase()} ${route.path}`;
     seenRoutes.add(key);
     const logged = cls.loggedRoutes.has(key);
     const excluded = excludedRoutes.has(key);
-    if (!logged && !excluded) problems.push(`unclassified read: ${route}`);
-    if (logged && excluded) problems.push(`logged and excluded: ${route}`);
+    const nonRead = nonReadRoutes.has(key);
+    if (!logged && !excluded && !nonRead && !isWriteRoute(route)) {
+      problems.push(`unclassified read: ${label}`);
+    }
+    if (logged && excluded) problems.push(`logged and excluded: ${label}`);
+    if (nonRead && (logged || excluded))
+      problems.push(`non-read row also classified as read: ${label}`);
   }
   const readTools = inv.tools.filter((t) => !isWriteTool(t));
   for (const tool of readTools) {
@@ -162,6 +257,9 @@ function unclassifiedReads(inv: Inventory, cls: Classification): string[] {
   for (const key of excludedRoutes) {
     if (!seenRoutes.has(key)) problems.push(`exclusion names no route: ${key}`);
   }
+  for (const key of nonReadRoutes) {
+    if (!seenRoutes.has(key)) problems.push(`non-read row names no route: ${key}`);
+  }
   const known = new Set([...readTools, ...inv.resourceKinds.map(resourceReadOperation)]);
   for (const op of excludedOther) {
     if (!known.has(op)) problems.push(`exclusion names no read: ${op}`);
@@ -171,7 +269,7 @@ function unclassifiedReads(inv: Inventory, cls: Classification): string[] {
 
 function liveInventory(): Inventory {
   return {
-    routes: [...new Set([...openApiGetRoutes(), ...expressGetRoutes()])],
+    routes: allRoutes(),
     tools: [...NEOTOMA_TOOL_NAMES],
     resourceKinds: resourceKinds(),
   };
@@ -180,29 +278,37 @@ function liveInventory(): Inventory {
 function liveClassification(): Classification {
   return {
     loggedRoutes: new Set(
-      OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true && m.method === "get").map((m) =>
+      OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true).map((m) =>
         routeKey(m.method, m.path)
       )
     ),
     loggedTools: READ_TOOL_NAMES,
     loggedResourceKinds: READ_RESOURCE_KINDS,
     exclusions: parseExclusions(fs.readFileSync(DOC, "utf8")),
+    nonReads: parseExclusions(fs.readFileSync(DOC, "utf8"), "read-log-non-reads"),
   };
 }
 
 describe("read log classification guard", () => {
   it("finds the reads it must classify", () => {
     const inv = liveInventory();
-    // Instrument check: known reads on each surface are in the inventory.
-    expect(inv.routes).toContain("GET /entities/{id}");
-    expect(inv.routes).toContain("GET /turns");
-    expect(inv.routes).toContain("GET /agents/{key}/records");
+    const labels = inv.routes.map((r) => `${r.method} ${r.path}`);
+    // Instrument check: known operations on each surface and method are in the inventory.
+    expect(labels).toContain("GET /entities/{id}");
+    expect(labels).toContain("GET /turns");
+    expect(labels).toContain("GET /agents/{key}/records");
+    expect(labels).toContain("POST /entities/query");
+    expect(labels).toContain("POST /sync/entities");
+    expect(labels).toContain("PATCH /agents/grants/{id}");
+    expect(labels).toContain("DELETE /peers/{peer_id}");
+    // A route registered only in src/actions.ts, not declared in openapi.yaml.
+    expect(labels).toContain("POST /submit/{entity_type}/{entity_id}/message");
     expect(inv.tools).toContain("retrieve_entities");
     expect(inv.resourceKinds).toEqual(expect.arrayContaining(["entity", "source", "entity_types"]));
     expect(liveClassification().exclusions.size).toBeGreaterThan(50);
   });
 
-  it("classifies every GET route, read-type MCP tool and resource kind", () => {
+  it("classifies every HTTP operation, read-type MCP tool and resource kind", () => {
     expect(unclassifiedReads(liveInventory(), liveClassification())).toEqual([]);
   });
 
@@ -216,7 +322,16 @@ describe("read log classification guard", () => {
     const cls = liveClassification();
     const problems = unclassifiedReads(
       {
-        routes: [...inv.routes, "GET /synthetic_records/{id}"],
+        routes: [
+          ...inv.routes,
+          { method: "GET", path: "/synthetic_records/{id}" },
+          {
+            method: "POST",
+            path: "/synthetic_records/query",
+            operationId: "querySyntheticRecords",
+          },
+          { method: "POST", path: "/synthetic_lookup" },
+        ],
         tools: [...inv.tools, "fetch_synthetic_records"],
         resourceKinds: [...inv.resourceKinds, "synthetic_collection"],
       },
@@ -224,15 +339,30 @@ describe("read log classification guard", () => {
     );
     expect(problems).toEqual([
       "unclassified read: GET /synthetic_records/{id}",
+      "unclassified read: POST /synthetic_records/query",
+      "unclassified read: POST /synthetic_lookup",
       "unclassified read: fetch_synthetic_records",
       "unclassified read: resources/read:synthetic_collection",
     ]);
   });
 
-  it("does not treat a write tool as a read", () => {
+  it("does not treat a write tool or a write route as a read", () => {
     const inv = liveInventory();
     expect(
-      unclassifiedReads({ ...inv, tools: [...inv.tools, "store_synthetic"] }, liveClassification())
+      unclassifiedReads(
+        {
+          ...inv,
+          routes: [
+            ...inv.routes,
+            { method: "POST", path: "/synthetic_things", operationId: "createSyntheticThing" },
+            { method: "POST", path: "/synthetic_things/{id}/revoke" },
+            { method: "DELETE", path: "/synthetic_things/{id}" },
+            { method: "PATCH", path: "/synthetic_things/{id}" },
+          ],
+          tools: [...inv.tools, "store_synthetic"],
+        },
+        liveClassification()
+      )
     ).toEqual([]);
   });
 
@@ -241,9 +371,14 @@ describe("read log classification guard", () => {
     const exclusions = new Map(cls.exclusions);
     exclusions.set("GET /retired_synthetic_route", "synthetic");
     exclusions.set("retrieve_entities", "synthetic");
-    expect(unclassifiedReads(liveInventory(), { ...cls, exclusions })).toEqual([
+    const nonReads = new Map(cls.nonReads);
+    nonReads.set("POST /retired_synthetic_write", "synthetic");
+    nonReads.set("POST /entities/query", "synthetic");
+    expect(unclassifiedReads(liveInventory(), { ...cls, exclusions, nonReads })).toEqual([
+      "non-read row also classified as read: POST /entities/query",
       "logged and excluded: retrieve_entities",
       "exclusion names no route: GET /retired_synthetic_route",
+      "non-read row names no route: POST /retired_synthetic_write",
     ]);
   });
 

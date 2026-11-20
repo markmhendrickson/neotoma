@@ -175,102 +175,139 @@ Only the HTTP server process writes the line, over REST (`surface: "rest"`) and 
 
 The logged reads are the operations marked `readLog` in `src/shared/contract_mappings.ts`, on both their REST route and their MCP tool: entity query and list, entity detail, snapshot, identifier and signal lookup, contacts at a company, observations, field provenance, relationships and relationship snapshots, related entities, graph neighborhood, timeline, potential duplicates, recent changes (`GET /record_activity`, `list_recent_changes`) and one agent's records (`GET /agents/{key}/records`). MCP `resources/read` is logged for the resource kinds that return entity records, observations, relationships or timeline events (`READ_RESOURCE_KINDS` in `src/services/read_log.ts`), with `operation` set to `resources/read:<kind>`, for example `resources/read:entity`. Route matching ignores letter case and a trailing slash, as the server's routing does. There is one line per call, not per entity. A failed or refused read also writes a line, with `count: 0`.
 
-The read log covers the general entity read operations only; it does not cover every route that returns stored data. The reads below are not logged. `tests/unit/read_log_classification.test.ts` reads this table: it fails when a GET route (from `openapi.yaml` or registered in `src/actions.ts`), a read-type MCP tool or an MCP resource kind is neither logged nor listed here, and when a row here names an operation that no longer exists or is also logged. An MCP tool counts as read-type unless its name starts with a write verb (`store`, `correct`, `create`, `delete`, `restore`, `merge`, `split`, `register`, `update`, `submit`, `add`, `remove`, `sync`, `subscribe`, `unsubscribe`, `resolve`, `publish`, `patch`).
+The read log covers the general entity read operations only; it does not cover every route that returns stored data. The reads below are not logged. `tests/unit/read_log_classification.test.ts` reads this table: it fails when an HTTP operation of any method (declared in `openapi.yaml` or registered in `src/actions.ts`), a read-type MCP tool or an MCP resource kind is not logged, not listed here and not a write or non-read (see below), and when a row here names an operation that no longer exists or is also logged. An MCP tool counts as read-type unless its name starts with a write verb (`store`, `correct`, `create`, `delete`, `restore`, `merge`, `split`, `register`, `update`, `submit`, `add`, `remove`, `sync`, `subscribe`, `unsubscribe`, `resolve`, `publish`, `patch`).
 
 <!-- read-log-exclusions:start -->
 
-| Read                                              | Surface | Reason                                           |
-| ------------------------------------------------- | ------- | ------------------------------------------------ |
-| `GET /get_file_url`                               | rest    | Returns a signed file URL, not entity records    |
-| `GET /health`                                     | rest    | Liveness probe                                   |
-| `GET /ready`                                      | rest    | Readiness probe                                  |
-| `GET /openapi.yaml`                               | rest    | API description                                  |
-| `GET /openapi_actions.yaml`                       | rest    | API description                                  |
-| `GET /server-info`                                | rest    | Server metadata                                  |
-| `GET /mcp-interaction-instructions`               | rest    | Agent instruction text                           |
-| `GET /me`                                         | rest    | The caller's own session details                 |
-| `GET /session`                                    | rest    | The caller's own session details                 |
-| `GET /mcp/oauth/authorize`                        | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/status`                           | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/connections`                      | rest    | OAuth connection list, not entity records        |
-| `GET /mcp/oauth/callback`                         | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/key-auth`                         | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/local-login`                      | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/authorization-details`            | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/google/start`                     | rest    | OAuth flow step                                  |
-| `GET /mcp/oauth/google/callback`                  | rest    | OAuth flow step                                  |
-| `GET /.well-known/oauth-authorization-server`     | rest    | Discovery metadata                               |
-| `GET /.well-known/oauth-protected-resource`       | rest    | Discovery metadata                               |
-| `GET /.well-known/oauth-protected-resource/mcp`   | rest    | Discovery metadata                               |
-| `GET /.well-known/openid-configuration`           | rest    | Discovery metadata                               |
-| `GET /.well-known/mcp/server-card.json`           | rest    | Discovery metadata                               |
-| `GET /.well-known/aauth-resource.json`            | rest    | Discovery metadata                               |
-| `GET /`                                           | rest    | Landing page                                     |
-| `GET /favicon.ico`                                | rest    | Static asset                                     |
-| `GET /robots.txt`                                 | rest    | Static asset                                     |
-| `GET /sandbox/session`                            | rest    | Sandbox session helper                           |
-| `GET /sandbox/terms`                              | rest    | Sandbox terms page                               |
-| `GET /sandbox/report/status`                      | rest    | Sandbox report status                            |
-| `GET /entities/{id}/html`                         | rest    | Rendered page, not an entity record              |
-| `GET /entities/{id}/markdown`                     | rest    | Rendered page, not an entity record              |
-| `GET /sources`                                    | rest    | Returns sources, not entity records              |
-| `GET /sources/{id}`                               | rest    | Returns a source, not an entity record           |
-| `GET /sources/{id}/content`                       | rest    | Returns source content, not entity records       |
-| `GET /sources/{id}/relationships`                 | rest    | Source relationship listing; follow-up candidate |
-| `GET /interpretations`                            | rest    | Returns interpretations, not entity records      |
-| `GET /recent_conversations`                       | rest    | Returns conversations, not entity records        |
-| `GET /recent_conversations/{conversation_id}`     | rest    | Returns a conversation, not entity records       |
-| `GET /conversations/{conversation_id}/turn-index` | rest    | Conversation turn index                          |
-| `GET /turns`                                      | rest    | Returns conversation turns, not entity records   |
-| `GET /turns/{turn_key}`                           | rest    | Returns a conversation turn, not entity records  |
-| `GET /submit/{entity_type}/{entity_id}`           | rest    | Submission status helper                         |
-| `GET /admin/compliance/scorecard`                 | rest    | Compliance statistics                            |
-| `GET /agents`                                     | rest    | Agent directory, not entity records              |
-| `GET /agents/{key}`                               | rest    | One agent directory entry                        |
-| `GET /agents/grants`                              | rest    | Agent grant policy                               |
-| `GET /agents/grants/{id}`                         | rest    | Agent grant policy                               |
-| `GET /schemas`                                    | rest    | Schema                                           |
-| `GET /schemas/{entity_type}`                      | rest    | Schema                                           |
-| `GET /instance-policy`                            | rest    | Policy                                           |
-| `GET /access_policies`                            | rest    | Policy                                           |
-| `GET /stats`                                      | rest    | Statistics                                       |
-| `GET /usage`                                      | rest    | Statistics                                       |
-| `GET /events/stream`                              | rest    | Change notification stream                       |
-| `GET /peers`                                      | rest    | Peer configuration                               |
-| `GET /peers/{peer_id}`                            | rest    | Peer configuration                               |
-| `GET /bundles`                                    | rest    | Bundle configuration                             |
-| `GET /bundles/{name}`                             | rest    | Bundle configuration                             |
-| `retrieve_file_url`                               | mcp     | Returns a signed file URL, not entity records    |
-| `parse_file`                                      | mcp     | Parses a supplied file; reads no stored records  |
-| `list_interpretations`                            | mcp     | Returns interpretations, not entity records      |
-| `get_entity_type_counts`                          | mcp     | Statistics                                       |
-| `list_entity_types`                               | mcp     | Schema                                           |
-| `list_relationship_types`                         | mcp     | Schema                                           |
-| `describe_entity_type`                            | mcp     | Schema                                           |
-| `describe_instance_policy`                        | mcp     | Policy                                           |
-| `analyze_schema_candidates`                       | mcp     | Schema analysis                                  |
-| `audit_undeclared_fragments`                      | mcp     | Schema analysis                                  |
-| `get_schema_recommendations`                      | mcp     | Schema analysis                                  |
-| `get_authenticated_user`                          | mcp     | The caller's own session details                 |
-| `get_session_identity`                            | mcp     | The caller's own session details                 |
-| `health_check_snapshots`                          | mcp     | Health statistics                                |
-| `get_issue_status`                                | mcp     | Issue status helper                              |
-| `get_entity_submission_status`                    | mcp     | Submission status helper                         |
-| `list_entity_submissions`                         | mcp     | Submission status helper                         |
-| `list_subscriptions`                              | mcp     | Subscription configuration                       |
-| `get_subscription_status`                         | mcp     | Subscription configuration                       |
-| `list_peers`                                      | mcp     | Peer configuration                               |
-| `get_peer_status`                                 | mcp     | Peer configuration                               |
-| `npm_check_update`                                | mcp     | Package update check                             |
-| `neotoma_turn_summary`                            | mcp     | Turn status line with counts, not entity records |
-| `manage_bundles`                                  | mcp     | Bundle configuration                             |
-| `resources/read:source`                           | mcp     | Returns a source, not an entity record           |
-| `resources/read:source_collection`                | mcp     | Returns sources, not entity records              |
-| `resources/read:entity_types`                     | mcp     | Schema                                           |
-| `resources/read:ui_timeline_widget`               | mcp     | Static widget HTML                               |
-| `resources/read:ui_turn_summary_widget`           | mcp     | Static widget HTML                               |
+| Read                                              | Surface | Reason                                                                        |
+| ------------------------------------------------- | ------- | ----------------------------------------------------------------------------- |
+| `GET /get_file_url`                               | rest    | Returns a signed file URL, not entity records                                 |
+| `GET /health`                                     | rest    | Liveness probe                                                                |
+| `GET /ready`                                      | rest    | Readiness probe                                                               |
+| `GET /openapi.yaml`                               | rest    | API description                                                               |
+| `GET /openapi_actions.yaml`                       | rest    | API description                                                               |
+| `GET /server-info`                                | rest    | Server metadata                                                               |
+| `GET /mcp-interaction-instructions`               | rest    | Agent instruction text                                                        |
+| `GET /me`                                         | rest    | The caller's own session details                                              |
+| `GET /session`                                    | rest    | The caller's own session details                                              |
+| `GET /mcp/oauth/authorize`                        | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/status`                           | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/connections`                      | rest    | OAuth connection list, not entity records                                     |
+| `GET /mcp/oauth/callback`                         | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/key-auth`                         | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/local-login`                      | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/authorization-details`            | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/google/start`                     | rest    | OAuth flow step                                                               |
+| `GET /mcp/oauth/google/callback`                  | rest    | OAuth flow step                                                               |
+| `GET /.well-known/oauth-authorization-server`     | rest    | Discovery metadata                                                            |
+| `GET /.well-known/oauth-protected-resource`       | rest    | Discovery metadata                                                            |
+| `GET /.well-known/oauth-protected-resource/mcp`   | rest    | Discovery metadata                                                            |
+| `GET /.well-known/openid-configuration`           | rest    | Discovery metadata                                                            |
+| `GET /.well-known/mcp/server-card.json`           | rest    | Discovery metadata                                                            |
+| `GET /.well-known/aauth-resource.json`            | rest    | Discovery metadata                                                            |
+| `GET /`                                           | rest    | Landing page                                                                  |
+| `GET /favicon.ico`                                | rest    | Static asset                                                                  |
+| `GET /robots.txt`                                 | rest    | Static asset                                                                  |
+| `GET /sandbox/session`                            | rest    | Sandbox session helper                                                        |
+| `GET /sandbox/terms`                              | rest    | Sandbox terms page                                                            |
+| `GET /sandbox/report/status`                      | rest    | Sandbox report status                                                         |
+| `GET /entities/{id}/html`                         | rest    | Rendered page, not an entity record                                           |
+| `GET /entities/{id}/markdown`                     | rest    | Rendered page, not an entity record                                           |
+| `GET /sources`                                    | rest    | Returns sources, not entity records                                           |
+| `GET /sources/{id}`                               | rest    | Returns a source, not an entity record                                        |
+| `GET /sources/{id}/content`                       | rest    | Returns source content, not entity records                                    |
+| `GET /sources/{id}/relationships`                 | rest    | Source relationship listing; follow-up candidate                              |
+| `GET /interpretations`                            | rest    | Returns interpretations, not entity records                                   |
+| `GET /recent_conversations`                       | rest    | Returns conversations, not entity records                                     |
+| `GET /recent_conversations/{conversation_id}`     | rest    | Returns a conversation, not entity records                                    |
+| `GET /conversations/{conversation_id}/turn-index` | rest    | Conversation turn index                                                       |
+| `GET /turns`                                      | rest    | Returns conversation turns, not entity records                                |
+| `GET /turns/{turn_key}`                           | rest    | Returns a conversation turn, not entity records                               |
+| `GET /submit/{entity_type}/{entity_id}`           | rest    | Submission status helper                                                      |
+| `GET /admin/compliance/scorecard`                 | rest    | Compliance statistics                                                         |
+| `GET /agents`                                     | rest    | Agent directory, not entity records                                           |
+| `GET /agents/{key}`                               | rest    | One agent directory entry                                                     |
+| `GET /agents/grants`                              | rest    | Agent grant policy                                                            |
+| `GET /agents/grants/{id}`                         | rest    | Agent grant policy                                                            |
+| `GET /schemas`                                    | rest    | Schema                                                                        |
+| `GET /schemas/{entity_type}`                      | rest    | Schema                                                                        |
+| `GET /instance-policy`                            | rest    | Policy                                                                        |
+| `GET /access_policies`                            | rest    | Policy                                                                        |
+| `GET /stats`                                      | rest    | Statistics                                                                    |
+| `GET /usage`                                      | rest    | Statistics                                                                    |
+| `GET /events/stream`                              | rest    | Change notification stream                                                    |
+| `GET /peers`                                      | rest    | Peer configuration                                                            |
+| `GET /peers/{peer_id}`                            | rest    | Peer configuration                                                            |
+| `GET /bundles`                                    | rest    | Bundle configuration                                                          |
+| `GET /bundles/{name}`                             | rest    | Bundle configuration                                                          |
+| `POST /mcp`                                       | rest    | MCP transport; each tool call and resource read is classified by its own name |
+| `POST /analyze_schema_candidates`                 | rest    | Schema analysis                                                               |
+| `POST /audit_undeclared_fragments`                | rest    | Schema analysis                                                               |
+| `POST /get_schema_recommendations`                | rest    | Schema analysis                                                               |
+| `POST /list_relationship_types`                   | rest    | Schema                                                                        |
+| `POST /turn_summary`                              | rest    | Turn status line with counts, not entity records                              |
+| `POST /get_authenticated_user`                    | rest    | The caller's own session details                                              |
+| `POST /health_check_snapshots`                    | rest    | Health statistics                                                             |
+| `POST /list_subscriptions`                        | rest    | Subscription configuration                                                    |
+| `POST /get_subscription_status`                   | rest    | Subscription configuration                                                    |
+| `POST /issues/status`                             | rest    | Issue status helper                                                           |
+| `POST /api/issues/status`                         | rest    | Legacy alias of `POST /issues/status`; follow-up candidate                    |
+| `POST /sync/entities`                             | rest    | Peer sync between verified peers of the same instance, not an agent read      |
+| `retrieve_file_url`                               | mcp     | Returns a signed file URL, not entity records                                 |
+| `parse_file`                                      | mcp     | Parses a supplied file; reads no stored records                               |
+| `list_interpretations`                            | mcp     | Returns interpretations, not entity records                                   |
+| `get_entity_type_counts`                          | mcp     | Statistics                                                                    |
+| `list_entity_types`                               | mcp     | Schema                                                                        |
+| `list_relationship_types`                         | mcp     | Schema                                                                        |
+| `describe_entity_type`                            | mcp     | Schema                                                                        |
+| `describe_instance_policy`                        | mcp     | Policy                                                                        |
+| `analyze_schema_candidates`                       | mcp     | Schema analysis                                                               |
+| `audit_undeclared_fragments`                      | mcp     | Schema analysis                                                               |
+| `get_schema_recommendations`                      | mcp     | Schema analysis                                                               |
+| `get_authenticated_user`                          | mcp     | The caller's own session details                                              |
+| `get_session_identity`                            | mcp     | The caller's own session details                                              |
+| `health_check_snapshots`                          | mcp     | Health statistics                                                             |
+| `get_issue_status`                                | mcp     | Issue status helper                                                           |
+| `get_entity_submission_status`                    | mcp     | Submission status helper                                                      |
+| `list_entity_submissions`                         | mcp     | Submission status helper                                                      |
+| `list_subscriptions`                              | mcp     | Subscription configuration                                                    |
+| `get_subscription_status`                         | mcp     | Subscription configuration                                                    |
+| `list_peers`                                      | mcp     | Peer configuration                                                            |
+| `get_peer_status`                                 | mcp     | Peer configuration                                                            |
+| `npm_check_update`                                | mcp     | Package update check                                                          |
+| `neotoma_turn_summary`                            | mcp     | Turn status line with counts, not entity records                              |
+| `manage_bundles`                                  | mcp     | Bundle configuration                                                          |
+| `resources/read:source`                           | mcp     | Returns a source, not an entity record                                        |
+| `resources/read:source_collection`                | mcp     | Returns sources, not entity records                                           |
+| `resources/read:entity_types`                     | mcp     | Schema                                                                        |
+| `resources/read:ui_timeline_widget`               | mcp     | Static widget HTML                                                            |
+| `resources/read:ui_turn_summary_widget`           | mcp     | Static widget HTML                                                            |
 
 <!-- read-log-exclusions:end -->
+
+Writes and operations that return no entity data are not reads. A `PUT`, `PATCH` or `DELETE` operation is a write. A `POST` operation is a write when the first word of its `operationId`, or for a route `openapi.yaml` does not declare, of its last path segment, is a write verb: the MCP write verbs above plus `revoke`, `suspend`, `batch`, `bulk`, `recompute` and `apply`. The other `POST` operations that are not reads are listed here; the guard fails when a row names an operation that no longer exists or is also logged or excluded.
+
+<!-- read-log-non-reads:start -->
+
+| Operation                                        | Surface | Reason                    |
+| ------------------------------------------------ | ------- | ------------------------- |
+| `POST /mcp/oauth/initiate`                       | rest    | OAuth flow step           |
+| `POST /mcp/oauth/token`                          | rest    | OAuth flow step           |
+| `POST /mcp/oauth/key-auth`                       | rest    | OAuth flow step           |
+| `POST /mcp/oauth/sign-out`                       | rest    | OAuth flow step           |
+| `POST /mcp/oauth/register`                       | rest    | OAuth client registration |
+| `POST /auth/dev-signin`                          | rest    | Local sign-in step        |
+| `POST /issues/add_message`                       | rest    | Write                     |
+| `POST /issues/submit`                            | rest    | Write                     |
+| `POST /issues/sync`                              | rest    | Write                     |
+| `POST /submit/{entity_type}/{entity_id}/message` | rest    | Write                     |
+| `POST /sandbox/session/new`                      | rest    | Sandbox session helper    |
+| `POST /sandbox/session/redeem`                   | rest    | Sandbox session helper    |
+| `POST /sandbox/session/reset`                    | rest    | Sandbox session helper    |
+| `POST /sandbox/report`                           | rest    | Write                     |
+| `POST /github/webhook`                           | rest    | Inbound webhook write     |
+
+<!-- read-log-non-reads:end -->
 
 The line never carries entity contents, snapshot fields, search text or query values. A search term is logged only as its length.
 
