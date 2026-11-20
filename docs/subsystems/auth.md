@@ -215,7 +215,32 @@ Out of scope, stated plainly:
 
 - `read_full_scope` reads are not narrowed. A type-limited grant cannot use them at all; a `"*"` grant reads them in full. Per-type narrowing of the paged relationship lists (`listRelationshipsForEntity`, `getEntityRelationships`) and of the timeline is follow-up work.
 - Writes that return entity data (for example `store` or `merge`) are governed by the write capabilities only.
-- Routes not declared in `openapi.yaml` (for example the Inspector's internal routes and `GET /entities/{id}/markdown`, covered in round 1 by its handler) are not part of the guard's enumeration.
+- List-style reads are refused for a type-limited grant until per-type narrowing exists for them: `list_relationships`, `list_timeline_events`, `list_recent_changes` and `identify_entity_by_signals` (REST `listRelationships`, `listTimeline`, `getRecordActivity`, `identifyEntityBySignals`). This is a known gap: a grant limited to some types cannot list those types' relationships, events or recent changes; it needs a `"*"` entry.
+
+### Default deny over registered routes
+
+The REST gate is default deny. With the setting on and an admitted grant, a request is let through to its handler only when it matches a classified route that is `read_entity` or `read_scoped` (the handler runs the per-type check), `exempt` or `write`. Every other request, including one that matches no classified route, needs a `"*"` retrieve entry and is otherwise refused with the 403 `capability_denied` envelope. When a static path and a param path both match, the most restrictive class wins. Callers without a grant, and every caller with the setting off, are unaffected.
+
+Classification covers every route the Express app registers, not only `openapi.yaml`. Routes with no `operationId` (aliases, site and UI pages, legacy paths) are classified in `UNDECLARED_ROUTE_RETRIEVE_CLASS`. `tests/contract/retrieve_scope_registered_routes.test.ts` reads the live route table and fails when a registered route has no class.
+
+Undeclared read aliases refused for a type-limited grant: `POST /api/issues/status`, `GET /sources/{id}/content`, `GET /turns`, `GET /turns/{turn_key}`, `GET /agents`, `GET /agents/{key}`, `GET /agents/{key}/records`, `GET /submit/{entity_type}/{entity_id}`, `GET /bundles`, `GET /bundles/{name}`. `GET /entities/{id}/markdown` is `read_entity` (its handler runs the round 1 check).
+
+Exempt routes with no `operationId` (no entity data):
+
+| Route                                                                           | Reason                                              |
+| ------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `GET /`                                                                         | Landing page and instance metadata                  |
+| `GET /.well-known/aauth-resource.json`, `GET /.well-known/mcp/server-card.json` | Discovery metadata                                  |
+| `GET /docs`, `GET /docs/*`                                                      | Bundled documentation                               |
+| `GET /favicon.ico`, `GET /robots.txt`                                           | Static files                                        |
+| `GET /openapi_actions.yaml`                                                     | API description                                     |
+| `GET /mcp/oauth/google/start`, `GET /mcp/oauth/google/callback`                 | Authentication flow                                 |
+| `GET /sandbox/terms`, `GET /sandbox/report/status`                              | Static terms; report status by its own access token |
+| `ALL /entities`                                                                 | Hinted 404 for misuse of the collection path        |
+| `ALL /mcp`                                                                      | MCP transport; each tool is classified on its own   |
+| `GET /assets/*`, `GET /inspector/assets/*`                                      | Inspector bundle assets served by static middleware |
+
+Inspector pages served by the SPA fallback match no route, so a type-limited grant is refused there too. Browsers do not carry agent grants, so this affects only signed agent requests.
 
 ## MCP Authentication
 
