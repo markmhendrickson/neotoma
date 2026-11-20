@@ -1,8 +1,9 @@
 /**
  * Structured per-call read log (part of neotoma#1872).
  *
- * In the HTTP server process, every entity read (the operations marked
- * `readLog` in src/shared/contract_mappings.ts) writes ONE JSON line to
+ * In the HTTP server process, each logged read (the operations marked
+ * `readLog` in src/shared/contract_mappings.ts, plus the submission status
+ * helpers listed below) writes ONE JSON line to
  * standard output per call, listing which entities the call returned. A log
  * shipper can keep the line outside the instance. The REST surface writes it
  * from the `restReadLog` middleware; MCP calls served over HTTP write it from
