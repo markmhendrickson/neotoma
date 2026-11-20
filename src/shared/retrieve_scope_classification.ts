@@ -188,6 +188,28 @@ export const MCP_ONLY_TOOL_RETRIEVE_CLASS: Record<string, RetrieveScopeEntry> = 
   list_entity_submissions: FULL("submitted entity records"),
 };
 
+/** Every resource kind returned by parseResourceUri has an explicit read decision. */
+export const MCP_RESOURCE_RETRIEVE_CLASS: Record<string, RetrieveScopeEntry> = {
+  entity_collection_all: R1("untyped entity collection narrowed to granted types"),
+  entity_collection: R1("typed entity collection checked before reading"),
+  entity: R1("named entity and merge chain checked before reading"),
+  entity_observations: R1("named entity and merge chain checked before reading"),
+  entity_relationships: FULL("relationship collection may contain other entity types"),
+  timeline_year: FULL("timeline includes events across entity types"),
+  timeline_month: FULL("timeline includes events across entity types"),
+  source: FULL("source may back several entity types"),
+  source_collection: FULL("sources may back several entity types"),
+  relationship_collection_all: FULL("relationships span entity types"),
+  relationship_collection: FULL("relationships span entity types"),
+  entity_types: EX("schema metadata only"),
+  ui_timeline_widget: EX("static widget markup"),
+  ui_turn_summary_widget: EX("static widget markup"),
+};
+
+export function retrieveClassForResource(kind: string): RetrieveScopeEntry | undefined {
+  return MCP_RESOURCE_RETRIEVE_CLASS[kind];
+}
+
 /** The class of an MCP tool, derived from its operation mapping first. */
 export function retrieveClassForTool(toolName: string): RetrieveScopeEntry | undefined {
   const operationId = MCP_TOOL_TO_OPERATION_ID[toolName];

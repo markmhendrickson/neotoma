@@ -102,13 +102,15 @@ import {
 } from "./services/agent_capabilities.js";
 import {
   currentRetrieveScope,
+  entityTypesById,
   enforceFullRetrieveScope,
   enforceRetrieveForEntityIds,
+  enforceRetrieveForEntityTypes,
   filterEdgesToScope,
   narrowTraversalToScope,
   retrieveScopeIsTypeLimited,
 } from "./services/retrieve_capability.js";
-import { retrieveClassForTool } from "./shared/retrieve_scope_classification.js";
+import { retrieveClassForResource, retrieveClassForTool } from "./shared/retrieve_scope_classification.js";
 import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
@@ -3286,6 +3288,21 @@ export class NeotomaServer {
         const { uri } = request.params;
         const parsed = this.parseResourceUri(uri);
 
+        // Resource reads do not pass through executeTool. Unknown kinds take
+        // the full-scope branch until explicitly classified.
+        const resourceClass = retrieveClassForResource(parsed.type)?.class;
+        if (!resourceClass || resourceClass === "read_full_scope") {
+          enforceFullRetrieveScope(`resources/read ${parsed.type}`);
+        } else if (resourceClass === "read_entity") {
+          if (parsed.entityId) {
+            await enforceRetrieveForEntityIds([parsed.entityId], this.getAuthenticatedUserId());
+          } else if (parsed.entityType || parsed.queryParams?.entity_type) {
+            enforceRetrieveForEntityTypes([(parsed.entityType ?? parsed.queryParams?.entity_type)!]);
+          } else {
+            currentRetrieveScope();
+          }
+        }
+
         let data: any;
 
         switch (parsed.type) {
@@ -3365,6 +3382,7 @@ export class NeotomaServer {
           ],
         };
       } catch (error) {
+        if (error instanceof AgentCapabilityError) throw error;
         if (error instanceof McpError) {
           throw error;
         }
@@ -9657,11 +9675,14 @@ export class NeotomaServer {
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const entityTypeFilter = queryParams?.entity_type;
+      const scope = currentRetrieveScope();
+      const allowedTypes = scope?.kind === "types" ? scope.types : undefined;
 
       // Get entities with filters
       const entities = await queryEntities({
         userId,
         entityType: entityTypeFilter,
+        entityTypes: entityTypeFilter ? undefined : allowedTypes,
         includeMerged: false,
         limit,
         offset,
@@ -9679,6 +9700,8 @@ export class NeotomaServer {
 
       if (entityTypeFilter) {
         countQuery = countQuery.eq("entity_type", entityTypeFilter);
+      } else if (allowedTypes) {
+        countQuery = countQuery.in("entity_type", allowedTypes);
       }
 
       const { count, error: countError } = await countQuery;
@@ -9699,6 +9722,8 @@ export class NeotomaServer {
 
       if (entityTypeFilter) {
         latestQuery = latestQuery.eq("entity_type", entityTypeFilter);
+      } else if (allowedTypes) {
+        latestQuery = latestQuery.in("entity_type", allowedTypes);
       }
 
       const { data: latestEntity } = await latestQuery
@@ -9712,6 +9737,7 @@ export class NeotomaServer {
         entities,
         total: count || 0,
         returned: entities.length,
+        ...(allowedTypes ? { narrowed_by_capability: true } : {}),
         has_more: (count || 0) > entities.length,
         last_updated:
           latestEntity?.updated_at || latestEntity?.created_at || new Date().toISOString(),

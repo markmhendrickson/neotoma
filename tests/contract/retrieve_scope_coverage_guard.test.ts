@@ -16,10 +16,12 @@ import {
 import {
   FULL_SCOPE_REST_ROUTES,
   MCP_ONLY_TOOL_RETRIEVE_CLASS,
+  MCP_RESOURCE_RETRIEVE_CLASS,
   OPERATION_RETRIEVE_CLASS,
   findUnclassified,
   fullScopeOperationForRequest,
   retrieveClassForTool,
+  retrieveClassForResource,
 } from "../../src/shared/retrieve_scope_classification.js";
 
 function openApiOperationIds(): string[] {
@@ -43,6 +45,18 @@ describe("retrieve scope coverage guard", () => {
 
   it("classifies every openapi.yaml operation and every MCP tool", () => {
     expect(findUnclassified(operationIds, tools)).toEqual({ operations: [], tools: [] });
+  });
+
+  it("classifies every resources/read handler kind and leaves unknown kinds for the default gate", () => {
+    const server = readFileSync(path.join(process.cwd(), "src/server.ts"), "utf8");
+    const handler = server.split("setRequestHandler(ReadResourceRequestSchema")[1]?.split("private async retrieveFileUrl")[0];
+    expect(handler).toBeDefined();
+    const kinds = Array.from(handler!.matchAll(/case "([a-z_]+)":/g), (match) => match[1]);
+    expect(kinds.length).toBeGreaterThan(10);
+    expect(kinds.filter((kind) => !retrieveClassForResource(kind))).toEqual([]);
+    expect(Object.keys(MCP_RESOURCE_RETRIEVE_CLASS).filter((kind) => !kinds.includes(kind))).toEqual([]);
+    expect(retrieveClassForResource("future_resource_kind")).toBeUndefined();
+    expect(handler).toContain('enforceFullRetrieveScope(`resources/read ${parsed.type}`)');
   });
 
   it("fails on a deliberately unclassified operation and tool", () => {

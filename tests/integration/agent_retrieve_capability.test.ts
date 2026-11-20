@@ -182,6 +182,25 @@ describe("agent grant retrieve capability on entity reads", () => {
     return grant ? runAsGrant(grant, call) : call();
   }
 
+  function resource(uri: string, grant?: string): Promise<{ contents: Array<{ text: string }> }> {
+    const handlers = (
+      mcp as unknown as {
+        mcpServer: {
+          server: {
+            _requestHandlers: Map<
+              string,
+              (request: { params: { uri: string } }) => Promise<{ contents: Array<{ text: string }> }>
+            >;
+          };
+        };
+      }
+    ).mcpServer.server._requestHandlers;
+    const handler = handlers.get("resources/read");
+    if (!handler) throw new Error("resources/read handler not registered");
+    const call = () => handler({ params: { uri } });
+    return grant ? runAsGrant(grant, call) : call();
+  }
+
   async function capture(fn: () => Promise<unknown>): Promise<unknown> {
     try {
       await fn();
@@ -253,6 +272,32 @@ describe("agent grant retrieve capability on entity reads", () => {
 
     describe("grant with retrieve for task only", () => {
       const G = "retrieve-task";
+
+      it("MCP resource reads check types and narrow an untyped collection", async () => {
+        const allowed = JSON.parse((await resource(`neotoma://entity/${taskId}`, G)).contents[0].text);
+        expect(allowed.entity_type).toBe("task");
+        expectDenied(await capture(() => resource(`neotoma://entity/${contactId}`, G)), "contact");
+        expectDenied(await capture(() => resource("neotoma://entities/contact", G)), "contact");
+        const page = JSON.parse((await resource("neotoma://entities?limit=500", G)).contents[0].text);
+        expect(page.narrowed_by_capability).toBe(true);
+        expect(page.entities.some((e: { entity_type: string }) => e.entity_type === "task")).toBe(true);
+        expect(page.entities.every((e: { entity_type: string }) => e.entity_type === "task")).toBe(true);
+        const typed = JSON.parse((await resource("neotoma://entities/task?limit=500", G)).contents[0].text);
+        expect(page.total).toBe(typed.total);
+        expectDenied(await capture(() => resource("neotoma://sources", G)), "*");
+        expectDenied(await capture(() => resource(`neotoma://entity/${taskId}`, "no-retrieve")));
+        const originalParser = (mcp as any).parseResourceUri;
+        (mcp as any).parseResourceUri = () => ({ type: "future_resource_kind" });
+        try {
+          expectDenied(await capture(() => resource("neotoma://future", G)), "*");
+        } finally {
+          (mcp as any).parseResourceUri = originalParser;
+        }
+        const star = JSON.parse((await resource(`neotoma://entity/${contactId}`, "retrieve-star")).contents[0].text);
+        expect(star.entity_type).toBe("contact");
+        const plain = JSON.parse((await resource(`neotoma://entity/${contactId}`)).contents[0].text);
+        expect(plain.entity_type).toBe("contact");
+      });
 
       it("REST reads of the allowed type succeed on every per-entity entry point", async () => {
         expect((await get(`/entities/${taskId}`, G)).status).toBe(200);
@@ -839,6 +884,10 @@ describe("agent grant retrieve capability on entity reads", () => {
 
     describe("setting off", () => {
       it("a one-type grant reads related entities, graph and counts as before", async () => {
+        const other = JSON.parse(
+          (await resource(`neotoma://entity/${contactId}`, "retrieve-task")).contents[0].text
+        );
+        expect(other.entity_type).toBe("contact");
         const res = await post("/retrieve_related_entities", relatedBody(), "retrieve-task");
         expect(res.status).toBe(200);
         expect(res.body.narrowed_by_capability).toBeUndefined();
