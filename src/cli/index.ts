@@ -8149,35 +8149,83 @@ instructionsCommand
     // Best-effort: an unreachable or unauthenticated instance degrades to the
     // global instructions rather than failing the command.
     let composed = body;
+    // When the configured identity authenticates, print the text a session
+    // initialize returns for it (standing rules first), served by the
+    // instance's instructions endpoint. Otherwise fall through to the global
+    // text below. Which one was printed goes to stderr after the text, so
+    // stdout stays the instructions alone.
+    let composition: "user" | "global" = "global";
     try {
-      const { composeClientInstructions } = await import("../mcp_instruction_doc.js");
       const cliConfig = await readConfig();
-      const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
-        token: await getCliToken(),
-      });
-      const { data } = await api.GET("/instance-policy", {});
-      const policy = (data as { policy?: unknown } | undefined)?.policy;
-      if (policy) {
-        const { renderInstancePolicyInstructions } = await import("../services/instance_policy.js");
-        composed = composeClientInstructions(
-          body,
-          renderInstancePolicyInstructions(policy as never)
-        );
+      const baseUrl = await resolveBaseUrl(program.opts().baseUrl, cliConfig);
+      const token = await getCliToken();
+      if (token) {
+        const response = await fetch(`${baseUrl.replace(/\/$/, "")}/mcp-interaction-instructions`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (response.ok && response.headers.get("x-neotoma-instructions-composition") === "user") {
+          composed = (await response.text()).replace(/\n$/, "");
+          composition = "user";
+        }
       }
     } catch {
-      // Leave `composed` as the global instructions.
+      // Unreachable instance: print the global text.
+    }
+    if (composition === "global") {
+      try {
+        const { composeClientInstructions } = await import("../mcp_instruction_doc.js");
+        const cliConfig = await readConfig();
+        const api = createApiClient({
+          baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+          token: await getCliToken(),
+        });
+        const { data } = await api.GET("/instance-policy", {});
+        const policy = (data as { policy?: unknown } | undefined)?.policy;
+        if (policy) {
+          const { renderInstancePolicyInstructions } =
+            await import("../services/instance_policy.js");
+          composed = composeClientInstructions(
+            body,
+            renderInstancePolicyInstructions(policy as never)
+          );
+        }
+      } catch {
+        // Leave `composed` as the global instructions.
+      }
     }
 
+    if (composition === "global") {
+      // Lead the global text with the fixed notice, as the REST endpoint and
+      // server/discover do, so missing rules read as unknown, not absent.
+      const { prependClientInstructionsSection } = await import("../mcp_instruction_doc.js");
+      const { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } =
+        await import("../services/standing_rules.js");
+      composed = prependClientInstructionsSection(
+        composed,
+        STANDING_RULES_AFTER_AUTHENTICATION_NOTICE
+      );
+    }
+
+    const compositionNote =
+      composition === "user"
+        ? "Printed: instructions composed for the configured identity (standing rules included)."
+        : "Printed: global instructions (not authenticated; standing rules not included).";
     if (outputMode === "json") {
-      writeOutput({ path: docPath, body: composed, format: opts.format ?? "plain" }, outputMode);
+      writeOutput(
+        { path: docPath, body: composed, format: opts.format ?? "plain", composition },
+        outputMode
+      );
+      process.stderr.write(compositionNote + "\n");
       return;
     }
     const fmt = (opts.format ?? "plain").toLowerCase();
     if (fmt === "md") {
       process.stdout.write("```\n" + composed + "\n```\n");
+      process.stderr.write(compositionNote + "\n");
     } else if (fmt === "plain") {
       process.stdout.write(composed + "\n");
+      process.stderr.write(compositionNote + "\n");
     } else {
       process.stderr.write(_errorStyle(`Unknown --format ${opts.format}; use plain or md`) + nl());
       process.exitCode = 1;

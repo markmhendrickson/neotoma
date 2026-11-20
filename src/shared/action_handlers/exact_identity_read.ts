@@ -1,4 +1,5 @@
 import { peekCachedDb } from "../../repositories/db/connection.js";
+import { enforceCurrentAgentRetrieveScope } from "../../services/agent_capabilities.js";
 import { WorkerFileDatabase } from "../../repositories/worker/worker_file_database.js";
 import {
   isBoundedIdentityValue,
@@ -49,6 +50,9 @@ export async function readExactIdentity(
     return undefined;
 
   const { entity_type } = raw;
+  // Typed read: refused when an admitted grant does not cover the type
+  // (opt-in NEOTOMA_ENFORCE_AGENT_RETRIEVE; a no-op when off).
+  enforceCurrentAgentRetrieveScope([entity_type]);
   const { value } = filter;
   const requested_scope = {
     owner: "authenticated" as const,

@@ -58,26 +58,27 @@ This does not change `NEOTOMA_ENV`'s own resolution for data locality (data dire
 
 ## Core variables
 
-| Variable                                       | Purpose                                                                                                                                                                                                                                                                                                                    | Default                      |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| `NEOTOMA_ENV`                                  | `development` or `production`                                                                                                                                                                                                                                                                                              | `development`                |
-| `NEOTOMA_DATA_DIR`                             | Root data directory                                                                                                                                                                                                                                                                                                        | local `data/`                |
-| `NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR`            | `1` demands an explicit `NEOTOMA_DATA_DIR`: refuse the `~/.config/neotoma/.env` fallback and exit non-zero. Implied by `VITEST` / `NODE_ENV=test`                                                                                                                                                                          | unset                        |
-| `NEOTOMA_ALLOW_USER_ENV_IN_TEST`               | `1` re-permits that fallback in a test-shaped process, for a test that means to exercise it                                                                                                                                                                                                                                | unset                        |
-| `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE`           | `1` lets a caller-supplied `user_id` replace the local development user for every sign-in that resolves to that user (default: only for local requests without a token, outside production). For test setups.                                                                                                              |
-| `NEOTOMA_SQLITE_PATH`                          | Explicit database file path                                                                                                                                                                                                                                                                                                | `{dataDir}/neotoma.db` (dev) |
-| `NEOTOMA_DB_BACKEND`                           | DB driver: `sqlite` (synchronous, zero-config) or `libsql` (concurrent — statements run off the event loop via worker-hosted driver for local files, or @libsql/client for remote sqld/Turso, so slow queries can't freeze the server; recommended for hosted/agent-heavy/shared instances)                                | `sqlite`                     |
-| `NEOTOMA_DB_URL`                               | libsql connection URL (`file:` for embedded local, `http(s)://`/`libsql://` for remote sqld/Turso)                                                                                                                                                                                                                         | `file:{NEOTOMA_SQLITE_PATH}` |
-| `NEOTOMA_DB_AUTH_TOKEN`                        | Auth token for remote libsql connections                                                                                                                                                                                                                                                                                   | unset                        |
-| `NEOTOMA_DB_READER_WORKERS`                    | Read-only worker connections for the local `libsql` backend (WAL lets them run concurrently with the writer). Reads go to the least-loaded reader, so raising this adds capacity rather than just slots. Reads outside a transaction do not wait for write transactions on the worker reader pool (with at least one reader)                                                                                                                    | `2`                          |
-| `NEOTOMA_DB_STATEMENT_TIMEOUT_MS`              | Per-statement budget for reads on that reader pool. On expiry the caller gets a timeout error at once and the reader is retired from the pool with a replacement spawned, so one runaway query cannot hold a pool slot indefinitely. The synchronous driver cannot be interrupted mid-statement, so a retired reader is shut down only after its statement returns, never while it is inside a native call. Writes and statements inside a transaction are never timed out. `0` disables | `30000`                      |
-| `NEOTOMA_DB_MAX_RETIRED_WORKERS`               | How many retired readers (see `NEOTOMA_DB_STATEMENT_TIMEOUT_MS`) may finish their statements at once. At the cap a timed-out read still returns its timeout error, but its reader stays in the pool, so later reads queue behind it instead of adding threads; a warning names the setting | `max(4, 2 × NEOTOMA_DB_READER_WORKERS)` |
-| `NEOTOMA_DB_ORPHAN_GRACE_MS`                   | How long shutdown (`close()`) waits for a busy reader before stopping it, and the interval of the warning about a retired reader that is still finishing. A retired reader is never stopped on this clock | `30000`                      |
-| `NEOTOMA_SCHEMA_REGISTRY_CACHE`                | In-memory cache of active-schema lookups. Set `off` (or `0`, `false`) to read `schema_registry` on every lookup. Writes made by this process are visible at once either way; see [Schema registry §3.2](../subsystems/schema_registry.md#32-active-schema) | on |
-| `NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS`       | How often a cached server re-checks for `schema_registry` writes made by another process on the same file (for example the CLI's `neotoma access set`), so the longest such a write goes unseen. `0` re-checks on every lookup. Values above 60000 are capped at 60000; an unparseable or negative value uses the default | `250` |
-| `NEOTOMA_RAW_STORAGE_DIR`                      | Content-addressed source files                                                                                                                                                                                                                                                                                             | `{dataDir}/sources`          |
-| `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH`  | Log directory and event log file                                                                                                                                                                                                                                                                                           | under `{dataDir}/logs`       |
-| `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance                                                                                                                                                                                                                                                                                                | auto-discovered or unset     |
+| Variable                                       | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Default                                 |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `NEOTOMA_ENV`                                  | `development` or `production`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `development`                           |
+| `NEOTOMA_DATA_DIR`                             | Root data directory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | local `data/`                           |
+| `NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR`            | `1` demands an explicit `NEOTOMA_DATA_DIR`: refuse the `~/.config/neotoma/.env` fallback and exit non-zero. Implied by `VITEST` / `NODE_ENV=test`                                                                                                                                                                                                                                                                                                                                                                                                         | unset                                   |
+| `NEOTOMA_ALLOW_USER_ENV_IN_TEST`               | `1` re-permits that fallback in a test-shaped process, for a test that means to exercise it                                                                                                                                                                                                                                                                                                                                                                                                                                                               | unset                                   |
+| `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE`           | `1` lets a caller-supplied `user_id` replace the local development user for every sign-in that resolves to that user (default: only for local requests without a token, outside production). For test setups.                                                                                                                                                                                                                                                                                                                                             |
+| `NEOTOMA_SQLITE_PATH`                          | Explicit database file path                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `{dataDir}/neotoma.db` (dev)            |
+| `NEOTOMA_DB_BACKEND`                           | DB driver: `sqlite` (synchronous, zero-config) or `libsql` (concurrent — statements run off the event loop via worker-hosted driver for local files, or @libsql/client for remote sqld/Turso, so slow queries can't freeze the server; recommended for hosted/agent-heavy/shared instances)                                                                                                                                                                                                                                                               | `sqlite`                                |
+| `NEOTOMA_DB_URL`                               | libsql connection URL (`file:` for embedded local, `http(s)://`/`libsql://` for remote sqld/Turso)                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `file:{NEOTOMA_SQLITE_PATH}`            |
+| `NEOTOMA_DB_AUTH_TOKEN`                        | Auth token for remote libsql connections                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | unset                                   |
+| `NEOTOMA_DB_READER_WORKERS`                    | Read-only worker connections for the local `libsql` backend (WAL lets them run concurrently with the writer). Reads go to the least-loaded reader, so raising this adds capacity rather than just slots. Reads outside a transaction do not wait for write transactions on the worker reader pool (with at least one reader)                                                                                                                                                                                                                              | `2`                                     |
+| `NEOTOMA_DB_STATEMENT_TIMEOUT_MS`              | Per-statement budget for reads on that reader pool. On expiry the caller gets a timeout error at once and the reader is retired from the pool with a replacement spawned, so one runaway query cannot hold a pool slot indefinitely. The synchronous driver cannot be interrupted mid-statement, so a retired reader is shut down only after its statement returns, never while it is inside a native call. Writes and statements inside a transaction are never timed out. `0` disables                                                                  | `30000`                                 |
+| `NEOTOMA_DB_MAX_RETIRED_WORKERS`               | How many retired readers (see `NEOTOMA_DB_STATEMENT_TIMEOUT_MS`) may finish their statements at once. At the cap a timed-out read still returns its timeout error, but its reader stays in the pool, so later reads queue behind it instead of adding threads; a warning names the setting                                                                                                                                                                                                                                                                | `max(4, 2 × NEOTOMA_DB_READER_WORKERS)` |
+| `NEOTOMA_DB_ORPHAN_GRACE_MS`                   | How long shutdown (`close()`) waits for a busy reader before stopping it, and the interval of the warning about a retired reader that is still finishing. A retired reader is never stopped on this clock                                                                                                                                                                                                                                                                                                                                                 | `30000`                                 |
+| `NEOTOMA_DROP_ORPHAN_ENTITY_FTS`               | `1` drops, at open, the five leftover `entity_fts_*` triggers some older databases carry, which make every snapshot write read the whole `entity_search_fts` table. It removes the leftover full-text triggers and the unused `entity_search_fts` and `entity_fts_rows` tables they maintain (freeing their disk space), and does not change search results. Check with `SELECT type, name FROM sqlite_master WHERE name LIKE 'entity_fts_%' OR name LIKE 'entity_search_fts%'`; it deletes the rows of those tables (derived copies, nothing reads them) | off                                     |
+| `NEOTOMA_SCHEMA_REGISTRY_CACHE`                | In-memory cache of active-schema lookups. Set `off` (or `0`, `false`) to read `schema_registry` on every lookup. Writes made by this process are visible at once either way; see [Schema registry §3.2](../subsystems/schema_registry.md#32-active-schema)                                                                                                                                                                                                                                                                                                | on                                      |
+| `NEOTOMA_SCHEMA_REGISTRY_CACHE_CHECK_MS`       | How often a cached server re-checks for `schema_registry` writes made by another process on the same file (for example the CLI's `neotoma access set`), so the longest such a write goes unseen. `0` re-checks on every lookup. Values above 60000 are capped at 60000; an unparseable or negative value uses the default                                                                                                                                                                                                                                 | `250`                                   |
+| `NEOTOMA_RAW_STORAGE_DIR`                      | Content-addressed source files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `{dataDir}/sources`                     |
+| `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH`  | Log directory and event log file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | under `{dataDir}/logs`                  |
+| `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | auto-discovered or unset                |
 
 ### When to opt into `NEOTOMA_DB_BACKEND=libsql`
 
@@ -90,26 +91,274 @@ Before flipping the variable on an existing database, run `npx tsx scripts/valid
 
 ## Server and ports
 
-| Variable                             | Purpose                                    | Default                 |
-| ------------------------------------ | ------------------------------------------- | ----------------------- |
-| `NEOTOMA_HTTP_PORT` (or `HTTP_PORT`) | HTTP API and HTTP MCP port                 | `3080` dev, `3180` prod |
-| `NEOTOMA_HTTP_HOST`                  | HTTP listener bind address (explicit opt-in for non-loopback) | `127.0.0.1` |
-| `WS_PORT`                            | WebSocket MCP bridge port                  | `8280`                  |
-| `NEOTOMA_WS_HOST`                    | WebSocket MCP bridge bind address (explicit opt-in for non-loopback). Prefer `127.0.0.1` for loopback; write an IPv6 loopback bare (`::1`, not `[::1]`, which fails to start with exit 1). `localhost` resolves to a single address family on some hosts (for example IPv6 `::1` only), so IPv4 clients may not reach it. | `127.0.0.1` |
+| Variable                             | Purpose                                                                                                                                                                                                                                                                                                                   | Default                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `NEOTOMA_HTTP_PORT` (or `HTTP_PORT`) | HTTP API and HTTP MCP port                                                                                                                                                                                                                                                                                                | `3080` dev, `3180` prod                   |
+| `NEOTOMA_HTTP_HOST`                  | HTTP listener bind address (explicit opt-in for non-loopback)                                                                                                                                                                                                                                                             | `127.0.0.1`                               |
+| `WS_PORT`                            | WebSocket MCP bridge port                                                                                                                                                                                                                                                                                                 | `8280`                                    |
+| `NEOTOMA_WS_HOST`                    | WebSocket MCP bridge bind address (explicit opt-in for non-loopback). Prefer `127.0.0.1` for loopback; write an IPv6 loopback bare (`::1`, not `[::1]`, which fails to start with exit 1). `localhost` resolves to a single address family on some hosts (for example IPv6 `::1` only), so IPv4 clients may not reach it. | `127.0.0.1`                               |
+| `NEOTOMA_MCP_INSTANCE_SKILL_HINTS`   | Append an `[INSTANCE SKILLS]` section to the MCP instructions listing the instance's enabled graph-stored `skill` rows, so MCP-only clients can discover them. Set `0` or `false` to omit the section entirely.                                                                                                           | on (`0` / `false` disables)               |
+| `NEOTOMA_ACCESS_LOG`                 | Per-request access log format: `json`, `dev` or `off`. See [Access log](#access-log)                                                                                                                                                                                                                                      | `json` beyond loopback, `dev` on loopback |
+| `NEOTOMA_ACCESS_LOG_FULL_IP`         | Set `1` to log full `client_ip` and `peer_ip` addresses in the `json` access log instead of redacted prefixes. Use it only while tracing a specific client, on a log destination whose retention you control.                                                                                                             | off (redacted prefixes)                   |
 
 The server binds loopback-only by default so a self-hosted install is never reachable from the LAN unless you opt in. Set `NEOTOMA_HTTP_HOST=0.0.0.0` for a Fly/Docker deployment fronted by its own network boundary or auth, or for a tunnel client — see [Deployment Modes](deployment.md). The WebSocket MCP bridge follows the same convention with `NEOTOMA_WS_HOST`: it listens on loopback by default, so a client on another host can reach it only after you set that variable (for example `NEOTOMA_WS_HOST=0.0.0.0` behind a network boundary or auth of your own).
 
+### Access log
+
+The HTTP server writes one access line per request to standard output. `NEOTOMA_ACCESS_LOG` selects the format:
+
+- `json`: one JSON object per line, written when the response finishes.
+- `dev`: morgan's compact `dev` format (method, path, status, timing).
+- `off`: no access line.
+
+Unset or unrecognised values default to `json` when `NEOTOMA_HTTP_HOST` is beyond loopback and `dev` on a loopback bind.
+
+Each `json` line carries these fields:
+
+| Field                 | Type           | Value                                                                                                                                                                                                                                                                                          |
+| --------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ts`                  | string         | Request start, ISO 8601 UTC                                                                                                                                                                                                                                                                    |
+| `request_id`          | string         | Server-generated UUID. Returned in the `x-request-id` response header                                                                                                                                                                                                                          |
+| `incoming_request_id` | string or null | Caller-supplied `x-request-id` when well formed (8-128 of `A-Za-z0-9._-`); null otherwise. Never used as `request_id`                                                                                                                                                                          |
+| `method`              | string         | HTTP method                                                                                                                                                                                                                                                                                    |
+| `path`                | string         | Request path without the query string                                                                                                                                                                                                                                                          |
+| `query_keys`          | string[]       | Query parameter names, sorted. Values are never logged                                                                                                                                                                                                                                         |
+| `status`              | number         | Response status                                                                                                                                                                                                                                                                                |
+| `duration_ms`         | number         | Time from request start to response finish                                                                                                                                                                                                                                                     |
+| `bytes`               | number or null | Response `Content-Length`; null for streamed or chunked responses                                                                                                                                                                                                                              |
+| `user_id`             | string or null | Authenticated user id; null when the request resolved none                                                                                                                                                                                                                                     |
+| `auth_method`         | string         | Label the auth middleware recorded (for example `bearer_env`, `session_bearer`, `aauth_admitted`, `guest_capability`); `none` when no auth ran                                                                                                                                                 |
+| `agent`               | string or null | Admitted AAuth grant label; null otherwise                                                                                                                                                                                                                                                     |
+| `client_ip`           | string or null | Redacted prefix (`a.b.c.x/24`, IPv6 `a:b:c::/48`) unless `NEOTOMA_ACCESS_LOG_FULL_IP=1`. On Fly (`FLY_APP_NAME` set): `fly-client-ip`. When the socket peer is in `NEOTOMA_TRUSTED_PROXY_IPS`: the nearest untrusted `x-forwarded-for` hop, read from the right. Otherwise: the socket address |
+| `peer_ip`             | string or null | Connecting socket address, redacted like `client_ip`. Always present, so a supplied header never replaces the real source                                                                                                                                                                      |
+| `user_agent`          | string or null | `User-Agent`, truncated to 120 characters                                                                                                                                                                                                                                                      |
+| `service`             | string         | `neotoma-api`                                                                                                                                                                                                                                                                                  |
+| `health`              | boolean        | True for `/health` and `/ready`. These requests are logged, not skipped                                                                                                                                                                                                                        |
+| `aborted`             | boolean        | True when the client closed the connection before the response finished; `status` is then not a sent status                                                                                                                                                                                    |
+
+Example (synthetic values, shown indented; the written line is a single line):
+
+```json
+{
+  "ts": "2026-01-02T03:04:05.678Z",
+  "request_id": "3f2a9c1e-0b4d-4e8a-9f61-2c7d5e8a1b90",
+  "incoming_request_id": null,
+  "method": "POST",
+  "path": "/store",
+  "query_keys": [],
+  "status": 200,
+  "duration_ms": 41.27,
+  "bytes": 512,
+  "user_id": "00000000-0000-0000-0000-000000000001",
+  "auth_method": "bearer_env",
+  "agent": null,
+  "client_ip": "203.0.113.x/24",
+  "peer_ip": "192.0.2.x/24",
+  "user_agent": "example-client/1.0",
+  "service": "neotoma-api",
+  "health": false,
+  "aborted": false
+}
+```
+
+Redaction rule: the line never carries request or response bodies, header values other than the truncated user agent, cookie values, tokens, keys or query values. `tests/unit/access_log.test.ts` sends a bearer token, a cookie, a key header and secret-shaped query values and asserts none appear in the line.
+
+The `json` line includes the user id and redacted address prefixes so a hosted log can answer who made a request, from where and when. Apply the hosted log destination's retention to it accordingly, and more strictly when `NEOTOMA_ACCESS_LOG_FULL_IP=1` adds full addresses.
+
 See [Running the Server](running_the_server.md) for transports and processes.
+
+### Read log
+
+The HTTP server writes one `read` line to standard output for each call to a logged read operation (listed below), naming which entities the call returned. A log shipper can keep these lines outside the instance; see [neotoma#1872](https://github.com/markmhendrickson/neotoma/issues/1872) for the in-database read record. The line is written whenever `NEOTOMA_ACCESS_LOG` is not `off`, in both `json` and `dev` modes. There is no separate setting.
+
+Only the HTTP server process writes the line, over REST (`surface: "rest"`) and over MCP served at `/mcp` (`"mcp"`). The stdio MCP transport writes nothing, because its standard output carries the protocol messages. In-process callers of the tool dispatcher (the CLI's local transport and plugins) also write nothing. A CLI command that talks to a server over HTTP is logged there as a `rest` read.
+
+The logged reads are the operations marked `readLog` in `src/shared/contract_mappings.ts`, on both their REST route and their MCP tool: entity query and list, entity detail, snapshot, identifier and signal lookup, contacts at a company, observations, field provenance, relationships and relationship snapshots, related entities, graph neighborhood, timeline, potential duplicates, recent changes (`GET /record_activity`, `list_recent_changes`) and one agent's records (`GET /agents/{key}/records`). The helper reads are also logged: issue status (`POST /issues/status`, its alias `POST /api/issues/status`, and `get_issue_status`), the markdown and HTML renderings of one entity (`GET /entities/{id}/markdown`, `GET /entities/{id}/html`), submission status (`GET /submit/{entity_type}/{entity_id}`, `get_entity_submission_status`) and the submission list (`list_entity_submissions`). An issue status line counts the one issue it names; its messages carry no entity ids. MCP `resources/read` is logged for the resource kinds that return entity records, observations, relationships or timeline events (`READ_RESOURCE_KINDS` in `src/services/read_log.ts`), with `operation` set to `resources/read:<kind>`, for example `resources/read:entity`. Route matching ignores letter case and a trailing slash, as the server's routing does. There is one line per call, not per entity. A failed or refused read also writes a line, with `count: 0`.
+
+The read log covers the general entity read operations and the helper reads named above, not every operation that returns stored data. Every other operation is classified: the reads below are not logged, each with a reason, and writes and operations that return no entity data follow the rule and table after it. `tests/unit/read_log_classification.test.ts` reads this table: it fails when an HTTP operation of any method (declared in `openapi.yaml` or registered in `src/actions.ts`), a read-type MCP tool or an MCP resource kind is not logged, not listed here and not a write or non-read (see below), and when a row here names an operation that no longer exists or is also logged. An MCP tool counts as read-type unless its name starts with a write verb (`store`, `correct`, `create`, `delete`, `restore`, `merge`, `split`, `register`, `update`, `submit`, `add`, `remove`, `sync`, `subscribe`, `unsubscribe`, `resolve`, `publish`, `patch`).
+
+<!-- read-log-exclusions:start -->
+
+| Read                                              | Surface | Reason                                                                                     |
+| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `GET /get_file_url`                               | rest    | Returns a signed file URL, not entity records                                              |
+| `GET /health`                                     | rest    | Liveness probe                                                                             |
+| `GET /ready`                                      | rest    | Readiness probe                                                                            |
+| `GET /openapi.yaml`                               | rest    | API description                                                                            |
+| `GET /openapi_actions.yaml`                       | rest    | API description                                                                            |
+| `GET /server-info`                                | rest    | Server metadata                                                                            |
+| `GET /mcp-interaction-instructions`               | rest    | Agent instruction text                                                                     |
+| `GET /me`                                         | rest    | The caller's own session details                                                           |
+| `GET /session`                                    | rest    | The caller's own session details                                                           |
+| `GET /mcp/oauth/authorize`                        | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/status`                           | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/connections`                      | rest    | OAuth connection list, not entity records                                                  |
+| `GET /mcp/oauth/callback`                         | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/key-auth`                         | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/local-login`                      | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/authorization-details`            | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/google/start`                     | rest    | OAuth flow step                                                                            |
+| `GET /mcp/oauth/google/callback`                  | rest    | OAuth flow step                                                                            |
+| `GET /.well-known/oauth-authorization-server`     | rest    | Discovery metadata                                                                         |
+| `GET /.well-known/oauth-protected-resource`       | rest    | Discovery metadata                                                                         |
+| `GET /.well-known/oauth-protected-resource/mcp`   | rest    | Discovery metadata                                                                         |
+| `GET /.well-known/openid-configuration`           | rest    | Discovery metadata                                                                         |
+| `GET /.well-known/mcp/server-card.json`           | rest    | Discovery metadata                                                                         |
+| `GET /.well-known/aauth-resource.json`            | rest    | Discovery metadata                                                                         |
+| `GET /`                                           | rest    | Landing page                                                                               |
+| `GET /favicon.ico`                                | rest    | Static asset                                                                               |
+| `GET /robots.txt`                                 | rest    | Static asset                                                                               |
+| `GET /sandbox/session`                            | rest    | Sandbox session helper                                                                     |
+| `GET /sandbox/terms`                              | rest    | Sandbox terms page                                                                         |
+| `GET /sandbox/report/status`                      | rest    | Sandbox report status                                                                      |
+| `GET /sources`                                    | rest    | Returns sources, not entity records                                                        |
+| `GET /sources/{id}`                               | rest    | Returns a source, not an entity record                                                     |
+| `GET /sources/{id}/content`                       | rest    | Returns source content, not entity records                                                 |
+| `GET /sources/{id}/relationships`                 | rest    | Returns relationship rows for one source (entity ids, no entity contents); not yet logged  |
+| `GET /interpretations`                            | rest    | Returns interpretations, not entity records                                                |
+| `GET /recent_conversations`                       | rest    | Returns conversation and message entities as summaries with message text; not yet logged   |
+| `GET /recent_conversations/{conversation_id}`     | rest    | Returns one conversation entity and its messages with message text; not yet logged         |
+| `GET /conversations/{conversation_id}/turn-index` | rest    | Returns one conversation's turns with message previews and entity ids; not yet logged      |
+| `GET /turns`                                      | rest    | Returns conversation turn entities as summaries; not yet logged                            |
+| `GET /turns/{turn_key}`                           | rest    | Returns one conversation turn entity with its messages; not yet logged                     |
+| `GET /admin/compliance/scorecard`                 | rest    | Compliance counts derived from turn entities, no entity records                            |
+| `GET /agents`                                     | rest    | Agent directory built from write provenance, not entity records                            |
+| `GET /agents/{key}`                               | rest    | One agent directory entry built from write provenance                                      |
+| `GET /agents/grants`                              | rest    | Returns the caller's `agent_grant` entities as grant policy; not yet logged                |
+| `GET /agents/grants/{id}`                         | rest    | Returns one `agent_grant` entity as grant policy; not yet logged                           |
+| `GET /schemas`                                    | rest    | Schema                                                                                     |
+| `GET /schemas/{entity_type}`                      | rest    | Schema                                                                                     |
+| `GET /instance-policy`                            | rest    | Policy                                                                                     |
+| `GET /access_policies`                            | rest    | Policy                                                                                     |
+| `GET /stats`                                      | rest    | Statistics                                                                                 |
+| `GET /usage`                                      | rest    | Statistics                                                                                 |
+| `GET /events/stream`                              | rest    | Server-sent change notifications for one subscription, not a read result                   |
+| `GET /peers`                                      | rest    | Peer configuration                                                                         |
+| `GET /peers/{peer_id}`                            | rest    | Peer configuration                                                                         |
+| `GET /bundles`                                    | rest    | Bundle configuration                                                                       |
+| `GET /bundles/{name}`                             | rest    | Bundle configuration                                                                       |
+| `POST /mcp`                                       | rest    | MCP transport; each tool call and resource read is classified by its own name              |
+| `POST /analyze_schema_candidates`                 | rest    | Schema analysis                                                                            |
+| `POST /audit_undeclared_fragments`                | rest    | Schema analysis                                                                            |
+| `POST /get_schema_recommendations`                | rest    | Schema analysis                                                                            |
+| `POST /list_relationship_types`                   | rest    | Schema                                                                                     |
+| `POST /turn_summary`                              | rest    | Turn status line with counts, not entity records                                           |
+| `POST /get_authenticated_user`                    | rest    | The caller's own session details                                                           |
+| `POST /health_check_snapshots`                    | rest    | Health statistics                                                                          |
+| `POST /list_subscriptions`                        | rest    | Subscription configuration                                                                 |
+| `POST /get_subscription_status`                   | rest    | Subscription configuration                                                                 |
+| `POST /sync/entities`                             | rest    | Returns entity records to a verified peer of the same instance for sync, not an agent read |
+| `retrieve_file_url`                               | mcp     | Returns a signed file URL, not entity records                                              |
+| `parse_file`                                      | mcp     | Parses a supplied file; reads no stored records                                            |
+| `list_interpretations`                            | mcp     | Returns interpretations, not entity records                                                |
+| `get_entity_type_counts`                          | mcp     | Statistics                                                                                 |
+| `list_entity_types`                               | mcp     | Schema                                                                                     |
+| `list_relationship_types`                         | mcp     | Schema                                                                                     |
+| `describe_entity_type`                            | mcp     | Schema                                                                                     |
+| `describe_instance_policy`                        | mcp     | Policy                                                                                     |
+| `analyze_schema_candidates`                       | mcp     | Schema analysis                                                                            |
+| `audit_undeclared_fragments`                      | mcp     | Schema analysis                                                                            |
+| `get_schema_recommendations`                      | mcp     | Schema analysis                                                                            |
+| `get_authenticated_user`                          | mcp     | The caller's own session details                                                           |
+| `get_session_identity`                            | mcp     | The caller's own session details                                                           |
+| `health_check_snapshots`                          | mcp     | Health statistics                                                                          |
+| `list_subscriptions`                              | mcp     | Subscription configuration                                                                 |
+| `get_subscription_status`                         | mcp     | Subscription configuration                                                                 |
+| `list_peers`                                      | mcp     | Peer configuration                                                                         |
+| `get_peer_status`                                 | mcp     | Peer configuration                                                                         |
+| `npm_check_update`                                | mcp     | Package update check                                                                       |
+| `neotoma_turn_summary`                            | mcp     | Turn status line with counts, not entity records                                           |
+| `manage_bundles`                                  | mcp     | Bundle configuration                                                                       |
+| `resources/read:source`                           | mcp     | Returns a source, not an entity record                                                     |
+| `resources/read:source_collection`                | mcp     | Returns sources, not entity records                                                        |
+| `resources/read:entity_types`                     | mcp     | Schema                                                                                     |
+| `resources/read:ui_timeline_widget`               | mcp     | Static widget HTML                                                                         |
+| `resources/read:ui_turn_summary_widget`           | mcp     | Static widget HTML                                                                         |
+
+<!-- read-log-exclusions:end -->
+
+Writes and operations that return no entity data are not reads. A `PUT`, `PATCH` or `DELETE` operation is a write. A `POST` operation is a write when the first word of its `operationId`, or for a route `openapi.yaml` does not declare, of its last path segment, is a write verb: the MCP write verbs above plus `revoke`, `suspend`, `batch`, `bulk`, `recompute` and `apply`. The other `POST` operations that are not reads are listed here; the guard fails when a row names an operation that no longer exists or is also logged or excluded.
+
+<!-- read-log-non-reads:start -->
+
+| Operation                                        | Surface | Reason                    |
+| ------------------------------------------------ | ------- | ------------------------- |
+| `POST /mcp/oauth/initiate`                       | rest    | OAuth flow step           |
+| `POST /mcp/oauth/token`                          | rest    | OAuth flow step           |
+| `POST /mcp/oauth/key-auth`                       | rest    | OAuth flow step           |
+| `POST /mcp/oauth/sign-out`                       | rest    | OAuth flow step           |
+| `POST /mcp/oauth/register`                       | rest    | OAuth client registration |
+| `POST /auth/dev-signin`                          | rest    | Local sign-in step        |
+| `POST /issues/add_message`                       | rest    | Write                     |
+| `POST /issues/submit`                            | rest    | Write                     |
+| `POST /issues/sync`                              | rest    | Write                     |
+| `POST /submit/{entity_type}/{entity_id}/message` | rest    | Write                     |
+| `POST /sandbox/session/new`                      | rest    | Sandbox session helper    |
+| `POST /sandbox/session/redeem`                   | rest    | Sandbox session helper    |
+| `POST /sandbox/session/reset`                    | rest    | Sandbox session helper    |
+| `POST /sandbox/report`                           | rest    | Write                     |
+| `POST /github/webhook`                           | rest    | Inbound webhook write     |
+
+<!-- read-log-non-reads:end -->
+
+The line never carries entity contents, snapshot fields, search text or query values. A search term is logged only as its length.
+
+| Field          | Type           | Value                                                                                                                          |
+| -------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ts`           | string         | Time the line was written, ISO 8601 UTC                                                                                        |
+| `event`        | string         | Always `read`                                                                                                                  |
+| `request_id`   | string or null | The access log's `request_id` for the HTTP request carrying the call; null when the access log is not `json`                   |
+| `user_id`      | string or null | Authenticated user id                                                                                                          |
+| `surface`      | string         | `rest` or `mcp`                                                                                                                |
+| `operation`    | string         | REST `operationId` (for example `queryEntities`) or MCP tool name (for example `retrieve_entities`)                            |
+| `agent`        | string or null | Admitted AAuth grant label, the same value the access log carries; null otherwise                                              |
+| `auth_method`  | string         | The access log's auth label; `none` when none was recorded                                                                     |
+| `status`       | string         | `ok`, `refused` (401, 403 or a capability refusal) or `error`                                                                  |
+| `http_status`  | number or null | Response status for REST calls; null for MCP                                                                                   |
+| `entity_types` | object         | Entity type to number of returned entities of that type, for example `{"task": 3, "issue": 1}`; `{}` when nothing was returned |
+| `count`        | number         | Number of distinct entities returned                                                                                           |
+| `entity_ids`   | string[]       | Returned entity ids, at most 50                                                                                                |
+| `truncated`    | boolean        | True when more than 50 entities were returned                                                                                  |
+| `query_length` | number or null | Length of the `search` or `query` argument; null when the call had none                                                        |
+
+An entity counts as returned when the result holds an object with an `entity_type` and an `entity_id`. Ids referenced from inside a returned entity (for example in its snapshot) are not counted.
+
+Example (synthetic values, shown indented; the written line is a single line):
+
+```json
+{
+  "ts": "2026-01-02T03:04:05.712Z",
+  "event": "read",
+  "request_id": "3f2a9c1e-0b4d-4e8a-9f61-2c7d5e8a1b90",
+  "user_id": "00000000-0000-0000-0000-000000000001",
+  "surface": "mcp",
+  "operation": "retrieve_entities",
+  "agent": "example-agent",
+  "auth_method": "aauth_admitted",
+  "status": "ok",
+  "http_status": null,
+  "entity_types": { "task": 2, "issue": 1 },
+  "count": 3,
+  "entity_ids": [
+    "ent_0000000000000000000000a1",
+    "ent_0000000000000000000000a2",
+    "ent_0000000000000000000000b1"
+  ],
+  "truncated": false,
+  "query_length": 12
+}
+```
 
 ## Auth and access
 
-| Variable                              | Purpose                                                                                                                                                                     |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NEOTOMA_REQUIRE_KEY_FOR_OAUTH`       | Require a key for OAuth connections                                                                                                                                         |
-| `NEOTOMA_OAUTH_CLIENT_ID`             | MCP OAuth client id (hosted mode)                                                                                                                                           |
-| `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS` | Comma-separated **exact** callback URLs additionally trusted to receive an authorization code when the authorize request arrives via a tunnel. Empty by default. See below. |
-| `NEOTOMA_SANDBOX_MODE`                | Opt into the public hosted-sandbox profile                                                                                                                                  |
-| `NEOTOMA_REFUSE_MODE`                 | `warn` or `enforce` when a no-auth, non-loopback topology is detected                                                                                                       |
+| Variable                              | Purpose                                                                                                                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NEOTOMA_REQUIRE_KEY_FOR_OAUTH`       | Require a key for OAuth connections                                                                                                                                                                                |
+| `NEOTOMA_OAUTH_CLIENT_ID`             | MCP OAuth client id (hosted mode)                                                                                                                                                                                  |
+| `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS` | Comma-separated **exact** callback URLs additionally trusted to receive an authorization code when the authorize request arrives via a tunnel. Empty by default. See below.                                        |
+| `NEOTOMA_SANDBOX_MODE`                | Opt into the public hosted-sandbox profile                                                                                                                                                                         |
+| `NEOTOMA_REFUSE_MODE`                 | `warn` or `enforce` when a no-auth, non-loopback topology is detected                                                                                                                                              |
+| `NEOTOMA_ENFORCE_AGENT_RETRIEVE`      | `1` enforces the `retrieve` capability of an admitted agent grant on entity reads (see [Agent grants: retrieve scope](../subsystems/auth.md#agent-grants-retrieve-scope)). Off by default; any other value is off. |
 
 ### Trusted OAuth callback URLs
 

@@ -546,6 +546,89 @@ async function ensureEntitySearchTextColumn(db: DbConnection): Promise<void> {
 }
 
 /**
+ * Full-text triggers an old unmerged branch left on some databases. Each body
+ * starts with `DELETE FROM entity_search_fts WHERE entity_id = ...`; that
+ * column is UNINDEXED in the fts5 table, so every snapshot insert or update
+ * reads the whole full-text store. Nothing on main creates or reads that table,
+ * so removing the triggers does not change search results.
+ */
+export const ORPHAN_ENTITY_FTS_TRIGGERS = [
+  "entity_fts_snapshot_ai",
+  "entity_fts_snapshot_au",
+  "entity_fts_snapshot_ad",
+  "entity_fts_entities_au",
+  "entity_fts_entities_ad",
+] as const;
+
+/**
+ * The leftover full-text table and its helper table. The delete and update
+ * triggers are the only thing that ever removed rows from them, so they are
+ * dropped together with the triggers: dropping the triggers alone would leave
+ * deleted or corrected text behind with nothing to remove it.
+ */
+export const ORPHAN_ENTITY_FTS_TABLES = ["entity_search_fts", "entity_fts_rows"] as const;
+
+/** What the opt-in removal dropped: leftover triggers and leftover tables. */
+export interface OrphanEntityFtsDropResult {
+  triggers: number;
+  tables: number;
+}
+
+function orphanEntityFtsTriggerDropEnabled(): boolean {
+  return runtimeEnv().NEOTOMA_DROP_ORPHAN_ENTITY_FTS === "1";
+}
+
+/**
+ * Drop the present ORPHAN_ENTITY_FTS_TRIGGERS and then the present
+ * ORPHAN_ENTITY_FTS_TABLES on an open transaction. Any failure rolls the whole
+ * transaction back, so a deletion is never left with its cleanup removed.
+ */
+async function dropOrphanEntityFtsTriggersIn(db: DbConnection): Promise<OrphanEntityFtsDropResult> {
+  const presentTables: string[] = [];
+  for (const name of ORPHAN_ENTITY_FTS_TABLES) {
+    const present = await db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(name);
+    if (present) presentTables.push(name);
+  }
+  const presentTriggers: string[] = [];
+  for (const name of ORPHAN_ENTITY_FTS_TRIGGERS) {
+    const present = await db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+      .get(name);
+    if (present) presentTriggers.push(name);
+  }
+  if (presentTriggers.length === 0 && presentTables.length === 0) return { triggers: 0, tables: 0 };
+  // Triggers first (a trigger that names a dropped table would fail on the next
+  // write), then the tables.
+  for (const name of presentTriggers) {
+    await db.prepare(`DROP TRIGGER IF EXISTS ${name}`).run();
+  }
+  for (const name of presentTables) {
+    await db.prepare(`DROP TABLE IF EXISTS ${name}`).run();
+  }
+  logger.warn(
+    `Dropped ${presentTriggers.length} leftover entity_fts_* trigger(s) and ${presentTables.length} unused ` +
+      "full-text table(s) (NEOTOMA_DROP_ORPHAN_ENTITY_FTS=1)"
+  );
+  return { triggers: presentTriggers.length, tables: presentTables.length };
+}
+
+/**
+ * Opt-in removal of ORPHAN_ENTITY_FTS_TRIGGERS and of the unused tables they
+ * maintain (ORPHAN_ENTITY_FTS_TABLES), in one transaction. Returns how many of
+ * each were dropped; zeros and no statement at all when not enabled. Runs at open
+ * inside ensureSchema.
+ */
+export async function dropOrphanEntityFtsTriggers(
+  db: DbDatabase,
+  enabled: boolean = orphanEntityFtsTriggerDropEnabled()
+): Promise<OrphanEntityFtsDropResult> {
+  if (!enabled) return { triggers: 0, tables: 0 };
+  return db.transaction((tx) => dropOrphanEntityFtsTriggersIn(tx));
+}
+
+/**
  * Create an index, logging only when it is actually built. On a large existing
  * table the first build blocks the single connection (and so all writes) until it
  * finishes, so the operator needs a visible start and end line. Silent when the
@@ -719,6 +802,7 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
     await ensureEntitySearchTextColumn(db);
+    if (orphanEntityFtsTriggerDropEnabled()) await dropOrphanEntityFtsTriggersIn(db);
     await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
@@ -900,6 +984,24 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_entities_user_live_name ON entities(user_id, merged_to_entity_id, canonical_name, id)"
       )
       .run();
+    // Lookups that carry entity_type (and canonical_name) but no user_id: the
+    // store path's canonical-name collision check and the instance-policy
+    // merge filter. Every index above leads with user_id, so these scanned
+    // the whole entities table.
+    await createIndexLogged(
+      db,
+      "idx_entities_type_name",
+      "entities",
+      "CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name)"
+    );
+    // relationship_observations had no index besides its primary key; every
+    // create_relationship lookup by relationship_key scanned the table.
+    await createIndexLogged(
+      db,
+      "idx_relationship_observations_key_user",
+      "relationship_observations",
+      "CREATE INDEX IF NOT EXISTS idx_relationship_observations_key_user ON relationship_observations(relationship_key, user_id)"
+    );
 
     // ateles#576: the visible-entity count is a COUNT(*) over entity_snapshots
     // filtered by (user_id, entity_type). Without this index that count was a

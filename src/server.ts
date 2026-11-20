@@ -89,9 +89,32 @@ import {
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
+import {
+  resolveGateAssignedConnectionUserId,
+  STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+  dropGateOnlyConnectionId,
+} from "./services/static_bearer_identity.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
-import { AgentCapabilityError } from "./services/agent_capabilities.js";
+import {
+  AgentCapabilityError,
+  isAgentRetrieveEnforcementEnabled,
+} from "./services/agent_capabilities.js";
+import {
+  currentRetrieveScope,
+  entityTypesById,
+  filterSourceIdsToScope,
+  enforceFullRetrieveScope,
+  enforceRetrieveForEntityIds,
+  enforceRetrieveForEntityTypes,
+  filterEdgesToScope,
+  narrowTraversalToScope,
+  retrieveScopeIsTypeLimited,
+} from "./services/retrieve_capability.js";
+import {
+  retrieveClassForResource,
+  retrieveClassForTool,
+} from "./shared/retrieve_scope_classification.js";
 import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
@@ -138,7 +161,12 @@ import {
   resolveConfiguredSessionOrigin,
   type SessionOriginInfo,
 } from "./services/session_info.js";
-import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
+import {
+  getActiveStandingRulesResult,
+  renderStandingRulesSectionForLookup,
+  STANDING_RULES_AFTER_AUTHENTICATION_NOTICE,
+  type StandingRule,
+} from "./services/standing_rules.js";
 import {
   getInstanceSkillsResult,
   renderInstanceSkillsSection,
@@ -174,6 +202,7 @@ import { getOrCreateMemberAttributionId } from "./services/member_attribution.js
 import {
   composeClientInstructions,
   extractFirstFencedCodeBlock,
+  prependClientInstructionsSection,
   readMcpInstructionsMarkdown,
   resolveNeotomaPackageRoot,
 } from "./mcp_instruction_doc.js";
@@ -191,6 +220,17 @@ import {
   retrieveRelatedEntitiesAsOf,
 } from "./services/record_as_of.js";
 import { runtimeEnv } from "./config_embedded.js";
+import {
+  READ_RESOURCE_KINDS,
+  READ_TOOL_NAMES,
+  admittedAgentLabel,
+  parseToolResultPayload,
+  readLogEnabled,
+  readLogWriterInstalled,
+  resourceReadOperation,
+  searchQueryLength,
+  writeReadLog,
+} from "./services/read_log.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -591,7 +631,9 @@ export class NeotomaServer {
     let connectionId =
       this.sessionConnectionId ||
       (authInfo as any)?.connectionId ||
-      (isHTTPTransport ? getCurrentMcpConnectionId() : runtimeEnv().NEOTOMA_CONNECTION_ID) ||
+      (isHTTPTransport
+        ? getCurrentMcpConnectionId()
+        : dropGateOnlyConnectionId(runtimeEnv().NEOTOMA_CONNECTION_ID)) ||
       undefined;
 
     // If no connection ID header, try to get it from Bearer token
@@ -685,6 +727,29 @@ export class NeotomaServer {
           token: "dev-local",
         });
         logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
+        return "authenticated";
+      }
+
+      // Static bearer under shared-graph mode: act as the shared graph owner.
+      // Fails closed when shared-graph mode is no longer configured.
+      if (connectionId === STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID) {
+        let sharedOwnerId: string | null;
+        try {
+          sharedOwnerId = await resolveGateAssignedConnectionUserId(connectionId);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          logger.error(`[MCP Server] Static bearer shared-graph identity unavailable: ${msg}`);
+          return "unauthenticated";
+        }
+        if (!sharedOwnerId) return "unauthenticated";
+        this.setAuthenticatedIdentity(sharedOwnerId, null);
+        this.requestAuth.set(requestId, {
+          userId: sharedOwnerId,
+          token: STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+        });
+        logger.info(
+          `[MCP Server] Using static bearer as shared graph owner (user: ${this.authenticatedUserId})`
+        );
         return "authenticated";
       }
 
@@ -787,16 +852,25 @@ export class NeotomaServer {
    * `server/discover` probe there would tell it to skip `initialize`, which is
    * where those transports authenticate. Carries protocol versions, this
    * server's declared capabilities, its identity and its instructions only:
-   * no caller identity, no tenant data (standing rules and instance skills are
-   * per-user graph data and stay off this RPC), no instance topology. The
-   * instructions are the same composition `/mcp-interaction-instructions`
-   * serves publicly: the MCP instruction block plus the instance data policy.
+   * no caller identity, no instance topology. The instructions are the same
+   * composition `/mcp-interaction-instructions` serves publicly (the MCP
+   * instruction block plus the instance data policy), led by the caller's
+   * standing rules when THIS request authenticated, and by one fixed line
+   * naming where rules are served when it did not. The result itself carries
+   * no per-user data for an unauthenticated build: the rules come only from
+   * the identity this request's own credentials resolved to.
    */
   private setupDiscoverHandler(): void {
     this.mcpServer.server.setRequestHandler(ServerDiscoverRequestSchema, async () =>
       this.buildDiscoverResult()
     );
   }
+
+  /**
+   * True once {@link handleStatelessRequest} has authenticated this request.
+   * Stateless instances serve exactly one request, so this never outlives it.
+   */
+  private statelessRequestAuthenticated = false;
 
   async buildDiscoverResult(): Promise<Record<string, unknown>> {
     let policySection = "";
@@ -809,11 +883,22 @@ export class NeotomaServer {
         `[instance_policy] discover instructions render skipped: ${(err as Error).message}`
       );
     }
+    // Rules come only from the identity THIS request's credentials resolved
+    // to (see handleStatelessRequest). An authenticated request whose user id
+    // cannot be resolved reports the rules as unknown, never as none.
+    const standingRulesSection = this.statelessRequestAuthenticated
+      ? renderStandingRulesSectionForLookup(
+          await this.lookupStandingRulesForInstructions(await this.resolveInstructionLookupUserId())
+        )
+      : STANDING_RULES_AFTER_AUTHENTICATION_NOTICE;
     return {
       resultType: "complete",
       supportedVersions: [...MCP_MODERN_SUPPORTED_VERSIONS],
       capabilities: { ...NEOTOMA_MCP_DECLARED_CAPABILITIES },
-      instructions: composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+      instructions: prependClientInstructionsSection(
+        composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+        standingRulesSection
+      ),
       ttlMs: MCP_STATELESS_CACHE_HINT.ttlMs,
       cacheScope: MCP_STATELESS_CACHE_HINT.cacheScope,
       _meta: { [MCP_META_SERVER_INFO]: this.getServerInfo() },
@@ -886,6 +971,7 @@ export class NeotomaServer {
       };
     }
 
+    this.statelessRequestAuthenticated = true;
     this.setupDiscoverHandler();
     const id = jsonRpcIdOf(message);
     const transport = new SingleExchangeTransport(id);
@@ -1137,10 +1223,10 @@ export class NeotomaServer {
     if (!connectionId) return null;
 
     try {
-      if (connectionId === "dev-local") {
-        const devUser = await ensureLocalDevUser();
-        this.setAuthenticatedIdentity(devUser.id, null);
-        return devUser.id;
+      const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+      if (gateAssignedUserId) {
+        this.setAuthenticatedIdentity(gateAssignedUserId, null);
+        return gateAssignedUserId;
       }
       const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
       const { userId, authenticatedUserId } = await getAccessTokenForConnection(connectionId);
@@ -1158,7 +1244,90 @@ export class NeotomaServer {
     const baseInstructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
       : this.getMcpInteractionInstructions();
+    // Identity may not be on the instance yet at this point; resolve it the way
+    // listTools does. A null result is an UNKNOWN identity, not an absent user,
+    // so it reports as a failed lookup rather than an empty rule set.
+    const lookupUserId = await this.resolveInstructionLookupUserId();
+    const {
+      instructions,
+      standingRules,
+      standingRulesLookupFailed,
+      availableSkills,
+      instanceSkillsLookupFailed,
+    } = await this.composeSessionInstructions(baseInstructions, lookupUserId);
 
+    return {
+      protocolVersion: "2025-11-25",
+      capabilities: {
+        ...NEOTOMA_MCP_DECLARED_CAPABILITIES,
+      },
+      serverInfo: {
+        name: "neotoma",
+        version: readPackageVersion(config.projectRoot),
+        ...(updateNotice
+          ? {
+              title: "Update available",
+              description: updateNotice,
+            }
+          : {}),
+        _neotoma: {
+          standing_rules: standingRules,
+          ...(standingRulesLookupFailed
+            ? {
+                standing_rules_unavailable: true,
+                standing_rules_note:
+                  "Standing rules could not be read for this session. An empty list here does NOT mean no rules are configured — treat any instance policy as unknown rather than absent, and say so rather than proceeding as if unrestricted.",
+              }
+            : {}),
+          available_skills: availableSkills,
+          ...(instanceSkillsLookupFailed
+            ? {
+                skills_unavailable: true,
+                skills_note:
+                  "Instance-stored skills could not be read for this session. An empty or filesystem-only available_skills here does NOT mean this instance has no skills — treat the instance's skills as unknown rather than absent, and say so rather than telling the user none exist.",
+              }
+            : {}),
+        },
+      },
+      instructions,
+    };
+  }
+
+  /**
+   * The instructions text a session `initialize` returns for `userId`, with no
+   * update notice. GET /mcp-interaction-instructions serves this for an
+   * authenticated caller, so the REST text and the handshake text come from
+   * one composition and cannot drift. A null `userId` is an unknown identity
+   * and yields the standing-rules-unavailable notice, never "no rules".
+   */
+  async buildInstructionsForUser(userId: string | null): Promise<string> {
+    return (await this.composeSessionInstructions(this.getMcpInteractionInstructions(), userId))
+      .instructions;
+  }
+
+  /**
+   * Standing rules for an instruction-serving entrance. A null user id is an
+   * UNKNOWN identity on a request meant to be authenticated, so it reports as
+   * a failed lookup, never as an empty rule set.
+   */
+  private async lookupStandingRulesForInstructions(
+    userId: string | null
+  ): Promise<{ rules: StandingRule[]; lookup_failed: boolean }> {
+    if (!userId) return { rules: [], lookup_failed: true };
+    const result = await getActiveStandingRulesResult(userId);
+    return { rules: result.rules, lookup_failed: result.lookup_failed };
+  }
+
+  private async composeSessionInstructions(
+    baseInstructions: string,
+    lookupUserId: string | null
+  ): Promise<{
+    instructions: string;
+    standingRules: StandingRule[];
+    standingRulesLookupFailed: boolean;
+    availableSkills: string[];
+    instanceSkillsLookupFailed: boolean;
+  }> {
     // Append this instance's declared data policy (#1974) so a cooperating
     // agent knows what this instance is for before its first write, rather than
     // discovering the rules by being rejected. A read failure or an unset
@@ -1179,23 +1348,13 @@ export class NeotomaServer {
 
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
-    let standingRules: StandingRule[] = [];
     // An empty rules array is ambiguous — it means either "no rules configured"
     // or "the lookup failed". Carry the distinction into the payload so an
     // agent is never handed an empty policy that is actually a broken read
-    // (#2131).
-    let standingRulesLookupFailed = false;
-    // Identity may not be on the instance yet at this point; resolve it the way
-    // listTools does. A null result is an UNKNOWN identity, not an absent user,
-    // so it reports as a failed lookup rather than an empty rule set.
-    const lookupUserId = await this.resolveInstructionLookupUserId();
-    if (lookupUserId) {
-      const result = await getActiveStandingRulesResult(lookupUserId);
-      standingRules = result.rules;
-      standingRulesLookupFailed = result.lookup_failed;
-    } else {
-      standingRulesLookupFailed = true;
-    }
+    // (#2131). A null user id reports as a failed lookup.
+    const standingRulesLookup = await this.lookupStandingRulesForInstructions(lookupUserId);
+    const standingRules: StandingRule[] = standingRulesLookup.rules;
+    const standingRulesLookupFailed = standingRulesLookup.lookup_failed;
 
     // Skills reach agents two ways: mirrored to a local skills directory, or
     // stored in the graph as `skill` rows. A hosted instance has only the
@@ -1250,48 +1409,38 @@ export class NeotomaServer {
         "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
         "the `[instance_skills]` warning if this persists."
       : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
-    // Nested rather than variadic: `composeClientInstructions` takes one
-    // section, and each call no-ops on an empty one, so an instance with no
-    // policy and no skill rows gets byte-identical instructions to before.
-    const instructions = composeClientInstructions(
-      composeClientInstructions(baseInstructions, policySection),
-      skillsSection
+    // Standing rules were delivered ONLY via `serverInfo._neotoma`, which
+    // general MCP clients drop — they surface `instructions` to the model and
+    // ignore unknown `serverInfo` keys. Rules that an operator had enabled
+    // therefore reached no session, while the instance policy (which does ride
+    // `instructions`) arrived fine (#2187). Render them into the prose too.
+    //
+    // A failed lookup is stated rather than rendered as silence, for the same
+    // reason it is for skills: an agent told nothing concludes "no rules",
+    // which is the one inference that must never follow from a broken read.
+    const standingRulesSection = renderStandingRulesSectionForLookup(standingRulesLookup);
+    // Nested rather than variadic: each helper takes one section and no-ops on
+    // an empty one, so an instance with no policy, no rules and no skill rows
+    // gets byte-identical instructions to before.
+    //
+    // Standing rules go FIRST, not appended with the other sections: the base
+    // block is well over 100KB and clients truncate long `instructions`, so an
+    // appended rule is the first thing cut. Operator-set rules are the
+    // must-follow content in this payload; they lead it.
+    const instructions = prependClientInstructionsSection(
+      composeClientInstructions(
+        composeClientInstructions(baseInstructions, policySection),
+        skillsSection
+      ),
+      standingRulesSection
     );
 
     return {
-      protocolVersion: "2025-11-25",
-      capabilities: {
-        ...NEOTOMA_MCP_DECLARED_CAPABILITIES,
-      },
-      serverInfo: {
-        name: "neotoma",
-        version: readPackageVersion(config.projectRoot),
-        ...(updateNotice
-          ? {
-              title: "Update available",
-              description: updateNotice,
-            }
-          : {}),
-        _neotoma: {
-          standing_rules: standingRules,
-          ...(standingRulesLookupFailed
-            ? {
-                standing_rules_unavailable: true,
-                standing_rules_note:
-                  "Standing rules could not be read for this session. An empty list here does NOT mean no rules are configured — treat any instance policy as unknown rather than absent, and say so rather than proceeding as if unrestricted.",
-              }
-            : {}),
-          available_skills: availableSkills,
-          ...(instanceSkillsLookupFailed
-            ? {
-                skills_unavailable: true,
-                skills_note:
-                  "Instance-stored skills could not be read for this session. An empty or filesystem-only available_skills here does NOT mean this instance has no skills — treat the instance's skills as unknown rather than absent, and say so rather than telling the user none exist.",
-              }
-            : {}),
-        },
-      },
       instructions,
+      standingRules,
+      standingRulesLookupFailed,
+      availableSkills,
+      instanceSkillsLookupFailed,
     };
   }
 
@@ -2471,8 +2620,9 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             let principalUserId: string | undefined;
-            if (connectionId === "dev-local") {
-              userId = (await ensureLocalDevUser()).id;
+            const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+            if (gateAssignedUserId) {
+              userId = gateAssignedUserId;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId, authenticatedUserId } =
@@ -2612,8 +2762,12 @@ export class NeotomaServer {
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
             mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
+            // Carry the HTTP request's access-log id and auth label so the
+            // read log line (src/services/read_log.ts) shares them.
+            requestId: getRequestContext()?.requestId ?? null,
+            authMethod: getRequestContext()?.authMethod ?? null,
           },
-          () => this.executeTool(name, args)
+          () => this.executeToolWithReadLog(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
@@ -2782,14 +2936,86 @@ export class NeotomaServer {
         aauthAdmission: null,
         authenticatedPrincipal: null,
       },
+      // No read log line: in-process callers own their standard output.
       () => this.executeTool(name, args)
     );
+  }
+
+  /**
+   * Run a tool and, for read tools, write one read log line
+   * (src/services/read_log.ts) per call: on success with the entities the
+   * result returned, on failure with a status and no entities. Must run
+   * inside the dispatch request context so the request id, auth method and
+   * admitted agent are visible. Writes only when the HTTP server installed the
+   * read log writer; on the stdio transport standard output is the protocol
+   * channel, so nothing is written there.
+   */
+  private async executeToolWithReadLog(
+    name: string,
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (!READ_TOOL_NAMES.has(name)) return this.executeTool(name, args);
+    return this.runWithMcpReadLog(
+      name,
+      searchQueryLength(args),
+      () => this.executeTool(name, args),
+      parseToolResultPayload
+    );
+  }
+
+  /**
+   * Run one MCP read and write its read log line (src/services/read_log.ts):
+   * on success with the entities `payloadOf(result)` holds, on failure with a
+   * status and no entities. Shared by tool calls and `resources/read` so both
+   * report the same fields. A plain call when no writer is installed (stdio
+   * transport, in-process callers) or `NEOTOMA_ACCESS_LOG` is `off`.
+   */
+  private async runWithMcpReadLog<T>(
+    operation: string,
+    queryLength: number | null,
+    run: () => Promise<T>,
+    payloadOf: (result: T) => unknown
+  ): Promise<T> {
+    if (!readLogWriterInstalled() || !readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
+      return run();
+    }
+    const context = getRequestContext();
+    const base = {
+      surface: "mcp" as const,
+      operation,
+      requestId: context?.requestId ?? null,
+      userId: this.authenticatedUserId,
+      agent: admittedAgentLabel(context?.aauthAdmission),
+      authMethod: context?.authMethod ?? "none",
+      queryLength,
+    };
+    let result: T;
+    try {
+      result = await run();
+    } catch (error) {
+      const statusCode = (error as { statusCode?: unknown } | null)?.statusCode;
+      const refused =
+        error instanceof AgentCapabilityError || statusCode === 401 || statusCode === 403;
+      writeReadLog({ ...base, status: refused ? "refused" : "error" });
+      throw error;
+    }
+    writeReadLog({ ...base, status: "ok", result: payloadOf(result) });
+    return result;
   }
 
   private async executeTool(
     name: string,
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Opt-in agent-grant retrieve scope: tools with no per-type check of
+    // their own need a `"*"` retrieve entry (same gate as the REST routes,
+    // derived from the same classification). No-op with the setting off.
+    if (
+      isAgentRetrieveEnforcementEnabled() &&
+      retrieveClassForTool(name)?.class === "read_full_scope"
+    ) {
+      enforceFullRetrieveScope(name);
+    }
     switch (name) {
       case "retrieve_file_url":
         return await this.retrieveFileUrl(args);
@@ -2953,8 +3179,9 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             let principalUserId: string | undefined;
-            if (connectionId === "dev-local") {
-              userId = (await ensureLocalDevUser()).id;
+            const gateAssignedUserId = await resolveGateAssignedConnectionUserId(connectionId);
+            if (gateAssignedUserId) {
+              userId = gateAssignedUserId;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId, authenticatedUserId } =
@@ -3143,44 +3370,47 @@ export class NeotomaServer {
         const { uri } = request.params;
         const parsed = this.parseResourceUri(uri);
 
+        // Resource reads do not pass through executeTool. Unknown kinds take
+        // the full-scope branch until explicitly classified.
+        // `currentRetrieveScope()` is null when no grant scope binds this request
+        // (setting off, or a caller without an admitted grant): nothing below runs.
+        if (currentRetrieveScope()) {
+          const resourceClass = retrieveClassForResource(parsed.type)?.class;
+          if (!resourceClass || resourceClass === "read_full_scope") {
+            enforceFullRetrieveScope(`resources/read ${parsed.type}`);
+          } else if (resourceClass === "read_entity") {
+            if (parsed.entityId) {
+              await enforceRetrieveForEntityIds([parsed.entityId], this.getAuthenticatedUserId());
+            } else if (parsed.entityType || parsed.queryParams?.entity_type) {
+              enforceRetrieveForEntityTypes([
+                (parsed.entityType ?? parsed.queryParams?.entity_type)!,
+              ]);
+            }
+          }
+        }
+
+        // Resource kinds that return entity records write a read log line
+        // (src/services/read_log.ts), the same line a read tool writes.
+        if (READ_RESOURCE_KINDS.has(parsed.type)) {
+          const data = await this.runWithMcpReadLog(
+            resourceReadOperation(parsed.type),
+            null,
+            () => this.readEntityResource(parsed),
+            (result) => result
+          );
+          return {
+            contents: [{ uri, mimeType: "application/json", text: JSON.stringify(data) }],
+          };
+        }
+
         let data: any;
 
         switch (parsed.type) {
-          case "entity_collection_all":
-            data = await this.handleEntityCollectionAll(parsed.queryParams);
-            break;
-          case "entity_collection":
-            data = await this.handleEntityCollection(parsed.entityType!, parsed.queryParams);
-            break;
-          case "entity":
-            data = await this.handleIndividualEntity(parsed.entityId!);
-            break;
-          case "entity_observations":
-            data = await this.handleEntityObservations(parsed.entityId!);
-            break;
-          case "entity_relationships":
-            data = await this.handleEntityRelationships(parsed.entityId!);
-            break;
-          case "timeline_year":
-            data = await this.handleTimelineYear(parsed.year!, parsed.queryParams);
-            break;
-          case "timeline_month":
-            data = await this.handleTimelineMonth(parsed.year!, parsed.month!, parsed.queryParams);
-            break;
           case "source":
             data = await this.handleSource(parsed.sourceId!);
             break;
           case "source_collection":
             data = await this.handleSourceCollection(parsed.queryParams);
-            break;
-          case "relationship_collection_all":
-            data = await this.handleRelationshipCollectionAll(parsed.queryParams);
-            break;
-          case "relationship_collection":
-            data = await this.handleRelationshipCollection(
-              parsed.relationshipType!,
-              parsed.queryParams
-            );
             break;
           case "entity_types":
             data = await this.handleEntityTypes();
@@ -3222,6 +3452,7 @@ export class NeotomaServer {
           ],
         };
       } catch (error) {
+        if (error instanceof AgentCapabilityError) throw error;
         if (error instanceof McpError) {
           throw error;
         }
@@ -3231,6 +3462,36 @@ export class NeotomaServer {
         );
       }
     });
+  }
+
+  /**
+   * Read a resource whose kind is in `READ_RESOURCE_KINDS` (entity records,
+   * their observations and relationships, timeline events). Every kind in
+   * that set must have a case here.
+   */
+  private async readEntityResource(parsed: ReturnType<NeotomaServer["parseResourceUri"]>) {
+    switch (parsed.type) {
+      case "entity_collection_all":
+        return this.handleEntityCollectionAll(parsed.queryParams);
+      case "entity_collection":
+        return this.handleEntityCollection(parsed.entityType!, parsed.queryParams);
+      case "entity":
+        return this.handleIndividualEntity(parsed.entityId!);
+      case "entity_observations":
+        return this.handleEntityObservations(parsed.entityId!);
+      case "entity_relationships":
+        return this.handleEntityRelationships(parsed.entityId!);
+      case "timeline_year":
+        return this.handleTimelineYear(parsed.year!, parsed.queryParams);
+      case "timeline_month":
+        return this.handleTimelineMonth(parsed.year!, parsed.month!, parsed.queryParams);
+      case "relationship_collection_all":
+        return this.handleRelationshipCollectionAll(parsed.queryParams);
+      case "relationship_collection":
+        return this.handleRelationshipCollection(parsed.relationshipType!, parsed.queryParams);
+      default:
+        throw new McpError(ErrorCode.InvalidRequest, `Unsupported resource type: ${parsed.type}`);
+    }
   }
 
   private async retrieveFileUrl(
@@ -3693,6 +3954,8 @@ export class NeotomaServer {
     // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
     // ownership; this MCP path historically did not.
     const userId = this.getAuthenticatedUserId();
+    // Opt-in agent-grant retrieve scope (no-op when off); same helper as REST.
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
     if (parsed.include_cleared_fields && parsed.format !== "json") {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -3869,6 +4132,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
 
     let obsQuery = db
       .from("observations")
@@ -3908,6 +4172,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
     try {
       return this.buildTextResponse(
         await getFieldProvenance(parsed.entity_id, parsed.field, userId)
@@ -4364,6 +4629,7 @@ export class NeotomaServer {
       search_mode,
       next_cursor,
       read_contract,
+      narrowed_by_capability,
     } = await queryEntitiesWithCount({
       readRequest: {
         raw: rawArgs,
@@ -4455,6 +4721,7 @@ export class NeotomaServer {
         ...(applied_search_strategies ? { applied_search_strategies } : {}),
         search_mode,
         ...(next_cursor ? { next_cursor } : {}),
+        ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
       });
     }
 
@@ -4466,6 +4733,7 @@ export class NeotomaServer {
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
+      ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
     });
   }
 
@@ -4621,11 +4889,15 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
 
     // Record-wide as-of read (#2700): edges, endpoint existence and entity
     // snapshots are all answered as recorded by the cutoff.
     const asOf = { at: parsed.at, at_ingested: parsed.at_ingested };
     if (hasAsOfCutoff(asOf)) {
+      if (retrieveScopeIsTypeLimited()) {
+        enforceFullRetrieveScope("retrieve_related_entities with an as-of cutoff");
+      }
       const result = await retrieveRelatedEntitiesAsOf(
         {
           entityId: parsed.entity_id,
@@ -4720,6 +4992,15 @@ export class NeotomaServer {
       currentLevel = nextLevel;
     }
 
+    // Agent-grant retrieve scope: drop edges to types the grant may not read,
+    // and anything reached only through them.
+    const narrowed = await narrowTraversalToScope(parsed.entity_id, allRelationships, userId);
+    if (narrowed) {
+      allRelationships.splice(0, allRelationships.length, ...narrowed.edges);
+      relatedEntityIds.clear();
+      for (const id of narrowed.entityIds) relatedEntityIds.add(id);
+    }
+
     // Get entity details if requested
     let entities: any[] = [];
     if (parsed.include_entities && relatedEntityIds.size > 0) {
@@ -4759,6 +5040,7 @@ export class NeotomaServer {
       total_entities: entities.length,
       total_relationships: allRelationships.length,
       hops_traversed: hopsTraversed,
+      ...(narrowed ? { narrowed_by_capability: true } : {}),
     });
   }
 
@@ -4778,6 +5060,11 @@ export class NeotomaServer {
       node_id: parsed.node_id,
       node_type: parsed.node_type,
     };
+
+    // Agent-grant retrieve scope: the root entity must be readable; a source
+    // node returns observations of any type, so it needs a "*" grant.
+    if (parsed.node_type === "entity") await enforceRetrieveForEntityIds([parsed.node_id], userId);
+    else enforceFullRetrieveScope("retrieve_graph_neighborhood for a source node");
 
     if (parsed.node_type === "entity") {
       // Get entity
@@ -4815,6 +5102,11 @@ export class NeotomaServer {
           .eq("user_id", userId);
 
         if (!relError && relationships) {
+          const narrowedEdges = await filterEdgesToScope(relationships as any[], userId);
+          if (narrowedEdges) {
+            relationships.splice(0, relationships.length, ...narrowedEdges);
+            result.narrowed_by_capability = true;
+          }
           result.relationships = relationships;
           const relatedEntityIds = new Set<string>();
           relationships.forEach((rel: { source_entity_id: string; target_entity_id: string }) => {
@@ -4860,14 +5152,20 @@ export class NeotomaServer {
               .map((obs: any) => obs.source_id)
               .filter((id: string) => id);
             if (sourceIds.length > 0) {
-              const { data: sources, error: sourceError } = await db
-                .from("sources")
-                .select("id, mime_type, file_size, original_filename, created_at")
-                .in("id", sourceIds)
-                .eq("user_id", userId);
+              const scope = currentRetrieveScope();
+              const allowedSourceIds = await filterSourceIdsToScope(sourceIds, userId);
+              const { data: sources, error: sourceError } =
+                allowedSourceIds.length > 0
+                  ? await db
+                      .from("sources")
+                      .select("id, mime_type, file_size, original_filename, created_at")
+                      .in("id", allowedSourceIds)
+                      .eq("user_id", userId)
+                  : { data: [], error: null };
 
               if (!sourceError && sources) {
                 result.related_sources = sources;
+                if (scope?.kind === "types") result.narrowed_by_capability = true;
 
                 // Get events for these sources
                 if (parsed.include_events) {
@@ -4878,7 +5176,20 @@ export class NeotomaServer {
                     .eq("user_id", userId);
 
                   if (!evtError && events) {
-                    result.timeline_events = events;
+                    const eventTypes =
+                      scope?.kind === "types"
+                        ? await entityTypesById(
+                            events.map((event: { entity_id?: string }) => event.entity_id ?? ""),
+                            userId
+                          )
+                        : null;
+                    result.timeline_events =
+                      scope?.kind === "types"
+                        ? events.filter((event: { entity_id?: string }) => {
+                            const type = eventTypes?.get(event.entity_id ?? "");
+                            return type !== undefined && scope.types.includes(type);
+                          })
+                        : events;
                   }
                 }
               }
@@ -4977,16 +5288,26 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const { getDashboardStats } = await import("./services/dashboard_stats.js");
 
+    // Agent-grant retrieve scope: return counts only for allowed types
+    // (resolved outside the try so a refusal keeps its own envelope).
+    const scope = currentRetrieveScope();
     try {
       const stats = await getDashboardStats(userId);
-      const sortedEntries = Object.entries(stats.entities_by_type ?? {}).sort((a, b) => {
+      const counted = Object.entries(stats.entities_by_type ?? {}).filter(
+        ([type]) => scope === null || scope.kind === "all" || scope.types.includes(type)
+      );
+      const narrowed = scope !== null && scope.kind === "types";
+      const sortedEntries = counted.sort((a, b) => {
         const diff = b[1] - a[1];
         return diff !== 0 ? diff : a[0].localeCompare(b[0]);
       });
 
       return this.buildTextResponse({
         entities_by_type: Object.fromEntries(sortedEntries),
-        total_entities: stats.total_entities ?? 0,
+        total_entities: narrowed
+          ? sortedEntries.reduce((sum, [, n]) => sum + n, 0)
+          : (stats.total_entities ?? 0),
+        ...(narrowed ? { narrowed_by_capability: true } : {}),
         last_updated: stats.last_updated,
         count_source: "dashboard_stats",
         scope: "authenticated_user",
@@ -9473,11 +9794,14 @@ export class NeotomaServer {
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const entityTypeFilter = queryParams?.entity_type;
+      const scope = currentRetrieveScope();
+      const allowedTypes = scope?.kind === "types" ? scope.types : undefined;
 
       // Get entities with filters
       const entities = await queryEntities({
         userId,
         entityType: entityTypeFilter,
+        entityTypes: entityTypeFilter ? undefined : allowedTypes,
         includeMerged: false,
         limit,
         offset,
@@ -9495,6 +9819,8 @@ export class NeotomaServer {
 
       if (entityTypeFilter) {
         countQuery = countQuery.eq("entity_type", entityTypeFilter);
+      } else if (allowedTypes) {
+        countQuery = countQuery.in("entity_type", allowedTypes);
       }
 
       const { count, error: countError } = await countQuery;
@@ -9515,6 +9841,8 @@ export class NeotomaServer {
 
       if (entityTypeFilter) {
         latestQuery = latestQuery.eq("entity_type", entityTypeFilter);
+      } else if (allowedTypes) {
+        latestQuery = latestQuery.in("entity_type", allowedTypes);
       }
 
       const { data: latestEntity } = await latestQuery
@@ -9528,6 +9856,7 @@ export class NeotomaServer {
         entities,
         total: count || 0,
         returned: entities.length,
+        ...(allowedTypes ? { narrowed_by_capability: true } : {}),
         has_more: (count || 0) > entities.length,
         last_updated:
           latestEntity?.updated_at || latestEntity?.created_at || new Date().toISOString(),

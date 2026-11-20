@@ -41,6 +41,12 @@ When `NEOTOMA_SHARED_GRAPH_USER_ID` is set, two concepts travel on the same sess
 
 Data scoping (`getAuthenticatedUserId`, store/retrieve) continues to use `user_id` alone. Inspector and CLI consumers treat `email` as who is signed in and `user_id` as whose graph.
 
+### Static bearer token identity
+
+A static bearer token (`NEOTOMA_BEARER_TOKEN`, or the retiring slot during a handover) acts as the local dev user. When `NEOTOMA_SHARED_GRAPH_USER_ID` is set to a usable UUID, it acts as the shared owner on REST and MCP alike, so a service token sees the team's records and skills. Writes made with it land in the shared graph, and `GET /me` reports `shared_graph: true` with no `email`. Without that setting the behaviour is the same as before.
+
+On MCP the identity is marked by a connection id that only the `/mcp` HTTP gate assigns. Stdio, the WebSocket bridge and the process environment never honour it, so a caller cannot claim the shared owner without presenting the token. A session opened before the setting changed keeps its earlier identity until it reconnects.
+
 ### Annotated responses
 
 **Fully remapped shared-graph session** (teammate has signed in after identity columns exist):
@@ -166,6 +172,78 @@ Before enabling writes, call `GET /session` (or `get_session_identity` over MCP,
 - Full integration guide (wire format, diagnostics, transport parity, troubleshooting): [`docs/subsystems/agent_attribution_integration.md`](./agent_attribution_integration.md).
 - Fleet quickstart (AAuth key setup, fleet schemas, snapshot export + drift): [`docs/developer/fleet_onboarding.md`](../developer/fleet_onboarding.md).
 - Capability scoping (per-agent `(op, entity_type)` allow-lists): [`docs/subsystems/agent_capabilities.md`](./agent_capabilities.md).
+
+## Agent grants: retrieve scope
+
+An agent grant lists capabilities as `(op, entity_types)` entries. Writes have always been checked against `store`, `correct` and the other write ops. The `retrieve` op is checked on entity reads only when the setting `NEOTOMA_ENFORCE_AGENT_RETRIEVE=1` is set. It is off by default, and any other value is off. With it off, reads behave exactly as before and run no extra check.
+
+Only a request signed with a key pinned to an active grant (an admitted grant) is bound by the grant's `retrieve` list. A plain bearer token, OAuth, local or unsigned caller is never limited by a grant. This is by design: a grant scopes an agent, not the account owner.
+
+With the setting on and an admitted grant:
+
+- A grant with no `retrieve` entry refuses every entity read (fail closed). A `retrieve` entry that names no types also refuses.
+- A read of one named entity (by id, by identifier, snapshot, observations, field provenance) resolves the entity's type first and refuses unless the type is listed. A `"*"` entry allows every type.
+- A typed query (`entity_type` or `entity_types`) is refused if any requested type is not listed.
+- An untyped query is narrowed to the listed types before it runs, so `total` and pagination describe the narrowed result. The response then carries `narrowed_by_capability: true`.
+
+Which type is checked after a cross-type merge:
+
+- Entity reads check the entity's type. A merged-away id is followed through its merge chain, as the readers follow it, and every entity on the chain must be covered. A chain that ends in a cycle, runs past the depth cap, or stops at an entity that still carries a merge link (a hop lookup failed) is refused unless the grant has a `"*"` entry.
+- An untyped observation listing filters on the observation row's `entity_type`. A merge moves observations to the surviving entity but leaves that column unchanged, so the row keeps the type it was written under.
+
+Identifier lookups and entity queries differ on purpose. An identifier lookup names what it wants, so it is refused when any matched entity, typed lookup or not, is outside the grant: a raw entity id matches whatever its type. An untyped entity query asks for a set, so it is narrowed to the listed types instead, and the caller is told through `narrowed_by_capability`.
+
+A refusal is HTTP 403 `capability_denied` with `op: "retrieve"` and the refused `entity_type`, the same envelope writes use. Over MCP the same envelope arrives as the error `data`. One shared helper, `enforceAgentRetrieveScope` in `src/services/agent_capabilities.ts`, makes the decision for both surfaces.
+
+Coverage is decided per operation in `src/shared/retrieve_scope_classification.ts`. Every `operationId` in `openapi.yaml`, MCP tool, and MCP resource kind has one class; an MCP tool mapped to an operation takes that operation's class. `tests/contract/retrieve_scope_coverage_guard.test.ts` fails when an operation, tool, or resource handler kind has no class. Unknown resource kinds take the full-scope gate.
+
+| Class | Behaviour with the setting on and an admitted grant | Operations |
+|-------|------------------------------------------------------|------------|
+| `read_entity` | Per-entity check; typed query refuses; untyped query narrowed | `listEntities`, `queryEntities`, `getEntityById`, `getEntityHtml`, `getEntityObservations`, `listObservations`, `queryObservations`, `getEntitySnapshot`, `listObservationsForEntity`, `getFieldProvenance`, `retrieveEntityByIdentifier` |
+| `read_scoped` | Root entity checked; neighbours or counts narrowed to allowed types | `retrieveRelatedEntities`, `retrieveGraphNeighborhood`, MCP `get_entity_type_counts` |
+| `read_full_scope` | Needs a `"*"` retrieve entry; a type-limited grant is refused with 403 | `getFileUrl`, `listPotentialDuplicates`, `listSources`, `getSourceById`, `getSourceRelationships`, `getRecordActivity`, `getComplianceScorecard`, `listAgentGrants`, `getAgentGrant`, `getRecentConversations`, `getRecentConversation`, `getConversationTurnIndex`, `listRelationships`, `getRelationshipById`, `getRelationshipSnapshot`, `getEntityRelationships`, `listRelationshipsForEntity`, `listTimeline`, `getTimelineById`, `listInterpretations`, `getStats`, `getUsage`, `queryContactsAtCompany`, `identifyEntityBySignals`, `issuesGetStatus`, `analyzeSchemaCandidates`, `auditUndeclaredFragments`, `getSchemaRecommendations`, `healthCheckSnapshots`, `listSubscriptions`, `getSubscriptionStatus`, `eventsStream`, `listSyncEntities`, MCP `manage_bundles`, `get_entity_submission_status`, `list_entity_submissions` |
+| `exempt` | Not checked: returns no entity data | health and readiness, server info, OpenAPI and instruction text, OAuth and sign-in flows, `getMe`, `getAuthenticatedUser`, `getSessionInfo`, schema and relationship-type metadata, instance and access policy, peer configuration, MCP `parse_file` and `npm_check_update`; the `/mcp` transport (each tool is classified on its own) |
+| `write` | Governed by the write capabilities, not `retrieve` | every mutation (store, correct, merge, split, delete, restore, relationship, schema, issue, subscription, peer and grant writes) |
+
+Details for the `read_scoped` reads:
+
+- Related entities and graph neighbourhood refuse when the root entity's type is not allowed. Edges whose other endpoint is of a type the grant may not read are dropped, and so is anything reached only through such an entity. For an entity-root graph neighbourhood, timeline events are kept only when their entity type is allowed; a source row is kept only when every entity backed by that source has an allowed type. The response carries `narrowed_by_capability: true`. A graph neighbourhood of a source node, and a related-entities read with an as-of cutoff, need a `"*"` entry.
+- The paged neighbourhood relationship list is narrowed before `total_count` and paging are computed.
+- `get_entity_type_counts` returns counts only for allowed types; `total_entities` is their sum.
+
+MCP `resources/read` applies the same scope within the `/mcp` transport. Individual entity and observation resources check the entity and its merge chain; typed entity collections check their requested type; untyped entity collections apply the granted types before counting and paging. Source, relationship, timeline and unknown resource kinds require a `"*"` retrieve entry. The entity-types resource and static UI widgets are metadata-only. A caller without an admitted grant, or with the setting off, keeps the existing behaviour.
+
+Out of scope, stated plainly:
+
+- `read_full_scope` reads are not narrowed. A type-limited grant cannot use them at all; a `"*"` grant reads them in full. Per-type narrowing of the paged relationship lists (`listRelationshipsForEntity`, `getEntityRelationships`) and of the timeline is follow-up work.
+- Writes that return entity data (for example `store` or `merge`) are governed by the write capabilities only.
+- List-style reads are refused for a type-limited grant until per-type narrowing exists for them: `list_relationships`, `list_timeline_events`, `list_recent_changes` and `identify_entity_by_signals` (REST `listRelationships`, `listTimeline`, `getRecordActivity`, `identifyEntityBySignals`). This is a known gap: a grant limited to some types cannot list those types' relationships, events or recent changes; it needs a `"*"` entry.
+- MCP `resources/list` still advertises resource names and counts across types. This round gates `resources/read` payloads; narrowing discovery metadata is separate work.
+
+### Default deny over registered routes
+
+The REST gate is default deny. With the setting on and an admitted grant, a request is let through to its handler only when it matches a classified route that is `read_entity` or `read_scoped` (the handler runs the per-type check), `exempt` or `write`. Every other request, including one that matches no classified route, needs a `"*"` retrieve entry and is otherwise refused with the 403 `capability_denied` envelope. When a static path and a param path both match, the most restrictive class wins. Callers without a grant, and every caller with the setting off, are unaffected.
+
+Classification covers every route the Express app registers, not only `openapi.yaml`. Routes with no `operationId` (aliases, site and UI pages, legacy paths) are classified in `UNDECLARED_ROUTE_RETRIEVE_CLASS`. `tests/contract/retrieve_scope_registered_routes.test.ts` reads the live route table and fails when a registered route has no class.
+
+Undeclared read aliases refused for a type-limited grant: `POST /api/issues/status`, `GET /sources/{id}/content`, `GET /turns`, `GET /turns/{turn_key}`, `GET /agents`, `GET /agents/{key}`, `GET /agents/{key}/records`, `GET /submit/{entity_type}/{entity_id}`, `GET /bundles`, `GET /bundles/{name}`. `GET /entities/{id}/markdown` is `read_entity` (its handler runs the round 1 check).
+
+Exempt routes with no `operationId` (no entity data):
+
+| Route                                                                           | Reason                                              |
+| ------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `GET /`                                                                         | Landing page and instance metadata                  |
+| `GET /.well-known/aauth-resource.json`, `GET /.well-known/mcp/server-card.json` | Discovery metadata                                  |
+| `GET /docs`, `GET /docs/*`                                                      | Bundled documentation                               |
+| `GET /favicon.ico`, `GET /robots.txt`                                           | Static files                                        |
+| `GET /openapi_actions.yaml`                                                     | API description                                     |
+| `GET /mcp/oauth/google/start`, `GET /mcp/oauth/google/callback`                 | Authentication flow                                 |
+| `GET /sandbox/terms`, `GET /sandbox/report/status`                              | Static terms; report status by its own access token |
+| `ALL /entities`                                                                 | Hinted 404 for misuse of the collection path        |
+| `ALL /mcp`                                                                      | MCP transport; each tool is classified on its own   |
+| `GET /assets/*`, `GET /inspector/assets/*`                                      | Inspector bundle assets served by static middleware |
+
+Inspector pages served by the SPA fallback match no route, so a type-limited grant is refused there too. Browsers do not carry agent grants, so this affects only signed agent requests.
 
 ## MCP Authentication
 

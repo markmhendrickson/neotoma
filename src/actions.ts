@@ -62,6 +62,7 @@ import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
+  isAgentRetrieveEnforcementEnabled,
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
@@ -245,6 +246,10 @@ import {
   verifyGoogleIdToken,
 } from "./services/google_oidc.js";
 import {
+  resolveStaticBearerUserId,
+  STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID,
+} from "./services/static_bearer_identity.js";
+import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
@@ -285,6 +290,17 @@ import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import {
+  currentRetrieveScope,
+  enforceFullRetrieveScope,
+  enforceRetrieveForEntityIds,
+  enforceRetrieveForEntityTypes,
+  filterEdgesToScope,
+  narrowTraversalToScope,
+  retrieveScopeIsTypeLimited,
+  filterSourceIdsToScope,
+} from "./services/retrieve_capability.js";
+import { retrieveGateTargetForRequest } from "./shared/retrieve_scope_classification.js";
+import {
   EXACT_IDENTITY_REQUEST_MESSAGE,
   exactIdentityRequested,
   readExactIdentity,
@@ -320,6 +336,18 @@ import {
 } from "./services/record_as_of.js";
 import { isProductionEnvironment } from "./shared/environment.js";
 import { isLoopbackHost, resolveBindHostFromEnv } from "./shared/bind_host.js";
+import {
+  jsonAccessLog,
+  resolveAccessLogFormat,
+  setRequestAuthMethod,
+} from "./services/access_log.js";
+import {
+  installHttpReadLogWriter,
+  readLogEnabled,
+  recordReadLogResult,
+  restReadLog,
+  restReadLogPlainBody,
+} from "./services/read_log.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -465,7 +493,7 @@ const corsOptions = {
     "X-Connection-Id",
     "mcp-session-id",
   ],
-  exposedHeaders: ["Content-Type"],
+  exposedHeaders: ["Content-Type", "x-request-id"],
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 app.use(cors(corsOptions));
@@ -482,12 +510,32 @@ app.use(
     },
   })
 );
-app.use(
-  morgan<express.Request, express.Response>("dev", {
-    // Suppress identity-bearing URLs independently of route spelling or method.
-    skip: (req) => exactIdentityRequested(req.query),
-  })
-);
+// Per-request access log. `NEOTOMA_ACCESS_LOG` selects `json` (one structured
+// line per request, written on response finish so it sees the resolved user),
+// `dev` (morgan's compact format) or `off`. The default is `json` when the
+// server binds beyond loopback and `dev` for a loopback bind. See
+// docs/operations/configuration.md "Access log".
+const accessLogBindHost = resolveHttpBindHost();
+const accessLogFormat = resolveAccessLogFormat(runtimeEnv().NEOTOMA_ACCESS_LOG, accessLogBindHost);
+if (accessLogFormat === "json") {
+  app.use(jsonAccessLog({ addresses: (req) => accessLogAddresses(req) }));
+} else if (accessLogFormat === "dev") {
+  app.use(
+    morgan<express.Request, express.Response>("dev", {
+      // Suppress identity-bearing URLs independently of route spelling or method.
+      skip: (req) => exactIdentityRequested(req.query),
+    })
+  );
+}
+// Per-call read log (src/services/read_log.ts): one JSON line per read
+// request listing the entities it returned. Shares the `NEOTOMA_ACCESS_LOG`
+// setting and is off only when that setting is `off`. MCP calls served here
+// write the same line from the tool dispatcher in src/server.ts. Lines reach
+// standard output only after `startHTTPServer` installs the writer, so a
+// process that imports this module without serving HTTP writes nothing.
+if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
+  app.use(restReadLog());
+}
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
 
@@ -1106,7 +1154,50 @@ app.get("/server-info", (req, res) => {
   });
 });
 
-app.get("/mcp-interaction-instructions", async (_req, res) => {
+/**
+ * Response header on GET /mcp-interaction-instructions naming the composition
+ * served: `user` when the caller authenticated and the text is the one a
+ * session initialize returns for that user (standing rules first). Absent on
+ * the global text, so an unauthenticated response is unchanged.
+ */
+export const INSTRUCTIONS_COMPOSITION_HEADER = "X-Neotoma-Instructions-Composition";
+
+/**
+ * Resolve the caller of a public route that serves more to an authenticated
+ * caller. Only a request carrying a Bearer header is attempted, and it goes
+ * through {@link restAuthMiddleware} itself, so a token is accepted here
+ * exactly when it is accepted on a protected route. Any request the
+ * middleware would refuse (or that resolves to no user principal) returns
+ * null and is served as unauthenticated; nothing is written to `res`.
+ */
+async function resolveOptionalBearerUserId(req: express.Request): Promise<string | null> {
+  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
+  if (!headerAuth.startsWith("Bearer ")) return null;
+  // Absorbs whatever the middleware would send on refusal; the route then
+  // answers as it does for an unauthenticated caller.
+  const discard: express.Response = new Proxy({} as express.Response, {
+    // `then` stays undefined: the middleware returns `sendError(res, ...)`,
+    // and a callable `then` would make that awaited value a never-settling
+    // thenable.
+    get: (_target, prop) => {
+      if (prop === "then") return undefined;
+      if (prop === "headersSent") return false;
+      return () => discard;
+    },
+  });
+  let accepted = false;
+  try {
+    await restAuthMiddleware(req, discard, () => {
+      accepted = true;
+    });
+    if (!accepted) return null;
+    return await getAuthenticatedUserId(req);
+  } catch {
+    return null;
+  }
+}
+
+app.get("/mcp-interaction-instructions", async (req, res) => {
   // Uses the shared extractor rather than an inlined fence regex, and appends
   // the instance policy through the shared composer (#1974), so this surface
   // cannot drift from the MCP handshake and the CLI.
@@ -1130,6 +1221,21 @@ app.get("/mcp-interaction-instructions", async (_req, res) => {
     return;
   }
 
+  // An authenticated caller gets the text a session initialize returns for
+  // it, built by the same server composition, so the two cannot drift.
+  // The body depends on the Authorization header, so every response varies
+  // on it; the per-user text is private to that caller (matching the
+  // discover result's cacheScope "private") and must not sit in a shared cache.
+  res.setHeader("Vary", "Authorization");
+  const userId = await resolveOptionalBearerUserId(req);
+  if (userId) {
+    const composed = await new NeotomaServer().buildInstructionsForUser(userId);
+    res.setHeader(INSTRUCTIONS_COMPOSITION_HEADER, "user");
+    res.setHeader("Cache-Control", "private");
+    res.type("text/plain").send(composed);
+    return;
+  }
+
   let policySection = "";
   try {
     const { getInstancePolicy, renderInstancePolicyInstructions } =
@@ -1140,7 +1246,20 @@ app.get("/mcp-interaction-instructions", async (_req, res) => {
     // failing the request.
   }
 
-  res.type("text/plain").send(composeClientInstructions(text, policySection));
+  // A caller whose credentials did not resolve gets the global text led by the
+  // fixed notice that standing rules are served after authentication, so the
+  // absence of rules is never read as "none" (same line server/discover carries).
+  const { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } =
+    await import("./services/standing_rules.js");
+  const { prependClientInstructionsSection } = await import("./mcp_instruction_doc.js");
+  res
+    .type("text/plain")
+    .send(
+      prependClientInstructionsSection(
+        composeClientInstructions(text, policySection),
+        STANDING_RULES_AFTER_AUTHENTICATION_NOTICE
+      )
+    );
 });
 
 // ============================================================================
@@ -1470,8 +1589,28 @@ export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = runtimeEnv
 function redactIpForLog(ip: string): string {
   const trimmed = ip.trim();
   if (trimmed.includes(":")) {
-    const parts = trimmed.split(":");
-    return parts.slice(0, 3).join(":") + "::/48";
+    const address = trimmed.split("%", 1)[0]!;
+    if (isIP(address) !== 6) return "<redacted>";
+    const [head, tail] = address.split("::");
+    const left = head ? head.split(":") : [];
+    const right = tail ? tail.split(":") : [];
+    const last = right.at(-1) ?? left.at(-1);
+    if (last?.includes(".")) {
+      const octets = last.split(".").map(Number);
+      const hextets = [
+        ((octets[0]! << 8) | octets[1]!).toString(16),
+        ((octets[2]! << 8) | octets[3]!).toString(16),
+      ];
+      if (right.length) right.splice(-1, 1, ...hextets);
+      else left.splice(-1, 1, ...hextets);
+    }
+    const missing = tail === undefined ? 0 : 8 - left.length - right.length;
+    const expanded = [...left, ...Array<string>(missing).fill("0"), ...right];
+    const prefix = expanded
+      .slice(0, 3)
+      .map((hextet) => parseInt(hextet, 16).toString(16))
+      .join(":");
+    return `${prefix}::/48`;
   }
   const v4 = trimmed.split(".");
   if (v4.length === 4) {
@@ -1487,6 +1626,63 @@ function forwardedForValues(req: express.Request): string[] {
     .flatMap((value) => String(value).split(","))
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+/** Strip the IPv4-mapped IPv6 prefix so `::ffff:a.b.c.d` redacts as IPv4. */
+function unmapIPv4(ip: string): string {
+  return ip.trim().replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
+}
+
+/**
+ * Request id and auth method label the access log carries, for the MCP read
+ * log line (src/services/read_log.ts) written from inside the tool dispatcher.
+ */
+function readLogRequestFields(req: express.Request): {
+  requestId: string | null;
+  authMethod: string | null;
+} {
+  const r = req as express.Request & { requestId?: string; authMethod?: string };
+  return { requestId: r.requestId ?? null, authMethod: r.authMethod ?? null };
+}
+
+/**
+ * Client and peer addresses for the access log (src/services/access_log.ts).
+ *
+ * `peer_ip` is always the connecting socket address. `client_ip` starts as the
+ * peer and is replaced from a header only when the header's source is trusted:
+ * - `fly-client-ip` only when the process runs on Fly (`FLY_APP_NAME` set),
+ *   where the platform proxy sets that header;
+ * - `x-forwarded-for` only when the peer is a configured trusted proxy
+ *   (`NEOTOMA_TRUSTED_PROXY_IPS`), taking the nearest untrusted hop from the
+ *   right.
+ * Both values are redacted with `redactIpForLog` unless
+ * `NEOTOMA_ACCESS_LOG_FULL_IP=1`. Logging only: never feeds a trust decision.
+ */
+export function accessLogAddresses(
+  req: express.Request,
+  env: NodeJS.ProcessEnv = runtimeEnv()
+): { client_ip: string | null; peer_ip: string | null } {
+  const rawPeer = req.socket?.remoteAddress;
+  const peer = rawPeer ? unmapIPv4(rawPeer) : null;
+  let client = peer;
+  if (peer) {
+    const onFly = Boolean(env.FLY_APP_NAME?.trim());
+    const platform = onFly ? req.header("fly-client-ip")?.split(",")[0]?.trim() : undefined;
+    if (platform && isIP(unmapIPv4(platform))) {
+      client = unmapIPv4(platform);
+    } else if (isTrustedProxyIP(peer, env)) {
+      const hops = forwardedForValues(req);
+      for (let i = hops.length - 1; i >= 0; i--) {
+        const hop = unmapIPv4(hops[i]!);
+        if (isTrustedProxyIP(hop, env)) continue;
+        if (isIP(hop)) client = hop;
+        break;
+      }
+    }
+  }
+  const full = env.NEOTOMA_ACCESS_LOG_FULL_IP === "1";
+  const shown = (ip: string | null) => (ip === null ? null : full ? ip : redactIpForLog(ip));
+  return { client_ip: shown(client), peer_ip: shown(peer) };
 }
 
 // isProductionEnvironment is imported from ./shared/environment.js — see that
@@ -2156,6 +2352,30 @@ app.use(dbAbortContext());
 // short-circuited inside the middleware.
 app.use(aauthAdmission());
 
+// Opt-in agent-grant retrieve scope (NEOTOMA_ENFORCE_AGENT_RETRIEVE=1),
+// default deny: a request that is not a classified route whose handler runs
+// the per-type check, an exempt route or a write (see
+// src/shared/retrieve_scope_classification.ts, which covers every registered
+// route, aliases included) needs a `"*"` retrieve entry on an admitted grant.
+// Callers without a grant are unaffected. With the setting off this returns
+// before reading the request context. Logs nothing.
+app.use((req, res, next) => {
+  if (!isAgentRetrieveEnforcementEnabled()) return next();
+  const operationId = retrieveGateTargetForRequest(req.method, req.path);
+  if (!operationId) return next();
+  try {
+    enforceFullRetrieveScope(operationId);
+  } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
+    return next(error);
+  }
+  return next();
+});
+
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
 app.all("/mcp", async (req, res) => {
@@ -2208,7 +2428,12 @@ app.all("/mcp", async (req, res) => {
     // header had been omitted. The MCP server takes its connection id from the
     // gate's resolved value (request context and session mint below), not from
     // the header; the header is removed from both header views as well.
-    if (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req)) {
+    // The static-bearer shared-graph id is only ever assigned by this gate
+    // (below), never honoured from a client, local or not.
+    if (
+      connectionIdHeader === STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID ||
+      (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req))
+    ) {
       setGateConnectionIdHeader(req, undefined);
       connectionIdHeader = undefined;
     }
@@ -2259,8 +2484,14 @@ app.all("/mcp", async (req, res) => {
               clientName: req.headers["x-client-name"],
             });
           }
-          setGateConnectionIdHeader(req, "dev-local");
-          connectionIdHeader = "dev-local";
+          // Shared-graph mode: the static token acts as the shared graph owner
+          // (see src/services/static_bearer_identity.ts). Otherwise dev-local,
+          // unchanged.
+          const staticBearerConnectionId = getSharedGraphUserId()
+            ? STATIC_BEARER_SHARED_GRAPH_CONNECTION_ID
+            : "dev-local";
+          setGateConnectionIdHeader(req, staticBearerConnectionId);
+          connectionIdHeader = staticBearerConnectionId;
           bearerValidated = true;
         }
       }
@@ -2435,6 +2666,7 @@ app.all("/mcp", async (req, res) => {
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
           mcpConnectionId: connectionIdHeader ?? null,
+          ...readLogRequestFields(req),
         },
         () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
       );
@@ -2622,6 +2854,7 @@ app.all("/mcp", async (req, res) => {
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
         mcpLookupTiming,
+        ...readLogRequestFields(req),
       },
       () => transport!.handleRequest(req, res, req.body)
     );
@@ -4209,6 +4442,7 @@ function stampAdmittedAAuthPrincipal(req: express.Request): boolean {
     return false;
   }
   stampUserPrincipal(req, admission.user_id);
+  setRequestAuthMethod(req, "aauth_admitted");
   logger.info(
     `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admission.user_id} grant_id=${admission.grant_id ?? "?"}`
   );
@@ -4893,11 +5127,13 @@ async function relatedEntitiesReadableByGuest(
   // Only entities that exist in the owner's graph are considered.
   const { data: rows, error } = await db
     .from("entities")
-    .select("id")
-    .in("id", relatedIds)
-    .eq("user_id", ownerId);
+    .select("id, user_id")
+    .in("id", relatedIds);
   if (error) throw error;
-  const candidates = ((rows ?? []) as Array<{ id: string }>)
+  // Filter by owner here: with user_id in the WHERE clause the planner picks
+  // the user_id index and reads every entity of a single-user instance.
+  const candidates = ((rows ?? []) as Array<{ id: string; user_id: string }>)
+    .filter((row) => row.user_id === ownerId)
     .map((row) => row.id)
     .sort()
     .slice(0, GUEST_EXPANSION_MAX_RELATED_ENTITIES);
@@ -4925,7 +5161,22 @@ installInspectorSpaShellEarly(app, runtimeEnv(), logger);
 
 // Public key-based authentication middleware
 // MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token
-app.use(async (req, res, next) => {
+/**
+ * REST principal resolution for every route registered after it. Named (not
+ * inline) so GET /mcp-interaction-instructions, which is public and registered
+ * before it, can resolve an optional Bearer caller through this same function
+ * rather than a second resolver (see {@link resolveOptionalBearerUserId}).
+ *
+ * That public route calls this function with a throwaway response object
+ * whose methods do nothing. Code here must therefore not rely on side effects
+ * of a real response (cookies, `res.locals`, headers set for later handlers):
+ * only the `next()` call and the principal it establishes reach the route.
+ */
+async function restAuthMiddleware(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): Promise<unknown> {
   // Bypass auth only for truly public endpoints (no user data)
   if (
     req.method === "OPTIONS" ||
@@ -4952,12 +5203,14 @@ app.use(async (req, res, next) => {
   ) {
     if (maybeStampAdmittedEntityReader(req)) return next();
     if (await maybeStampGuestPrincipal(req)) {
+      setRequestAuthMethod(req, "guest_capability");
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
     }
     if (_localSandboxActive) {
       const sandboxUser = await ensureLocalSandboxUser();
       stampUserPrincipal(req, sandboxUser.id);
+      setRequestAuthMethod(req, "local_sandbox");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
       );
@@ -4966,6 +5219,7 @@ app.use(async (req, res, next) => {
     const devUser = await ensureLocalDevUser();
     stampUserPrincipal(req, devUser.id);
     markLocalNoTokenSignIn(req);
+    setRequestAuthMethod(req, "local_no_bearer");
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
     );
@@ -4978,6 +5232,7 @@ app.use(async (req, res, next) => {
     const sessionInfo = await resolveSessionFromRequest(req);
     if (sessionInfo) {
       stampUserPrincipal(req, sessionInfo.userId);
+      setRequestAuthMethod(req, "sandbox_session");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=sandbox_session user_id=${sessionInfo.userId}`
       );
@@ -5004,6 +5259,7 @@ app.use(async (req, res, next) => {
     if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
       const aauthUser = await ensureSandboxAauthUser(aauthCtx.thumbprint);
       stampUserPrincipal(req, aauthUser.id);
+      setRequestAuthMethod(req, "sandbox_aauth");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=sandbox_aauth user_id=${aauthUser.id} thumbprint=${aauthCtx.thumbprint}`
       );
@@ -5011,6 +5267,7 @@ app.use(async (req, res, next) => {
     }
     const sandboxUser = await ensureSandboxPublicUser();
     stampUserPrincipal(req, sandboxUser.id);
+    setRequestAuthMethod(req, "sandbox_public");
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=sandbox_public user_id=${sandboxUser.id}`
     );
@@ -5027,6 +5284,7 @@ app.use(async (req, res, next) => {
     if (safeCompareTokens(token, mcpExpectedToken)) {
       const devUser = await ensureLocalDevUser();
       stampUserPrincipal(req, devUser.id);
+      setRequestAuthMethod(req, "bearer_mcp_token");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
       );
@@ -5040,6 +5298,7 @@ app.use(async (req, res, next) => {
     if (!headerAuth.startsWith("Bearer ")) {
       if (maybeStampAdmittedEntityReader(req)) return next();
       if (await maybeStampGuestPrincipal(req)) {
+        setRequestAuthMethod(req, "guest_capability");
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }
@@ -5047,6 +5306,7 @@ app.use(async (req, res, next) => {
         if (_localSandboxActive) {
           const sandboxUser = await ensureLocalSandboxUser();
           stampUserPrincipal(req, sandboxUser.id);
+          setRequestAuthMethod(req, "local_sandbox");
           logger.info(
             `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
           );
@@ -5055,6 +5315,7 @@ app.use(async (req, res, next) => {
         const devUser = await ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         markLocalNoTokenSignIn(req);
+        setRequestAuthMethod(req, "local_no_bearer");
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
         );
@@ -5076,10 +5337,17 @@ app.use(async (req, res, next) => {
             clientName: req.headers["x-client-name"],
           });
         }
-        const devUser = await ensureLocalDevUser();
-        stampUserPrincipal(req, devUser.id);
+        // Shared-graph mode resolves the static token to the shared graph
+        // owner; otherwise the local dev user, as before.
+        const staticBearerUserId = await resolveStaticBearerUserId();
+        stampUserPrincipal(req, staticBearerUserId);
+        // Report the shared graph on GET /me for a static token acting as the shared owner.
+        if (getSharedGraphUserId() && staticBearerUserId === getSharedGraphUserId()) {
+          (req as any).signedInSharedGraph = true;
+        }
+        setRequestAuthMethod(req, slot === "previous" ? "bearer_env_previous" : "bearer_env");
         logger.info(
-          `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${devUser.id}`
+          `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${staticBearerUserId}`
         );
         return next();
       }
@@ -5098,6 +5366,7 @@ app.use(async (req, res, next) => {
   // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
     if (await maybeStampGuestPrincipal(req)) {
+      setRequestAuthMethod(req, "guest_capability");
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
     }
@@ -5177,6 +5446,7 @@ app.use(async (req, res, next) => {
     // stamped principal, and the Ed25519 fall-through that trusted a
     // caller-supplied user_id has been removed.
     stampUserPrincipal(req, registeredUserId);
+    setRequestAuthMethod(req, "ed25519_bearer");
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=ed25519_bearer user_id=${registeredUserId}`
     );
@@ -5196,11 +5466,13 @@ app.use(async (req, res, next) => {
       (req as any).signedInSharedGraph = validated.sharedGraph === true;
       (req as any).bearerToken = bearerToken;
       sessionActorId = validated.actorId;
+      setRequestAuthMethod(req, "session_bearer");
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
     } catch (authError) {
       if (await maybeStampGuestPrincipal(req)) {
+        setRequestAuthMethod(req, "guest_capability");
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }
@@ -5219,6 +5491,7 @@ app.use(async (req, res, next) => {
         res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
         const sandboxUser = await ensureSandboxPublicUser();
         stampUserPrincipal(req, sandboxUser.id);
+        setRequestAuthMethod(req, "sandbox_public_stale_bearer");
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=sandbox_public_stale_bearer user_id=${sandboxUser.id}`
         );
@@ -5240,10 +5513,15 @@ app.use(async (req, res, next) => {
     return runWithAuthenticatedPrincipal({ actorId: sessionActorId }, () => next());
   }
   return next();
-});
+}
+app.use(restAuthMiddleware);
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+// Read log body capture below encryption (src/services/read_log.ts): records
+// the plain body's entity ids and types for the read line, so an encrypted
+// response is not logged as an empty read. Never changes the response.
+app.use(restReadLogPlainBody());
 
 // #2240: member write-attribution (`provenance.authenticated_actor_id`) is for
 // members of the graph, not for a guest holding an entity-scoped token. Wrap
@@ -5638,33 +5916,40 @@ async function runEntitiesQuery(
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies, search_mode, next_cursor, read_contract } =
-      await queryEntitiesWithCount({
-        readRequest: {
-          raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
-          surface: req.method === "GET" ? "http_get" : "http_post",
-          consumed: [...Object.keys(parsed.data), "query", "search_query"],
-        },
-        userId,
-        entityType: entity_type,
-        entityTypes: entity_types,
-        includeMerged: include_merged,
-        includeSnapshots: include_snapshots,
-        sortBy: sort_by,
-        sortOrder: sort_order,
-        published,
-        publishedAfter: published_after,
-        publishedBefore: published_before,
-        search,
-        limit,
-        offset,
-        cursor,
-        updatedSince: updated_since,
-        createdSince: created_since,
-        identityBasis: identity_basis,
-        snapshotFilters: snapshot_filters,
-        excludeBookkeeping: exclude_bookkeeping,
-      });
+    const {
+      entities,
+      total,
+      applied_search_strategies,
+      search_mode,
+      next_cursor,
+      read_contract,
+      narrowed_by_capability,
+    } = await queryEntitiesWithCount({
+      readRequest: {
+        raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
+        surface: req.method === "GET" ? "http_get" : "http_post",
+        consumed: [...Object.keys(parsed.data), "query", "search_query"],
+      },
+      userId,
+      entityType: entity_type,
+      entityTypes: entity_types,
+      includeMerged: include_merged,
+      includeSnapshots: include_snapshots,
+      sortBy: sort_by,
+      sortOrder: sort_order,
+      published,
+      publishedAfter: published_after,
+      publishedBefore: published_before,
+      search,
+      limit,
+      offset,
+      cursor,
+      updatedSince: updated_since,
+      createdSince: created_since,
+      identityBasis: identity_basis,
+      snapshotFilters: snapshot_filters,
+      excludeBookkeeping: exclude_bookkeeping,
+    });
 
     return res.json({
       entities,
@@ -5675,6 +5960,7 @@ async function runEntitiesQuery(
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
+      ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
     });
   } catch (error) {
     return handleApiError(
@@ -5873,6 +6159,7 @@ app.get("/entities/:id", async (req, res) => {
     if (entityError || !entity) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
+    await enforceRetrieveForEntityIds([entityId], userId);
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const entityWithProvenance = await getEntityWithProvenance(entityId, false);
@@ -5914,6 +6201,7 @@ app.get("/entities/:id/markdown", async (req, res) => {
     if (entityError || !entity) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
+    await enforceRetrieveForEntityIds([entityId], userId);
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const current = await getEntityWithProvenance(entityId);
@@ -5953,6 +6241,11 @@ app.get("/entities/:id/markdown", async (req, res) => {
       : undefined;
     if (etag) res.setHeader("ETag", etag);
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    // The reply is text, so name the returned entity for the read log.
+    recordReadLogResult(res, {
+      entity_id: current.entity_id ?? entityId,
+      entity_type: current.entity_type,
+    });
     return res.send(markdown);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
@@ -5995,6 +6288,7 @@ app.get("/entities/:id/html", async (req, res) => {
       if (entityError || !entity) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
+      await enforceRetrieveForEntityIds([entityId], userId);
       const { getEntityWithProvenance } = await import("./services/entity_queries.js");
       current = await getEntityWithProvenance(entityId, false);
     }
@@ -6026,6 +6320,11 @@ app.get("/entities/:id/html", async (req, res) => {
       await import("./services/rendered_page/copy_controls.js");
     res.setHeader("Content-Security-Policy", renderedPageContentSecurityPolicy(htmlBody));
     res.setHeader("X-Content-Type-Options", "nosniff");
+    // The reply is HTML, so name the returned entity for the read log.
+    recordReadLogResult(res, {
+      entity_id: current.entity_id ?? entityId,
+      entity_type: current.entity_type,
+    });
     return res.send(html);
   } catch (error) {
     if (error instanceof GuestTokenInvalidError || error instanceof GuestTokenScopeError) {
@@ -6145,6 +6444,7 @@ app.get("/entities/:id/observations", async (req, res) => {
       if (entityError || !entity) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
+      await enforceRetrieveForEntityIds([entityId], userId);
     }
 
     const limit = parseInt(req.query.limit as string) || 100;
@@ -7237,6 +7537,36 @@ async function setGrantStatusRoute(
   }
 }
 
+app.post("/guest-access-tokens/:id/revoke", async (req, res) => {
+  try {
+    if (requestPrincipal(req)?.kind === "guest")
+      return res
+        .status(403)
+        .json(buildErrorEnvelope("FORBIDDEN", "Owner authentication is required."));
+    const userId = await getAuthenticatedUserId(req);
+    const { revokeGuestAccessToken, GuestTokenRevocationError } =
+      await import("./services/guest_access_token.js");
+    try {
+      if (Object.keys(req.query).length)
+        throw new GuestTokenRevocationError(400, "Query parameters are not accepted.");
+      return res.json(await revokeGuestAccessToken(userId, req.params.id, req.body));
+    } catch (error) {
+      if (error instanceof GuestTokenRevocationError)
+        return res.status(error.status).json(buildErrorEnvelope(error.code, error.message));
+      throw error;
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Guest token revocation failed.",
+      "DB_QUERY_FAILED",
+      "APIError:guest_token_revoke"
+    );
+  }
+});
+
 app.post("/agents/grants/:id/suspend", (req, res) => setGrantStatusRoute(req, res, "suspended"));
 app.post("/agents/grants/:id/revoke", (req, res) => setGrantStatusRoute(req, res, "revoked"));
 app.post("/agents/grants/:id/restore", (req, res) => setGrantStatusRoute(req, res, "active"));
@@ -8139,6 +8469,15 @@ app.get("/observations", async (req, res) => {
       query = query.eq("entity_id", entityId);
     }
 
+    // Opt-in agent-grant retrieve scope: a named entity must be covered;
+    // otherwise the grant's types become the filter before the query runs.
+    if (entityId) await enforceRetrieveForEntityIds([entityId], userId);
+    const retrieveScope = currentRetrieveScope();
+    const narrowedByCapability = retrieveScope?.kind === "types" && !entityId;
+    if (retrieveScope?.kind === "types") {
+      query = query.in("entity_type", retrieveScope.types);
+    }
+
     query = query.order("observed_at", { ascending: false });
     query = query.range(offset, offset + limit - 1);
 
@@ -8154,6 +8493,7 @@ app.get("/observations", async (req, res) => {
       total: count || 0,
       limit,
       offset,
+      ...(narrowedByCapability ? { narrowed_by_capability: true } : {}),
     });
   } catch (error) {
     return handleApiError(
@@ -10838,6 +11178,17 @@ app.post("/observations/query", async (req, res) => {
       query = query.eq("source_id", source_id);
     }
 
+    // Opt-in agent-grant retrieve scope: requested types and a named entity
+    // must be covered; otherwise the grant's types become the filter before
+    // the query runs, so `total` matches the rows.
+    if (entity_type) enforceRetrieveForEntityTypes([entity_type]);
+    if (entity_id) await enforceRetrieveForEntityIds([entity_id], userId);
+    const retrieveScope = currentRetrieveScope();
+    const narrowedByCapability = retrieveScope?.kind === "types" && !entity_type && !entity_id;
+    if (retrieveScope?.kind === "types") {
+      query = query.in("entity_type", retrieveScope.types);
+    }
+
     if (updated_since) {
       // Observations are immutable; treat updated_since as a synonym for
       // observed_at >= updated_since so clients have a single "since" knob.
@@ -10859,10 +11210,14 @@ app.post("/observations/query", async (req, res) => {
       total: count || 0,
       limit,
       offset,
+      ...(narrowedByCapability ? { narrowed_by_capability: true } : {}),
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "Failed to query observations");
     }
     logError("APIError:observations_query", req, error);
     const message = error instanceof Error ? error.message : "Failed to query observations";
@@ -11029,6 +11384,12 @@ app.post("/get_entity_snapshot", async (req, res) => {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
   }
 
+  try {
+    await enforceRetrieveForEntityIds([entity_id], userId);
+  } catch (err) {
+    return handleApiError(req, res, err, "Failed to read entity");
+  }
+
   // When at/at_ingested cutoffs are requested, use the shared observation-replay
   // helper so the offline path honours them with the same semantics as the MCP
   // path in server.ts. Without cutoffs, fall through to the fast materialized
@@ -11129,6 +11490,12 @@ app.post("/list_observations", async (req, res) => {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
   }
 
+  try {
+    await enforceRetrieveForEntityIds([entity_id], userId);
+  } catch (err) {
+    return handleApiError(req, res, err, "Failed to read entity");
+  }
+
   let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
 
   if (updated_since) {
@@ -11171,6 +11538,12 @@ app.post("/get_field_provenance", async (req, res) => {
     userId = await getAuthenticatedUserId(req);
   } catch (err) {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
+  try {
+    await enforceRetrieveForEntityIds([entity_id], userId);
+  } catch (err) {
+    return handleApiError(req, res, err, "Failed to read entity");
   }
 
   try {
@@ -11599,10 +11972,14 @@ app.post("/retrieve_related_entities", async (req, res) => {
       at_ingested,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
+    await enforceRetrieveForEntityIds([entity_id], userId);
 
     // Record-wide as-of read (#2700): edges, endpoint existence and entity
     // snapshots are all answered as recorded by the cutoff.
     if (hasAsOfCutoff({ at, at_ingested })) {
+      if (retrieveScopeIsTypeLimited()) {
+        enforceFullRetrieveScope("retrieve_related_entities with an as-of cutoff");
+      }
       const result = await retrieveRelatedEntitiesAsOf(
         {
           entityId: entity_id,
@@ -11691,6 +12068,15 @@ app.post("/retrieve_related_entities", async (req, res) => {
       currentLevel = nextLevel;
     }
 
+    // Agent-grant retrieve scope: drop edges to types the grant may not read,
+    // and anything reached only through them.
+    const narrowed = await narrowTraversalToScope(entity_id, relationships, userId);
+    if (narrowed) {
+      relationships.splice(0, relationships.length, ...narrowed.edges);
+      relatedIds.clear();
+      for (const id of narrowed.entityIds) relatedIds.add(id);
+    }
+
     // Get entities if requested
     let entities: any[] = [];
     if (include_entities && relatedIds.size > 0) {
@@ -11712,7 +12098,11 @@ app.post("/retrieve_related_entities", async (req, res) => {
       count: relationships.length,
       max_hops,
     });
-    return res.json({ relationships, entities });
+    return res.json({
+      relationships,
+      entities,
+      ...(narrowed ? { narrowed_by_capability: true } : {}),
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -11754,6 +12144,12 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
     const result: any = { node_id, node_type };
 
+    // Agent-grant retrieve scope: the root entity must be readable; a source
+    // node returns observations of any type, so it needs a "*" grant.
+    if (node_type === "entity") await enforceRetrieveForEntityIds([node_id], userId);
+    else enforceFullRetrieveScope("retrieve_graph_neighborhood for a source node");
+    const narrowEdges = node_type === "entity" && retrieveScopeIsTypeLimited();
+
     if (node_type === "entity") {
       // Get entity
       const { data: entity, error: entityError } = await db
@@ -11768,7 +12164,45 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       }
 
       // Get relationships if requested
-      if (include_relationships) {
+      if (include_relationships && narrowEdges) {
+        // Narrow to edges whose endpoints the grant may read BEFORE counting
+        // and paging, so total_count agrees with the rows.
+        const { data: allEdges, error: allError } = await db
+          .from("relationship_snapshots")
+          .select("*")
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId)
+          .order("last_observation_at", { ascending: false })
+          .order("relationship_key", { ascending: true });
+        if (allError) throw allError;
+        const kept = (await filterEdgesToScope((allEdges || []) as any[], userId)) ?? [];
+        result.total_count = kept.length;
+        result.has_more = offset + limit < kept.length;
+        const page = kept.slice(offset, offset + limit);
+        result.relationships = page;
+        result.narrowed_by_capability = true;
+        const relatedEntityIds = Array.from(
+          new Set(
+            page
+              .flatMap((r: any) => [r.source_entity_id, r.target_entity_id])
+              .filter((id: string) => typeof id === "string" && id.length > 0 && id !== node_id)
+          )
+        );
+        if (relatedEntityIds.length > 0) {
+          const { data: relatedEntities, error: relatedEntitiesError } = await db
+            .from("entities")
+            .select("*")
+            .in("id", relatedEntityIds)
+            .eq("user_id", userId);
+          if (!relatedEntitiesError) {
+            result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
+              entity_id: id,
+              id,
+              ...rest,
+            }));
+          }
+        }
+      } else if (include_relationships) {
         // Count total relationships for pagination metadata
         const { count: totalCount, error: countError } = await db
           .from("relationship_snapshots")
@@ -11850,14 +12284,19 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       if (include_sources && include_observations) {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
-          const { data: sources, error: srcError } = await db
-            .from("sources")
-            .select("*")
-            .in("id", sourceIds)
-            .eq("user_id", userId);
+          const allowedSourceIds = await filterSourceIdsToScope(sourceIds, userId);
+          const { data: sources, error: srcError } =
+            allowedSourceIds.length > 0
+              ? await db
+                  .from("sources")
+                  .select("*")
+                  .in("id", allowedSourceIds)
+                  .eq("user_id", userId)
+              : { data: [], error: null };
 
           if (!srcError) {
             result.sources = sources || [];
+            if (retrieveScopeIsTypeLimited()) result.narrowed_by_capability = true;
           }
         }
       }
@@ -14613,6 +15052,9 @@ export function tryListen(
 
 // Export function to start HTTP server (called explicitly, not on import)
 export async function startHTTPServer() {
+  // The read log writes to standard output only in the HTTP server process
+  // (src/services/read_log.ts); the stdio MCP transport never installs it.
+  if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) installHttpReadLogWriter();
   // Stronger AAuth Admission plan: capabilities now live on agent_grant
   // entities. If the legacy NEOTOMA_AGENT_CAPABILITIES_* env vars are
   // still set, fail fast with a structured pointer to the migration

@@ -4032,6 +4032,46 @@ paths:
                     type: string
                     description: Resolved NEOTOMA_ENV for this process (development or production).
 
+  /mcp-interaction-instructions:
+    get:
+      summary: Get the MCP interaction instructions
+      description: |
+        The agent instruction text a session receives at initialize. Public: with no
+        credentials, or with credentials that do not resolve to a user, it returns the
+        global instructions (with the instance data policy) led by a fixed line saying
+        standing rules are served only after authentication. With a bearer token that
+        resolves to a user it returns the text a session initialize returns for that
+        user (standing rules first, then the global instructions and the user's
+        instance skills) and sets `X-Neotoma-Instructions-Composition: user`.
+        Clients branch only on that header; its absence means the global text.
+      operationId: getMcpInteractionInstructions
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        "200":
+          description: Instruction text
+          headers:
+            X-Neotoma-Instructions-Composition:
+              description: Present with the value `user` when the text was composed for the authenticated caller; absent for the global text.
+              schema:
+                type: string
+                enum:
+                  - user
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: The instruction document could not be found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
   /mcp:
     post:
       summary: MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
@@ -4807,6 +4847,13 @@ paths:
                   search_mode:
                     type: string
                     enum: [none, semantic, lexical_typed, lexical_fallback]
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when this untyped query was narrowed to the
+                      entity types the caller's admitted agent grant may `retrieve`
+                      (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+                      the narrowed result. Omitted otherwise.
         "400":
           description: Invalid query parameters
           content:
@@ -5056,6 +5103,13 @@ paths:
                       matching answered instead. Lets callers detect a silent
                       semantic→lexical degradation (e.g. embedding provider
                       unavailable). See issue #1506.
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when this untyped query was narrowed to the
+                      entity types the caller's admitted agent grant may `retrieve`
+                      (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+                      the narrowed result. Omitted otherwise.
         "400":
           description: |
             Invalid request. Error codes:
@@ -5609,6 +5663,13 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Observation"
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when this untyped listing was narrowed to the
+                      entity types the caller's admitted agent grant may `retrieve`
+                      (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+                      the narrowed result. Omitted otherwise.
 
   /observations/query:
     post:
@@ -5661,6 +5722,13 @@ paths:
                     type: integer
                   offset:
                     type: integer
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when this untyped query was narrowed to the
+                      entity types the caller's admitted agent grant may `retrieve`
+                      (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+                      the narrowed result. Omitted otherwise.
 
   /record_activity:
     get:
@@ -6142,6 +6210,7 @@ paths:
 
   /agents/{key}/records:
     get:
+      operationId: getAgentRecords
       summary: Records written by a specific agent
       description: |
         Returns observations, sources, interpretations, timeline events,
@@ -7738,6 +7807,14 @@ paths:
                       at_ingested:
                         type: string
                         nullable: true
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when edges to entity types outside the caller's
+                      admitted agent grant `retrieve` entries were dropped, with anything
+                      reached only through them (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`).
+                      `relationships`, `entities` and their counts describe the narrowed
+                      result. Omitted otherwise.
 
   /retrieve_graph_neighborhood:
     post:
@@ -7848,6 +7925,13 @@ paths:
                   has_more:
                     type: boolean
                     description: True when additional relationships exist beyond the current page.
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when relationships to entity types outside the
+                      caller's admitted agent grant `retrieve` entries were dropped
+                      (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). `total_count` and `has_more`
+                      describe the narrowed result. Omitted otherwise.
 
   /issues/bulk_close:
     post:
@@ -10080,6 +10164,118 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionInfo"
+
+  /guest-access-tokens/{id}/revoke:
+    post:
+      summary: Revoke an owned guest access token
+      description: |
+        Owner-authenticated administration of one existing token. The request
+        binds an original immutable observation, not a bearer value or digest.
+        Appends one immutable revocation observation in one transaction and
+        returns metadata only. The token history is read by the same rules as
+        guest-token validation: partial correction records narrow the token,
+        lifecycle (`_deleted`) records are honoured, and a token that already
+        carries `revoked_at` replays its earliest revoking record without a new
+        observation. The same idempotency key and target replay the committed
+        receipt; that key used for a different target or original conflicts.
+        Does not create a replacement token, schema, or grant.
+      operationId: revokeGuestAccessToken
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            pattern: "^guest_token_[a-f0-9]{16}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idempotency_key, expected_observation_id]
+              properties:
+                idempotency_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                expected_observation_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        "200":
+          description: Complete revocation evidence committed or replayed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  [revoked, replayed, token_entity_id, revocation_observation_id, revoked_at]
+                properties:
+                  revoked:
+                    type: boolean
+                    enum: [true]
+                  replayed:
+                    type: boolean
+                  token_entity_id:
+                    type: string
+                  revocation_observation_id:
+                    type: string
+                  revoked_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: |
+            `VALIDATION_INVALID_FORMAT` for malformed or unknown request fields
+            or query parameters. `ERR_STORE_POLICY_DENIED` when this instance's
+            configured data policy refuses writes to `guest_access_token`; no
+            observation is written.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          description: An authenticated owner is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Guest administration is forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: "`RESOURCE_NOT_FOUND`: owned token entity not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: |
+            No observation was written. `ERR_GUEST_TOKEN_ORIGINAL_STALE`: the
+            expected original record is missing, incomplete or revoked.
+            `ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT`: the key already committed a
+            different request. `ERR_GUEST_TOKEN_HISTORY_UNREADABLE`: a token
+            record cannot be read or names a different token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: |
+            `DB_CONNECTION_FAILED`: token storage or the atomic commit is
+            unavailable; nothing was committed. Retry the identical request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /rendered-pages/publish:
     post:

@@ -225,7 +225,7 @@
     {
       "path": "/agents/{key}/records",
       "method": "GET",
-      "operation_id": null,
+      "operation_id": "getAgentRecords",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
@@ -587,6 +587,19 @@
       ]
     },
     {
+      "path": "/guest-access-tokens/{id}/revoke",
+      "method": "POST",
+      "operation_id": "revokeGuestAccessToken",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/health",
       "method": "GET",
       "operation_id": "healthCheck",
@@ -811,6 +824,19 @@
       ],
       "expected_invalid_auth_status": [
         401
+      ]
+    },
+    {
+      "path": "/mcp-interaction-instructions",
+      "method": "GET",
+      "operation_id": "getMcpInteractionInstructions",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200
+      ],
+      "expected_invalid_auth_status": [
+        200
       ]
     },
     {

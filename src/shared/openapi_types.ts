@@ -98,6 +98,33 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp-interaction-instructions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get the MCP interaction instructions
+     * @description The agent instruction text a session receives at initialize. Public: with no
+     *     credentials, or with credentials that do not resolve to a user, it returns the
+     *     global instructions (with the instance data policy) led by a fixed line saying
+     *     standing rules are served only after authentication. With a bearer token that
+     *     resolves to a user it returns the text a session initialize returns for that
+     *     user (standing rules first, then the global instructions and the user's
+     *     instance skills) and sets `X-Neotoma-Instructions-Composition: user`.
+     *     Clients branch only on that header; its absence means the global text.
+     */
+    get: operations["getMcpInteractionInstructions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp": {
     parameters: {
       query?: never;
@@ -1039,37 +1066,7 @@ export interface paths {
      *     The shape matches `/record_activity` so clients can reuse the
      *     same activity feed renderer.
      */
-    get: {
-      parameters: {
-        query?: {
-          user_id?: string;
-          limit?: number;
-          offset?: number;
-        };
-        header?: never;
-        path: {
-          key: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Records scoped to this agent */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": {
-              items?: Record<string, never>[];
-              has_more?: boolean;
-              limit?: number;
-              offset?: number;
-            };
-          };
-        };
-      };
-    };
+    get: operations["getAgentRecords"];
     put?: never;
     post?: never;
     delete?: never;
@@ -2314,6 +2311,35 @@ export interface paths {
     get: operations["getSessionInfo"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/guest-access-tokens/{id}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke an owned guest access token
+     * @description Owner-authenticated administration of one existing token. The request
+     *     binds an original immutable observation, not a bearer value or digest.
+     *     Appends one immutable revocation observation in one transaction and
+     *     returns metadata only. The token history is read by the same rules as
+     *     guest-token validation: partial correction records narrow the token,
+     *     lifecycle (`_deleted`) records are honoured, and a token that already
+     *     carries `revoked_at` replays its earliest revoking record without a new
+     *     observation. The same idempotency key and target replay the committed
+     *     receipt; that key used for a different target or original conflicts.
+     *     Does not create a replacement token, schema, or grant.
+     */
+    post: operations["revokeGuestAccessToken"];
     delete?: never;
     options?: never;
     head?: never;
@@ -5459,6 +5485,39 @@ export interface operations {
       };
     };
   };
+  getMcpInteractionInstructions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Instruction text */
+      200: {
+        headers: {
+          /** @description Present with the value `user` when the text was composed for the authenticated caller; absent for the global text. */
+          "X-Neotoma-Instructions-Composition"?: "user";
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /** @description The instruction document could not be found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error?: string;
+          };
+        };
+      };
+    };
+  };
   mcpStreamableHttpPost: {
     parameters: {
       query?: never;
@@ -6229,6 +6288,13 @@ export interface operations {
             )[];
             /** @enum {string} */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+            /**
+             * @description Present (`true`) only when this untyped query was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -6454,6 +6520,13 @@ export interface operations {
              * @enum {string}
              */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+            /**
+             * @description Present (`true`) only when this untyped query was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -6931,6 +7004,13 @@ export interface operations {
         content: {
           "application/json": {
             observations?: components["schemas"]["Observation"][];
+            /**
+             * @description Present (`true`) only when this untyped listing was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -6978,6 +7058,13 @@ export interface operations {
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Present (`true`) only when this untyped query was narrowed to the
+             *     entity types the caller's admitted agent grant may `retrieve`
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Totals and pagination describe
+             *     the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           };
         };
       };
@@ -7315,6 +7402,37 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+    };
+  };
+  getAgentRecords: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Records scoped to this agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items?: Record<string, never>[];
+            has_more?: boolean;
+            limit?: number;
+            offset?: number;
           };
         };
       };
@@ -8643,6 +8761,14 @@ export interface operations {
               at?: string | null;
               at_ingested?: string | null;
             };
+            /**
+             * @description Present (`true`) only when edges to entity types outside the caller's
+             *     admitted agent grant `retrieve` entries were dropped, with anything
+             *     reached only through them (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`).
+             *     `relationships`, `entities` and their counts describe the narrowed
+             *     result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           } & {
             [key: string]: unknown;
           };
@@ -8726,6 +8852,13 @@ export interface operations {
             total_count?: number;
             /** @description True when additional relationships exist beyond the current page. */
             has_more?: boolean;
+            /**
+             * @description Present (`true`) only when relationships to entity types outside the
+             *     caller's admitted agent grant `retrieve` entries were dropped
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). `total_count` and `has_more`
+             *     describe the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           } & {
             [key: string]: unknown;
           };
@@ -10419,6 +10552,113 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SessionInfo"];
+        };
+      };
+    };
+  };
+  revokeGuestAccessToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          idempotency_key: string;
+          expected_observation_id: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Complete revocation evidence committed or replayed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {boolean} */
+            revoked: true;
+            replayed: boolean;
+            token_entity_id: string;
+            revocation_observation_id: string;
+            /** Format: date-time */
+            revoked_at: string;
+          };
+        };
+      };
+      /**
+       * @description `VALIDATION_INVALID_FORMAT` for malformed or unknown request fields
+       *     or query parameters. `ERR_STORE_POLICY_DENIED` when this instance's
+       *     configured data policy refuses writes to `guest_access_token`; no
+       *     observation is written.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description An authenticated owner is required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest administration is forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description `RESOURCE_NOT_FOUND`: owned token entity not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description No observation was written. `ERR_GUEST_TOKEN_ORIGINAL_STALE`: the
+       *     expected original record is missing, incomplete or revoked.
+       *     `ERR_GUEST_TOKEN_IDEMPOTENCY_CONFLICT`: the key already committed a
+       *     different request. `ERR_GUEST_TOKEN_HISTORY_UNREADABLE`: a token
+       *     record cannot be read or names a different token.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `DB_CONNECTION_FAILED`: token storage or the atomic commit is
+       *     unavailable; nothing was committed. Retry the identical request.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

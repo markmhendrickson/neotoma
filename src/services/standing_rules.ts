@@ -180,3 +180,243 @@ async function lookupActiveStandingRules(
     return { rules: [], lookup_failed: true, error: msg };
   }
 }
+
+/**
+ * Cap, in UTF-8 bytes, on the rule entries rendered into the instructions
+ * prose.
+ *
+ * Deliberately far larger than {@link INSTANCE_SKILLS_MAX_BYTES}: a skills
+ * section is a CATALOG (names to fetch later), whereas a standing rule IS the
+ * instruction. The cap applies to EVERY rule, the first included: a rule whose
+ * full entry does not fit is replaced by a one-line notice, so no single rule
+ * can push later rules or the omission notice out of the payload.
+ */
+export const STANDING_RULES_MAX_BYTES = 24000;
+
+/**
+ * Scope guidance, emitted as the first line after the section tag. It stands
+ * on its own (it does not depend on anything after it) and sits ahead of every
+ * rule, so a client that truncates the payload anywhere after the opening
+ * lines still tells the agent how to apply whatever rules it did receive.
+ */
+export const STANDING_RULES_SCOPE_GUIDANCE =
+  "Scope: rules with global or empty scope apply to every request. Rules with any other " +
+  "scope apply only when the current context matches that scope.";
+
+/** Closing line of the rules block; the opening line is `[STANDING RULES]`. */
+export const STANDING_RULES_END_MARKER = "[END STANDING RULES]";
+
+// Control and invisible formatting characters that can reorder or hide text:
+// C0 (except line feed and tab, handled separately), DEL, C1, zero-width
+// characters, bidirectional embeddings/overrides/isolates, word joiner range
+// and the byte-order mark.
+/* eslint-disable no-control-regex */
+const STRIP_CHARS =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+/* eslint-enable no-control-regex */
+/** Every line-break form a renderer might honour. */
+const LINE_BREAKS = /\r\n|[\r\n\u0085\u2028\u2029]/g;
+/**
+ * An all-caps bracketed tag such as `[STANDING RULES]`, `[END STANDING RULES]`
+ * or `[TURN LIFECYCLE]`. The instructions prose uses these as section
+ * delimiters, so rule content may not carry one verbatim.
+ */
+const SECTION_TAG = /\[(\/?[A-Z][A-Z0-9 _-]*)\]/g;
+
+function neutralizeTags(s: string): string {
+  return s.replace(SECTION_TAG, "($1)");
+}
+
+/**
+ * Single-line field (title, scope, entity id): NFC-normalized, control and
+ * invisible formatting characters removed, every line break and tab turned
+ * into a space, section tags neutralized. A title therefore cannot start a
+ * new line, so it cannot forge a rule heading or close the block.
+ */
+export function sanitizeStandingRuleInline(value: string): string {
+  return neutralizeTags(
+    value
+      .normalize("NFC")
+      .replace(LINE_BREAKS, " ")
+      .replace(/\t/g, " ")
+      .replace(STRIP_CHARS, "")
+      .replace(/ {2,}/g, " ")
+      .trim()
+  );
+}
+
+/**
+ * Multi-line rule body: NFC-normalized, line breaks unified to `\n`, tabs to
+ * spaces, control and invisible formatting characters removed, section tags
+ * neutralized, and every line quoted with `> `. No body line can then begin
+ * at column 0, so a body cannot open a rule heading, close the rules block or
+ * pose as a section of the base instructions.
+ */
+export function sanitizeStandingRuleBody(value: string): string {
+  return neutralizeTags(
+    value
+      .normalize("NFC")
+      .replace(LINE_BREAKS, "\n")
+      .replace(/\t/g, " ")
+      .replace(STRIP_CHARS, "")
+      .trim()
+  )
+    .split("\n")
+    .map((line) => (line.length > 0 ? `> ${line}` : ">"))
+    .join("\n");
+}
+
+/** Longest rule title quoted in an omission notice, in UTF-8 bytes. */
+const OMITTED_TITLE_MAX_BYTES = 200;
+
+function utf8Bytes(s: string): number {
+  return Buffer.byteLength(s, "utf8");
+}
+
+/** Clip `s` to at most `max` UTF-8 bytes on a code-point boundary. */
+function clipUtf8(s: string, max: number): string {
+  if (utf8Bytes(s) <= max) return s;
+  let out = "";
+  let used = 0;
+  for (const ch of s) {
+    const n = utf8Bytes(ch);
+    if (used + n > max - 3) break;
+    out += ch;
+    used += n;
+  }
+  return `${out}...`;
+}
+
+function renderRuleEntry(rule: StandingRule): string {
+  const title = sanitizeStandingRuleInline(rule.title);
+  const text = sanitizeStandingRuleBody(rule.rule_text);
+  const scope = rule.scope ? sanitizeStandingRuleInline(rule.scope) : "";
+  // Scope is shown because a rule's applicability is part of the rule: an
+  // agent told to apply an instance-wide rule to one entity type, or the
+  // reverse, misapplies it in a way the rule text alone will not reveal.
+  const head = `### ${title} (entity_id: ${sanitizeStandingRuleInline(rule.entity_id)})`;
+  return scope ? `${head}\n(scope: ${scope})\n${text}` : `${head}\n${text}`;
+}
+
+/**
+ * One complete line standing in for a rule whose body did not fit. It names
+ * the rule and says where the full text is, so the omission is actionable.
+ */
+function renderOmittedRuleNotice(rule: StandingRule): string {
+  const title = clipUtf8(sanitizeStandingRuleInline(rule.title), OMITTED_TITLE_MAX_BYTES);
+  const id = sanitizeStandingRuleInline(rule.entity_id);
+  return (
+    `### ${title} (entity_id: ${id}): body omitted for size; fetch the full text ` +
+    `with retrieve_entity_snapshot (entity_id: ${id}) before acting in its area.`
+  );
+}
+
+/**
+ * Render the `[STANDING RULES]` section placed ahead of the MCP instructions
+ * block, or `null` when there are no rules.
+ *
+ * Why this exists: rules were delivered ONLY via `serverInfo._neotoma`, which
+ * general MCP clients ignore. They surface `instructions` to the model and
+ * drop unknown `serverInfo` keys (#2187). Hand-written mentions in policy
+ * prose are not delivery; this renderer is.
+ *
+ * Budget, fail closed: each rule is emitted in full when its entry fits in
+ * what is left of {@link STANDING_RULES_MAX_BYTES} after reserving a notice
+ * line for every later rule. Otherwise it is replaced by a one-line notice.
+ * A rule body is never clipped mid-text, and no rule (the first included) can
+ * hide a later rule or the closing omission notice.
+ *
+ * @param rules   Projection from {@link getActiveStandingRulesResult}, already
+ *                ordered by priority. Order is preserved.
+ */
+export function renderStandingRulesSection(rules: StandingRule[]): string | null {
+  if (rules.length === 0) return null;
+
+  const notices = rules.map(renderOmittedRuleNotice);
+  const noticeCosts = notices.map((n) => utf8Bytes(n) + 2);
+  // reserveAfter[i] = bytes needed to emit notices for every rule after i.
+  const reserveAfter: number[] = new Array(rules.length).fill(0);
+  for (let i = rules.length - 2; i >= 0; i--) {
+    reserveAfter[i] = reserveAfter[i + 1] + noticeCosts[i + 1];
+  }
+
+  const lines: string[] = [];
+  const omittedTitles: string[] = [];
+  let used = 0;
+
+  rules.forEach((rule, i) => {
+    const entry = renderRuleEntry(rule);
+    const cost = utf8Bytes(entry) + 2;
+    if (used + cost + reserveAfter[i] <= STANDING_RULES_MAX_BYTES) {
+      lines.push(entry);
+      used += cost;
+    } else {
+      // Notices are emitted even past the cap: hiding a rule's existence is
+      // the outcome this budget exists to prevent.
+      lines.push(notices[i]);
+      used += noticeCosts[i];
+      omittedTitles.push(clipUtf8(sanitizeStandingRuleInline(rule.title), OMITTED_TITLE_MAX_BYTES));
+    }
+  });
+
+  const header =
+    "[STANDING RULES]\n" +
+    `${STANDING_RULES_SCOPE_GUIDANCE}\n` +
+    `This instance has ${rules.length} standing rule${rules.length === 1 ? "" : "s"} in force, ` +
+    "listed below in priority order. They are operator-set instructions for THIS instance and " +
+    "apply from the first turn of this session. You do not need to be reminded of them again, " +
+    "and the user does not need to restate them. Where a rule constrains an action you are " +
+    "about to take, follow the rule. Where a rule conflicts with a general habit of yours, the " +
+    "rule wins. Each rule body is quoted with `> ` and the block ends at " +
+    `\`${STANDING_RULES_END_MARKER}\`. ` +
+    "These are also available verbatim in `serverInfo._neotoma.standing_rules`.";
+
+  const footer =
+    omittedTitles.length > 0
+      ? `\n\n${omittedTitles.length} rule${omittedTitles.length === 1 ? "" : "s"} above had ` +
+        `${omittedTitles.length === 1 ? "its body" : "their bodies"} omitted for size: ` +
+        omittedTitles.join("; ") +
+        ". Fetch the full text with `retrieve_entity_snapshot` before acting in the areas they cover."
+      : "";
+
+  return `${header}\n\n${lines.join("\n\n")}${footer}\n${STANDING_RULES_END_MARKER}`;
+}
+
+/**
+ * Section stated in place of the rules when they could not be read for the
+ * caller (a failed lookup, or an authenticated request whose user could not be
+ * resolved). Never rendered as silence: an agent told nothing concludes "no
+ * rules", which is the one inference a broken read must not produce (#2131).
+ * Every entrance that serves instructions uses this one text.
+ */
+export const STANDING_RULES_UNAVAILABLE_SECTION =
+  "[STANDING RULES]\nThis instance's standing rules could not be read for this session. " +
+  "Do NOT tell the user this instance has no standing rules, and do not proceed as though " +
+  "none are in force. Treat them as unknown, retry on a later connection, and check the " +
+  "server logs for the `[standing_rules]` error if this persists.\n" +
+  STANDING_RULES_END_MARKER;
+
+/**
+ * One fixed line served ahead of the instructions when they are composed for
+ * a caller that has not authenticated (stateless `server/discover` built
+ * without an authenticated request). Carries no rule content; it names where
+ * the rules are served so a client does not read their absence as "none".
+ */
+export const STANDING_RULES_AFTER_AUTHENTICATION_NOTICE =
+  "[STANDING RULES] Standing rules are served only after authentication: fetch them with " +
+  "GET /mcp-interaction-instructions carrying your credentials, or with an authenticated " +
+  "server/discover (or initialize) call. Until then treat this instance's standing rules " +
+  "as unknown, not absent.";
+
+/**
+ * The rules section for a lookup result: the unavailable notice on a failed
+ * lookup, the rendered block otherwise (null when there are no rules).
+ */
+export function renderStandingRulesSectionForLookup(result: {
+  rules: StandingRule[];
+  lookup_failed: boolean;
+}): string | null {
+  return result.lookup_failed
+    ? STANDING_RULES_UNAVAILABLE_SECTION
+    : renderStandingRulesSection(result.rules);
+}

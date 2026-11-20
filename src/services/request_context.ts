@@ -85,6 +85,15 @@ export interface RequestContext {
    * left unattributed rather than attributed to a default person.
    */
   authenticatedPrincipal?: AuthenticatedPrincipal | null;
+  /**
+   * The access log's request id (src/services/access_log.ts) for the HTTP
+   * request carrying this call, so the MCP read log line
+   * (src/services/read_log.ts) shares it. Null or absent off HTTP or when
+   * the JSON access log is not on.
+   */
+  requestId?: string | null;
+  /** The access log's auth method label for the HTTP request, when known. */
+  authMethod?: string | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
