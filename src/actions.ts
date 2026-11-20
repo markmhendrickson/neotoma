@@ -298,7 +298,7 @@ import {
   narrowTraversalToScope,
   retrieveScopeIsTypeLimited,
 } from "./services/retrieve_capability.js";
-import { fullScopeOperationForRequest } from "./shared/retrieve_scope_classification.js";
+import { retrieveGateTargetForRequest } from "./shared/retrieve_scope_classification.js";
 import {
   EXACT_IDENTITY_REQUEST_MESSAGE,
   exactIdentityRequested,
@@ -2323,14 +2323,16 @@ app.use(dbAbortContext());
 // short-circuited inside the middleware.
 app.use(aauthAdmission());
 
-// Opt-in agent-grant retrieve scope (NEOTOMA_ENFORCE_AGENT_RETRIEVE=1): reads
-// with no per-type check of their own (`read_full_scope` in
-// src/shared/retrieve_scope_classification.ts, derived from the contract
-// mappings) need a `"*"` retrieve entry on an admitted grant. With the setting
-// off this returns before reading the request context. Logs nothing.
+// Opt-in agent-grant retrieve scope (NEOTOMA_ENFORCE_AGENT_RETRIEVE=1),
+// default deny: a request that is not a classified route whose handler runs
+// the per-type check, an exempt route or a write (see
+// src/shared/retrieve_scope_classification.ts, which covers every registered
+// route, aliases included) needs a `"*"` retrieve entry on an admitted grant.
+// Callers without a grant are unaffected. With the setting off this returns
+// before reading the request context. Logs nothing.
 app.use((req, res, next) => {
   if (!isAgentRetrieveEnforcementEnabled()) return next();
-  const operationId = fullScopeOperationForRequest(req.method, req.path);
+  const operationId = retrieveGateTargetForRequest(req.method, req.path);
   if (!operationId) return next();
   try {
     enforceFullRetrieveScope(operationId);
