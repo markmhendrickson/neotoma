@@ -6210,6 +6210,7 @@ paths:
 
   /agents/{key}/records:
     get:
+      operationId: getAgentRecords
       summary: Records written by a specific agent
       description: |
         Returns observations, sources, interpretations, timeline events,

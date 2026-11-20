@@ -225,7 +225,7 @@
     {
       "path": "/agents/{key}/records",
       "method": "GET",
-      "operation_id": null,
+      "operation_id": "getAgentRecords",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
