@@ -191,6 +191,72 @@ function parseExclusions(
   return rows;
 }
 
+/** Calls that gate a route on the caller's retrieve capability (src/actions.ts). */
+const RETRIEVE_GATE = /\benforceRetrieveForEntity(?:Ids|Types)\s*\(/;
+
+/**
+ * Routes whose handler calls `enforceRetrieveForEntityIds` or
+ * `enforceRetrieveForEntityTypes`, directly or through a top-level function
+ * of the same file that does (followed to a fixed point). A route gated on
+ * retrieve returns entity data, so it must be logged or excluded with a
+ * reason; the non-reads table does not cover it.
+ */
+function retrieveGatedRoutes(source: string): RouteOp[] {
+  const lines = source.split("\n");
+  const blockEnd = (start: number): number => {
+    if (/\);\s*$/.test(lines[start]!)) return start;
+    for (let i = start + 1; i < lines.length; i++) if (/^\}\)?;?\s*$/.test(lines[i]!)) return i;
+    return lines.length - 1;
+  };
+  const functions = new Map<string, string>();
+  const declaration =
+    /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)|^(?:export\s+)?const\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\(|function)/;
+  lines.forEach((line, i) => {
+    const m = declaration.exec(line);
+    if (m) functions.set((m[1] ?? m[2])!, lines.slice(i, blockEnd(i) + 1).join("\n"));
+  });
+  const gated = new Set<string>();
+  const callsGated = (body: string) =>
+    RETRIEVE_GATE.test(body) || [...gated].some((name) => new RegExp(`\\b${name}\\b`).test(body));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [name, body] of functions) {
+      if (!gated.has(name) && callsGated(body.slice(body.indexOf(name) + name.length))) {
+        gated.add(name);
+        changed = true;
+      }
+    }
+  }
+  const routes: RouteOp[] = [];
+  lines.forEach((line, i) => {
+    const m = /^app\.(get|post|put|patch|delete)\(\s*(\[[^\]]*\]|(["'`])[^"'`]+\3)/.exec(line);
+    if (!m) return;
+    if (!callsGated(lines.slice(i, blockEnd(i) + 1).join("\n"))) return;
+    for (const literal of m[2]!.matchAll(/["'`]([^"'`]+)["'`]/g)) {
+      routes.push({
+        method: m[1]!.toUpperCase(),
+        path: literal[1]!.replace(/:([A-Za-z_]+)/g, "{$1}"),
+      });
+    }
+  });
+  return routes;
+}
+
+/** Retrieve-gated routes that are neither logged nor in the exclusions table. */
+function unloggedGatedRoutes(gatedRoutes: RouteOp[], cls: Classification): string[] {
+  const excluded = new Set<string>();
+  for (const op of cls.exclusions.keys()) {
+    const m = /^([A-Z]+) (\/.*)$/.exec(op);
+    if (m) excluded.add(routeKey(m[1]!, m[2]!));
+  }
+  return gatedRoutes
+    .filter((r) => {
+      const key = routeKey(r.method, r.path);
+      return !cls.loggedRoutes.has(key) && !excluded.has(key);
+    })
+    .map((r) => `retrieve-gated route not logged or excluded: ${r.method} ${r.path}`);
+}
+
 interface Inventory {
   routes: RouteOp[];
   tools: string[];
@@ -375,6 +441,42 @@ describe("read log classification guard", () => {
       "logged and excluded: retrieve_entities",
       "exclusion names no route: GET /retired_synthetic_route",
       "non-read row names no route: POST /retired_synthetic_write",
+    ]);
+  });
+
+  it("logs or excludes every route gated on the retrieve capability", () => {
+    const gated = retrieveGatedRoutes(fs.readFileSync(path.join(ROOT, "src/actions.ts"), "utf8"));
+    const labels = gated.map((r) => `${r.method} ${r.path}`);
+    // Instrument check: known gated routes are found.
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "GET /entities/{id}",
+        "GET /entities/{id}/markdown",
+        "GET /entities/{id}/html",
+        "POST /get_entity_snapshot",
+      ])
+    );
+    expect(unloggedGatedRoutes(gated, liveClassification())).toEqual([]);
+  });
+
+  it("fails on a synthetic retrieve-gated handler that is not logged or excluded", () => {
+    const source = [
+      'app.get("/synthetic_gated/:id", async (req, res) => {',
+      "  await enforceRetrieveForEntityIds([req.params.id], userId);",
+      "  return res.json({});",
+      "});",
+      "async function syntheticGatedHelper(req, res) {",
+      '  enforceRetrieveForEntityTypes(["task"]);',
+      "  return res.json({});",
+      "}",
+      'app.post("/synthetic_gated_indirect", syntheticGatedHelper);',
+      'app.get("/synthetic_open", async (_req, res) => {',
+      "  return res.json({});",
+      "});",
+    ].join("\n");
+    expect(unloggedGatedRoutes(retrieveGatedRoutes(source), liveClassification())).toEqual([
+      "retrieve-gated route not logged or excluded: GET /synthetic_gated/{id}",
+      "retrieve-gated route not logged or excluded: POST /synthetic_gated_indirect",
     ]);
   });
 
