@@ -8,6 +8,13 @@ export interface OpenApiOperationMapping {
   mcpTool?: string;
   cliCommand?: string;
   notes?: string;
+  /**
+   * True for operations that return entity records. The structured read log
+   * (src/services/read_log.ts) derives both its REST routes and its MCP tool
+   * names from the operations carrying this flag, so the two surfaces cannot
+   * drift apart.
+   */
+  readLog?: true;
 }
 
 export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
@@ -227,6 +234,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "queryEntities",
+    readLog: true,
     method: "post",
     path: "/entities/query",
     adapter: "both",
@@ -236,6 +244,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listEntities",
+    readLog: true,
     method: "get",
     path: "/entities",
     adapter: "cli",
@@ -293,6 +302,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getEntityById",
+    readLog: true,
     method: "get",
     path: "/entities/{id}",
     adapter: "cli",
@@ -307,6 +317,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getEntityObservations",
+    readLog: true,
     method: "get",
     path: "/entities/{id}/observations",
     adapter: "cli",
@@ -314,6 +325,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getEntityRelationships",
+    readLog: true,
     method: "get",
     path: "/entities/{id}/relationships",
     adapter: "cli",
@@ -337,6 +349,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listPotentialDuplicates",
+    readLog: true,
     method: "get",
     path: "/entities/duplicates",
     adapter: "both",
@@ -366,6 +379,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listObservations",
+    readLog: true,
     method: "get",
     path: "/observations",
     adapter: "cli",
@@ -373,6 +387,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "queryObservations",
+    readLog: true,
     method: "post",
     path: "/observations/query",
     adapter: "cli",
@@ -387,6 +402,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listRelationships",
+    readLog: true,
     method: "get",
     path: "/relationships",
     adapter: "cli",
@@ -394,6 +410,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getRelationshipById",
+    readLog: true,
     method: "get",
     path: "/relationships/{id}",
     adapter: "cli",
@@ -401,6 +418,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listTimeline",
+    readLog: true,
     method: "get",
     path: "/timeline",
     adapter: "both",
@@ -409,6 +427,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getTimelineById",
+    readLog: true,
     method: "get",
     path: "/timeline/{id}",
     adapter: "cli",
@@ -479,6 +498,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getRecordActivity",
+    readLog: true,
     method: "get",
     path: "/record_activity",
     adapter: "both",
@@ -547,6 +567,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getEntitySnapshot",
+    readLog: true,
     method: "post",
     path: "/get_entity_snapshot",
     adapter: "both",
@@ -555,6 +576,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listObservationsForEntity",
+    readLog: true,
     method: "post",
     path: "/list_observations",
     adapter: "both",
@@ -563,6 +585,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getFieldProvenance",
+    readLog: true,
     method: "post",
     path: "/get_field_provenance",
     adapter: "both",
@@ -587,6 +610,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "listRelationshipsForEntity",
+    readLog: true,
     method: "post",
     path: "/list_relationships",
     adapter: "both",
@@ -595,6 +619,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "queryContactsAtCompany",
+    readLog: true,
     method: "post",
     path: "/query_contacts_at_company",
     adapter: "mcp",
@@ -618,6 +643,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "retrieveEntityByIdentifier",
+    readLog: true,
     method: "post",
     path: "/retrieve_entity_by_identifier",
     adapter: "both",
@@ -626,6 +652,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "identifyEntityBySignals",
+    readLog: true,
     method: "post",
     path: "/identify_entity_by_signals",
     adapter: "mcp",
@@ -633,6 +660,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "retrieveRelatedEntities",
+    readLog: true,
     method: "post",
     path: "/retrieve_related_entities",
     adapter: "both",
@@ -641,6 +669,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "retrieveGraphNeighborhood",
+    readLog: true,
     method: "post",
     path: "/retrieve_graph_neighborhood",
     adapter: "both",
@@ -681,6 +710,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "getRelationshipSnapshot",
+    readLog: true,
     method: "post",
     path: "/relationships/snapshot",
     adapter: "both",

@@ -203,6 +203,15 @@ import {
   retrieveRelatedEntitiesAsOf,
 } from "./services/record_as_of.js";
 import { runtimeEnv } from "./config_embedded.js";
+import {
+  READ_TOOL_NAMES,
+  admittedAgentLabel,
+  parseToolResultPayload,
+  readLogEnabled,
+  readLogWriterInstalled,
+  searchQueryLength,
+  writeReadLog,
+} from "./services/read_log.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -2734,8 +2743,12 @@ export class NeotomaServer {
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
             mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
+            // Carry the HTTP request's access-log id and auth label so the
+            // read log line (src/services/read_log.ts) shares them.
+            requestId: getRequestContext()?.requestId ?? null,
+            authMethod: getRequestContext()?.authMethod ?? null,
           },
-          () => this.executeTool(name, args)
+          () => this.executeToolWithReadLog(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
@@ -2904,8 +2917,53 @@ export class NeotomaServer {
         aauthAdmission: null,
         authenticatedPrincipal: null,
       },
+      // No read log line: in-process callers own their standard output.
       () => this.executeTool(name, args)
     );
+  }
+
+  /**
+   * Run a tool and, for read tools, write one read log line
+   * (src/services/read_log.ts) per call: on success with the entities the
+   * result returned, on failure with a status and no entities. Must run
+   * inside the dispatch request context so the request id, auth method and
+   * admitted agent are visible. Writes only when the HTTP server installed the
+   * read log writer; on the stdio transport standard output is the protocol
+   * channel, so nothing is written there.
+   */
+  private async executeToolWithReadLog(
+    name: string,
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (
+      !READ_TOOL_NAMES.has(name) ||
+      !readLogWriterInstalled() ||
+      !readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)
+    ) {
+      return this.executeTool(name, args);
+    }
+    const context = getRequestContext();
+    const base = {
+      surface: "mcp" as const,
+      operation: name,
+      requestId: context?.requestId ?? null,
+      userId: this.authenticatedUserId,
+      agent: admittedAgentLabel(context?.aauthAdmission),
+      authMethod: context?.authMethod ?? "none",
+      queryLength: searchQueryLength(args),
+    };
+    let result: { content: Array<{ type: string; text: string }> };
+    try {
+      result = await this.executeTool(name, args);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: unknown } | null)?.statusCode;
+      const refused =
+        error instanceof AgentCapabilityError || statusCode === 401 || statusCode === 403;
+      writeReadLog({ ...base, status: refused ? "refused" : "error" });
+      throw error;
+    }
+    writeReadLog({ ...base, status: "ok", result: parseToolResultPayload(result) });
+    return result;
   }
 
   private async executeTool(
