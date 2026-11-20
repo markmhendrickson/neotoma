@@ -13,9 +13,11 @@ import {
   matchRestReadRoute,
   readLogEnabled,
   readRoutePattern,
+  recordReadLogResult,
   restReadLog,
   restReadLogPlainBody,
   setReadLogWriter,
+  walkReturnedEntities,
 } from "../../src/services/read_log.js";
 import { encryptResponseMiddleware } from "../../src/middleware/encrypt_response.js";
 import { generateX25519KeyPair } from "../../src/crypto/keys.js";
@@ -613,6 +615,17 @@ describe("read log for the submission and issue status helpers", () => {
     app.use(restReadLog({ write: (line) => restLines.push(line) }));
     app.get("/submit/:entity_type/:entity_id", (_req, res) => res.json(snapshotPayload));
     app.post("/issues/status", (_req, res) => res.json(issueStatusPayload));
+    app.post("/api/issues/status", (_req, res) => res.json(issueStatusPayload));
+    // The entity renderings reply with text, as in src/actions.ts, and name
+    // the returned entity through recordReadLogResult.
+    app.get("/entities/:id/markdown", (req, res) => {
+      recordReadLogResult(res, { entity_id: req.params.id, entity_type: "task" });
+      res.type("text/markdown").send(`# ${SECRET_TITLE}\n\n${SECRET_NOTE}\n`);
+    });
+    app.get("/entities/:id/html", (req, res) => {
+      recordReadLogResult(res, { entity_id: req.params.id, entity_type: "rendered_page" });
+      res.type("text/html").send(`<h1>${SECRET_TITLE}</h1>`);
+    });
     const server = await new Promise<Server>((resolve) => {
       const s = app.listen(0, "127.0.0.1", () => resolve(s));
     });
@@ -661,6 +674,133 @@ describe("read log for the submission and issue status helpers", () => {
     });
     expectNoContent(restLines[0]!);
   });
+  it("REST POST /api/issues/status (the alias) writes one line naming the issue", async () => {
+    const { base, waitForLines } = await startHelperApp();
+    await fetch(`${base}/api/issues/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_number: 7 }),
+    });
+    const restLines = await waitForLines();
+    expect(restLines).toHaveLength(1);
+    expect(JSON.parse(restLines[0]!)).toMatchObject({
+      surface: "rest",
+      operation: "issuesGetStatus",
+      status: "ok",
+      entity_types: { issue: 1 },
+      count: 1,
+      entity_ids: ["ent_issue_0002"],
+    });
+    expectNoContent(restLines[0]!);
+  });
+
+  it("REST GET /entities/{id}/markdown writes one line naming the rendered entity", async () => {
+    const { base, waitForLines } = await startHelperApp();
+    const res = await fetch(`${base}/entities/ent_task_0001/markdown`);
+    expect(await res.text()).toContain(SECRET_TITLE);
+    const restLines = await waitForLines();
+    expect(restLines).toHaveLength(1);
+    expect(JSON.parse(restLines[0]!)).toMatchObject({
+      surface: "rest",
+      operation: "getEntityMarkdown",
+      status: "ok",
+      http_status: 200,
+      entity_types: { task: 1 },
+      count: 1,
+      entity_ids: ["ent_task_0001"],
+      truncated: false,
+    });
+    expectNoContent(restLines[0]!);
+  });
+
+  it("REST GET /entities/{id}/html writes one line naming the rendered entity", async () => {
+    const { base, waitForLines } = await startHelperApp();
+    const res = await fetch(`${base}/entities/ent_page_0001/html`);
+    expect(await res.text()).toContain(SECRET_TITLE);
+    const restLines = await waitForLines();
+    expect(restLines).toHaveLength(1);
+    expect(JSON.parse(restLines[0]!)).toMatchObject({
+      surface: "rest",
+      operation: "getEntityHtml",
+      status: "ok",
+      entity_types: { rendered_page: 1 },
+      count: 1,
+      entity_ids: ["ent_page_0001"],
+    });
+    expectNoContent(restLines[0]!);
+  });
+});
+
+describe("result walker limits", () => {
+  function relationshipRow(i: number) {
+    return {
+      id: `rel_${i}`,
+      relationship_type: "REFERS_TO",
+      source_entity_id: "ent_root_0001",
+      target_entity_id: `ent_target_${i % 2}`,
+      snapshot: { note: SECRET_NOTE },
+      computed_at: "2026-01-01T00:00:00.000Z",
+      observation_count: 1,
+      provenance: { a: 1, b: 2, c: 3 },
+      last_observation_at: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  it("records the related entities of a 2,000-relationship neighbourhood", () => {
+    // Shape and key order of retrieveGraphNeighborhood in src/server.ts:
+    // relationships are set on the result before related_entities.
+    const neighbourhood = {
+      node_id: "ent_root_0001",
+      node_type: "entity",
+      entity: { id: "ent_root_0001", entity_type: "task", canonical_name: SECRET_TITLE },
+      relationships: Array.from({ length: 2000 }, (_, i) => relationshipRow(i)),
+      related_entities: [
+        { id: "ent_target_0", entity_type: "contact" },
+        { id: "ent_target_1", entity_type: "issue" },
+      ],
+    };
+    const ids = collectReturnedEntities(neighbourhood).map((e) => e.id);
+    expect(ids).toEqual(["ent_root_0001", "ent_target_0", "ent_target_1"]);
+  });
+
+  it("marks the line truncated when the walk reaches its node cap", () => {
+    expect(walkReturnedEntities(manyTasks(5), { maxNodes: 3 }).incomplete).toBe(true);
+    expect(walkReturnedEntities(manyTasks(5)).incomplete).toBe(false);
+    const record = buildReadLogRecord({
+      surface: "rest",
+      operation: "queryEntities",
+      requestId: null,
+      userId: null,
+      agent: null,
+      authMethod: "none",
+      status: "ok",
+      // Nested past the depth cap: the walk cannot see the entity at the bottom.
+      result: { a: { b: { c: { d: { e: { f: { g: { h: { i: [manyTasks(1)] } } } } } } } } },
+    });
+    expect(record.count).toBe(0);
+    expect(record.truncated).toBe(true);
+  });
+
+  it("adds no id for an entity-shaped object stored inside a snapshot, metadata or fields", () => {
+    const stored = { entity_id: "ent_stored_0001", entity_type: "task" };
+    const result = {
+      items: [
+        { id: "row_1", snapshot: { nested: stored } },
+        { id: "row_2", metadata: { copy: stored } },
+        { id: "row_3", fields: { copy: [stored] } },
+      ],
+    };
+    expect(collectReturnedEntities(result)).toEqual([]);
+  });
+
+  it("counts only ids in the ent_ form", () => {
+    expect(
+      collectReturnedEntities([
+        { entity_id: "row_7", entity_type: "task" },
+        { entity_id: "ent_task_0007", entity_type: "task" },
+      ]).map((e) => e.id)
+    ).toEqual(["ent_task_0007"]);
+  });
 });
 
 describe("read routes derived from the contract mappings", () => {
@@ -707,8 +847,6 @@ describe("read routes derived from the contract mappings", () => {
     expect(matchRestReadRoute("GET", "/interpretations")).toBeNull();
     expect(matchRestReadRoute("GET", "/recent_conversations")).toBeNull();
     expect(matchRestReadRoute("GET", "/turns")).toBeNull();
-    expect(matchRestReadRoute("GET", "/entities/ent_1/markdown")).toBeNull();
-    expect(matchRestReadRoute("GET", "/entities/ent_1/html")).toBeNull();
     expect(READ_TOOL_NAMES.has("list_interpretations")).toBe(false);
   });
 });

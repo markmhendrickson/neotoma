@@ -337,6 +337,7 @@ import {
 import {
   installHttpReadLogWriter,
   readLogEnabled,
+  recordReadLogResult,
   restReadLog,
   restReadLogPlainBody,
 } from "./services/read_log.js";
@@ -6209,6 +6210,11 @@ app.get("/entities/:id/markdown", async (req, res) => {
       : undefined;
     if (etag) res.setHeader("ETag", etag);
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    // The reply is text, so name the returned entity for the read log.
+    recordReadLogResult(res, {
+      entity_id: current.entity_id ?? entityId,
+      entity_type: current.entity_type,
+    });
     return res.send(markdown);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
@@ -6283,6 +6289,11 @@ app.get("/entities/:id/html", async (req, res) => {
       await import("./services/rendered_page/copy_controls.js");
     res.setHeader("Content-Security-Policy", renderedPageContentSecurityPolicy(htmlBody));
     res.setHeader("X-Content-Type-Options", "nosniff");
+    // The reply is HTML, so name the returned entity for the read log.
+    recordReadLogResult(res, {
+      entity_id: current.entity_id ?? entityId,
+      entity_type: current.entity_type,
+    });
     return res.send(html);
   } catch (error) {
     if (error instanceof GuestTokenInvalidError || error instanceof GuestTokenScopeError) {

@@ -56,10 +56,14 @@ export function readLogEnabled(rawValue: string | undefined): boolean {
 }
 
 /**
- * Entity reads served outside the contract mappings: the submission status
- * helpers. They return entity records (a snapshot, or a page of entities of
- * one type) through the nested operations layer, which writes no read line
- * of its own, so the outer call is logged here.
+ * Entity reads served outside the `readLog` contract rows: the submission
+ * status helpers, which return entity records (a snapshot, or a page of
+ * entities of one type) through the nested operations layer and write no read
+ * line of their own; the legacy alias of the issue status route, served by
+ * the same handler as `POST /issues/status`; and the markdown and HTML
+ * renderings of one entity, which return its snapshot content. The two
+ * renderings reply with `res.send`, so their handlers name the entity with
+ * `recordReadLogResult`.
  */
 const HELPER_READ_TOOL_NAMES = ["get_entity_submission_status", "list_entity_submissions"];
 const HELPER_READ_ROUTES: ReadonlyArray<{ method: string; path: string; operationId: string }> = [
@@ -68,6 +72,9 @@ const HELPER_READ_ROUTES: ReadonlyArray<{ method: string; path: string; operatio
     path: "/submit/{entity_type}/{entity_id}",
     operationId: "getEntitySubmissionStatus",
   },
+  { method: "post", path: "/api/issues/status", operationId: "issuesGetStatus" },
+  { method: "get", path: "/entities/{id}/markdown", operationId: "getEntityMarkdown" },
+  { method: "get", path: "/entities/{id}/html", operationId: "getEntityHtml" },
 ];
 
 /**
@@ -178,24 +185,71 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Entity ids have the `ent_` form; any other string is not counted as an entity id. */
+function isEntityId(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("ent_") && value.length > 4;
+}
+
 function entityIdOf(node: Record<string, unknown>): string | null {
   if (typeof node.entity_type !== "string" || node.entity_type.length === 0) return null;
-  if (typeof node.entity_id === "string" && node.entity_id.length > 0) return node.entity_id;
-  if (typeof node.id === "string" && node.id.startsWith("ent_")) return node.id;
+  if (isEntityId(node.entity_id)) return node.entity_id;
+  if (isEntityId(node.id)) return node.id;
   return null;
 }
 
 /**
- * Collect the entities a read result returned: every object that carries an
- * `entity_type` together with an `entity_id` (or an `ent_` `id`). The walk
- * does not descend into a matched entity, so ids referenced from inside an
- * entity's snapshot are not counted as returned. Duplicate ids count once.
+ * Keys holding stored content (an entity's fields, a snapshot, metadata). The
+ * walk never descends into them, so an object stored inside an entity's
+ * content that happens to look like an entity is not counted as returned.
  */
-export function collectReturnedEntities(result: unknown): Array<{ id: string; type: string }> {
+const STORED_CONTENT_KEYS = new Set(["snapshot", "metadata", "fields", "raw_fragments"]);
+
+/**
+ * Keys walked first and last. Returned entities are recorded before bulky
+ * relationship and observation rows, so a large neighbourhood still records
+ * its related entities before a walk cap is reached.
+ */
+const FIRST_KEYS = ["entity", "entity_snapshot", "entities", "related_entities"];
+const LAST_KEYS = ["relationships", "related_relationships", "observations"];
+
+function orderedKeys(node: Record<string, unknown>): string[] {
+  const keys = Object.keys(node).filter((k) => !STORED_CONTENT_KEYS.has(k));
+  const first = FIRST_KEYS.filter((k) => keys.includes(k));
+  const last = LAST_KEYS.filter((k) => keys.includes(k));
+  const middle = keys.filter((k) => !FIRST_KEYS.includes(k) && !LAST_KEYS.includes(k));
+  return [...first, ...middle, ...last];
+}
+
+export interface ReturnedEntities {
+  entities: Array<{ id: string; type: string }>;
+  /** True when the walk stopped at its depth or node cap, so entities may be missing. */
+  incomplete: boolean;
+}
+
+/**
+ * Walk a read result for the entities it returned: every object that carries
+ * an `entity_type` together with an `ent_` `entity_id` (or `id`). The walk
+ * does not descend into a matched entity or into stored-content keys
+ * (`STORED_CONTENT_KEYS`), so ids referenced from inside stored content are
+ * not counted as returned. Duplicate ids count once. When the walk reaches
+ * `MAX_WALK_DEPTH` or `MAX_WALK_NODES` it stops and reports `incomplete`.
+ */
+export function walkReturnedEntities(
+  result: unknown,
+  limits: { maxDepth?: number; maxNodes?: number } = {}
+): ReturnedEntities {
+  const maxDepth = limits.maxDepth ?? MAX_WALK_DEPTH;
+  const maxNodes = limits.maxNodes ?? MAX_WALK_NODES;
   const seen = new Map<string, string>();
   let nodes = 0;
+  let incomplete = false;
   const walk = (value: unknown, depth: number): void => {
-    if (depth > MAX_WALK_DEPTH || nodes >= MAX_WALK_NODES) return;
+    if (incomplete) return;
+    if (typeof value !== "object" || value === null) return;
+    if (depth > maxDepth || nodes >= maxNodes) {
+      incomplete = true;
+      return;
+    }
     nodes += 1;
     if (Array.isArray(value)) {
       for (const item of value) walk(item, depth + 1);
@@ -207,10 +261,15 @@ export function collectReturnedEntities(result: unknown): Array<{ id: string; ty
       if (!seen.has(id)) seen.set(id, value.entity_type as string);
       return;
     }
-    for (const key of Object.keys(value)) walk(value[key], depth + 1);
+    for (const key of orderedKeys(value)) walk(value[key], depth + 1);
   };
   walk(result, 0);
-  return [...seen.entries()].map(([id, type]) => ({ id, type }));
+  return { entities: [...seen.entries()].map(([id, type]) => ({ id, type })), incomplete };
+}
+
+/** The entities a read result returned (see `walkReturnedEntities`). */
+export function collectReturnedEntities(result: unknown): Array<{ id: string; type: string }> {
+  return walkReturnedEntities(result).entities;
 }
 
 /** Length of the search term in read arguments, or null when none was given. */
@@ -246,25 +305,30 @@ const ISSUE_STATUS_OPERATIONS = new Set(["issuesGetStatus", "get_issue_status"])
  * issue's id as `issue_entity_id` with no `entity_type`, so it is read as one
  * `issue` entity; its messages carry no entity ids.
  */
-function returnedEntities(operation: string, result: unknown): Array<{ id: string; type: string }> {
+function returnedEntities(operation: string, result: unknown): ReturnedEntities {
   if (
     ISSUE_STATUS_OPERATIONS.has(operation) &&
     isRecord(result) &&
     typeof result.issue_entity_id === "string" &&
     result.issue_entity_id.length > 0
   ) {
-    return [{ id: result.issue_entity_id, type: "issue" }];
+    return { entities: [{ id: result.issue_entity_id, type: "issue" }], incomplete: false };
   }
-  return collectReturnedEntities(result);
+  return walkReturnedEntities(result);
 }
 
 export function buildReadLogRecord(input: ReadLogInput): ReadLogRecord {
-  const entities = input.status === "ok" ? returnedEntities(input.operation, input.result) : [];
+  const walked =
+    input.status === "ok"
+      ? returnedEntities(input.operation, input.result)
+      : { entities: [], incomplete: false };
+  const entities = walked.entities;
   const entityTypes: Record<string, number> = {};
   for (const entity of entities) {
     entityTypes[entity.type] = (entityTypes[entity.type] ?? 0) + 1;
   }
-  const truncated = entities.length > READ_LOG_ENTITY_ID_CAP;
+  // Truncated when ids were cut at the cap or the walk stopped early.
+  const truncated = entities.length > READ_LOG_ENTITY_ID_CAP || walked.incomplete;
   return {
     ts: (input.now ?? new Date()).toISOString(),
     event: READ_LOG_EVENT,
@@ -364,6 +428,19 @@ interface ReadLogCapture {
   body: unknown;
   /** True once the plain body was captured below response encryption. */
   plain: boolean;
+}
+
+/**
+ * Name the result of a read whose handler replies with `res.send` rather than
+ * `res.json` (the markdown and HTML renderings of an entity), so its read line
+ * records what was returned instead of nothing. A no-op for requests that are
+ * not read routes or when the read log is off. Never changes the response.
+ */
+export function recordReadLogResult(res: Response, result: unknown): void {
+  const capture = res.locals[READ_LOG_CAPTURE] as ReadLogCapture | undefined;
+  if (capture === undefined) return;
+  capture.body = result;
+  capture.plain = true;
 }
 
 /**
