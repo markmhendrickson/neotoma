@@ -34,6 +34,22 @@ const GRANTS = vi.hoisted(
   })
 );
 
+// Ids whose merge-hop lookup is made to fail, as a transient `entities` read
+// error would: the resolver then stops at the id as if it had no merge link.
+const FAILING_HOP_IDS = vi.hoisted(() => new Set<string>());
+
+vi.mock("../../src/services/attachment_resolution.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../../src/services/attachment_resolution.js")>();
+  return {
+    ...original,
+    resolveAttachmentTarget: async (entityId: string, userId: string | null) =>
+      FAILING_HOP_IDS.has(entityId)
+        ? { resolvedEntityId: entityId, path: [entityId], truncated: false }
+        : original.resolveAttachmentTarget(entityId, userId),
+  };
+});
+
 vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/middleware/aauth_verify.js")>();
   return {
@@ -88,6 +104,7 @@ import {
 } from "../../src/services/agent_capabilities.js";
 import type { AgentIdentity } from "../../src/crypto/agent_identity.js";
 import { mergeEntities } from "../../src/services/entity_merge.js";
+import { MAX_ATTACHMENT_RESOLUTION_DEPTH } from "../../src/services/attachment_resolution.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
 
@@ -487,6 +504,114 @@ describe("agent grant retrieve capability on entity reads", () => {
         ).toBe(200);
         await tool("retrieveEntitySnapshot", { entity_id: mergedIntoContact, at: AT }, G);
       });
+    });
+
+    describe("merge chains the resolver could not follow", () => {
+      async function link(fromId: string, toId: string | null): Promise<void> {
+        const { error } = await db
+          .from("entities")
+          .update({ merged_to_entity_id: toId })
+          .eq("id", fromId)
+          .eq("user_id", USER_ID);
+        expect(error).toBeNull();
+      }
+
+      it("a failed hop lookup refuses a typed grant and allows a * grant", async () => {
+        const tag = randomBytes(5).toString("hex");
+        const from = await seed({ entity_type: "task", title: `retrcap-hop-${tag}` });
+        const to = await seed({ entity_type: "contact", name: `retrcap-hop-to-${tag}` });
+        await link(from, to);
+        FAILING_HOP_IDS.add(from);
+        try {
+          expectRest403(await get(`/entities/${from}`, "retrieve-task"));
+          expectRest403(await get(`/entities/${from}/markdown`, "retrieve-task"));
+          expectDenied(
+            await capture(() =>
+              tool("retrieveEntitySnapshot", { entity_id: from }, "retrieve-task")
+            )
+          );
+          expect((await get(`/entities/${from}`, "retrieve-star")).status).toBe(200);
+          await tool("retrieveEntitySnapshot", { entity_id: from }, "retrieve-star");
+        } finally {
+          FAILING_HOP_IDS.delete(from);
+          await link(from, null);
+        }
+      });
+
+      it("a cycle refuses a typed grant even when every type is listed; * reads", async () => {
+        const tag = randomBytes(5).toString("hex");
+        const a = await seed({ entity_type: "task", title: `retrcap-cyc-a-${tag}` });
+        const b = await seed({ entity_type: "task", title: `retrcap-cyc-b-${tag}` });
+        await link(a, b);
+        await link(b, a);
+        try {
+          expectRest403(await get(`/entities/${a}`, "retrieve-task"));
+          expectRest403(await get(`/entities/${a}/observations`, "retrieve-task"));
+          expectDenied(
+            await capture(() => tool("listObservations", { entity_id: a }, "retrieve-task"))
+          );
+          // The observations read does not follow merge links, so it is the one
+          // read that terminates on a cycle; it shows the check lets * through.
+          expect((await get(`/entities/${a}/observations`, "retrieve-star")).status).toBe(200);
+          await tool("listObservations", { entity_id: a }, "retrieve-star");
+        } finally {
+          await link(a, null);
+          await link(b, null);
+        }
+      });
+
+      it("an over-deep chain refuses a typed grant even when every type is listed; * reads", async () => {
+        const tag = randomBytes(5).toString("hex");
+        const ids: string[] = [];
+        for (let i = 0; i <= MAX_ATTACHMENT_RESOLUTION_DEPTH + 1; i++) {
+          ids.push(await seed({ entity_type: "task", title: `retrcap-deep-${tag}-${i}` }));
+        }
+        for (let i = 0; i < ids.length - 1; i++) await link(ids[i], ids[i + 1]);
+        try {
+          expectRest403(await get(`/entities/${ids[0]}`, "retrieve-task"));
+          expectDenied(
+            await capture(() =>
+              tool("retrieveEntitySnapshot", { entity_id: ids[0] }, "retrieve-task")
+            )
+          );
+          expect((await get(`/entities/${ids[0]}`, "retrieve-star")).status).toBe(200);
+          await tool("retrieveEntitySnapshot", { entity_id: ids[0] }, "retrieve-star");
+        } finally {
+          for (const id of ids) await link(id, null);
+        }
+      });
+    });
+
+    it("a typed identifier lookup naming an allowed type with another type's raw id is refused", async () => {
+      const G = "retrieve-task";
+      expectRest403(
+        await post(
+          "/retrieve_entity_by_identifier",
+          { identifier: contactId, entity_type: "task" },
+          G
+        ),
+        "contact"
+      );
+      expectRest403(
+        await post(
+          "/retrieve_entity_by_identifier",
+          { identifier: contactId, entity_type: "task", include_observations: true },
+          G
+        ),
+        "contact"
+      );
+      expectDenied(
+        await capture(() =>
+          tool("retrieveEntityByIdentifier", { identifier: contactId, entity_type: "task" }, G)
+        ),
+        "contact"
+      );
+      const own = await post(
+        "/retrieve_entity_by_identifier",
+        { identifier: taskId, entity_type: "task" },
+        G
+      );
+      expect(own.status).toBe(200);
     });
 
     it("a caller without a grant is not limited", async () => {
