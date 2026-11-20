@@ -195,7 +195,27 @@ Identifier lookups and entity queries differ on purpose. An identifier lookup na
 
 A refusal is HTTP 403 `capability_denied` with `op: "retrieve"` and the refused `entity_type`, the same envelope writes use. Over MCP the same envelope arrives as the error `data`. One shared helper, `enforceAgentRetrieveScope` in `src/services/agent_capabilities.ts`, makes the decision for both surfaces.
 
-Covered in this round: `GET /entities`, `POST /entities/query`, `GET /entities/{id}` and its `/markdown`, `/html` and `/observations` reads, `POST /get_entity_snapshot`, `POST /list_observations`, `POST /get_field_provenance`, `POST /retrieve_entity_by_identifier`, `GET /observations`, `POST /observations/query`, and the MCP tools `retrieve_entities`, `retrieve_entity_snapshot`, `retrieve_entity_by_identifier`, `list_observations` and `retrieve_field_provenance`. A second round covers the remaining read paths: relationships, graph, timeline, search, counts and exports.
+Coverage is decided per operation in `src/shared/retrieve_scope_classification.ts`. Every `operationId` in `openapi.yaml` and every MCP tool has one class; an MCP tool mapped to an operation takes that operation's class. `tests/contract/retrieve_scope_coverage_guard.test.ts` fails when an operation or tool has no class, so a new read cannot ship without a decision.
+
+| Class | Behaviour with the setting on and an admitted grant | Operations |
+|-------|------------------------------------------------------|------------|
+| `read_entity` | Per-entity check; typed query refuses; untyped query narrowed | `listEntities`, `queryEntities`, `getEntityById`, `getEntityHtml`, `getEntityObservations`, `listObservations`, `queryObservations`, `getEntitySnapshot`, `listObservationsForEntity`, `getFieldProvenance`, `retrieveEntityByIdentifier` |
+| `read_scoped` | Root entity checked; neighbours or counts narrowed to allowed types | `retrieveRelatedEntities`, `retrieveGraphNeighborhood`, MCP `get_entity_type_counts` |
+| `read_full_scope` | Needs a `"*"` retrieve entry; a type-limited grant is refused with 403 | `getFileUrl`, `listPotentialDuplicates`, `listSources`, `getSourceById`, `getSourceRelationships`, `getRecordActivity`, `getComplianceScorecard`, `listAgentGrants`, `getAgentGrant`, `getRecentConversations`, `getRecentConversation`, `getConversationTurnIndex`, `listRelationships`, `getRelationshipById`, `getRelationshipSnapshot`, `getEntityRelationships`, `listRelationshipsForEntity`, `listTimeline`, `getTimelineById`, `listInterpretations`, `getStats`, `getUsage`, `queryContactsAtCompany`, `identifyEntityBySignals`, `issuesGetStatus`, `analyzeSchemaCandidates`, `auditUndeclaredFragments`, `getSchemaRecommendations`, `healthCheckSnapshots`, `listSubscriptions`, `getSubscriptionStatus`, `eventsStream`, `listSyncEntities`, MCP `manage_bundles`, `get_entity_submission_status`, `list_entity_submissions` |
+| `exempt` | Not checked: returns no entity data | health and readiness, server info, OpenAPI and instruction text, OAuth and sign-in flows, `getMe`, `getAuthenticatedUser`, `getSessionInfo`, schema and relationship-type metadata, instance and access policy, peer configuration, MCP `parse_file` and `npm_check_update`; the `/mcp` transport (each tool is classified on its own) |
+| `write` | Governed by the write capabilities, not `retrieve` | every mutation (store, correct, merge, split, delete, restore, relationship, schema, issue, subscription, peer and grant writes) |
+
+Details for the `read_scoped` reads:
+
+- Related entities and graph neighbourhood refuse when the root entity's type is not allowed. Edges whose other endpoint is of a type the grant may not read are dropped, and so is anything reached only through such an entity. The response carries `narrowed_by_capability: true`. A graph neighbourhood of a source node, and a related-entities read with an as-of cutoff, need a `"*"` entry.
+- The paged neighbourhood relationship list is narrowed before `total_count` and paging are computed.
+- `get_entity_type_counts` returns counts only for allowed types; `total_entities` is their sum.
+
+Out of scope, stated plainly:
+
+- `read_full_scope` reads are not narrowed. A type-limited grant cannot use them at all; a `"*"` grant reads them in full. Per-type narrowing of the paged relationship lists (`listRelationshipsForEntity`, `getEntityRelationships`) and of the timeline is follow-up work.
+- Writes that return entity data (for example `store` or `merge`) are governed by the write capabilities only.
+- Routes not declared in `openapi.yaml` (for example the Inspector's internal routes and `GET /entities/{id}/markdown`, covered in round 1 by its handler) are not part of the guard's enumeration.
 
 ## MCP Authentication
 
