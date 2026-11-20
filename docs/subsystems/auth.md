@@ -186,6 +186,13 @@ With the setting on and an admitted grant:
 - A typed query (`entity_type` or `entity_types`) is refused if any requested type is not listed.
 - An untyped query is narrowed to the listed types before it runs, so `total` and pagination describe the narrowed result. The response then carries `narrowed_by_capability: true`.
 
+Which type is checked after a cross-type merge:
+
+- Entity reads check the entity's type. A merged-away id is followed through its merge chain, as the readers follow it, and every entity on the chain must be covered. A chain that ends in a cycle, runs past the depth cap, or stops at an entity that still carries a merge link (a hop lookup failed) is refused unless the grant has a `"*"` entry.
+- An untyped observation listing filters on the observation row's `entity_type`. A merge moves observations to the surviving entity but leaves that column unchanged, so the row keeps the type it was written under.
+
+Identifier lookups and entity queries differ on purpose. An identifier lookup names what it wants, so it is refused when any matched entity, typed lookup or not, is outside the grant: a raw entity id matches whatever its type. An untyped entity query asks for a set, so it is narrowed to the listed types instead, and the caller is told through `narrowed_by_capability`.
+
 A refusal is HTTP 403 `capability_denied` with `op: "retrieve"` and the refused `entity_type`, the same envelope writes use. Over MCP the same envelope arrives as the error `data`. One shared helper, `enforceAgentRetrieveScope` in `src/services/agent_capabilities.ts`, makes the decision for both surfaces.
 
 Covered in this round: `GET /entities`, `POST /entities/query`, `GET /entities/{id}` and its `/markdown`, `/html` and `/observations` reads, `POST /get_entity_snapshot`, `POST /list_observations`, `POST /get_field_provenance`, `POST /retrieve_entity_by_identifier`, `GET /observations`, `POST /observations/query`, and the MCP tools `retrieve_entities`, `retrieve_entity_snapshot`, `retrieve_entity_by_identifier`, `list_observations` and `retrieve_field_provenance`. A second round covers the remaining read paths: relationships, graph, timeline, search, counts and exports.

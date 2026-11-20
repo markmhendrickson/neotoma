@@ -54,7 +54,9 @@ export function enforceRetrieveForEntityTypes(entityTypes: string[]): void {
  * grant must cover the type of the requested row AND of every entity on the
  * chain. That resolver carries the cycle guard and the depth cap; a chain it
  * could not resolve to a fixed point is refused unless the grant covers every
- * type.
+ * type (`*`). So is a chain whose last entity still carries a merge link: the
+ * resolver stops there when a hop lookup fails, and the reader would follow
+ * the link to an entity this check never saw (fail closed).
  */
 export async function enforceRetrieveForEntityIds(
   entityIds: Array<string | null | undefined>,
@@ -67,19 +69,39 @@ export async function enforceRetrieveForEntityIds(
   );
   if (ids.length === 0) return;
   const chainIds = new Set<string>(ids);
+  const resolvedIds = new Map<string, string>();
   let unresolvedChainFrom: string | null = null;
   for (const id of ids) {
     const target = await resolveAttachmentTarget(id, userId);
     for (const hop of target.path) chainIds.add(hop);
+    resolvedIds.set(id, target.resolvedEntityId);
     if (target.truncated && unresolvedChainFrom === null) unresolvedChainFrom = id;
   }
   const { data, error } = await db
     .from("entities")
-    .select("id, entity_type")
+    .select("id, entity_type, merged_to_entity_id")
     .in("id", Array.from(chainIds))
     .eq("user_id", userId);
   if (error) throw error;
-  const types = ((data ?? []) as Array<{ entity_type?: string | null }>)
+  const rows = (data ?? []) as Array<{
+    id: string;
+    entity_type?: string | null;
+    merged_to_entity_id?: string | null;
+  }>;
+  // The resolver reports a failed hop lookup the same way as a row with no
+  // merge link (its read path degrades rather than throws). If the entity the
+  // chain stopped at still carries a merge link, a hop was not followed, and
+  // the reader would follow it to an entity whose type was never checked.
+  const mergeLinkById = new Map(rows.map((row) => [row.id, row.merged_to_entity_id ?? null]));
+  if (unresolvedChainFrom === null) {
+    for (const [id, resolved] of resolvedIds) {
+      if (mergeLinkById.get(resolved)) {
+        unresolvedChainFrom = id;
+        break;
+      }
+    }
+  }
+  const types = rows
     .map((row) => row.entity_type)
     .filter((t): t is string => typeof t === "string" && t.length > 0);
   const scope = enforceAgentRetrieveScope(ctx, types);

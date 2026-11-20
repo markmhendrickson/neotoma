@@ -4584,7 +4584,6 @@ export class NeotomaServer {
         search_mode,
         ...(next_cursor ? { next_cursor } : {}),
         ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
-        ...(narrowed_by_capability ? { narrowed_by_capability } : {}),
       });
     }
 
