@@ -356,6 +356,73 @@ describe("MCP read log", () => {
     expect(lines).toHaveLength(0);
   });
 
+  function readResource(server: NeotomaServer, uri: string, admission: unknown = null) {
+    const handler = (server as any).mcpServer.server._requestHandlers.get("resources/read");
+    return runWithRequestContext(
+      {
+        agentIdentity: null,
+        aauthAdmission: admission as never,
+        requestId: "req-synthetic-0002",
+        authMethod: "aauth",
+      },
+      () =>
+        handler(
+          { method: "resources/read", params: { uri } },
+          {
+            signal: new AbortController().signal,
+            requestId: 2,
+            sendNotification: async () => {},
+            sendRequest: async () => ({}),
+          }
+        )
+    );
+  }
+
+  it("writes one line for an entity resources/read, with types and count and no content", async () => {
+    const server = new NeotomaServer();
+    (server as any).authenticatedUserId = "user-0001";
+    (server as any).handleEntityCollectionAll = async () => mixedResult;
+    const res = await readResource(server, "neotoma://entities", {
+      admitted: true,
+      agent_label: "synthetic-agent",
+    });
+    expect(JSON.parse(res.contents[0].text)).toEqual(mixedResult);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      request_id: "req-synthetic-0002",
+      user_id: "user-0001",
+      surface: "mcp",
+      operation: "resources/read:entity_collection_all",
+      agent: "synthetic-agent",
+      status: "ok",
+      entity_types: { task: 2, issue: 1 },
+      count: 3,
+      entity_ids: ["ent_task_0001", "ent_task_0002", "ent_issue_0001"],
+    });
+    expectNoContent(lines[0]!);
+  });
+
+  it("writes an error line for a failed entity resources/read", async () => {
+    const server = new NeotomaServer();
+    (server as any).handleIndividualEntity = async () => {
+      throw new Error("synthetic failure");
+    };
+    await expect(readResource(server, "neotoma://entity/ent_task_0001")).rejects.toBeDefined();
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      operation: "resources/read:entity",
+      status: "error",
+      count: 0,
+    });
+  });
+
+  it("writes nothing for an excluded resource kind", async () => {
+    const server = new NeotomaServer();
+    (server as any).handleEntityTypes = async () => ({ entity_types: [] });
+    await readResource(server, "neotoma://entity_types");
+    expect(lines).toHaveLength(0);
+  });
+
   it("writes no read line through executeToolForCli", async () => {
     const server = new NeotomaServer();
     (server as any).executeTool = okResult;

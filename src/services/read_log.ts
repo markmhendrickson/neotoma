@@ -65,6 +65,30 @@ export const READ_TOOL_NAMES: ReadonlySet<string> = new Set(
   )
 );
 
+/**
+ * MCP `resources/read` kinds (the `type` from `parseResourceUri` in
+ * src/server.ts) that return entity records and so write a read line. The
+ * other kinds are listed with a reason in the read log exclusions table in
+ * docs/operations/configuration.md; tests/unit/read_log_classification.test.ts
+ * fails when a kind is in neither.
+ */
+export const READ_RESOURCE_KINDS: ReadonlySet<string> = new Set([
+  "entity_collection_all",
+  "entity_collection",
+  "entity",
+  "entity_observations",
+  "entity_relationships",
+  "timeline_year",
+  "timeline_month",
+  "relationship_collection_all",
+  "relationship_collection",
+]);
+
+/** The logged operation for a `resources/read` call of the given kind. */
+export function resourceReadOperation(kind: string): string {
+  return `resources/read:${kind}`;
+}
+
 interface RestReadRoute {
   method: string;
   pattern: RegExp;
