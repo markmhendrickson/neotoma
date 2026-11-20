@@ -182,6 +182,28 @@ describe("agent grant retrieve capability on entity reads", () => {
     return grant ? runAsGrant(grant, call) : call();
   }
 
+  function resource(uri: string, grant?: string): Promise<{ contents: Array<{ text: string }> }> {
+    const handlers = (
+      mcp as unknown as {
+        mcpServer: {
+          server: {
+            _requestHandlers: Map<
+              string,
+              (request: {
+                method: string;
+                params: { uri: string };
+              }) => Promise<{ contents: Array<{ text: string }> }>
+            >;
+          };
+        };
+      }
+    ).mcpServer.server._requestHandlers;
+    const handler = handlers.get("resources/read");
+    if (!handler) throw new Error("resources/read handler not registered");
+    const call = () => handler({ method: "resources/read", params: { uri } });
+    return grant ? runAsGrant(grant, call) : call();
+  }
+
   async function capture(fn: () => Promise<unknown>): Promise<unknown> {
     try {
       await fn();
@@ -253,6 +275,46 @@ describe("agent grant retrieve capability on entity reads", () => {
 
     describe("grant with retrieve for task only", () => {
       const G = "retrieve-task";
+
+      it("MCP resource reads check types and narrow an untyped collection", async () => {
+        const allowed = JSON.parse(
+          (await resource(`neotoma://entity/${taskId}`, G)).contents[0].text
+        );
+        expect(allowed.entity_type).toBe("task");
+        expectDenied(await capture(() => resource(`neotoma://entity/${contactId}`, G)), "contact");
+        expectDenied(await capture(() => resource("neotoma://entities/contact", G)), "contact");
+        const page = JSON.parse(
+          (await resource("neotoma://entities?limit=500", G)).contents[0].text
+        );
+        expect(page.narrowed_by_capability).toBe(true);
+        expect(page.entities.some((e: { entity_type: string }) => e.entity_type === "task")).toBe(
+          true
+        );
+        expect(page.entities.every((e: { entity_type: string }) => e.entity_type === "task")).toBe(
+          true
+        );
+        const typed = JSON.parse(
+          (await resource("neotoma://entities/task?limit=500", G)).contents[0].text
+        );
+        expect(page.total).toBe(typed.total);
+        expectDenied(await capture(() => resource("neotoma://sources", G)), "*");
+        expectDenied(await capture(() => resource(`neotoma://entity/${taskId}`, "no-retrieve")));
+        const originalParser = (mcp as any).parseResourceUri;
+        (mcp as any).parseResourceUri = () => ({ type: "future_resource_kind" });
+        try {
+          expectDenied(await capture(() => resource("neotoma://future", G)), "*");
+        } finally {
+          (mcp as any).parseResourceUri = originalParser;
+        }
+        const star = JSON.parse(
+          (await resource(`neotoma://entity/${contactId}`, "retrieve-star")).contents[0].text
+        );
+        expect(star.entity_type).toBe("contact");
+        const plain = JSON.parse(
+          (await resource(`neotoma://entity/${contactId}`)).contents[0].text
+        );
+        expect(plain.entity_type).toBe("contact");
+      });
 
       it("REST reads of the allowed type succeed on every per-entity entry point", async () => {
         expect((await get(`/entities/${taskId}`, G)).status).toBe(200);
@@ -646,6 +708,308 @@ describe("agent grant retrieve capability on entity reads", () => {
         expect((await get(`/entities/${contactId}`, "retrieve-task")).status).toBe(200);
       }
       delete process.env[SETTING];
+    });
+  });
+
+  describe("round 2: related entities, graph neighbourhood, type counts and the gate", () => {
+    let hubId: string;
+    let peerTaskId: string;
+
+    function parse(result: ToolResult): Record<string, unknown> {
+      return JSON.parse(result.content[0].text) as Record<string, unknown>;
+    }
+    const endpoints = (rels: unknown): string[] =>
+      (rels as Array<{ source_entity_id: string; target_entity_id: string }>).flatMap((r) => [
+        r.source_entity_id,
+        r.target_entity_id,
+      ]);
+    const relatedBody = () => ({ entity_id: hubId, max_hops: 1, include_entities: true });
+    const graphBody = () => ({
+      node_id: hubId,
+      node_type: "entity",
+      include_relationships: true,
+      include_entities: true,
+      limit: 100,
+    });
+
+    beforeAll(async () => {
+      const tag = randomBytes(5).toString("hex");
+      hubId = await seed({ entity_type: "task", title: `retrcap-hub-${tag}` });
+      peerTaskId = await seed({ entity_type: "task", title: `retrcap-peer-${tag}` });
+      for (const target of [peerTaskId, contactId]) {
+        const res = await post("/create_relationship", {
+          relationship_type: "REFERS_TO",
+          source_entity_id: hubId,
+          target_entity_id: target,
+        });
+        expect(res.status).toBe(200);
+      }
+    });
+
+    afterAll(async () => {
+      for (const t of ["relationship_snapshots", "relationship_observations"]) {
+        await db.from(t).delete().eq("source_entity_id", hubId);
+      }
+    });
+
+    describe("setting on", () => {
+      beforeEach(() => {
+        process.env[SETTING] = "1";
+      });
+      afterEach(() => {
+        delete process.env[SETTING];
+      });
+
+      it("REST retrieve_related_entities narrows a one-type grant to the allowed type", async () => {
+        const res = await post("/retrieve_related_entities", relatedBody(), "retrieve-task");
+        expect(res.status).toBe(200);
+        expect(res.body.narrowed_by_capability).toBe(true);
+        const ids = endpoints(res.body.relationships);
+        expect(ids).toContain(peerTaskId);
+        expect(ids).not.toContain(contactId);
+        const rows = res.body.entities as Array<{ entity_type?: string; id?: string }>;
+        expect(rows.every((e) => (e.entity_type ?? "task") === "task")).toBe(true);
+      });
+
+      it("REST retrieve_related_entities refuses a root of another type", async () => {
+        const body = { entity_id: contactId, max_hops: 1 };
+        expectRest403(await post("/retrieve_related_entities", body, "retrieve-task"), "contact");
+      });
+
+      it("REST retrieve_graph_neighborhood narrows with a total that matches the rows", async () => {
+        const res = await post("/retrieve_graph_neighborhood", graphBody(), "retrieve-task");
+        expect(res.status).toBe(200);
+        expect(res.body.narrowed_by_capability).toBe(true);
+        const rels = res.body.relationships as unknown[];
+        expect(endpoints(rels)).toContain(peerTaskId);
+        expect(endpoints(rels)).not.toContain(contactId);
+        expect(res.body.total_count).toBe(rels.length);
+        const refused = await post(
+          "/retrieve_graph_neighborhood",
+          { ...graphBody(), node_id: contactId },
+          "retrieve-task"
+        );
+        expectRest403(refused, "contact");
+      });
+
+      it("MCP related entities and graph neighbourhood narrow and refuse the same way", async () => {
+        const related = parse(
+          await tool("retrieveRelatedEntities", relatedBody(), "retrieve-task")
+        );
+        expect(related.narrowed_by_capability).toBe(true);
+        expect(endpoints(related.relationships)).not.toContain(contactId);
+        expect(endpoints(related.relationships)).toContain(peerTaskId);
+        const graph = parse(await tool("retrieveGraphNeighborhood", graphBody(), "retrieve-task"));
+        expect(graph.narrowed_by_capability).toBe(true);
+        expect(endpoints(graph.relationships)).not.toContain(contactId);
+        expectDenied(
+          await capture(() =>
+            tool("retrieveRelatedEntities", { entity_id: contactId }, "retrieve-task")
+          ),
+          "contact"
+        );
+        expectDenied(
+          await capture(() =>
+            tool(
+              "retrieveGraphNeighborhood",
+              { ...graphBody(), node_id: contactId },
+              "retrieve-task"
+            )
+          ),
+          "contact"
+        );
+      });
+
+      it("MCP get_entity_type_counts returns only allowed types with a consistent total", async () => {
+        const counts = parse(await tool("getEntityTypeCounts", {}, "retrieve-task"));
+        expect(counts.narrowed_by_capability).toBe(true);
+        const byType = counts.entities_by_type as Record<string, number>;
+        expect(Object.keys(byType)).toEqual(["task"]);
+        expect(counts.total_entities).toBe(byType.task);
+      });
+
+      it("graph neighbourhood omits a shared source and other-type events", async () => {
+        const sourceId = randomUUID();
+        const observationIds = [randomUUID(), randomUUID()];
+        const eventIds = [randomUUID(), randomUUID()];
+        const now = new Date().toISOString();
+        try {
+          expect(
+            (
+              await db.from("sources").insert({
+                id: sourceId,
+                user_id: USER_ID,
+                content_hash: `retrcap-shared-${sourceId}`,
+                mime_type: "text/plain",
+                storage_url: "internal://test/shared-source",
+                file_size: 0,
+              })
+            ).error
+          ).toBeNull();
+          for (const [index, entityId, entityType] of [
+            [0, hubId, "task"],
+            [1, contactId, "contact"],
+          ] as const) {
+            expect(
+              (
+                await db.from("observations").insert({
+                  id: observationIds[index],
+                  entity_id: entityId,
+                  entity_type: entityType,
+                  schema_version: "1.0",
+                  observed_at: now,
+                  source_priority: 0,
+                  source_id: sourceId,
+                  fields: {},
+                  user_id: USER_ID,
+                })
+              ).error
+            ).toBeNull();
+            expect(
+              (
+                await db.from("timeline_events").insert({
+                  id: eventIds[index],
+                  entity_id: entityId,
+                  source_id: sourceId,
+                  event_type: `retrcap_${entityType}`,
+                  event_timestamp: now,
+                  user_id: USER_ID,
+                })
+              ).error
+            ).toBeNull();
+          }
+          const body = {
+            ...graphBody(),
+            include_observations: true,
+            include_sources: true,
+            include_events: true,
+          };
+          const limited = await post("/retrieve_graph_neighborhood", body, "retrieve-task");
+          expect(limited.status).toBe(200);
+          // The REST route returns the root entity's own observations and their sources and has no
+          // timeline events field; the shared-source narrowing is asserted on the MCP surface below.
+          expect(limited.body.timeline_events).toBeUndefined();
+          expect(
+            ((limited.body.sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).not.toContain(sourceId);
+          const fullRest = await post("/retrieve_graph_neighborhood", body, "retrieve-star");
+          expect(
+            ((fullRest.body.sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).toContain(sourceId);
+          const limitedMcp = parse(await tool("retrieveGraphNeighborhood", body, "retrieve-task"));
+          expect(
+            ((limitedMcp.related_sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).not.toContain(sourceId);
+          expect(
+            ((limitedMcp.timeline_events ?? []) as Array<{ id: string }>).map((e) => e.id)
+          ).toContain(eventIds[0]);
+          expect(
+            ((limitedMcp.timeline_events ?? []) as Array<{ id: string }>).map((e) => e.id)
+          ).not.toContain(eventIds[1]);
+          const full = parse(await tool("retrieveGraphNeighborhood", body, "retrieve-star"));
+          expect(
+            ((full.related_sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).toContain(sourceId);
+          expect(
+            ((full.timeline_events ?? []) as Array<{ id: string }>).map((e) => e.id)
+          ).toContain(eventIds[1]);
+        } finally {
+          await db.from("timeline_events").delete().in("id", eventIds);
+          await db.from("observations").delete().in("id", observationIds);
+          await db.from("sources").delete().eq("id", sourceId);
+        }
+      });
+
+      it("a grant with no retrieve entry is refused on both surfaces", async () => {
+        expectRest403(await post("/retrieve_related_entities", relatedBody(), "no-retrieve"));
+        expectRest403(await post("/retrieve_graph_neighborhood", graphBody(), "no-retrieve"));
+        for (const [name, args] of [
+          ["retrieveRelatedEntities", relatedBody()],
+          ["retrieveGraphNeighborhood", graphBody()],
+          ["getEntityTypeCounts", {}],
+        ] as const) {
+          expectDenied(await capture(() => tool(name, args, "no-retrieve")));
+        }
+      });
+
+      it("a * grant reads every type without narrowing", async () => {
+        const res = await post("/retrieve_related_entities", relatedBody(), "retrieve-star");
+        expect(res.status).toBe(200);
+        expect(res.body.narrowed_by_capability).toBeUndefined();
+        expect(endpoints(res.body.relationships)).toContain(contactId);
+        const graph = await post("/retrieve_graph_neighborhood", graphBody(), "retrieve-star");
+        expect(graph.body.narrowed_by_capability).toBeUndefined();
+        expect(endpoints(graph.body.relationships)).toContain(contactId);
+        const counts = parse(await tool("getEntityTypeCounts", {}, "retrieve-star"));
+        expect(counts.narrowed_by_capability).toBeUndefined();
+        expect(Object.keys(counts.entities_by_type as object)).toContain("contact");
+      });
+
+      it("a caller without a grant is unaffected", async () => {
+        const res = await post("/retrieve_related_entities", relatedBody());
+        expect(res.status).toBe(200);
+        expect(res.body.narrowed_by_capability).toBeUndefined();
+        expect(endpoints(res.body.relationships)).toContain(contactId);
+        const counts = parse(await tool("getEntityTypeCounts", {}));
+        expect(counts.narrowed_by_capability).toBeUndefined();
+      });
+
+      describe("default-deny gate on routes with no per-type check", () => {
+        // Contract-mapped reads and the registered aliases that openapi.yaml
+        // does not declare; every one must refuse a one-type grant.
+        const routes: Array<["GET" | "POST", string, Record<string, unknown>?]> = [
+          ["GET", "/relationships"],
+          ["GET", "/sources"],
+          ["GET", "/record_activity"],
+          ["POST", "/api/issues/status", { entity_id: "ent_synthetic" }],
+          ["GET", "/sources/src_synthetic/content"],
+          ["GET", "/turns"],
+          ["GET", "/turns/turn_synthetic"],
+          ["GET", "/agents"],
+          ["GET", "/agents/agent_synthetic"],
+          ["GET", "/agents/agent_synthetic/records"],
+          ["GET", "/submit/task/ent_synthetic"],
+          ["GET", "/bundles"],
+          ["GET", "/no_such_read_route"],
+        ];
+
+        for (const [method, path, body] of routes) {
+          it(`${method} ${path}: one-type grant refused; * grant and no grant pass the gate`, async () => {
+            const call = (grant?: string) => request(method, path, body, grant);
+            expectRest403(await call("retrieve-task"));
+            expectRest403(await call("no-retrieve"));
+            const star = await call("retrieve-star");
+            expect(star.body.error_code).not.toBe("capability_denied");
+            const bearer = await call();
+            expect(bearer.body.error_code).not.toBe("capability_denied");
+          });
+        }
+
+        it("exempt routes stay readable for a one-type grant", async () => {
+          expect((await get("/health", "retrieve-task")).status).toBe(200);
+        });
+      });
+    });
+
+    describe("setting off", () => {
+      it("a one-type grant reads related entities, graph and counts as before", async () => {
+        const other = JSON.parse(
+          (await resource(`neotoma://entity/${contactId}`, "retrieve-task")).contents[0].text
+        );
+        expect(other.entity_type).toBe("contact");
+        const res = await post("/retrieve_related_entities", relatedBody(), "retrieve-task");
+        expect(res.status).toBe(200);
+        expect(res.body.narrowed_by_capability).toBeUndefined();
+        expect(endpoints(res.body.relationships)).toContain(contactId);
+        const graph = await post("/retrieve_graph_neighborhood", graphBody(), "retrieve-task");
+        expect(endpoints(graph.body.relationships)).toContain(contactId);
+        const counts = parse(await tool("getEntityTypeCounts", {}, "retrieve-task"));
+        expect(counts.narrowed_by_capability).toBeUndefined();
+        for (const path of ["/turns", "/agents", "/no_such_read_route"]) {
+          const r = await get(path, "retrieve-task");
+          expect(r.body.error_code).not.toBe("capability_denied");
+        }
+      });
     });
   });
 
