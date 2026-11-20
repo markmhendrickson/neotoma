@@ -5052,14 +5052,43 @@ export class NeotomaServer {
               .map((obs: any) => obs.source_id)
               .filter((id: string) => id);
             if (sourceIds.length > 0) {
-              const { data: sources, error: sourceError } = await db
-                .from("sources")
-                .select("id, mime_type, file_size, original_filename, created_at")
-                .in("id", sourceIds)
-                .eq("user_id", userId);
+              const scope = currentRetrieveScope();
+              let allowedSourceIds = sourceIds;
+              if (scope?.kind === "types") {
+                const { data: sourceObservations, error: sourceObsError } = await db
+                  .from("observations")
+                  .select("source_id, entity_id")
+                  .in("source_id", sourceIds)
+                  .eq("user_id", userId);
+                if (sourceObsError) throw sourceObsError;
+                const backing = (sourceObservations ?? []) as Array<{
+                  source_id: string;
+                  entity_id: string | null;
+                }>;
+                const backingTypes = await entityTypesById(
+                  backing.map((row) => row.entity_id ?? ""),
+                  userId
+                );
+                allowedSourceIds = sourceIds.filter((sourceId: string) => {
+                  const rows = backing.filter((row) => row.source_id === sourceId);
+                  return rows.length > 0 && rows.every((row) => {
+                    const type = backingTypes.get(row.entity_id ?? "");
+                    return type !== undefined && scope.types.includes(type);
+                  });
+                });
+              }
+              const { data: sources, error: sourceError } =
+                allowedSourceIds.length > 0
+                  ? await db
+                      .from("sources")
+                      .select("id, mime_type, file_size, original_filename, created_at")
+                      .in("id", allowedSourceIds)
+                      .eq("user_id", userId)
+                  : { data: [], error: null };
 
               if (!sourceError && sources) {
                 result.related_sources = sources;
+                if (scope?.kind === "types") result.narrowed_by_capability = true;
 
                 // Get events for these sources
                 if (parsed.include_events) {
@@ -5070,7 +5099,20 @@ export class NeotomaServer {
                     .eq("user_id", userId);
 
                   if (!evtError && events) {
-                    result.timeline_events = events;
+                    const eventTypes =
+                      scope?.kind === "types"
+                        ? await entityTypesById(
+                            events.map((event: { entity_id?: string }) => event.entity_id ?? ""),
+                            userId
+                          )
+                        : null;
+                    result.timeline_events =
+                      scope?.kind === "types"
+                        ? events.filter((event: { entity_id?: string }) => {
+                            const type = eventTypes?.get(event.entity_id ?? "");
+                            return type !== undefined && scope.types.includes(type);
+                          })
+                        : events;
                   }
                 }
               }

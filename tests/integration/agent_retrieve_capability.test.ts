@@ -811,6 +811,68 @@ describe("agent grant retrieve capability on entity reads", () => {
         expect(counts.total_entities).toBe(byType.task);
       });
 
+      it("graph neighbourhood omits a shared source and other-type events", async () => {
+        const sourceId = randomUUID();
+        const observationIds = [randomUUID(), randomUUID()];
+        const eventIds = [randomUUID(), randomUUID()];
+        const now = new Date().toISOString();
+        try {
+          expect((await db.from("sources").insert({
+            id: sourceId,
+            user_id: USER_ID,
+            content_hash: `retrcap-shared-${sourceId}`,
+            mime_type: "text/plain",
+            storage_url: "internal://test/shared-source",
+            file_size: 0,
+          })).error).toBeNull();
+          for (const [index, entityId, entityType] of [
+            [0, hubId, "task"],
+            [1, contactId, "contact"],
+          ] as const) {
+            expect((await db.from("observations").insert({
+              id: observationIds[index],
+              entity_id: entityId,
+              entity_type: entityType,
+              schema_version: "1.0",
+              observed_at: now,
+              source_priority: 0,
+              source_id: sourceId,
+              fields: {},
+              user_id: USER_ID,
+            })).error).toBeNull();
+            expect((await db.from("timeline_events").insert({
+              id: eventIds[index],
+              entity_id: entityId,
+              source_id: sourceId,
+              event_type: `retrcap_${entityType}`,
+              event_timestamp: now,
+              user_id: USER_ID,
+            })).error).toBeNull();
+          }
+          const body = {
+            ...graphBody(),
+            include_observations: true,
+            include_sources: true,
+            include_events: true,
+          };
+          const limited = await post("/retrieve_graph_neighborhood", body, "retrieve-task");
+          expect(limited.status).toBe(200);
+          expect((limited.body.related_sources as Array<{ id: string }>).map((s) => s.id)).not.toContain(sourceId);
+          expect((limited.body.timeline_events as Array<{ id: string }>).map((e) => e.id)).toContain(eventIds[0]);
+          expect((limited.body.timeline_events as Array<{ id: string }>).map((e) => e.id)).not.toContain(eventIds[1]);
+          const limitedMcp = parse(await tool("retrieveGraphNeighborhood", body, "retrieve-task"));
+          expect((limitedMcp.related_sources as Array<{ id: string }>).map((s) => s.id)).not.toContain(sourceId);
+          expect((limitedMcp.timeline_events as Array<{ id: string }>).map((e) => e.id)).not.toContain(eventIds[1]);
+          const full = await post("/retrieve_graph_neighborhood", body, "retrieve-star");
+          expect((full.body.related_sources as Array<{ id: string }>).map((s) => s.id)).toContain(sourceId);
+          expect((full.body.timeline_events as Array<{ id: string }>).map((e) => e.id)).toContain(eventIds[1]);
+        } finally {
+          await db.from("timeline_events").delete().in("id", eventIds);
+          await db.from("observations").delete().in("id", observationIds);
+          await db.from("sources").delete().eq("id", sourceId);
+        }
+      });
+
       it("a grant with no retrieve entry is refused on both surfaces", async () => {
         expectRest403(await post("/retrieve_related_entities", relatedBody(), "no-retrieve"));
         expectRest403(await post("/retrieve_graph_neighborhood", graphBody(), "no-retrieve"));

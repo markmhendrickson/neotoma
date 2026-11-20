@@ -195,7 +195,7 @@ Identifier lookups and entity queries differ on purpose. An identifier lookup na
 
 A refusal is HTTP 403 `capability_denied` with `op: "retrieve"` and the refused `entity_type`, the same envelope writes use. Over MCP the same envelope arrives as the error `data`. One shared helper, `enforceAgentRetrieveScope` in `src/services/agent_capabilities.ts`, makes the decision for both surfaces.
 
-Coverage is decided per operation in `src/shared/retrieve_scope_classification.ts`. Every `operationId` in `openapi.yaml` and every MCP tool has one class; an MCP tool mapped to an operation takes that operation's class. `tests/contract/retrieve_scope_coverage_guard.test.ts` fails when an operation or tool has no class, so a new read cannot ship without a decision.
+Coverage is decided per operation in `src/shared/retrieve_scope_classification.ts`. Every `operationId` in `openapi.yaml`, MCP tool, and MCP resource kind has one class; an MCP tool mapped to an operation takes that operation's class. `tests/contract/retrieve_scope_coverage_guard.test.ts` fails when an operation, tool, or resource handler kind has no class. Unknown resource kinds take the full-scope gate.
 
 | Class | Behaviour with the setting on and an admitted grant | Operations |
 |-------|------------------------------------------------------|------------|
@@ -207,15 +207,18 @@ Coverage is decided per operation in `src/shared/retrieve_scope_classification.t
 
 Details for the `read_scoped` reads:
 
-- Related entities and graph neighbourhood refuse when the root entity's type is not allowed. Edges whose other endpoint is of a type the grant may not read are dropped, and so is anything reached only through such an entity. The response carries `narrowed_by_capability: true`. A graph neighbourhood of a source node, and a related-entities read with an as-of cutoff, need a `"*"` entry.
+- Related entities and graph neighbourhood refuse when the root entity's type is not allowed. Edges whose other endpoint is of a type the grant may not read are dropped, and so is anything reached only through such an entity. For an entity-root graph neighbourhood, timeline events are kept only when their entity type is allowed; a source row is kept only when every entity backed by that source has an allowed type. The response carries `narrowed_by_capability: true`. A graph neighbourhood of a source node, and a related-entities read with an as-of cutoff, need a `"*"` entry.
 - The paged neighbourhood relationship list is narrowed before `total_count` and paging are computed.
 - `get_entity_type_counts` returns counts only for allowed types; `total_entities` is their sum.
+
+MCP `resources/read` applies the same scope within the `/mcp` transport. Individual entity and observation resources check the entity and its merge chain; typed entity collections check their requested type; untyped entity collections apply the granted types before counting and paging. Source, relationship, timeline and unknown resource kinds require a `"*"` retrieve entry. The entity-types resource and static UI widgets are metadata-only. A caller without an admitted grant, or with the setting off, keeps the existing behaviour.
 
 Out of scope, stated plainly:
 
 - `read_full_scope` reads are not narrowed. A type-limited grant cannot use them at all; a `"*"` grant reads them in full. Per-type narrowing of the paged relationship lists (`listRelationshipsForEntity`, `getEntityRelationships`) and of the timeline is follow-up work.
 - Writes that return entity data (for example `store` or `merge`) are governed by the write capabilities only.
 - List-style reads are refused for a type-limited grant until per-type narrowing exists for them: `list_relationships`, `list_timeline_events`, `list_recent_changes` and `identify_entity_by_signals` (REST `listRelationships`, `listTimeline`, `getRecordActivity`, `identifyEntityBySignals`). This is a known gap: a grant limited to some types cannot list those types' relationships, events or recent changes; it needs a `"*"` entry.
+- MCP `resources/list` still advertises resource names and counts across types. This round gates `resources/read` payloads; narrowing discovery metadata is separate work.
 
 ### Default deny over registered routes
 
