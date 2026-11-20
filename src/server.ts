@@ -110,7 +110,10 @@ import {
   narrowTraversalToScope,
   retrieveScopeIsTypeLimited,
 } from "./services/retrieve_capability.js";
-import { retrieveClassForResource, retrieveClassForTool } from "./shared/retrieve_scope_classification.js";
+import {
+  retrieveClassForResource,
+  retrieveClassForTool,
+} from "./shared/retrieve_scope_classification.js";
 import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
@@ -3297,7 +3300,9 @@ export class NeotomaServer {
           if (parsed.entityId) {
             await enforceRetrieveForEntityIds([parsed.entityId], this.getAuthenticatedUserId());
           } else if (parsed.entityType || parsed.queryParams?.entity_type) {
-            enforceRetrieveForEntityTypes([(parsed.entityType ?? parsed.queryParams?.entity_type)!]);
+            enforceRetrieveForEntityTypes([
+              (parsed.entityType ?? parsed.queryParams?.entity_type)!,
+            ]);
           } else {
             currentRetrieveScope();
           }
@@ -5071,10 +5076,13 @@ export class NeotomaServer {
                 );
                 allowedSourceIds = sourceIds.filter((sourceId: string) => {
                   const rows = backing.filter((row) => row.source_id === sourceId);
-                  return rows.length > 0 && rows.every((row) => {
-                    const type = backingTypes.get(row.entity_id ?? "");
-                    return type !== undefined && scope.types.includes(type);
-                  });
+                  return (
+                    rows.length > 0 &&
+                    rows.every((row) => {
+                      const type = backingTypes.get(row.entity_id ?? "");
+                      return type !== undefined && scope.types.includes(type);
+                    })
+                  );
                 });
               }
               const { data: sources, error: sourceError } =

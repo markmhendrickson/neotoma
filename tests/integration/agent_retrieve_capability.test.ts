@@ -189,7 +189,10 @@ describe("agent grant retrieve capability on entity reads", () => {
           server: {
             _requestHandlers: Map<
               string,
-              (request: { params: { uri: string } }) => Promise<{ contents: Array<{ text: string }> }>
+              (request: {
+                method: string;
+                params: { uri: string };
+              }) => Promise<{ contents: Array<{ text: string }> }>
             >;
           };
         };
@@ -197,7 +200,7 @@ describe("agent grant retrieve capability on entity reads", () => {
     ).mcpServer.server._requestHandlers;
     const handler = handlers.get("resources/read");
     if (!handler) throw new Error("resources/read handler not registered");
-    const call = () => handler({ params: { uri } });
+    const call = () => handler({ method: "resources/read", params: { uri } });
     return grant ? runAsGrant(grant, call) : call();
   }
 
@@ -274,15 +277,25 @@ describe("agent grant retrieve capability on entity reads", () => {
       const G = "retrieve-task";
 
       it("MCP resource reads check types and narrow an untyped collection", async () => {
-        const allowed = JSON.parse((await resource(`neotoma://entity/${taskId}`, G)).contents[0].text);
+        const allowed = JSON.parse(
+          (await resource(`neotoma://entity/${taskId}`, G)).contents[0].text
+        );
         expect(allowed.entity_type).toBe("task");
         expectDenied(await capture(() => resource(`neotoma://entity/${contactId}`, G)), "contact");
         expectDenied(await capture(() => resource("neotoma://entities/contact", G)), "contact");
-        const page = JSON.parse((await resource("neotoma://entities?limit=500", G)).contents[0].text);
+        const page = JSON.parse(
+          (await resource("neotoma://entities?limit=500", G)).contents[0].text
+        );
         expect(page.narrowed_by_capability).toBe(true);
-        expect(page.entities.some((e: { entity_type: string }) => e.entity_type === "task")).toBe(true);
-        expect(page.entities.every((e: { entity_type: string }) => e.entity_type === "task")).toBe(true);
-        const typed = JSON.parse((await resource("neotoma://entities/task?limit=500", G)).contents[0].text);
+        expect(page.entities.some((e: { entity_type: string }) => e.entity_type === "task")).toBe(
+          true
+        );
+        expect(page.entities.every((e: { entity_type: string }) => e.entity_type === "task")).toBe(
+          true
+        );
+        const typed = JSON.parse(
+          (await resource("neotoma://entities/task?limit=500", G)).contents[0].text
+        );
         expect(page.total).toBe(typed.total);
         expectDenied(await capture(() => resource("neotoma://sources", G)), "*");
         expectDenied(await capture(() => resource(`neotoma://entity/${taskId}`, "no-retrieve")));
@@ -293,9 +306,13 @@ describe("agent grant retrieve capability on entity reads", () => {
         } finally {
           (mcp as any).parseResourceUri = originalParser;
         }
-        const star = JSON.parse((await resource(`neotoma://entity/${contactId}`, "retrieve-star")).contents[0].text);
+        const star = JSON.parse(
+          (await resource(`neotoma://entity/${contactId}`, "retrieve-star")).contents[0].text
+        );
         expect(star.entity_type).toBe("contact");
-        const plain = JSON.parse((await resource(`neotoma://entity/${contactId}`)).contents[0].text);
+        const plain = JSON.parse(
+          (await resource(`neotoma://entity/${contactId}`)).contents[0].text
+        );
         expect(plain.entity_type).toBe("contact");
       });
 
@@ -817,37 +834,49 @@ describe("agent grant retrieve capability on entity reads", () => {
         const eventIds = [randomUUID(), randomUUID()];
         const now = new Date().toISOString();
         try {
-          expect((await db.from("sources").insert({
-            id: sourceId,
-            user_id: USER_ID,
-            content_hash: `retrcap-shared-${sourceId}`,
-            mime_type: "text/plain",
-            storage_url: "internal://test/shared-source",
-            file_size: 0,
-          })).error).toBeNull();
+          expect(
+            (
+              await db.from("sources").insert({
+                id: sourceId,
+                user_id: USER_ID,
+                content_hash: `retrcap-shared-${sourceId}`,
+                mime_type: "text/plain",
+                storage_url: "internal://test/shared-source",
+                file_size: 0,
+              })
+            ).error
+          ).toBeNull();
           for (const [index, entityId, entityType] of [
             [0, hubId, "task"],
             [1, contactId, "contact"],
           ] as const) {
-            expect((await db.from("observations").insert({
-              id: observationIds[index],
-              entity_id: entityId,
-              entity_type: entityType,
-              schema_version: "1.0",
-              observed_at: now,
-              source_priority: 0,
-              source_id: sourceId,
-              fields: {},
-              user_id: USER_ID,
-            })).error).toBeNull();
-            expect((await db.from("timeline_events").insert({
-              id: eventIds[index],
-              entity_id: entityId,
-              source_id: sourceId,
-              event_type: `retrcap_${entityType}`,
-              event_timestamp: now,
-              user_id: USER_ID,
-            })).error).toBeNull();
+            expect(
+              (
+                await db.from("observations").insert({
+                  id: observationIds[index],
+                  entity_id: entityId,
+                  entity_type: entityType,
+                  schema_version: "1.0",
+                  observed_at: now,
+                  source_priority: 0,
+                  source_id: sourceId,
+                  fields: {},
+                  user_id: USER_ID,
+                })
+              ).error
+            ).toBeNull();
+            expect(
+              (
+                await db.from("timeline_events").insert({
+                  id: eventIds[index],
+                  entity_id: entityId,
+                  source_id: sourceId,
+                  event_type: `retrcap_${entityType}`,
+                  event_timestamp: now,
+                  user_id: USER_ID,
+                })
+              ).error
+            ).toBeNull();
           }
           const body = {
             ...graphBody(),
@@ -857,15 +886,26 @@ describe("agent grant retrieve capability on entity reads", () => {
           };
           const limited = await post("/retrieve_graph_neighborhood", body, "retrieve-task");
           expect(limited.status).toBe(200);
-          expect((limited.body.related_sources as Array<{ id: string }>).map((s) => s.id)).not.toContain(sourceId);
-          expect((limited.body.timeline_events as Array<{ id: string }>).map((e) => e.id)).toContain(eventIds[0]);
-          expect((limited.body.timeline_events as Array<{ id: string }>).map((e) => e.id)).not.toContain(eventIds[1]);
+          // The REST route returns the root entity's own observations and their sources and has no
+          // timeline events field; the shared-source narrowing is asserted on the MCP surface below.
+          expect(limited.body.timeline_events).toBeUndefined();
           const limitedMcp = parse(await tool("retrieveGraphNeighborhood", body, "retrieve-task"));
-          expect((limitedMcp.related_sources as Array<{ id: string }>).map((s) => s.id)).not.toContain(sourceId);
-          expect((limitedMcp.timeline_events as Array<{ id: string }>).map((e) => e.id)).not.toContain(eventIds[1]);
-          const full = await post("/retrieve_graph_neighborhood", body, "retrieve-star");
-          expect((full.body.related_sources as Array<{ id: string }>).map((s) => s.id)).toContain(sourceId);
-          expect((full.body.timeline_events as Array<{ id: string }>).map((e) => e.id)).toContain(eventIds[1]);
+          expect(
+            ((limitedMcp.related_sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).not.toContain(sourceId);
+          expect(
+            ((limitedMcp.timeline_events ?? []) as Array<{ id: string }>).map((e) => e.id)
+          ).toContain(eventIds[0]);
+          expect(
+            ((limitedMcp.timeline_events ?? []) as Array<{ id: string }>).map((e) => e.id)
+          ).not.toContain(eventIds[1]);
+          const full = parse(await tool("retrieveGraphNeighborhood", body, "retrieve-star"));
+          expect(
+            ((full.related_sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).toContain(sourceId);
+          expect(
+            ((full.timeline_events ?? []) as Array<{ id: string }>).map((e) => e.id)
+          ).toContain(eventIds[1]);
         } finally {
           await db.from("timeline_events").delete().in("id", eventIds);
           await db.from("observations").delete().in("id", observationIds);
