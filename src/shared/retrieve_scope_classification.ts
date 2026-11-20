@@ -10,8 +10,7 @@
  *     (round 1: entity query, detail, snapshot, observations, provenance,
  *     identifier lookup).
  *   - `read_scoped`: a read with its own root check and narrowing (round 2:
- *     relationship lists, related entities, graph neighbourhood, timeline,
- *     entity type counts).
+ *     related entities, graph neighbourhood, entity type counts).
  *   - `read_full_scope`: a read that returns entity-derived data with no
  *     per-type check of its own. A grant bound by the retrieve scope may use
  *     it only with a `"*"` retrieve entry; a type-limited grant is refused
@@ -99,11 +98,11 @@ export const OPERATION_RETRIEVE_CLASS: Record<string, RetrieveScopeEntry> = {
   getFieldProvenance: R1("one named entity"),
   retrieveEntityByIdentifier: R1("identifier search: every matched type checked"),
   // Round 2 scoped reads
-  getEntityRelationships: R2("root entity checked; neighbours narrowed"),
-  listRelationshipsForEntity: R2("root entity checked; neighbours narrowed"),
+  getEntityRelationships: FULL("paged relationship list; per-type narrowing not yet added"),
+  listRelationshipsForEntity: FULL("paged relationship list; per-type narrowing not yet added"),
   retrieveRelatedEntities: R2("root entity checked; neighbours narrowed"),
   retrieveGraphNeighborhood: R2("root entity checked; neighbours narrowed"),
-  listTimeline: R2("entity filter checked; untyped narrowed to allowed entities"),
+  listTimeline: FULL("paged event list; per-type narrowing not yet added"),
   // Reads with no per-type check: a type-limited grant is refused
   getFileUrl: FULL("file of a source that may back any entity type"),
   listPotentialDuplicates: FULL("candidate entity pairs across types"),
@@ -234,7 +233,11 @@ function pathPattern(path: string): RegExp {
 export const FULL_SCOPE_REST_ROUTES: Array<{ operationId: string; method: string; re: RegExp }> =
   OPENAPI_OPERATION_MAPPINGS.filter(
     (m) => OPERATION_RETRIEVE_CLASS[m.operationId]?.class === "read_full_scope"
-  ).map((m) => ({ operationId: m.operationId, method: m.method.toUpperCase(), re: pathPattern(m.path) }));
+  ).map((m) => ({
+    operationId: m.operationId,
+    method: m.method.toUpperCase(),
+    re: pathPattern(m.path),
+  }));
 
 /** The `read_full_scope` operation a REST request targets, if any. */
 export function fullScopeOperationForRequest(method: string, path: string): string | null {

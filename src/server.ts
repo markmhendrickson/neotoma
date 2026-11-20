@@ -104,7 +104,6 @@ import {
   currentRetrieveScope,
   enforceFullRetrieveScope,
   enforceRetrieveForEntityIds,
-  allowedEntityIdsForScope,
   filterEdgesToScope,
   narrowTraversalToScope,
   retrieveScopeIsTypeLimited,
@@ -5152,16 +5151,26 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const { getDashboardStats } = await import("./services/dashboard_stats.js");
 
+    // Agent-grant retrieve scope: return counts only for allowed types
+    // (resolved outside the try so a refusal keeps its own envelope).
+    const scope = currentRetrieveScope();
     try {
       const stats = await getDashboardStats(userId);
-      const sortedEntries = Object.entries(stats.entities_by_type ?? {}).sort((a, b) => {
+      const counted = Object.entries(stats.entities_by_type ?? {}).filter(
+        ([type]) => scope === null || scope.kind === "all" || scope.types.includes(type)
+      );
+      const narrowed = scope !== null && scope.kind === "types";
+      const sortedEntries = counted.sort((a, b) => {
         const diff = b[1] - a[1];
         return diff !== 0 ? diff : a[0].localeCompare(b[0]);
       });
 
       return this.buildTextResponse({
         entities_by_type: Object.fromEntries(sortedEntries),
-        total_entities: stats.total_entities ?? 0,
+        total_entities: narrowed
+          ? sortedEntries.reduce((sum, [, n]) => sum + n, 0)
+          : (stats.total_entities ?? 0),
+        ...(narrowed ? { narrowed_by_capability: true } : {}),
         last_updated: stats.last_updated,
         count_source: "dashboard_stats",
         scope: "authenticated_user",

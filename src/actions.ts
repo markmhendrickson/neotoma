@@ -294,7 +294,6 @@ import {
   enforceFullRetrieveScope,
   enforceRetrieveForEntityIds,
   enforceRetrieveForEntityTypes,
-  allowedEntityIdsForScope,
   filterEdgesToScope,
   narrowTraversalToScope,
   retrieveScopeIsTypeLimited,

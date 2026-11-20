@@ -171,10 +171,7 @@ export async function allowedEntityIdsForScope(
 }
 
 /** Types of the caller's entities by id (ids not found are absent). */
-export async function entityTypesById(
-  ids: string[],
-  userId: string
-): Promise<Map<string, string>> {
+export async function entityTypesById(ids: string[], userId: string): Promise<Map<string, string>> {
   const unique = Array.from(new Set(ids.filter((id) => typeof id === "string" && id.length > 0)));
   const out = new Map<string, string>();
   if (unique.length === 0) return out;
