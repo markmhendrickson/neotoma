@@ -297,6 +297,7 @@ import {
   filterEdgesToScope,
   narrowTraversalToScope,
   retrieveScopeIsTypeLimited,
+  filterSourceIdsToScope,
 } from "./services/retrieve_capability.js";
 import { retrieveGateTargetForRequest } from "./shared/retrieve_scope_classification.js";
 import {
@@ -12239,14 +12240,19 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       if (include_sources && include_observations) {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
-          const { data: sources, error: srcError } = await db
-            .from("sources")
-            .select("*")
-            .in("id", sourceIds)
-            .eq("user_id", userId);
+          const allowedSourceIds = await filterSourceIdsToScope(sourceIds, userId);
+          const { data: sources, error: srcError } =
+            allowedSourceIds.length > 0
+              ? await db
+                  .from("sources")
+                  .select("*")
+                  .in("id", allowedSourceIds)
+                  .eq("user_id", userId)
+              : { data: [], error: null };
 
           if (!srcError) {
             result.sources = sources || [];
+            if (retrieveScopeIsTypeLimited()) result.narrowed_by_capability = true;
           }
         }
       }

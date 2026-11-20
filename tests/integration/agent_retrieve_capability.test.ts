@@ -889,6 +889,13 @@ describe("agent grant retrieve capability on entity reads", () => {
           // The REST route returns the root entity's own observations and their sources and has no
           // timeline events field; the shared-source narrowing is asserted on the MCP surface below.
           expect(limited.body.timeline_events).toBeUndefined();
+          expect(
+            ((limited.body.sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).not.toContain(sourceId);
+          const fullRest = await post("/retrieve_graph_neighborhood", body, "retrieve-star");
+          expect(
+            ((fullRest.body.sources ?? []) as Array<{ id: string }>).map((s) => s.id)
+          ).toContain(sourceId);
           const limitedMcp = parse(await tool("retrieveGraphNeighborhood", body, "retrieve-task"));
           expect(
             ((limitedMcp.related_sources ?? []) as Array<{ id: string }>).map((s) => s.id)

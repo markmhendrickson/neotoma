@@ -189,6 +189,42 @@ export async function entityTypesById(ids: string[], userId: string): Promise<Ma
   return out;
 }
 
+/**
+ * Narrow a list of source ids to the retrieve scope. Under a type-limited grant a
+ * source qualifies only when every observation behind it belongs to an entity of an
+ * allowed type; a source with no backing rows, an entity whose type cannot be read,
+ * or a failed lookup is not allowed (fail closed). With no scope, or a full (`*`)
+ * grant, the ids are returned unchanged and no statement runs.
+ */
+export async function filterSourceIdsToScope(
+  sourceIds: string[],
+  userId: string
+): Promise<string[]> {
+  const scope = currentRetrieveScope();
+  if (!scope || scope.kind !== "types" || sourceIds.length === 0) return sourceIds;
+  const { data, error } = await db
+    .from("observations")
+    .select("source_id, entity_id")
+    .in("source_id", sourceIds)
+    .eq("user_id", userId);
+  if (error) throw error;
+  const backing = (data ?? []) as Array<{ source_id: string; entity_id: string | null }>;
+  const types = await entityTypesById(
+    backing.map((row) => row.entity_id ?? ""),
+    userId
+  );
+  return sourceIds.filter((sourceId) => {
+    const rows = backing.filter((row) => row.source_id === sourceId);
+    return (
+      rows.length > 0 &&
+      rows.every((row) => {
+        const type = types.get(row.entity_id ?? "");
+        return type !== undefined && scope.types.includes(type);
+      })
+    );
+  });
+}
+
 type Edge = { source_entity_id: string; target_entity_id: string };
 
 /**

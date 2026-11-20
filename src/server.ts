@@ -103,6 +103,7 @@ import {
 import {
   currentRetrieveScope,
   entityTypesById,
+  filterSourceIdsToScope,
   enforceFullRetrieveScope,
   enforceRetrieveForEntityIds,
   enforceRetrieveForEntityTypes,
@@ -5058,33 +5059,7 @@ export class NeotomaServer {
               .filter((id: string) => id);
             if (sourceIds.length > 0) {
               const scope = currentRetrieveScope();
-              let allowedSourceIds = sourceIds;
-              if (scope?.kind === "types") {
-                const { data: sourceObservations, error: sourceObsError } = await db
-                  .from("observations")
-                  .select("source_id, entity_id")
-                  .in("source_id", sourceIds)
-                  .eq("user_id", userId);
-                if (sourceObsError) throw sourceObsError;
-                const backing = (sourceObservations ?? []) as Array<{
-                  source_id: string;
-                  entity_id: string | null;
-                }>;
-                const backingTypes = await entityTypesById(
-                  backing.map((row) => row.entity_id ?? ""),
-                  userId
-                );
-                allowedSourceIds = sourceIds.filter((sourceId: string) => {
-                  const rows = backing.filter((row) => row.source_id === sourceId);
-                  return (
-                    rows.length > 0 &&
-                    rows.every((row) => {
-                      const type = backingTypes.get(row.entity_id ?? "");
-                      return type !== undefined && scope.types.includes(type);
-                    })
-                  );
-                });
-              }
+              const allowedSourceIds = await filterSourceIdsToScope(sourceIds, userId);
               const { data: sources, error: sourceError } =
                 allowedSourceIds.length > 0
                   ? await db
