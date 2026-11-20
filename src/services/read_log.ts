@@ -1,12 +1,13 @@
 /**
  * Structured per-call read log (part of neotoma#1872).
  *
- * Every read operation (entity query, retrieve, snapshot, search,
- * relationship and graph reads) writes ONE JSON line to standard output per
- * call, listing which entities the call returned. A log shipper can keep the
- * line outside the instance. The REST surface writes it from the
- * `restReadLog` middleware; the MCP and CLI surfaces write it from the tool
- * dispatcher in src/server.ts.
+ * In the HTTP server process, every entity read (the operations marked
+ * `readLog` in src/shared/contract_mappings.ts) writes ONE JSON line to
+ * standard output per call, listing which entities the call returned. A log
+ * shipper can keep the line outside the instance. The REST surface writes it
+ * from the `restReadLog` middleware; MCP calls served over HTTP write it from
+ * the tool dispatcher in src/server.ts. The stdio MCP process and in-process
+ * callers write nothing (see `readLogWriter`).
  *
  * Content rule: the line carries entity ids and entity types only. It never
  * carries entity contents, snapshot fields, search text or query values; a
@@ -17,13 +18,15 @@
  */
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
+import { OPENAPI_OPERATION_MAPPINGS } from "../shared/contract_mappings.js";
+
 export const READ_LOG_EVENT = "read";
 export const READ_LOG_ENTITY_ID_CAP = 50;
 /** Bounds on the result walk so a large response cannot make logging expensive. */
 const MAX_WALK_DEPTH = 8;
 const MAX_WALK_NODES = 20000;
 
-export type ReadSurface = "rest" | "mcp" | "cli";
+export type ReadSurface = "rest" | "mcp";
 export type ReadStatus = "ok" | "refused" | "error";
 
 export interface ReadLogRecord {
@@ -36,7 +39,7 @@ export interface ReadLogRecord {
   agent: string | null;
   auth_method: string;
   status: ReadStatus;
-  /** HTTP status for REST calls; null for MCP and CLI calls. */
+  /** HTTP status for REST calls; null for MCP calls. */
   http_status: number | null;
   entity_types: Record<string, number>;
   count: number;
@@ -52,23 +55,15 @@ export function readLogEnabled(rawValue: string | undefined): boolean {
 }
 
 /**
- * MCP tool names that are reads, mapped to the operation name logged. The
- * CLI reaches the same tools through `executeToolForCli`.
+ * MCP tool names that are reads: every `readLog` operation in
+ * src/shared/contract_mappings.ts that has an MCP twin. Derived from the same
+ * rows as `REST_READ_ROUTES`, so a read on one surface is a read on the other.
  */
-export const READ_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "retrieve_entities",
-  "retrieve_entity_snapshot",
-  "retrieve_entity_by_identifier",
-  "retrieve_related_entities",
-  "retrieve_graph_neighborhood",
-  "retrieve_field_provenance",
-  "list_observations",
-  "list_relationships",
-  "get_relationship_snapshot",
-  "list_timeline_events",
-  "identify_entity_by_signals",
-  "query_contacts_at_company",
-]);
+export const READ_TOOL_NAMES: ReadonlySet<string> = new Set(
+  OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true && m.mcpTool).map(
+    (m) => m.mcpTool as string
+  )
+);
 
 interface RestReadRoute {
   method: string;
@@ -76,49 +71,44 @@ interface RestReadRoute {
   operation: string;
 }
 
-/** REST read routes. Matched on method and path, before or after auth runs. */
-export const REST_READ_ROUTES: readonly RestReadRoute[] = [
-  { method: "GET", pattern: /^\/entities\/?$/, operation: "entities_list" },
-  { method: "POST", pattern: /^\/entities\/query\/?$/, operation: "entities_query" },
-  { method: "GET", pattern: /^\/entities\/duplicates\/?$/, operation: "entities_duplicates" },
-  {
-    method: "GET",
-    pattern: /^\/entities\/[^/]+\/observations\/?$/,
-    operation: "entity_observations",
-  },
-  {
-    method: "GET",
-    pattern: /^\/entities\/[^/]+\/relationships\/?$/,
-    operation: "entity_relationships",
-  },
-  { method: "GET", pattern: /^\/entities\/[^/]+\/?$/, operation: "entity_detail" },
-  { method: "GET", pattern: /^\/relationships\/?$/, operation: "relationships_list" },
-  { method: "GET", pattern: /^\/relationships\/[^/]+\/?$/, operation: "relationship_detail" },
-  { method: "POST", pattern: /^\/relationships\/snapshot\/?$/, operation: "relationship_snapshot" },
-  { method: "GET", pattern: /^\/timeline\/?$/, operation: "timeline_list" },
-  { method: "GET", pattern: /^\/timeline\/[^/]+\/?$/, operation: "timeline_detail" },
-  { method: "GET", pattern: /^\/observations\/?$/, operation: "observations_list" },
-  { method: "POST", pattern: /^\/observations\/query\/?$/, operation: "observations_query" },
-  { method: "POST", pattern: /^\/get_entity_snapshot\/?$/, operation: "get_entity_snapshot" },
-  { method: "POST", pattern: /^\/list_observations\/?$/, operation: "list_observations" },
-  { method: "POST", pattern: /^\/get_field_provenance\/?$/, operation: "get_field_provenance" },
-  { method: "POST", pattern: /^\/list_relationships\/?$/, operation: "list_relationships" },
-  {
-    method: "POST",
-    pattern: /^\/retrieve_entity_by_identifier\/?$/,
-    operation: "retrieve_entity_by_identifier",
-  },
-  {
-    method: "POST",
-    pattern: /^\/retrieve_related_entities\/?$/,
-    operation: "retrieve_related_entities",
-  },
-  {
-    method: "POST",
-    pattern: /^\/retrieve_graph_neighborhood\/?$/,
-    operation: "retrieve_graph_neighborhood",
-  },
-];
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Pattern for an OpenAPI path. Matching ignores letter case and allows one
+ * trailing slash, as Express routing does with its default (non-strict,
+ * case-insensitive) settings, so every spelling that reaches a handler is
+ * logged.
+ */
+export function readRoutePattern(path: string): RegExp {
+  const source = path
+    .split("/")
+    .map((segment) => (/^\{[^}]+\}$/.test(segment) ? "[^/]+" : escapeRegExp(segment)))
+    .join("/");
+  return new RegExp(`^${source}/?$`, "i");
+}
+
+function paramCount(path: string): number {
+  return (path.match(/\{/g) ?? []).length;
+}
+
+/**
+ * REST read routes: every `readLog` operation in the contract mappings, with
+ * literal paths tried before parameterised ones (so `/entities/duplicates`
+ * is not taken for `/entities/{id}`). The logged operation is the
+ * `operationId`. Matched on method and path, before or after auth runs.
+ */
+export const REST_READ_ROUTES: readonly RestReadRoute[] = OPENAPI_OPERATION_MAPPINGS.filter(
+  (m) => m.readLog === true
+)
+  .map((m, index) => ({ m, index }))
+  .sort((a, b) => paramCount(a.m.path) - paramCount(b.m.path) || a.index - b.index)
+  .map(({ m }) => ({
+    method: m.method.toUpperCase(),
+    pattern: readRoutePattern(m.path),
+    operation: m.operationId,
+  }));
 
 export function matchRestReadRoute(method: string, path: string): string | null {
   const upper = method.toUpperCase();
@@ -218,19 +208,42 @@ export function buildReadLogRecord(input: ReadLogInput): ReadLogRecord {
   };
 }
 
-let readLogWriter: (line: string) => void = (line) => process.stdout.write(line);
+/**
+ * The line writer. Null until a host installs one: only the HTTP server
+ * process does (`installHttpReadLogWriter`, called from `startHTTPServer`).
+ * In the stdio MCP process standard output carries the JSON-RPC messages, and
+ * in-process callers (the CLI's local transport, plugins) own their standard
+ * output, so neither may receive a read line.
+ */
+let readLogWriter: ((line: string) => void) | null = null;
 
-/** Replace the line writer (tests). Returns the previous writer. */
-export function setReadLogWriter(writer: (line: string) => void): (line: string) => void {
+/** Replace the line writer (tests, HTTP startup). Returns the previous writer. */
+export function setReadLogWriter(
+  writer: ((line: string) => void) | null
+): ((line: string) => void) | null {
   const previous = readLogWriter;
   readLogWriter = writer;
   return previous;
 }
 
+/** True when a host installed a writer, so read lines will be written. */
+export function readLogWriterInstalled(): boolean {
+  return readLogWriter !== null;
+}
+
+/** Install the standard-output writer. Called only by the HTTP server at startup. */
+export function installHttpReadLogWriter(): void {
+  setReadLogWriter((line) => {
+    process.stdout.write(line);
+  });
+}
+
 /** Write one read line. Never throws: logging must not affect the read. */
 export function writeReadLog(input: ReadLogInput): void {
+  const writer = readLogWriter;
+  if (writer === null) return;
   try {
-    readLogWriter(JSON.stringify(buildReadLogRecord(input)) + "\n");
+    writer(JSON.stringify(buildReadLogRecord(input)) + "\n");
   } catch {
     // Logging must never affect the response.
   }

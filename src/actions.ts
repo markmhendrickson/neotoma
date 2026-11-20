@@ -329,7 +329,7 @@ import {
   resolveAccessLogFormat,
   setRequestAuthMethod,
 } from "./services/access_log.js";
-import { readLogEnabled, restReadLog } from "./services/read_log.js";
+import { installHttpReadLogWriter, readLogEnabled, restReadLog } from "./services/read_log.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -511,8 +511,10 @@ if (accessLogFormat === "json") {
 }
 // Per-call read log (src/services/read_log.ts): one JSON line per read
 // request listing the entities it returned. Shares the `NEOTOMA_ACCESS_LOG`
-// setting and is off only when that setting is `off`. The MCP and CLI
-// surfaces write the same line from the tool dispatcher in src/server.ts.
+// setting and is off only when that setting is `off`. MCP calls served here
+// write the same line from the tool dispatcher in src/server.ts. Lines reach
+// standard output only after `startHTTPServer` installs the writer, so a
+// process that imports this module without serving HTTP writes nothing.
 if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
   app.use(restReadLog());
 }
@@ -14873,6 +14875,9 @@ export function tryListen(
 
 // Export function to start HTTP server (called explicitly, not on import)
 export async function startHTTPServer() {
+  // The read log writes to standard output only in the HTTP server process
+  // (src/services/read_log.ts); the stdio MCP transport never installs it.
+  if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) installHttpReadLogWriter();
   // Stronger AAuth Admission plan: capabilities now live on agent_grant
   // entities. If the legacy NEOTOMA_AGENT_CAPABILITIES_* env vars are
   // still set, fail fast with a structured pointer to the migration

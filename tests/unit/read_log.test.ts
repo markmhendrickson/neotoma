@@ -1,18 +1,23 @@
 import type { AddressInfo } from "node:net";
 
 import express from "express";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentCapabilityError } from "../../src/services/agent_capabilities.js";
 import { jsonAccessLog, setRequestAuthMethod } from "../../src/services/access_log.js";
 import {
   READ_LOG_ENTITY_ID_CAP,
   buildReadLogRecord,
+  READ_TOOL_NAMES,
   collectReturnedEntities,
+  installHttpReadLogWriter,
+  matchRestReadRoute,
   readLogEnabled,
+  readRoutePattern,
   restReadLog,
   setReadLogWriter,
 } from "../../src/services/read_log.js";
+import { OPENAPI_OPERATION_MAPPINGS } from "../../src/shared/contract_mappings.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
 import { NeotomaServer } from "../../src/server.js";
 
@@ -120,7 +125,7 @@ describe("read log record", () => {
   it("caps entity_ids at 50 and marks truncation", () => {
     const record = buildReadLogRecord({
       surface: "rest",
-      operation: "entities_query",
+      operation: "queryEntities",
       requestId: "req-1",
       userId: "user-0001",
       agent: null,
@@ -153,7 +158,7 @@ describe("REST read log", () => {
       request_id: res.headers.get("x-request-id"),
       user_id: "user-0001",
       surface: "rest",
-      operation: "entities_query",
+      operation: "queryEntities",
       agent: "synthetic-agent",
       auth_method: "aauth",
       status: "ok",
@@ -205,6 +210,26 @@ describe("REST read log", () => {
     });
   });
 
+  it("logs a read whose path differs only in letter case or a trailing slash", async () => {
+    const { base, waitForLines } = await startApp();
+    for (const path of ["/ENTITIES/Query", "/entities/query/"]) {
+      const res = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer tok-SYNTHETIC-plain",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
+      expect(res.status).toBe(200);
+    }
+    const lines = await waitForLines(2);
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(JSON.parse(line)).toMatchObject({ operation: "queryEntities", count: 3 });
+    }
+  });
+
   it("writes nothing for a non-read route", async () => {
     const { base, lines } = await startApp();
     await fetch(`${base}/store`, {
@@ -219,7 +244,7 @@ describe("REST read log", () => {
 
 describe("MCP read log", () => {
   let lines: string[];
-  let previous: (line: string) => void;
+  let previous: ((line: string) => void) | null;
   const savedEnv = process.env.NEOTOMA_ACCESS_LOG;
 
   beforeEach(() => {
@@ -329,11 +354,124 @@ describe("MCP read log", () => {
     expect(lines).toHaveLength(0);
   });
 
-  it("tags the CLI surface", async () => {
+  it("writes no read line through executeToolForCli", async () => {
     const server = new NeotomaServer();
     (server as any).executeTool = okResult;
     await server.executeToolForCli("retrieve_entities", {}, "user-0003");
-    const record = JSON.parse(lines[0]!);
-    expect(record).toMatchObject({ surface: "cli", user_id: "user-0003", count: 3 });
+    expect(lines).toHaveLength(0);
+  });
+});
+
+describe("read log output channel", () => {
+  let previous: ((line: string) => void) | null;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutChunks: string[];
+
+  beforeEach(() => {
+    // No writer installed: the state of the stdio MCP process and of any
+    // in-process caller.
+    previous = setReadLogWriter(null);
+    stdoutChunks = [];
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: unknown) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as never);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    setReadLogWriter(previous);
+  });
+
+  const okResult = async () => ({
+    content: [{ type: "text", text: JSON.stringify(mixedResult) }],
+  });
+  const readLines = () => stdoutChunks.filter((c) => c.includes('"event":"read"'));
+
+  function stdioStyleCall(server: NeotomaServer) {
+    const handler = (server as any).mcpServer.server._requestHandlers.get("tools/call");
+    return handler(
+      { method: "tools/call", params: { name: "retrieve_entities", arguments: {} } },
+      {
+        signal: new AbortController().signal,
+        requestId: 1,
+        sendNotification: async () => {},
+        sendRequest: async () => ({}),
+      }
+    );
+  }
+
+  it("writes nothing to stdout for a stdio-transport read call", async () => {
+    const server = new NeotomaServer();
+    (server as any).authenticatedUserId = "user-0001";
+    (server as any).executeTool = okResult;
+    await stdioStyleCall(server);
+    expect(readLines()).toHaveLength(0);
+  });
+
+  it("writes nothing to stdout for an in-process read call", async () => {
+    const server = new NeotomaServer();
+    (server as any).executeTool = okResult;
+    await server.executeToolForCli("retrieve_entities", {}, "user-0003");
+    expect(readLines()).toHaveLength(0);
+  });
+
+  it("writes the line to stdout once the HTTP server installs the writer", async () => {
+    installHttpReadLogWriter();
+    const server = new NeotomaServer();
+    (server as any).authenticatedUserId = "user-0001";
+    (server as any).executeTool = okResult;
+    await stdioStyleCall(server);
+    expect(readLines()).toHaveLength(1);
+    expect(JSON.parse(readLines()[0]!)).toMatchObject({ surface: "mcp", count: 3 });
+  });
+});
+
+describe("read routes derived from the contract mappings", () => {
+  const readMappings = OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true);
+
+  function concretePath(path: string): string {
+    return path.replace(/\{[^}]+\}/g, "ent_synthetic_0001");
+  }
+
+  it("logs every read-marked operation with an MCP tool on both surfaces", () => {
+    const withTool = readMappings.filter((m) => m.mcpTool);
+    expect(withTool.length).toBeGreaterThan(0);
+    for (const m of withTool) {
+      expect(READ_TOOL_NAMES.has(m.mcpTool!), m.mcpTool).toBe(true);
+      expect(matchRestReadRoute(m.method, concretePath(m.path)), m.operationId).toBe(m.operationId);
+    }
+  });
+
+  it("matches every read-marked REST operation to itself", () => {
+    for (const m of readMappings) {
+      expect(matchRestReadRoute(m.method, concretePath(m.path)), m.operationId).toBe(m.operationId);
+    }
+  });
+
+  it("covers duplicates and recent changes on both surfaces", () => {
+    expect(READ_TOOL_NAMES.has("list_potential_duplicates")).toBe(true);
+    expect(READ_TOOL_NAMES.has("list_recent_changes")).toBe(true);
+    expect(matchRestReadRoute("GET", "/entities/duplicates")).toBe("listPotentialDuplicates");
+    expect(matchRestReadRoute("GET", "/record_activity")).toBe("getRecordActivity");
+  });
+
+  it("matches letter-case and trailing-slash variants", () => {
+    expect(matchRestReadRoute("post", "/Entities/QUERY")).toBe("queryEntities");
+    expect(matchRestReadRoute("POST", "/entities/query/")).toBe("queryEntities");
+    expect(matchRestReadRoute("GET", "/ENTITIES/ent_synthetic_0001/")).toBe("getEntityById");
+    expect(matchRestReadRoute("GET", "/Record_Activity/")).toBe("getRecordActivity");
+    expect(readRoutePattern("/entities/{id}").test("/entities/a/b")).toBe(false);
+  });
+
+  it("leaves the documented non-entity reads out", () => {
+    expect(matchRestReadRoute("GET", "/sources")).toBeNull();
+    expect(matchRestReadRoute("GET", "/sources/src_1")).toBeNull();
+    expect(matchRestReadRoute("GET", "/sources/src_1/content")).toBeNull();
+    expect(matchRestReadRoute("GET", "/interpretations")).toBeNull();
+    expect(matchRestReadRoute("GET", "/recent_conversations")).toBeNull();
+    expect(matchRestReadRoute("GET", "/turns")).toBeNull();
+    expect(matchRestReadRoute("GET", "/entities/ent_1/markdown")).toBeNull();
+    expect(matchRestReadRoute("GET", "/entities/ent_1/html")).toBeNull();
+    expect(READ_TOOL_NAMES.has("list_interpretations")).toBe(false);
   });
 });

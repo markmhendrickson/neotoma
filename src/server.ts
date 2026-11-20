@@ -207,9 +207,9 @@ import {
   admittedAgentLabel,
   parseToolResultPayload,
   readLogEnabled,
+  readLogWriterInstalled,
   searchQueryLength,
   writeReadLog,
-  type ReadSurface,
 } from "./services/read_log.js";
 
 type StoreRelationshipRef = {
@@ -2747,7 +2747,7 @@ export class NeotomaServer {
             requestId: getRequestContext()?.requestId ?? null,
             authMethod: getRequestContext()?.authMethod ?? null,
           },
-          () => this.executeToolWithReadLog("mcp", name, args)
+          () => this.executeToolWithReadLog(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
@@ -2916,7 +2916,8 @@ export class NeotomaServer {
         aauthAdmission: null,
         authenticatedPrincipal: null,
       },
-      () => this.executeToolWithReadLog("cli", name, args)
+      // No read log line: in-process callers own their standard output.
+      () => this.executeTool(name, args)
     );
   }
 
@@ -2925,19 +2926,24 @@ export class NeotomaServer {
    * (src/services/read_log.ts) per call: on success with the entities the
    * result returned, on failure with a status and no entities. Must run
    * inside the dispatch request context so the request id, auth method and
-   * admitted agent are visible.
+   * admitted agent are visible. Writes only when the HTTP server installed the
+   * read log writer; on the stdio transport standard output is the protocol
+   * channel, so nothing is written there.
    */
   private async executeToolWithReadLog(
-    surface: ReadSurface,
     name: string,
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    if (!READ_TOOL_NAMES.has(name) || !readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
+    if (
+      !READ_TOOL_NAMES.has(name) ||
+      !readLogWriterInstalled() ||
+      !readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)
+    ) {
       return this.executeTool(name, args);
     }
     const context = getRequestContext();
     const base = {
-      surface,
+      surface: "mcp" as const,
       operation: name,
       requestId: context?.requestId ?? null,
       userId: this.authenticatedUserId,
