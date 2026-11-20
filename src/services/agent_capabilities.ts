@@ -25,7 +25,7 @@
 
 import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
-import { getCurrentAAuthAdmission } from "./request_context.js";
+import { getCurrentAAuthAdmission, getCurrentAgentIdentity } from "./request_context.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
 import { runtimeEnv } from "../config_embedded.js";
 
@@ -594,6 +594,127 @@ export function enforceAgentCapability(
     })
   );
   throw err;
+}
+
+/** ---------- Retrieve scope (opt-in) ---------- */
+
+/**
+ * Whether the `retrieve` capability of an admitted agent grant is enforced on
+ * entity reads. Opt-in: only the exact value `"1"` turns it on. With it off,
+ * {@link enforceAgentRetrieveScope} returns `null` before reading anything else,
+ * so no new check runs on any read.
+ */
+export function isAgentRetrieveEnforcementEnabled(): boolean {
+  return runtimeEnv().NEOTOMA_ENFORCE_AGENT_RETRIEVE === "1";
+}
+
+/**
+ * The entity types an admitted grant may read. `all` comes from a `"*"`
+ * entry; `types` is the sorted, de-duplicated union of the grant's
+ * `retrieve` entries and is never empty.
+ */
+export type AgentRetrieveScope = { kind: "all" } | { kind: "types"; types: string[] };
+
+function retrieveDenial(ctx: AgentCapabilityContext, entityType: string, hint: string) {
+  return new AgentCapabilityError({
+    op: "retrieve",
+    entityType,
+    agentLabel: ctx.agentLabel,
+    hint,
+  });
+}
+
+/**
+ * Shared retrieve-scope check for every entity read entry point (REST and
+ * MCP), so the two surfaces cannot drift.
+ *
+ * Returns `null` (no limit) unless {@link isAgentRetrieveEnforcementEnabled}
+ * AND the request carries an ADMITTED grant (`grant` ceiling). Plain bearer,
+ * OAuth, local and unsigned callers are never limited by a grant.
+ *
+ * When bound:
+ *   - a grant with no `retrieve` entry refuses every read (fail closed);
+ *   - each requested type must be covered, else {@link AgentCapabilityError}
+ *     (the same 403 `capability_denied` envelope as writes) naming the
+ *     first refused type;
+ *   - a grant whose `retrieve` entries name no type at all refuses (an
+ *     empty allowed set must never widen into "no type filter").
+ *
+ * Callers with an untyped query use the returned scope as the type filter
+ * BEFORE the query runs, so totals and pagination stay consistent.
+ * Emits no log line; the caller's error path decides what to report.
+ */
+export function enforceAgentRetrieveScope(
+  ctx: AgentCapabilityContext | null | undefined,
+  entityTypes: string[]
+): AgentRetrieveScope | null {
+  if (!isAgentRetrieveEnforcementEnabled()) return null;
+  if (!ctx || !ctx.admitted) return null;
+  const ceiling = ceilingOf(ctx);
+  if (ceiling.kind !== "grant") return null;
+
+  const requested = Array.from(
+    new Set((entityTypes ?? []).filter((t) => typeof t === "string" && t.length > 0))
+  );
+  const entries = ceiling.capabilities.filter((cap) => cap.op === "retrieve");
+  if (entries.length === 0) {
+    throw retrieveDenial(
+      ctx,
+      requested[0] ?? "*",
+      `Admitted agent "${ctx.agentLabel}" has no "retrieve" capability, so entity reads ` +
+        `are refused. Edit the grant in Inspector → Agents → Grants and add ` +
+        `{ op: "retrieve", entity_types: [...] }.`
+    );
+  }
+  const allowsAll = entries.some(
+    (cap) => Array.isArray(cap.entity_types) && cap.entity_types.includes("*")
+  );
+  const allowed = Array.from(
+    new Set(
+      entries.flatMap((cap) =>
+        Array.isArray(cap.entity_types)
+          ? cap.entity_types.filter((t) => typeof t === "string" && t.length > 0 && t !== "*")
+          : []
+      )
+    )
+  ).sort();
+
+  if (!allowsAll) {
+    const denied = requested.filter((t) => !allowed.includes(t));
+    if (denied.length > 0) {
+      throw retrieveDenial(
+        ctx,
+        denied[0],
+        `Admitted agent "${ctx.agentLabel}" has no "retrieve" capability for ` +
+          `entity_type${denied.length > 1 ? "s" : ""} ` +
+          `${denied.map((t) => `"${t}"`).join(", ")}. ` +
+          `Edit the grant in Inspector → Agents → Grants and add ` +
+          `{ op: "retrieve", entity_types: [${denied.map((t) => `"${t}"`).join(", ")}] }.`
+      );
+    }
+    if (allowed.length === 0) {
+      throw retrieveDenial(
+        ctx,
+        requested[0] ?? "*",
+        `Admitted agent "${ctx.agentLabel}" has a "retrieve" capability that names no ` +
+          `entity_types, so entity reads are refused.`
+      );
+    }
+    return { kind: "types", types: allowed };
+  }
+  return { kind: "all" };
+}
+
+/**
+ * {@link enforceAgentRetrieveScope} for the current request's agent identity.
+ * Returns `null` without reading the request context when the setting is off.
+ */
+export function enforceCurrentAgentRetrieveScope(entityTypes: string[]): AgentRetrieveScope | null {
+  if (!isAgentRetrieveEnforcementEnabled()) return null;
+  return enforceAgentRetrieveScope(
+    contextFromAgentIdentity(getCurrentAgentIdentity()),
+    entityTypes
+  );
 }
 
 /**
