@@ -398,7 +398,13 @@ function yieldToEventLoop(): Promise<void> {
  */
 export type SearchStrategy = "strict" | "semantic" | "partial_overlap" | "concept_bridge";
 
-type LexicalCandidateRow = { id: string; canonical_name: string; entity_type: string };
+type LexicalCandidateRow = {
+  id: string;
+  canonical_name: string;
+  entity_type: string;
+  /** 1 when the row's stored search_text is NULL (or it has no snapshot row). */
+  search_text_null: number;
+};
 
 type LexicalCandidateScope = {
   userId: string;
@@ -495,7 +501,8 @@ async function loadLexicalCandidateRows(
   const conn = await getDb();
   const rows = (await conn
     .prepare(
-      `SELECT e.id AS id, e.canonical_name AS canonical_name, e.entity_type AS entity_type
+      `SELECT e.id AS id, e.canonical_name AS canonical_name, e.entity_type AS entity_type,
+              (s.search_text IS NULL) AS search_text_null
        FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id = e.id
        WHERE ${where.sql} AND (s.search_text IS NULL OR (${textFilter}))
        ORDER BY e.id`
@@ -584,6 +591,15 @@ export async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParam
     kind: "all",
     tokens: requiredTokens,
   });
+  // Every NULL row in scope is always returned (it cannot be filtered in SQL),
+  // so counting them here is free: it is how many rows in this search's scope
+  // the search_text backfill has still to fill.
+  if (params.readTrace) {
+    params.readTrace.search_text_null_remaining = strictRows.reduce(
+      (n, row) => n + (Number(row.search_text_null) ? 1 : 0),
+      0
+    );
+  }
 
   type Candidate = {
     id: string;

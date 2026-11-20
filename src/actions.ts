@@ -15455,6 +15455,15 @@ export async function startHTTPServer() {
         await import("./services/subscriptions/install_subscription_bridge.js");
       subscriptionBridge.installSubscriptionBridge();
       logger.info("[Subscriptions] substrate event bridge installed");
+      // Fill entity_snapshots.search_text for existing rows, throttled, in the
+      // background. Off unless NEOTOMA_SEARCH_TEXT_BACKFILL is on.
+      import("./services/entity_search_text_backfill.js")
+        .then((backfill) => backfill.startEntitySearchTextBackfillIfEnabled())
+        .catch((error: unknown) => {
+          logger.warn(
+            `[search_text_backfill] not started: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
       return { server, port: boundPort };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;
