@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 
 import express from "express";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AgentCapabilityError } from "../../src/services/agent_capabilities.js";
 import { jsonAccessLog, setRequestAuthMethod } from "../../src/services/access_log.js";
