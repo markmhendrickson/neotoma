@@ -176,6 +176,7 @@ See [Running the Server](running_the_server.md) for transports and processes.
 | `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS` | Comma-separated **exact** callback URLs additionally trusted to receive an authorization code when the authorize request arrives via a tunnel. Empty by default. See below. |
 | `NEOTOMA_SANDBOX_MODE`                | Opt into the public hosted-sandbox profile                                                                                                                                  |
 | `NEOTOMA_REFUSE_MODE`                 | `warn` or `enforce` when a no-auth, non-loopback topology is detected                                                                                                       |
+| `NEOTOMA_ENFORCE_AGENT_RETRIEVE`      | `1` enforces the `retrieve` capability of an admitted agent grant on entity reads (see [Agent grants: retrieve scope](../subsystems/auth.md#agent-grants-retrieve-scope)). Off by default; any other value is off. |
 
 ### Trusted OAuth callback URLs
 

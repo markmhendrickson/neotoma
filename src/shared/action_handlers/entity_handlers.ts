@@ -10,6 +10,7 @@ import {
 import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
+import { enforceCurrentAgentRetrieveScope } from "../../services/agent_capabilities.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import {
   loadConceptTypeSynonyms,
@@ -1205,7 +1206,57 @@ async function queryEntitiesFromLexicalSearch(params: {
  */
 export type EntitySearchMode = "none" | "semantic" | "lexical_typed" | "lexical_fallback";
 
-export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promise<{
+type QueryEntitiesWithCountResult = {
+  entities: EntityWithProvenance[];
+  total: number;
+  excluded_merged: boolean;
+  /**
+   * Non-strict retrieval strategies that contributed to a `search` result set
+   * (#1495/#1496/#1551 silent-behavior signal). `undefined` for non-search
+   * listings; an empty array when a search matched nothing.
+   */
+  applied_search_strategies?: SearchStrategy[];
+  search_mode: EntitySearchMode;
+  /**
+   * #1943: opaque keyset cursor to fetch the next page, present only on the
+   * plain-listing path (default `entity_id` sort, no `search`) when a full page
+   * was returned. `undefined` when there is no next page or the query is not
+   * cursor-eligible.
+   */
+  next_cursor?: string;
+  read_contract: EntityReadContract;
+  /**
+   * Present (`true`) only when an untyped query was narrowed to the entity
+   * types an admitted agent grant may `retrieve`
+   * (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). Omitted otherwise.
+   */
+  narrowed_by_capability?: true;
+};
+
+/**
+ * Entity query with the opt-in agent-grant retrieve scope applied before the
+ * query runs (shared by REST `/entities/query` and MCP `retrieve_entities`).
+ * A typed query is refused if any requested type is outside the grant; an
+ * untyped query is narrowed to the grant's types, so `total` and pagination
+ * describe exactly the rows that can be returned.
+ */
+export async function queryEntitiesWithCount(
+  params: QueryEntitiesParams
+): Promise<QueryEntitiesWithCountResult> {
+  const requestedTypes = normalizeEntityTypeFilter(params.entityType, params.entityTypes);
+  const scope = enforceCurrentAgentRetrieveScope(requestedTypes);
+  if (scope && scope.kind === "types" && requestedTypes.length === 0) {
+    const narrowed = await queryEntitiesWithCountUnscoped({
+      ...params,
+      entityType: undefined,
+      entityTypes: scope.types,
+    });
+    return { ...narrowed, narrowed_by_capability: true };
+  }
+  return queryEntitiesWithCountUnscoped(params);
+}
+
+async function queryEntitiesWithCountUnscoped(params: QueryEntitiesParams): Promise<{
   entities: EntityWithProvenance[];
   total: number;
   excluded_merged: boolean;
