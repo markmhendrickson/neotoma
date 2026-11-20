@@ -111,6 +111,7 @@ export const OPERATION_RETRIEVE_CLASS: Record<string, RetrieveScopeEntry> = {
   getSourceRelationships: FULL("entities derived from a source"),
   getRecordActivity: FULL("recent changes across entity types"),
   getComplianceScorecard: FULL("per-agent write activity across entity types"),
+  getAgentRecords: FULL("per-agent record activity rows with entity ids and types"),
   listAgentGrants: FULL("agent_grant records"),
   getAgentGrant: FULL("agent_grant record"),
   getRecentConversations: FULL("conversation records and their messages"),

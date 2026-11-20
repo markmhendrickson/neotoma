@@ -220,6 +220,17 @@ import {
   retrieveRelatedEntitiesAsOf,
 } from "./services/record_as_of.js";
 import { runtimeEnv } from "./config_embedded.js";
+import {
+  READ_RESOURCE_KINDS,
+  READ_TOOL_NAMES,
+  admittedAgentLabel,
+  parseToolResultPayload,
+  readLogEnabled,
+  readLogWriterInstalled,
+  resourceReadOperation,
+  searchQueryLength,
+  writeReadLog,
+} from "./services/read_log.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -2751,8 +2762,12 @@ export class NeotomaServer {
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
             mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
+            // Carry the HTTP request's access-log id and auth label so the
+            // read log line (src/services/read_log.ts) shares them.
+            requestId: getRequestContext()?.requestId ?? null,
+            authMethod: getRequestContext()?.authMethod ?? null,
           },
-          () => this.executeTool(name, args)
+          () => this.executeToolWithReadLog(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
@@ -2921,8 +2936,71 @@ export class NeotomaServer {
         aauthAdmission: null,
         authenticatedPrincipal: null,
       },
+      // No read log line: in-process callers own their standard output.
       () => this.executeTool(name, args)
     );
+  }
+
+  /**
+   * Run a tool and, for read tools, write one read log line
+   * (src/services/read_log.ts) per call: on success with the entities the
+   * result returned, on failure with a status and no entities. Must run
+   * inside the dispatch request context so the request id, auth method and
+   * admitted agent are visible. Writes only when the HTTP server installed the
+   * read log writer; on the stdio transport standard output is the protocol
+   * channel, so nothing is written there.
+   */
+  private async executeToolWithReadLog(
+    name: string,
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (!READ_TOOL_NAMES.has(name)) return this.executeTool(name, args);
+    return this.runWithMcpReadLog(
+      name,
+      searchQueryLength(args),
+      () => this.executeTool(name, args),
+      parseToolResultPayload
+    );
+  }
+
+  /**
+   * Run one MCP read and write its read log line (src/services/read_log.ts):
+   * on success with the entities `payloadOf(result)` holds, on failure with a
+   * status and no entities. Shared by tool calls and `resources/read` so both
+   * report the same fields. A plain call when no writer is installed (stdio
+   * transport, in-process callers) or `NEOTOMA_ACCESS_LOG` is `off`.
+   */
+  private async runWithMcpReadLog<T>(
+    operation: string,
+    queryLength: number | null,
+    run: () => Promise<T>,
+    payloadOf: (result: T) => unknown
+  ): Promise<T> {
+    if (!readLogWriterInstalled() || !readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
+      return run();
+    }
+    const context = getRequestContext();
+    const base = {
+      surface: "mcp" as const,
+      operation,
+      requestId: context?.requestId ?? null,
+      userId: this.authenticatedUserId,
+      agent: admittedAgentLabel(context?.aauthAdmission),
+      authMethod: context?.authMethod ?? "none",
+      queryLength,
+    };
+    let result: T;
+    try {
+      result = await run();
+    } catch (error) {
+      const statusCode = (error as { statusCode?: unknown } | null)?.statusCode;
+      const refused =
+        error instanceof AgentCapabilityError || statusCode === 401 || statusCode === 403;
+      writeReadLog({ ...base, status: refused ? "refused" : "error" });
+      throw error;
+    }
+    writeReadLog({ ...base, status: "ok", result: payloadOf(result) });
+    return result;
   }
 
   private async executeTool(
@@ -3294,59 +3372,45 @@ export class NeotomaServer {
 
         // Resource reads do not pass through executeTool. Unknown kinds take
         // the full-scope branch until explicitly classified.
-        const resourceClass = retrieveClassForResource(parsed.type)?.class;
-        if (!resourceClass || resourceClass === "read_full_scope") {
-          enforceFullRetrieveScope(`resources/read ${parsed.type}`);
-        } else if (resourceClass === "read_entity") {
-          if (parsed.entityId) {
-            await enforceRetrieveForEntityIds([parsed.entityId], this.getAuthenticatedUserId());
-          } else if (parsed.entityType || parsed.queryParams?.entity_type) {
-            enforceRetrieveForEntityTypes([
-              (parsed.entityType ?? parsed.queryParams?.entity_type)!,
-            ]);
-          } else {
-            currentRetrieveScope();
+        // `currentRetrieveScope()` is null when no grant scope binds this request
+        // (setting off, or a caller without an admitted grant): nothing below runs.
+        if (currentRetrieveScope()) {
+          const resourceClass = retrieveClassForResource(parsed.type)?.class;
+          if (!resourceClass || resourceClass === "read_full_scope") {
+            enforceFullRetrieveScope(`resources/read ${parsed.type}`);
+          } else if (resourceClass === "read_entity") {
+            if (parsed.entityId) {
+              await enforceRetrieveForEntityIds([parsed.entityId], this.getAuthenticatedUserId());
+            } else if (parsed.entityType || parsed.queryParams?.entity_type) {
+              enforceRetrieveForEntityTypes([
+                (parsed.entityType ?? parsed.queryParams?.entity_type)!,
+              ]);
+            }
           }
+        }
+
+        // Resource kinds that return entity records write a read log line
+        // (src/services/read_log.ts), the same line a read tool writes.
+        if (READ_RESOURCE_KINDS.has(parsed.type)) {
+          const data = await this.runWithMcpReadLog(
+            resourceReadOperation(parsed.type),
+            null,
+            () => this.readEntityResource(parsed),
+            (result) => result
+          );
+          return {
+            contents: [{ uri, mimeType: "application/json", text: JSON.stringify(data) }],
+          };
         }
 
         let data: any;
 
         switch (parsed.type) {
-          case "entity_collection_all":
-            data = await this.handleEntityCollectionAll(parsed.queryParams);
-            break;
-          case "entity_collection":
-            data = await this.handleEntityCollection(parsed.entityType!, parsed.queryParams);
-            break;
-          case "entity":
-            data = await this.handleIndividualEntity(parsed.entityId!);
-            break;
-          case "entity_observations":
-            data = await this.handleEntityObservations(parsed.entityId!);
-            break;
-          case "entity_relationships":
-            data = await this.handleEntityRelationships(parsed.entityId!);
-            break;
-          case "timeline_year":
-            data = await this.handleTimelineYear(parsed.year!, parsed.queryParams);
-            break;
-          case "timeline_month":
-            data = await this.handleTimelineMonth(parsed.year!, parsed.month!, parsed.queryParams);
-            break;
           case "source":
             data = await this.handleSource(parsed.sourceId!);
             break;
           case "source_collection":
             data = await this.handleSourceCollection(parsed.queryParams);
-            break;
-          case "relationship_collection_all":
-            data = await this.handleRelationshipCollectionAll(parsed.queryParams);
-            break;
-          case "relationship_collection":
-            data = await this.handleRelationshipCollection(
-              parsed.relationshipType!,
-              parsed.queryParams
-            );
             break;
           case "entity_types":
             data = await this.handleEntityTypes();
@@ -3398,6 +3462,36 @@ export class NeotomaServer {
         );
       }
     });
+  }
+
+  /**
+   * Read a resource whose kind is in `READ_RESOURCE_KINDS` (entity records,
+   * their observations and relationships, timeline events). Every kind in
+   * that set must have a case here.
+   */
+  private async readEntityResource(parsed: ReturnType<NeotomaServer["parseResourceUri"]>) {
+    switch (parsed.type) {
+      case "entity_collection_all":
+        return this.handleEntityCollectionAll(parsed.queryParams);
+      case "entity_collection":
+        return this.handleEntityCollection(parsed.entityType!, parsed.queryParams);
+      case "entity":
+        return this.handleIndividualEntity(parsed.entityId!);
+      case "entity_observations":
+        return this.handleEntityObservations(parsed.entityId!);
+      case "entity_relationships":
+        return this.handleEntityRelationships(parsed.entityId!);
+      case "timeline_year":
+        return this.handleTimelineYear(parsed.year!, parsed.queryParams);
+      case "timeline_month":
+        return this.handleTimelineMonth(parsed.year!, parsed.month!, parsed.queryParams);
+      case "relationship_collection_all":
+        return this.handleRelationshipCollectionAll(parsed.queryParams);
+      case "relationship_collection":
+        return this.handleRelationshipCollection(parsed.relationshipType!, parsed.queryParams);
+      default:
+        throw new McpError(ErrorCode.InvalidRequest, `Unsupported resource type: ${parsed.type}`);
+    }
   }
 
   private async retrieveFileUrl(
