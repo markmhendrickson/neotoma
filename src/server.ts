@@ -2742,6 +2742,10 @@ export class NeotomaServer {
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
             mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
+            // Carry the HTTP request's access-log id and auth label so the
+            // read log line (src/services/read_log.ts) shares them.
+            requestId: getRequestContext()?.requestId ?? null,
+            authMethod: getRequestContext()?.authMethod ?? null,
           },
           () => this.executeToolWithReadLog("mcp", name, args)
         );
