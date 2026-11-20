@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **890**
-- Backend and repo Vitest files: **836**
+- Total automated test files: **893**
+- Backend and repo Vitest files: **839**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 252 |
+| Vitest unit tests | 255 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 72 |
 | Vitest integration tests | 266 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (252):**
+**Files (255):**
 - `tests/unit/aauth_admission_middleware_lookup_failed.test.ts`
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
@@ -287,6 +287,9 @@ flowchart TD
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/publish_rendered_page_description_parity.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/read_log_classification.test.ts`
+- `tests/unit/read_log_output_channel.test.ts`
+- `tests/unit/read_log.test.ts`
 - `tests/unit/reader_language_asset.test.ts`
 - `tests/unit/reader_pool_midcall_timeout.test.ts`
 - `tests/unit/readiness_probe.test.ts`

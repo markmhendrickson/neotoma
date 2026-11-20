@@ -1066,37 +1066,7 @@ export interface paths {
      *     The shape matches `/record_activity` so clients can reuse the
      *     same activity feed renderer.
      */
-    get: {
-      parameters: {
-        query?: {
-          user_id?: string;
-          limit?: number;
-          offset?: number;
-        };
-        header?: never;
-        path: {
-          key: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Records scoped to this agent */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": {
-              items?: Record<string, never>[];
-              has_more?: boolean;
-              limit?: number;
-              offset?: number;
-            };
-          };
-        };
-      };
-    };
+    get: operations["getAgentRecords"];
     put?: never;
     post?: never;
     delete?: never;
@@ -7432,6 +7402,37 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+    };
+  };
+  getAgentRecords: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Records scoped to this agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items?: Record<string, never>[];
+            has_more?: boolean;
+            limit?: number;
+            offset?: number;
           };
         };
       };

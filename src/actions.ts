@@ -334,6 +334,12 @@ import {
   resolveAccessLogFormat,
   setRequestAuthMethod,
 } from "./services/access_log.js";
+import {
+  installHttpReadLogWriter,
+  readLogEnabled,
+  restReadLog,
+  restReadLogPlainBody,
+} from "./services/read_log.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -512,6 +518,15 @@ if (accessLogFormat === "json") {
       skip: (req) => exactIdentityRequested(req.query),
     })
   );
+}
+// Per-call read log (src/services/read_log.ts): one JSON line per read
+// request listing the entities it returned. Shares the `NEOTOMA_ACCESS_LOG`
+// setting and is off only when that setting is `off`. MCP calls served here
+// write the same line from the tool dispatcher in src/server.ts. Lines reach
+// standard output only after `startHTTPServer` installs the writer, so a
+// process that imports this module without serving HTTP writes nothing.
+if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
+  app.use(restReadLog());
 }
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
@@ -1611,6 +1626,18 @@ function unmapIPv4(ip: string): string {
 }
 
 /**
+ * Request id and auth method label the access log carries, for the MCP read
+ * log line (src/services/read_log.ts) written from inside the tool dispatcher.
+ */
+function readLogRequestFields(req: express.Request): {
+  requestId: string | null;
+  authMethod: string | null;
+} {
+  const r = req as express.Request & { requestId?: string; authMethod?: string };
+  return { requestId: r.requestId ?? null, authMethod: r.authMethod ?? null };
+}
+
+/**
  * Client and peer addresses for the access log (src/services/access_log.ts).
  *
  * `peer_ip` is always the connecting socket address. `client_ip` starts as the
@@ -2607,6 +2634,7 @@ app.all("/mcp", async (req, res) => {
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
           mcpConnectionId: connectionIdHeader ?? null,
+          ...readLogRequestFields(req),
         },
         () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
       );
@@ -2794,6 +2822,7 @@ app.all("/mcp", async (req, res) => {
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
         mcpLookupTiming,
+        ...readLogRequestFields(req),
       },
       () => transport!.handleRequest(req, res, req.body)
     );
@@ -5457,6 +5486,10 @@ app.use(restAuthMiddleware);
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+// Read log body capture below encryption (src/services/read_log.ts): records
+// the plain body's entity ids and types for the read line, so an encrypted
+// response is not logged as an empty read. Never changes the response.
+app.use(restReadLogPlainBody());
 
 // #2240: member write-attribution (`provenance.authenticated_actor_id`) is for
 // members of the graph, not for a guest holding an entity-scoped token. Wrap
@@ -14911,6 +14944,9 @@ export function tryListen(
 
 // Export function to start HTTP server (called explicitly, not on import)
 export async function startHTTPServer() {
+  // The read log writes to standard output only in the HTTP server process
+  // (src/services/read_log.ts); the stdio MCP transport never installs it.
+  if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) installHttpReadLogWriter();
   // Stronger AAuth Admission plan: capabilities now live on agent_grant
   // entities. If the legacy NEOTOMA_AGENT_CAPABILITIES_* env vars are
   // still set, fail fast with a structured pointer to the migration
