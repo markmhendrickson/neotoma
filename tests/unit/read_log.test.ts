@@ -232,6 +232,46 @@ describe("REST read log", () => {
     }
   });
 
+  it("logs GET /agents/{key}/records with the types of the activity rows it returned", async () => {
+    const lines: string[] = [];
+    const app = express();
+    app.use(restReadLog({ write: (line) => lines.push(line) }));
+    app.get("/agents/:key/records", (_req, res) =>
+      res.json({
+        items: [
+          {
+            record_type: "observation",
+            id: "obs_0001",
+            title: SECRET_TITLE,
+            entity_id: "ent_task_0001",
+            entity_type: "task",
+          },
+          {
+            record_type: "observation",
+            id: "obs_0002",
+            title: SECRET_TITLE,
+            entity_id: "ent_issue_0001",
+            entity_type: "issue",
+          },
+        ],
+      })
+    );
+    const server = await new Promise<Server>((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    servers.push(server);
+    const port = (server.address() as AddressInfo).port;
+    await fetch(`http://127.0.0.1:${port}/agents/thumb%3Asynthetic/records`);
+    for (let i = 0; i < 50 && lines.length < 1; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      operation: "getAgentRecords",
+      entity_types: { task: 1, issue: 1 },
+      count: 2,
+    });
+    expectNoContent(lines[0]!);
+  });
+
   it("writes nothing for a non-read route", async () => {
     const { base, lines } = await startApp();
     await fetch(`${base}/store`, {

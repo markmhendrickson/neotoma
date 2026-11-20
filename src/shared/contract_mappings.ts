@@ -506,6 +506,15 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "recent",
   },
   {
+    operationId: "getAgentRecords",
+    readLog: true,
+    method: "get",
+    path: "/agents/{key}/records",
+    adapter: "infra",
+    notes:
+      "Inspector agent page: records one agent wrote, in the `/record_activity` item shape. HTTP only; no MCP tool or CLI command.",
+  },
+  {
     operationId: "getRecentConversations",
     method: "get",
     path: "/recent_conversations",
