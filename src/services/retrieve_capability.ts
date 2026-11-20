@@ -129,3 +129,108 @@ export function currentRetrieveScope(): AgentRetrieveScope | null {
   if (!ctx) return null;
   return enforceAgentRetrieveScope(ctx, []);
 }
+
+/**
+ * Gate for reads with no per-type check of their own (`read_full_scope` in
+ * src/shared/retrieve_scope_classification.ts). A bound grant needs a `"*"`
+ * retrieve entry; a type-limited grant is refused, and a grant with no
+ * `retrieve` entry is refused by {@link currentRetrieveScope}. Runs no
+ * statement.
+ */
+export function enforceFullRetrieveScope(operation: string): void {
+  const ctx = boundRetrieveContext();
+  if (!ctx) return;
+  const scope = enforceAgentRetrieveScope(ctx, []);
+  if (scope === null || scope.kind === "all") return;
+  throw new AgentCapabilityError({
+    op: "retrieve",
+    entityType: "*",
+    agentLabel: ctx.agentLabel,
+    hint:
+      `"${operation}" returns data across entity types and has no per-type check, so it ` +
+      `needs a "retrieve" capability for every type: { op: "retrieve", entity_types: ["*"] }. ` +
+      `Agent "${ctx.agentLabel}" may retrieve only [${scope.types.map((t) => `"${t}"`).join(", ")}].`,
+  });
+}
+
+/**
+ * Ids of the caller's entities whose type the scope allows, for injecting
+ * as an `entity_id IN (...)` filter before a list query runs.
+ */
+export async function allowedEntityIdsForScope(
+  scope: AgentRetrieveScope & { kind: "types" },
+  userId: string
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("entities")
+    .select("id")
+    .eq("user_id", userId)
+    .in("entity_type", scope.types);
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string }>).map((row) => row.id).sort();
+}
+
+/** Types of the caller's entities by id (ids not found are absent). */
+export async function entityTypesById(
+  ids: string[],
+  userId: string
+): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(ids.filter((id) => typeof id === "string" && id.length > 0)));
+  const out = new Map<string, string>();
+  if (unique.length === 0) return out;
+  const { data, error } = await db
+    .from("entities")
+    .select("id, entity_type")
+    .in("id", unique)
+    .eq("user_id", userId);
+  if (error) throw error;
+  for (const row of (data ?? []) as Array<{ id: string; entity_type?: string | null }>) {
+    if (typeof row.entity_type === "string" && row.entity_type.length > 0) {
+      out.set(row.id, row.entity_type);
+    }
+  }
+  return out;
+}
+
+type Edge = { source_entity_id: string; target_entity_id: string };
+
+/**
+ * Narrow a traversal result rooted at `rootId` to the scope: keep only edges
+ * whose two endpoints are of allowed types, then keep only what is still
+ * reachable from the root through kept edges, so nothing is reached through
+ * an entity the grant may not read. An endpoint whose type cannot be read is
+ * treated as not allowed (fail closed). Returns `null` when no scope binds.
+ */
+export async function narrowTraversalToScope<E extends Edge>(
+  rootId: string,
+  edges: E[],
+  userId: string
+): Promise<{ edges: E[]; entityIds: Set<string> } | null> {
+  const scope = currentRetrieveScope();
+  if (scope === null || scope.kind === "all") return null;
+  const ids = edges.flatMap((e) => [e.source_entity_id, e.target_entity_id]);
+  const types = await entityTypesById([rootId, ...ids], userId);
+  const allowed = (id: string) => {
+    const t = types.get(id);
+    return t !== undefined && scope.types.includes(t);
+  };
+  const usable = edges.filter((e) => allowed(e.source_entity_id) && allowed(e.target_entity_id));
+  const reached = new Set<string>([rootId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const e of usable) {
+      const a = reached.has(e.source_entity_id);
+      const b = reached.has(e.target_entity_id);
+      if (a !== b) {
+        reached.add(a ? e.target_entity_id : e.source_entity_id);
+        grew = true;
+      }
+    }
+  }
+  const kept = usable.filter(
+    (e) => reached.has(e.source_entity_id) && reached.has(e.target_entity_id)
+  );
+  reached.delete(rootId);
+  return { edges: kept, entityIds: reached };
+}

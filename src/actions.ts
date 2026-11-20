@@ -62,6 +62,7 @@ import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
+  isAgentRetrieveEnforcementEnabled,
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
@@ -290,9 +291,13 @@ import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import {
   currentRetrieveScope,
+  enforceFullRetrieveScope,
   enforceRetrieveForEntityIds,
   enforceRetrieveForEntityTypes,
+  allowedEntityIdsForScope,
+  narrowTraversalToScope,
 } from "./services/retrieve_capability.js";
+import { fullScopeOperationForRequest } from "./shared/retrieve_scope_classification.js";
 import {
   EXACT_IDENTITY_REQUEST_MESSAGE,
   exactIdentityRequested,
@@ -2316,6 +2321,28 @@ app.use(dbAbortContext());
 // identity) for downstream guards. Cheap public discovery routes are
 // short-circuited inside the middleware.
 app.use(aauthAdmission());
+
+// Opt-in agent-grant retrieve scope (NEOTOMA_ENFORCE_AGENT_RETRIEVE=1): reads
+// with no per-type check of their own (`read_full_scope` in
+// src/shared/retrieve_scope_classification.ts, derived from the contract
+// mappings) need a `"*"` retrieve entry on an admitted grant. With the setting
+// off this returns before reading the request context. Logs nothing.
+app.use((req, res, next) => {
+  if (!isAgentRetrieveEnforcementEnabled()) return next();
+  const operationId = fullScopeOperationForRequest(req.method, req.path);
+  if (!operationId) return next();
+  try {
+    enforceFullRetrieveScope(operationId);
+  } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
+    return next(error);
+  }
+  return next();
+});
 
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication

@@ -96,8 +96,18 @@ import {
 } from "./services/static_bearer_identity.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
-import { AgentCapabilityError } from "./services/agent_capabilities.js";
-import { enforceRetrieveForEntityIds } from "./services/retrieve_capability.js";
+import {
+  AgentCapabilityError,
+  isAgentRetrieveEnforcementEnabled,
+} from "./services/agent_capabilities.js";
+import {
+  currentRetrieveScope,
+  enforceFullRetrieveScope,
+  enforceRetrieveForEntityIds,
+  allowedEntityIdsForScope,
+  narrowTraversalToScope,
+} from "./services/retrieve_capability.js";
+import { retrieveClassForTool } from "./shared/retrieve_scope_classification.js";
 import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
@@ -2912,6 +2922,15 @@ export class NeotomaServer {
     name: string,
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Opt-in agent-grant retrieve scope: tools with no per-type check of
+    // their own need a `"*"` retrieve entry (same gate as the REST routes,
+    // derived from the same classification). No-op with the setting off.
+    if (
+      isAgentRetrieveEnforcementEnabled() &&
+      retrieveClassForTool(name)?.class === "read_full_scope"
+    ) {
+      enforceFullRetrieveScope(name);
+    }
     switch (name) {
       case "retrieve_file_url":
         return await this.retrieveFileUrl(args);
