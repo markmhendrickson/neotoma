@@ -167,6 +167,60 @@ The `json` line includes the user id and redacted address prefixes so a hosted l
 
 See [Running the Server](running_the_server.md) for transports and processes.
 
+### Read log
+
+Every read call also writes one `read` line to standard output, listing which entities the call returned. A log shipper can keep these lines outside the instance; see [neotoma#1872](https://github.com/markmhendrickson/neotoma/issues/1872) for the in-database read record. The line is written whenever `NEOTOMA_ACCESS_LOG` is not `off`, in both `json` and `dev` modes. There is no separate setting.
+
+Read calls are the entity query, list, detail, snapshot, search, observation, timeline, field provenance, relationship and graph neighborhood operations, over REST (`surface: "rest"`), MCP (`"mcp"`) and the CLI tool path (`"cli"`). There is one line per call, not per entity. A failed or refused read also writes a line, with `count: 0`.
+
+The line never carries entity contents, snapshot fields, search text or query values. A search term is logged only as its length.
+
+| Field          | Type           | Value                                                                                                                                   |
+| -------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `ts`           | string         | Time the line was written, ISO 8601 UTC                                                                                                 |
+| `event`        | string         | Always `read`                                                                                                                           |
+| `request_id`   | string or null | The access log's `request_id` for the HTTP request carrying the call; null for stdio and CLI calls or when the access log is not `json` |
+| `user_id`      | string or null | Authenticated user id                                                                                                                   |
+| `surface`      | string         | `rest`, `mcp` or `cli`                                                                                                                  |
+| `operation`    | string         | REST operation name (for example `entities_query`) or MCP tool name (for example `retrieve_entities`)                                   |
+| `agent`        | string or null | Admitted AAuth grant label, the same value the access log carries; null otherwise                                                       |
+| `auth_method`  | string         | The access log's auth label; `none` when none was recorded                                                                              |
+| `status`       | string         | `ok`, `refused` (401, 403 or a capability refusal) or `error`                                                                           |
+| `http_status`  | number or null | Response status for REST calls; null for MCP and CLI                                                                                    |
+| `entity_types` | object         | Entity type to number of returned entities of that type, for example `{"task": 3, "issue": 1}`; `{}` when nothing was returned          |
+| `count`        | number         | Number of distinct entities returned                                                                                                    |
+| `entity_ids`   | string[]       | Returned entity ids, at most 50                                                                                                         |
+| `truncated`    | boolean        | True when more than 50 entities were returned                                                                                           |
+| `query_length` | number or null | Length of the `search` or `query` argument; null when the call had none                                                                 |
+
+An entity counts as returned when the result holds an object with an `entity_type` and an `entity_id`. Ids referenced from inside a returned entity (for example in its snapshot) are not counted.
+
+Example (synthetic values, shown indented; the written line is a single line):
+
+```json
+{
+  "ts": "2026-01-02T03:04:05.712Z",
+  "event": "read",
+  "request_id": "3f2a9c1e-0b4d-4e8a-9f61-2c7d5e8a1b90",
+  "user_id": "00000000-0000-0000-0000-000000000001",
+  "surface": "mcp",
+  "operation": "retrieve_entities",
+  "agent": "example-agent",
+  "auth_method": "aauth_admitted",
+  "status": "ok",
+  "http_status": null,
+  "entity_types": { "task": 2, "issue": 1 },
+  "count": 3,
+  "entity_ids": [
+    "ent_0000000000000000000000a1",
+    "ent_0000000000000000000000a2",
+    "ent_0000000000000000000000b1"
+  ],
+  "truncated": false,
+  "query_length": 12
+}
+```
+
 ## Auth and access
 
 | Variable                              | Purpose                                                                                                                                                                     |
