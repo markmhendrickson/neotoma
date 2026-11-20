@@ -8760,6 +8760,14 @@ export interface operations {
               at?: string | null;
               at_ingested?: string | null;
             };
+            /**
+             * @description Present (`true`) only when edges to entity types outside the caller's
+             *     admitted agent grant `retrieve` entries were dropped, with anything
+             *     reached only through them (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`).
+             *     `relationships`, `entities` and their counts describe the narrowed
+             *     result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           } & {
             [key: string]: unknown;
           };
@@ -8843,6 +8851,13 @@ export interface operations {
             total_count?: number;
             /** @description True when additional relationships exist beyond the current page. */
             has_more?: boolean;
+            /**
+             * @description Present (`true`) only when relationships to entity types outside the
+             *     caller's admitted agent grant `retrieve` entries were dropped
+             *     (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). `total_count` and `has_more`
+             *     describe the narrowed result. Omitted otherwise.
+             */
+            narrowed_by_capability?: boolean;
           } & {
             [key: string]: unknown;
           };

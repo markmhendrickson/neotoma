@@ -7806,6 +7806,14 @@ paths:
                       at_ingested:
                         type: string
                         nullable: true
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when edges to entity types outside the caller's
+                      admitted agent grant `retrieve` entries were dropped, with anything
+                      reached only through them (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`).
+                      `relationships`, `entities` and their counts describe the narrowed
+                      result. Omitted otherwise.
 
   /retrieve_graph_neighborhood:
     post:
@@ -7916,6 +7924,13 @@ paths:
                   has_more:
                     type: boolean
                     description: True when additional relationships exist beyond the current page.
+                  narrowed_by_capability:
+                    type: boolean
+                    description: |
+                      Present (`true`) only when relationships to entity types outside the
+                      caller's admitted agent grant `retrieve` entries were dropped
+                      (`NEOTOMA_ENFORCE_AGENT_RETRIEVE=1`). `total_count` and `has_more`
+                      describe the narrowed result. Omitted otherwise.
 
   /issues/bulk_close:
     post:
