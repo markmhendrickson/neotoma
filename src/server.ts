@@ -96,8 +96,19 @@ import {
 } from "./services/static_bearer_identity.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
-import { AgentCapabilityError } from "./services/agent_capabilities.js";
-import { enforceRetrieveForEntityIds } from "./services/retrieve_capability.js";
+import {
+  AgentCapabilityError,
+  isAgentRetrieveEnforcementEnabled,
+} from "./services/agent_capabilities.js";
+import {
+  currentRetrieveScope,
+  enforceFullRetrieveScope,
+  enforceRetrieveForEntityIds,
+  filterEdgesToScope,
+  narrowTraversalToScope,
+  retrieveScopeIsTypeLimited,
+} from "./services/retrieve_capability.js";
+import { retrieveClassForTool } from "./shared/retrieve_scope_classification.js";
 import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
@@ -2912,6 +2923,15 @@ export class NeotomaServer {
     name: string,
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Opt-in agent-grant retrieve scope: tools with no per-type check of
+    // their own need a `"*"` retrieve entry (same gate as the REST routes,
+    // derived from the same classification). No-op with the setting off.
+    if (
+      isAgentRetrieveEnforcementEnabled() &&
+      retrieveClassForTool(name)?.class === "read_full_scope"
+    ) {
+      enforceFullRetrieveScope(name);
+    }
     switch (name) {
       case "retrieve_file_url":
         return await this.retrieveFileUrl(args);
@@ -4751,11 +4771,15 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    await enforceRetrieveForEntityIds([parsed.entity_id], userId);
 
     // Record-wide as-of read (#2700): edges, endpoint existence and entity
     // snapshots are all answered as recorded by the cutoff.
     const asOf = { at: parsed.at, at_ingested: parsed.at_ingested };
     if (hasAsOfCutoff(asOf)) {
+      if (retrieveScopeIsTypeLimited()) {
+        enforceFullRetrieveScope("retrieve_related_entities with an as-of cutoff");
+      }
       const result = await retrieveRelatedEntitiesAsOf(
         {
           entityId: parsed.entity_id,
@@ -4850,6 +4874,15 @@ export class NeotomaServer {
       currentLevel = nextLevel;
     }
 
+    // Agent-grant retrieve scope: drop edges to types the grant may not read,
+    // and anything reached only through them.
+    const narrowed = await narrowTraversalToScope(parsed.entity_id, allRelationships, userId);
+    if (narrowed) {
+      allRelationships.splice(0, allRelationships.length, ...narrowed.edges);
+      relatedEntityIds.clear();
+      for (const id of narrowed.entityIds) relatedEntityIds.add(id);
+    }
+
     // Get entity details if requested
     let entities: any[] = [];
     if (parsed.include_entities && relatedEntityIds.size > 0) {
@@ -4889,6 +4922,7 @@ export class NeotomaServer {
       total_entities: entities.length,
       total_relationships: allRelationships.length,
       hops_traversed: hopsTraversed,
+      ...(narrowed ? { narrowed_by_capability: true } : {}),
     });
   }
 
@@ -4908,6 +4942,11 @@ export class NeotomaServer {
       node_id: parsed.node_id,
       node_type: parsed.node_type,
     };
+
+    // Agent-grant retrieve scope: the root entity must be readable; a source
+    // node returns observations of any type, so it needs a "*" grant.
+    if (parsed.node_type === "entity") await enforceRetrieveForEntityIds([parsed.node_id], userId);
+    else enforceFullRetrieveScope("retrieve_graph_neighborhood for a source node");
 
     if (parsed.node_type === "entity") {
       // Get entity
@@ -4945,6 +4984,11 @@ export class NeotomaServer {
           .eq("user_id", userId);
 
         if (!relError && relationships) {
+          const narrowedEdges = await filterEdgesToScope(relationships as any[], userId);
+          if (narrowedEdges) {
+            relationships.splice(0, relationships.length, ...narrowedEdges);
+            result.narrowed_by_capability = true;
+          }
           result.relationships = relationships;
           const relatedEntityIds = new Set<string>();
           relationships.forEach((rel: { source_entity_id: string; target_entity_id: string }) => {
@@ -5107,16 +5151,26 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const { getDashboardStats } = await import("./services/dashboard_stats.js");
 
+    // Agent-grant retrieve scope: return counts only for allowed types
+    // (resolved outside the try so a refusal keeps its own envelope).
+    const scope = currentRetrieveScope();
     try {
       const stats = await getDashboardStats(userId);
-      const sortedEntries = Object.entries(stats.entities_by_type ?? {}).sort((a, b) => {
+      const counted = Object.entries(stats.entities_by_type ?? {}).filter(
+        ([type]) => scope === null || scope.kind === "all" || scope.types.includes(type)
+      );
+      const narrowed = scope !== null && scope.kind === "types";
+      const sortedEntries = counted.sort((a, b) => {
         const diff = b[1] - a[1];
         return diff !== 0 ? diff : a[0].localeCompare(b[0]);
       });
 
       return this.buildTextResponse({
         entities_by_type: Object.fromEntries(sortedEntries),
-        total_entities: stats.total_entities ?? 0,
+        total_entities: narrowed
+          ? sortedEntries.reduce((sum, [, n]) => sum + n, 0)
+          : (stats.total_entities ?? 0),
+        ...(narrowed ? { narrowed_by_capability: true } : {}),
         last_updated: stats.last_updated,
         count_source: "dashboard_stats",
         scope: "authenticated_user",

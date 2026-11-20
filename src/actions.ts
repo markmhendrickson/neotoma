@@ -62,6 +62,7 @@ import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
+  isAgentRetrieveEnforcementEnabled,
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
@@ -290,9 +291,14 @@ import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import {
   currentRetrieveScope,
+  enforceFullRetrieveScope,
   enforceRetrieveForEntityIds,
   enforceRetrieveForEntityTypes,
+  filterEdgesToScope,
+  narrowTraversalToScope,
+  retrieveScopeIsTypeLimited,
 } from "./services/retrieve_capability.js";
+import { retrieveGateTargetForRequest } from "./shared/retrieve_scope_classification.js";
 import {
   EXACT_IDENTITY_REQUEST_MESSAGE,
   exactIdentityRequested,
@@ -2316,6 +2322,30 @@ app.use(dbAbortContext());
 // identity) for downstream guards. Cheap public discovery routes are
 // short-circuited inside the middleware.
 app.use(aauthAdmission());
+
+// Opt-in agent-grant retrieve scope (NEOTOMA_ENFORCE_AGENT_RETRIEVE=1),
+// default deny: a request that is not a classified route whose handler runs
+// the per-type check, an exempt route or a write (see
+// src/shared/retrieve_scope_classification.ts, which covers every registered
+// route, aliases included) needs a `"*"` retrieve entry on an admitted grant.
+// Callers without a grant are unaffected. With the setting off this returns
+// before reading the request context. Logs nothing.
+app.use((req, res, next) => {
+  if (!isAgentRetrieveEnforcementEnabled()) return next();
+  const operationId = retrieveGateTargetForRequest(req.method, req.path);
+  if (!operationId) return next();
+  try {
+    enforceFullRetrieveScope(operationId);
+  } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
+    return next(error);
+  }
+  return next();
+});
 
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
@@ -11897,10 +11927,14 @@ app.post("/retrieve_related_entities", async (req, res) => {
       at_ingested,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
+    await enforceRetrieveForEntityIds([entity_id], userId);
 
     // Record-wide as-of read (#2700): edges, endpoint existence and entity
     // snapshots are all answered as recorded by the cutoff.
     if (hasAsOfCutoff({ at, at_ingested })) {
+      if (retrieveScopeIsTypeLimited()) {
+        enforceFullRetrieveScope("retrieve_related_entities with an as-of cutoff");
+      }
       const result = await retrieveRelatedEntitiesAsOf(
         {
           entityId: entity_id,
@@ -11989,6 +12023,15 @@ app.post("/retrieve_related_entities", async (req, res) => {
       currentLevel = nextLevel;
     }
 
+    // Agent-grant retrieve scope: drop edges to types the grant may not read,
+    // and anything reached only through them.
+    const narrowed = await narrowTraversalToScope(entity_id, relationships, userId);
+    if (narrowed) {
+      relationships.splice(0, relationships.length, ...narrowed.edges);
+      relatedIds.clear();
+      for (const id of narrowed.entityIds) relatedIds.add(id);
+    }
+
     // Get entities if requested
     let entities: any[] = [];
     if (include_entities && relatedIds.size > 0) {
@@ -12010,7 +12053,11 @@ app.post("/retrieve_related_entities", async (req, res) => {
       count: relationships.length,
       max_hops,
     });
-    return res.json({ relationships, entities });
+    return res.json({
+      relationships,
+      entities,
+      ...(narrowed ? { narrowed_by_capability: true } : {}),
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -12052,6 +12099,12 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
     const result: any = { node_id, node_type };
 
+    // Agent-grant retrieve scope: the root entity must be readable; a source
+    // node returns observations of any type, so it needs a "*" grant.
+    if (node_type === "entity") await enforceRetrieveForEntityIds([node_id], userId);
+    else enforceFullRetrieveScope("retrieve_graph_neighborhood for a source node");
+    const narrowEdges = node_type === "entity" && retrieveScopeIsTypeLimited();
+
     if (node_type === "entity") {
       // Get entity
       const { data: entity, error: entityError } = await db
@@ -12066,7 +12119,45 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       }
 
       // Get relationships if requested
-      if (include_relationships) {
+      if (include_relationships && narrowEdges) {
+        // Narrow to edges whose endpoints the grant may read BEFORE counting
+        // and paging, so total_count agrees with the rows.
+        const { data: allEdges, error: allError } = await db
+          .from("relationship_snapshots")
+          .select("*")
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId)
+          .order("last_observation_at", { ascending: false })
+          .order("relationship_key", { ascending: true });
+        if (allError) throw allError;
+        const kept = (await filterEdgesToScope((allEdges || []) as any[], userId)) ?? [];
+        result.total_count = kept.length;
+        result.has_more = offset + limit < kept.length;
+        const page = kept.slice(offset, offset + limit);
+        result.relationships = page;
+        result.narrowed_by_capability = true;
+        const relatedEntityIds = Array.from(
+          new Set(
+            page
+              .flatMap((r: any) => [r.source_entity_id, r.target_entity_id])
+              .filter((id: string) => typeof id === "string" && id.length > 0 && id !== node_id)
+          )
+        );
+        if (relatedEntityIds.length > 0) {
+          const { data: relatedEntities, error: relatedEntitiesError } = await db
+            .from("entities")
+            .select("*")
+            .in("id", relatedEntityIds)
+            .eq("user_id", userId);
+          if (!relatedEntitiesError) {
+            result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
+              entity_id: id,
+              id,
+              ...rest,
+            }));
+          }
+        }
+      } else if (include_relationships) {
         // Count total relationships for pagination metadata
         const { count: totalCount, error: countError } = await db
           .from("relationship_snapshots")
