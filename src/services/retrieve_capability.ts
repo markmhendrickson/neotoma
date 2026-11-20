@@ -234,3 +234,33 @@ export async function narrowTraversalToScope<E extends Edge>(
   reached.delete(rootId);
   return { edges: kept, entityIds: reached };
 }
+
+/**
+ * Keep only edges whose two endpoints are of types the scope allows (an
+ * endpoint whose type cannot be read is not allowed). Callers that page or
+ * count edges fetch the full matching set, filter, then count and page the
+ * filtered set, so `total` agrees with the rows. Returns `null` when no
+ * type-limited scope binds.
+ */
+export async function filterEdgesToScope<E extends Edge>(
+  edges: E[],
+  userId: string
+): Promise<E[] | null> {
+  const scope = currentRetrieveScope();
+  if (scope === null || scope.kind === "all") return null;
+  const types = await entityTypesById(
+    edges.flatMap((e) => [e.source_entity_id, e.target_entity_id]),
+    userId
+  );
+  const allowed = (id: string) => {
+    const t = types.get(id);
+    return t !== undefined && scope.types.includes(t);
+  };
+  return edges.filter((e) => allowed(e.source_entity_id) && allowed(e.target_entity_id));
+}
+
+/** True when a type-limited scope binds this request. */
+export function retrieveScopeIsTypeLimited(): boolean {
+  const scope = currentRetrieveScope();
+  return scope !== null && scope.kind === "types";
+}
