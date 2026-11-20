@@ -299,11 +299,18 @@ describe("MCP read log", () => {
     else process.env.NEOTOMA_ACCESS_LOG = savedEnv;
   });
 
-  function makeServer(executeTool: (name: string, args: unknown) => Promise<unknown>) {
+  function makeServer(
+    executeTool: (
+      name: string,
+      args: unknown,
+      original: (name: string, args: unknown) => Promise<unknown>
+    ) => Promise<unknown>
+  ) {
     const server = new NeotomaServer();
     const s = server as any;
     s.authenticatedUserId = "user-0001";
-    s.executeTool = executeTool;
+    const original = s.executeTool.bind(server);
+    s.executeTool = (name: string, args: unknown) => executeTool(name, args, original);
     const handler = s.mcpServer.server._requestHandlers.get("tools/call");
     const call = (name: string, args: unknown, admission: unknown) =>
       runWithRequestContext(
@@ -468,6 +475,191 @@ describe("MCP read log", () => {
     (server as any).executeTool = okResult;
     await server.executeToolForCli("retrieve_entities", {}, "user-0003");
     expect(lines).toHaveLength(0);
+  });
+});
+
+describe("read log for the submission and issue status helpers", () => {
+  let lines: string[];
+  let previous: ((line: string) => void) | null;
+
+  beforeEach(() => {
+    lines = [];
+    previous = setReadLogWriter((line) => lines.push(line));
+  });
+  afterEach(() => {
+    setReadLogWriter(previous);
+  });
+
+  const snapshotPayload = {
+    entity_id: "ent_issue_0001",
+    entity_type: "issue",
+    snapshot: { title: SECRET_TITLE, body: SECRET_NOTE, owner_id: "ent_ref_inside_snapshot" },
+  };
+  const issueStatusPayload = {
+    issue_entity_id: "ent_issue_0002",
+    issue_number: 7,
+    title: SECRET_TITLE,
+    status: "open",
+    labels: [],
+    github_url: "https://example.invalid/issues/7",
+    author: "synthetic-author",
+    created_at: "2026-01-02T03:04:05.000Z",
+    closed_at: null,
+    messages: [
+      { author: "synthetic-author", body: SECRET_NOTE, created_at: "2026-01-02T03:04:05.000Z" },
+    ],
+    synced: false,
+  };
+  const asText = (payload: unknown) => ({
+    content: [{ type: "text", text: JSON.stringify(payload) }],
+  });
+
+  function mcpCall(
+    executeTool: (
+      name: string,
+      args: unknown,
+      original: (name: string, args: unknown) => Promise<unknown>
+    ) => Promise<unknown>
+  ) {
+    const server = new NeotomaServer();
+    const s = server as any;
+    s.authenticatedUserId = "user-0001";
+    const original = s.executeTool.bind(server);
+    s.executeTool = (name: string, args: unknown) => executeTool(name, args, original);
+    const handler = s.mcpServer.server._requestHandlers.get("tools/call");
+    return (name: string, args: unknown) =>
+      runWithRequestContext(
+        {
+          agentIdentity: null,
+          aauthAdmission: null,
+          requestId: "req-synthetic-0002",
+          authMethod: "bearer_env",
+        },
+        () =>
+          handler(
+            { method: "tools/call", params: { name, arguments: args } },
+            {
+              signal: new AbortController().signal,
+              requestId: 1,
+              sendNotification: async () => {},
+              sendRequest: async () => ({}),
+            }
+          )
+      );
+  }
+
+  it("MCP get_entity_submission_status writes one line for the snapshot it returns", async () => {
+    const nested: string[] = [];
+    // The real handler runs; only the nested snapshot read is stubbed.
+    const call = mcpCall(async (name, args, original) => {
+      if (name === "retrieve_entity_snapshot") {
+        nested.push(name);
+        return asText(snapshotPayload);
+      }
+      return original(name, args);
+    });
+    await call("get_entity_submission_status", { entity_id: "ent_issue_0001" });
+    expect(nested).toEqual(["retrieve_entity_snapshot"]);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      surface: "mcp",
+      operation: "get_entity_submission_status",
+      status: "ok",
+      entity_types: { issue: 1 },
+      count: 1,
+      entity_ids: ["ent_issue_0001"],
+    });
+    expectNoContent(lines[0]!);
+  });
+
+  it("MCP list_entity_submissions writes one line with the types and count of the page", async () => {
+    const call = mcpCall(async (name, args, original) => {
+      if (name === "retrieve_entities") return asText(mixedResult);
+      return original(name, args);
+    });
+    await call("list_entity_submissions", { entity_type: "task", limit: 10 });
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      surface: "mcp",
+      operation: "list_entity_submissions",
+      status: "ok",
+      entity_types: { task: 2, issue: 1 },
+      count: 3,
+    });
+    expectNoContent(lines[0]!);
+  });
+
+  it("MCP get_issue_status writes one line naming the issue, without its messages", async () => {
+    const call = mcpCall(async (name, args, original) =>
+      name === "get_issue_status" ? asText(issueStatusPayload) : original(name, args)
+    );
+    await call("get_issue_status", { issue_number: 7 });
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      surface: "mcp",
+      operation: "get_issue_status",
+      status: "ok",
+      entity_types: { issue: 1 },
+      count: 1,
+      entity_ids: ["ent_issue_0002"],
+    });
+    expectNoContent(lines[0]!);
+  });
+
+  async function startHelperApp() {
+    const restLines: string[] = [];
+    const app = express();
+    app.use(express.json());
+    app.use(restReadLog({ write: (line) => restLines.push(line) }));
+    app.get("/submit/:entity_type/:entity_id", (_req, res) => res.json(snapshotPayload));
+    app.post("/issues/status", (_req, res) => res.json(issueStatusPayload));
+    const server = await new Promise<Server>((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    servers.push(server);
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const waitForLines = async () => {
+      for (let i = 0; i < 50 && restLines.length < 1; i++)
+        await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 30));
+      return restLines;
+    };
+    return { base, waitForLines };
+  }
+
+  it("REST GET /submit/{entity_type}/{entity_id} writes one line for the snapshot it returns", async () => {
+    const { base, waitForLines } = await startHelperApp();
+    const res = await fetch(`${base}/submit/issue/ent_issue_0001`);
+    expect(res.status).toBe(200);
+    const restLines = await waitForLines();
+    expect(restLines).toHaveLength(1);
+    expect(JSON.parse(restLines[0]!)).toMatchObject({
+      surface: "rest",
+      operation: "getEntitySubmissionStatus",
+      status: "ok",
+      http_status: 200,
+      entity_types: { issue: 1 },
+      count: 1,
+      entity_ids: ["ent_issue_0001"],
+    });
+    expectNoContent(restLines[0]!);
+  });
+
+  it("REST POST /issues/status writes one line naming the issue", async () => {
+    const { base, waitForLines } = await startHelperApp();
+    await fetch(`${base}/issues/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_number: 7 }),
+    });
+    const restLines = await waitForLines();
+    expect(restLines).toHaveLength(1);
+    expect(JSON.parse(restLines[0]!)).toMatchObject({
+      operation: "issuesGetStatus",
+      entity_types: { issue: 1 },
+      entity_ids: ["ent_issue_0002"],
+    });
+    expectNoContent(restLines[0]!);
   });
 });
 

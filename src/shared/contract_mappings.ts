@@ -286,6 +286,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
   {
     operationId: "issuesGetStatus",
+    readLog: true,
     method: "post",
     path: "/issues/status",
     adapter: "both",

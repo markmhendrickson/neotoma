@@ -18,11 +18,11 @@ import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 
 import {
+  READ_LOG_ROUTES,
   READ_RESOURCE_KINDS,
   READ_TOOL_NAMES,
   resourceReadOperation,
 } from "../../src/services/read_log.js";
-import { OPENAPI_OPERATION_MAPPINGS } from "../../src/shared/contract_mappings.js";
 import { NEOTOMA_TOOL_NAMES } from "../../src/tool_definitions.js";
 
 const ROOT = process.cwd();
@@ -277,11 +277,7 @@ function liveInventory(): Inventory {
 
 function liveClassification(): Classification {
   return {
-    loggedRoutes: new Set(
-      OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true).map((m) =>
-        routeKey(m.method, m.path)
-      )
-    ),
+    loggedRoutes: new Set(READ_LOG_ROUTES.map((m) => routeKey(m.method, m.path))),
     loggedTools: READ_TOOL_NAMES,
     loggedResourceKinds: READ_RESOURCE_KINDS,
     exclusions: parseExclusions(fs.readFileSync(DOC, "utf8")),

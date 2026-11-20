@@ -55,15 +55,46 @@ export function readLogEnabled(rawValue: string | undefined): boolean {
 }
 
 /**
- * MCP tool names that are reads: every `readLog` operation in
- * src/shared/contract_mappings.ts that has an MCP twin. Derived from the same
- * rows as `REST_READ_ROUTES`, so a read on one surface is a read on the other.
+ * Entity reads served outside the contract mappings: the submission status
+ * helpers. They return entity records (a snapshot, or a page of entities of
+ * one type) through the nested operations layer, which writes no read line
+ * of its own, so the outer call is logged here.
  */
-export const READ_TOOL_NAMES: ReadonlySet<string> = new Set(
-  OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true && m.mcpTool).map(
+const HELPER_READ_TOOL_NAMES = ["get_entity_submission_status", "list_entity_submissions"];
+const HELPER_READ_ROUTES: ReadonlyArray<{ method: string; path: string; operationId: string }> = [
+  {
+    method: "get",
+    path: "/submit/{entity_type}/{entity_id}",
+    operationId: "getEntitySubmissionStatus",
+  },
+];
+
+/**
+ * MCP tool names that are reads: every `readLog` operation in
+ * src/shared/contract_mappings.ts that has an MCP twin, plus the submission
+ * status helpers. Derived from the same rows as `REST_READ_ROUTES`, so a read
+ * on one surface is a read on the other.
+ */
+export const READ_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true && m.mcpTool).map(
     (m) => m.mcpTool as string
-  )
-);
+  ),
+  ...HELPER_READ_TOOL_NAMES,
+]);
+
+/**
+ * Logged REST reads as method, OpenAPI-style path and operation: every
+ * `readLog` operation in the contract mappings, then the helper routes.
+ */
+export const READ_LOG_ROUTES: ReadonlyArray<{ method: string; path: string; operationId: string }> =
+  [
+    ...OPENAPI_OPERATION_MAPPINGS.filter((m) => m.readLog === true).map((m) => ({
+      method: m.method,
+      path: m.path,
+      operationId: m.operationId,
+    })),
+    ...HELPER_READ_ROUTES,
+  ];
 
 /**
  * MCP `resources/read` kinds (the `type` from `parseResourceUri` in
@@ -123,10 +154,10 @@ function paramCount(path: string): number {
  * is not taken for `/entities/{id}`). The logged operation is the
  * `operationId`. Matched on method and path, before or after auth runs.
  */
-export const REST_READ_ROUTES: readonly RestReadRoute[] = OPENAPI_OPERATION_MAPPINGS.filter(
-  (m) => m.readLog === true
-)
-  .map((m, index) => ({ m, index }))
+export const REST_READ_ROUTES: readonly RestReadRoute[] = READ_LOG_ROUTES.map((m, index) => ({
+  m,
+  index,
+}))
   .sort((a, b) => paramCount(a.m.path) - paramCount(b.m.path) || a.index - b.index)
   .map(({ m }) => ({
     method: m.method.toUpperCase(),
@@ -206,8 +237,28 @@ export interface ReadLogInput {
   now?: Date;
 }
 
+/** Issue status reads (REST and MCP), whose result names its issue as `issue_entity_id`. */
+const ISSUE_STATUS_OPERATIONS = new Set(["issuesGetStatus", "get_issue_status"]);
+
+/**
+ * The returned entities of a read result. An issue status result carries the
+ * issue's id as `issue_entity_id` with no `entity_type`, so it is read as one
+ * `issue` entity; its messages carry no entity ids.
+ */
+function returnedEntities(operation: string, result: unknown): Array<{ id: string; type: string }> {
+  if (
+    ISSUE_STATUS_OPERATIONS.has(operation) &&
+    isRecord(result) &&
+    typeof result.issue_entity_id === "string" &&
+    result.issue_entity_id.length > 0
+  ) {
+    return [{ id: result.issue_entity_id, type: "issue" }];
+  }
+  return collectReturnedEntities(result);
+}
+
 export function buildReadLogRecord(input: ReadLogInput): ReadLogRecord {
-  const entities = input.status === "ok" ? collectReturnedEntities(input.result) : [];
+  const entities = input.status === "ok" ? returnedEntities(input.operation, input.result) : [];
   const entityTypes: Record<string, number> = {};
   for (const entity of entities) {
     entityTypes[entity.type] = (entityTypes[entity.type] ?? 0) + 1;

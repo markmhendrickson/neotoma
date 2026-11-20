@@ -223,7 +223,6 @@ The read log covers the general entity read operations only; it does not cover e
 | `GET /conversations/{conversation_id}/turn-index` | rest    | Conversation turn index                                                       |
 | `GET /turns`                                      | rest    | Returns conversation turns, not entity records                                |
 | `GET /turns/{turn_key}`                           | rest    | Returns a conversation turn, not entity records                               |
-| `GET /submit/{entity_type}/{entity_id}`           | rest    | Submission status helper                                                      |
 | `GET /admin/compliance/scorecard`                 | rest    | Compliance statistics                                                         |
 | `GET /agents`                                     | rest    | Agent directory, not entity records                                           |
 | `GET /agents/{key}`                               | rest    | One agent directory entry                                                     |
@@ -250,7 +249,6 @@ The read log covers the general entity read operations only; it does not cover e
 | `POST /health_check_snapshots`                    | rest    | Health statistics                                                             |
 | `POST /list_subscriptions`                        | rest    | Subscription configuration                                                    |
 | `POST /get_subscription_status`                   | rest    | Subscription configuration                                                    |
-| `POST /issues/status`                             | rest    | Issue status helper                                                           |
 | `POST /api/issues/status`                         | rest    | Legacy alias of `POST /issues/status`; follow-up candidate                    |
 | `POST /sync/entities`                             | rest    | Peer sync between verified peers of the same instance, not an agent read      |
 | `retrieve_file_url`                               | mcp     | Returns a signed file URL, not entity records                                 |
@@ -267,9 +265,6 @@ The read log covers the general entity read operations only; it does not cover e
 | `get_authenticated_user`                          | mcp     | The caller's own session details                                              |
 | `get_session_identity`                            | mcp     | The caller's own session details                                              |
 | `health_check_snapshots`                          | mcp     | Health statistics                                                             |
-| `get_issue_status`                                | mcp     | Issue status helper                                                           |
-| `get_entity_submission_status`                    | mcp     | Submission status helper                                                      |
-| `list_entity_submissions`                         | mcp     | Submission status helper                                                      |
 | `list_subscriptions`                              | mcp     | Subscription configuration                                                    |
 | `get_subscription_status`                         | mcp     | Subscription configuration                                                    |
 | `list_peers`                                      | mcp     | Peer configuration                                                            |
