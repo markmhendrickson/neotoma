@@ -329,6 +329,7 @@ import {
   resolveAccessLogFormat,
   setRequestAuthMethod,
 } from "./services/access_log.js";
+import { readLogEnabled, restReadLog } from "./services/read_log.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -507,6 +508,13 @@ if (accessLogFormat === "json") {
       skip: (req) => exactIdentityRequested(req.query),
     })
   );
+}
+// Per-call read log (src/services/read_log.ts): one JSON line per read
+// request listing the entities it returned. Shares the `NEOTOMA_ACCESS_LOG`
+// setting and is off only when that setting is `off`. The MCP and CLI
+// surfaces write the same line from the tool dispatcher in src/server.ts.
+if (readLogEnabled(runtimeEnv().NEOTOMA_ACCESS_LOG)) {
+  app.use(restReadLog());
 }
 app.use(cookieParser());
 app.use(unknownFieldsGuard);
@@ -1606,6 +1614,18 @@ function unmapIPv4(ip: string): string {
 }
 
 /**
+ * Request id and auth method label the access log carries, for the MCP read
+ * log line (src/services/read_log.ts) written from inside the tool dispatcher.
+ */
+function readLogRequestFields(req: express.Request): {
+  requestId: string | null;
+  authMethod: string | null;
+} {
+  const r = req as express.Request & { requestId?: string; authMethod?: string };
+  return { requestId: r.requestId ?? null, authMethod: r.authMethod ?? null };
+}
+
+/**
  * Client and peer addresses for the access log (src/services/access_log.ts).
  *
  * `peer_ip` is always the connecting socket address. `client_ip` starts as the
@@ -2602,6 +2622,7 @@ app.all("/mcp", async (req, res) => {
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
           mcpConnectionId: connectionIdHeader ?? null,
+          ...readLogRequestFields(req),
         },
         () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
       );
@@ -2789,6 +2810,7 @@ app.all("/mcp", async (req, res) => {
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
         mcpLookupTiming,
+        ...readLogRequestFields(req),
       },
       () => transport!.handleRequest(req, res, req.body)
     );
