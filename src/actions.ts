@@ -334,7 +334,12 @@ import {
   resolveAccessLogFormat,
   setRequestAuthMethod,
 } from "./services/access_log.js";
-import { installHttpReadLogWriter, readLogEnabled, restReadLog } from "./services/read_log.js";
+import {
+  installHttpReadLogWriter,
+  readLogEnabled,
+  restReadLog,
+  restReadLogPlainBody,
+} from "./services/read_log.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -5481,6 +5486,10 @@ app.use(restAuthMiddleware);
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+// Read log body capture below encryption (src/services/read_log.ts): records
+// the plain body's entity ids and types for the read line, so an encrypted
+// response is not logged as an empty read. Never changes the response.
+app.use(restReadLogPlainBody());
 
 // #2240: member write-attribution (`provenance.authenticated_actor_id`) is for
 // members of the graph, not for a guest holding an entity-scoped token. Wrap

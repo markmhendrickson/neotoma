@@ -281,11 +281,49 @@ function restStatus(httpStatus: number): ReadStatus {
   return "error";
 }
 
+/** Key in `res.locals` holding the body captured for the read line. */
+const READ_LOG_CAPTURE = "neotomaReadLogCapture";
+
+interface ReadLogCapture {
+  body: unknown;
+  /** True once the plain body was captured below response encryption. */
+  plain: boolean;
+}
+
+/**
+ * Companion to `restReadLog`, installed after the response-encryption
+ * middleware (src/middleware/encrypt_response.ts). Express wrappers on
+ * `res.json` run last-installed first, so this wrapper sees the plain body
+ * before encryption replaces it with an envelope. It records the body for the
+ * read line only; it never changes what is sent. A no-op for requests that
+ * are not read routes.
+ */
+export function restReadLogPlainBody(): RequestHandler {
+  return (_req: Request, res: Response, next: NextFunction): void => {
+    const capture = res.locals[READ_LOG_CAPTURE] as ReadLogCapture | undefined;
+    if (capture === undefined) {
+      next();
+      return;
+    }
+    const encryptedJson = res.json.bind(res);
+    res.json = ((payload: unknown) => {
+      if (!capture.plain) {
+        capture.body = payload;
+        capture.plain = true;
+      }
+      return encryptedJson(payload);
+    }) as Response["json"];
+    next();
+  };
+}
+
 /**
  * Express middleware for the REST surface. For a request matching a read
  * route it captures the JSON body passed to `res.json` and writes one line
  * when the response finishes. Install after the access log (so the request
- * id exists) and before the auth middleware (so a refused read is logged).
+ * id exists) and before the auth middleware (so a refused read is logged),
+ * and install `restReadLogPlainBody` after the response-encryption
+ * middleware so an encrypted response is logged from its plain body.
  */
 export function restReadLog(opts: { write?: (line: string) => void } = {}): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -294,10 +332,15 @@ export function restReadLog(opts: { write?: (line: string) => void } = {}): Requ
       next();
       return;
     }
-    let body: unknown;
+    const capture: ReadLogCapture = { body: undefined, plain: false };
+    res.locals[READ_LOG_CAPTURE] = capture;
     const originalJson = res.json.bind(res);
     res.json = ((payload: unknown) => {
-      body = payload;
+      // Keep the body captured below response encryption when there is one:
+      // the payload reaching this outer wrapper is then the encrypted
+      // envelope. This wrapper alone sees responses sent before the inner
+      // capture is installed (for example an auth refusal).
+      if (!capture.plain) capture.body = payload;
       return originalJson(payload);
     }) as Response["json"];
     let written = false;
@@ -315,7 +358,7 @@ export function restReadLog(opts: { write?: (line: string) => void } = {}): Requ
         authMethod: r.authMethod ?? "none",
         status: restStatus(httpStatus),
         httpStatus,
-        result: body,
+        result: capture.body,
         queryLength: searchQueryLength(req.method === "GET" ? req.query : req.body),
       };
       if (opts.write) {

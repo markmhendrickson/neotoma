@@ -14,8 +14,11 @@ import {
   readLogEnabled,
   readRoutePattern,
   restReadLog,
+  restReadLogPlainBody,
   setReadLogWriter,
 } from "../../src/services/read_log.js";
+import { encryptResponseMiddleware } from "../../src/middleware/encrypt_response.js";
+import { generateX25519KeyPair } from "../../src/crypto/keys.js";
 import { OPENAPI_OPERATION_MAPPINGS } from "../../src/shared/contract_mappings.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
 import { NeotomaServer } from "../../src/server.js";
@@ -408,5 +411,66 @@ describe("read routes derived from the contract mappings", () => {
     expect(matchRestReadRoute("GET", "/entities/ent_1/markdown")).toBeNull();
     expect(matchRestReadRoute("GET", "/entities/ent_1/html")).toBeNull();
     expect(READ_TOOL_NAMES.has("list_interpretations")).toBe(false);
+  });
+});
+
+describe("REST read log with response encryption", () => {
+  // Same order as src/actions.ts: read log, auth (sets the client key),
+  // encryption, then the plain-body capture installed below encryption.
+  async function startEncryptedApp() {
+    const lines: string[] = [];
+    const { publicKey } = await generateX25519KeyPair();
+    const app = express();
+    app.use(express.json());
+    app.use(restReadLog({ write: (line) => lines.push(line) }));
+    app.use((req, _res, next) => {
+      (req as express.Request & { publicKey?: Uint8Array }).publicKey = publicKey;
+      (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId = "user-0001";
+      next();
+    });
+    app.use(encryptResponseMiddleware);
+    app.use(restReadLogPlainBody());
+    app.post("/entities/query", (_req, res) => res.json(mixedResult));
+    const server = await new Promise<Server>((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    servers.push(server);
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return { base, lines };
+  }
+
+  it("logs the types and count of an encrypted response from its plain body", async () => {
+    const { base, lines } = await startEncryptedApp();
+    const res = await fetch(`${base}/entities/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-encrypt-response": "true" },
+      body: "{}",
+    });
+    expect(res.status).toBe(200);
+    const sent = (await res.json()) as Record<string, unknown>;
+    // The client receives the envelope, not the entities.
+    expect(typeof sent.encryptedPayload).toBe("string");
+    for (let i = 0; i < 50 && lines.length < 1; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      operation: "queryEntities",
+      status: "ok",
+      entity_types: { task: 2, issue: 1 },
+      count: 3,
+      entity_ids: ["ent_task_0001", "ent_task_0002", "ent_issue_0001"],
+    });
+    expectNoContent(lines[0]!);
+  });
+
+  it("is a no-op on routes that are not reads", async () => {
+    const app = express();
+    app.use(restReadLogPlainBody());
+    app.get("/health", (_req, res) => res.json({ ok: true }));
+    const server = await new Promise<Server>((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    servers.push(server);
+    const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/health`);
+    expect(await res.json()).toEqual({ ok: true });
   });
 });
