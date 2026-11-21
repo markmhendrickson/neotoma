@@ -17695,8 +17695,7 @@ snapshotsCommand
       const outputMode = resolveOutputMode();
       const { runEntitySearchTextBackfill } =
         await import("../services/entity_search_text_backfill.js");
-      const flagName = (opt: string) =>
-        "--" + opt.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+      const flagName = (opt: string) => "--" + opt.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
       const settings: Record<string, number> = {};
       const numeric: Array<[keyof typeof opts, string]> = [
         ["batchSize", "batchSize"],
