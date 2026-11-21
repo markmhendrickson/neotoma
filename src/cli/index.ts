@@ -17670,16 +17670,33 @@ snapshotsCommand
     "A batch slower than this pauses slow-pause-factor times its duration"
   )
   .option("--stop-batch-ms <n>", "Stop after consecutive batches slower than this")
+  .option(
+    "--max-batches <n>",
+    "Bounded verification: commit at most this many batches (checked before each batch begins)"
+  )
+  .option(
+    "--max-active-seconds <n>",
+    "Bounded verification: active-time budget from just before the first batch; a batch still running at the deadline rolls back"
+  )
+  .option(
+    "--max-init-seconds <n>",
+    "Bounded verification: stop before any batch if database init plus the initial count took longer"
+  )
   .action(
     async (opts: {
       batchSize?: string;
       rowsPerSecond?: string;
       slowBatchMs?: string;
       stopBatchMs?: string;
+      maxBatches?: string;
+      maxActiveSeconds?: string;
+      maxInitSeconds?: string;
     }) => {
       const outputMode = resolveOutputMode();
       const { runEntitySearchTextBackfill } =
         await import("../services/entity_search_text_backfill.js");
+      const flagName = (opt: string) =>
+        "--" + opt.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
       const settings: Record<string, number> = {};
       const numeric: Array<[keyof typeof opts, string]> = [
         ["batchSize", "batchSize"],
@@ -17691,21 +17708,50 @@ snapshotsCommand
         if (opts[opt] === undefined) continue;
         const n = Number(opts[opt]);
         if (!Number.isFinite(n) || n <= 0) {
-          process.stderr.write(
-            `Error: --${String(opt).replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())} must be a positive number\n`
-          );
+          process.stderr.write(`Error: ${flagName(String(opt))} must be a positive number\n`);
           process.exitCode = 1;
           return;
         }
         settings[key] = n;
       }
+      // Bounded verification caps. Any one selects bounded mode; a bad value
+      // fails here, before the database is opened.
+      const limits: { maxBatches?: number; maxActiveMs?: number; maxInitMs?: number } = {};
+      const limitFlags: Array<[keyof typeof opts, keyof typeof limits, number]> = [
+        ["maxBatches", "maxBatches", 1],
+        ["maxActiveSeconds", "maxActiveMs", 1000],
+        ["maxInitSeconds", "maxInitMs", 1000],
+      ];
+      for (const [opt, key, scale] of limitFlags) {
+        if (opts[opt] === undefined) continue;
+        const n = Number(opts[opt]);
+        const integer = key === "maxBatches";
+        if (!Number.isFinite(n) || n <= 0 || (integer && !Number.isInteger(n))) {
+          process.stderr.write(
+            `Error: ${flagName(String(opt))} must be a positive ${integer ? "integer" : "number"}\n`
+          );
+          process.exitCode = 1;
+          return;
+        }
+        limits[key] = n * scale;
+      }
+      const bounded = Object.keys(limits).length > 0;
+      // Bounded mode: one metadata-only JSON line per phase on stderr, so a
+      // supervisor can tell init from active work whatever the output mode.
+      const onPhase = (event: object) => {
+        process.stderr.write(
+          JSON.stringify({ event: "search_text_backfill_phase", pid: process.pid, ...event }) + "\n"
+        );
+      };
       const controller = new AbortController();
       const onSignal = () => controller.abort();
       process.once("SIGINT", onSignal);
+      if (bounded) process.once("SIGTERM", onSignal);
       try {
         const report = await runEntitySearchTextBackfill({
           settings,
           signal: controller.signal,
+          ...(bounded ? { limits, onPhase } : {}),
           onProgress: (p) => {
             if (outputMode === "json") return;
             process.stdout.write(
@@ -17725,6 +17771,7 @@ snapshotsCommand
         }
       } finally {
         process.removeListener("SIGINT", onSignal);
+        process.removeListener("SIGTERM", onSignal);
       }
     }
   );
