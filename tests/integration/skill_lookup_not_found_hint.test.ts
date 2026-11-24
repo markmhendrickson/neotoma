@@ -24,6 +24,10 @@ const API_BASE = `http://127.0.0.1:${API_PORT}`;
 const MISSING_NAME = `absent-skill-${Date.now()}`;
 const PRESENT_NAME = `present-skill-${Date.now()}`;
 const PRESENT_ID = `ent_skillhint${Date.now().toString(16)}`;
+const OTHER_USER_ID = "00000000-0000-0000-0000-000000000002";
+const OTHER_USER_NAME = `other-user-skill-${Date.now()}`;
+const OTHER_USER_SKILL_ID = `ent_0${Date.now().toString(16)}`;
+const MISSING_ENTITY_ID = `ent_f${Date.now().toString(16)}`;
 
 type LookupBody = { entities: unknown[]; total: number; hint?: string };
 
@@ -70,6 +74,12 @@ describe("skill lookup by name: not-found hint (REST and MCP)", () => {
           entity_type: "skill",
           canonical_name: normalizeEntityValue("skill", PRESENT_NAME),
         },
+        {
+          id: OTHER_USER_SKILL_ID,
+          user_id: OTHER_USER_ID,
+          entity_type: "skill",
+          canonical_name: normalizeEntityValue("skill", OTHER_USER_NAME),
+        },
       ]);
     expect(error).toBeNull();
   });
@@ -77,6 +87,8 @@ describe("skill lookup by name: not-found hint (REST and MCP)", () => {
   afterAll(async () => {
     await db.from("entity_snapshots").delete().eq("entity_id", PRESENT_ID);
     await db.from("entities").delete().eq("id", PRESENT_ID);
+    await db.from("entity_snapshots").delete().eq("entity_id", OTHER_USER_SKILL_ID);
+    await db.from("entities").delete().eq("id", OTHER_USER_SKILL_ID);
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   });
 
@@ -108,6 +120,28 @@ describe("skill lookup by name: not-found hint (REST and MCP)", () => {
     for (const body of [await restLookup(args), await mcpLookup(server, args)]) {
       expect(body.total).toBe(0);
       expect(body.hint).toBeUndefined();
+    }
+  });
+
+  it("preserves the entity-id hint for an id-shaped skill lookup", async () => {
+    const args = { identifier: MISSING_ENTITY_ID, entity_type: "skill" };
+    for (const body of [await restLookup(args), await mcpLookup(server, args)]) {
+      expect(body.total).toBe(0);
+      expect(body.entities).toEqual([]);
+      expect(body.hint).toContain("retrieve_entity_snapshot(entity_id=…)");
+      expect(body.hint).not.toContain("no skill with that name");
+    }
+  });
+
+  it("an other user's skill yields a hint naming only the caller", async () => {
+    const args = { identifier: OTHER_USER_NAME, entity_type: "skill" };
+    for (const body of [await restLookup(args), await mcpLookup(server, args)]) {
+      expect(body.total).toBe(0);
+      expect(body.entities).toEqual([]);
+      expect(body.hint).toBe(skillNotFoundHint(USER_ID));
+      expect(body.hint).toContain(`user_id ${USER_ID}`);
+      expect(body.hint).not.toContain(OTHER_USER_ID);
+      expect(body.hint).not.toContain(OTHER_USER_NAME);
     }
   });
 });

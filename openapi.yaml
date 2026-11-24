@@ -7593,8 +7593,8 @@ paths:
                       `skill` and nothing matched: it says no skill with that
                       name is stored in the graph being read, names the
                       caller's user id, and suggests comparing
-                      `get_authenticated_user` with the owner of the team's
-                      records. Omitted for every other result.
+                      `get_authenticated_user` with the account that owns the graph the
+                      instructions came from. Omitted for every other result.
         "400":
           description: Invalid request
           content:
