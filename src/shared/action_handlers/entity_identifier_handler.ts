@@ -216,9 +216,12 @@ export async function retrieveEntityByIdentifierWithFallback(
   }
   // Skill names are what session instructions point agents at, so an empty
   // skill lookup says which graph was read rather than returning a bare empty
-  // result. This per-type branch is for a platform type seeded by the server
-  // and already handled specially in instance_skills.ts and
-  // remote_snapshot_admission.ts. An existing id-shaped hint takes precedence.
+  // result. An existing id-shaped hint takes precedence.
+  // Per-type branch allowed under docs/foundation/schema_agnostic_design_rules.md
+  // Step 3: `skill` is a platform type the server seeds and already handles
+  // specially (src/services/skills/instance_skills.ts,
+  // src/services/sync/remote_snapshot_admission.ts). If a second type ever needs a
+  // not-found hint, replace this branch with a SchemaDefinition declaration.
   if (params.entityType === SKILL_ENTITY_TYPE && result.total === 0 && !result.hint) {
     return { ...result, hint: skillNotFoundHint(params.userId) };
   }
