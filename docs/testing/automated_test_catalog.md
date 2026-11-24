@@ -743,6 +743,7 @@ flowchart TD
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/shared_graph_identity.test.ts`
 - `tests/integration/shared_graph_write_attribution.test.ts`
+- `tests/integration/skill_lookup_not_found_hint.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
