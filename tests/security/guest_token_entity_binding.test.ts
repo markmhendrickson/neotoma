@@ -927,6 +927,63 @@ describe("guest subscription and event routes", () => {
   });
 });
 
+describe.each(POLICIES)("guest subscription and event routes under policy %s", (policy) => {
+  async function jsonPost(path: string, token: string, body: Record<string, unknown>) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "x-forwarded-for": "203.0.113.9",
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: await response.text() };
+  }
+
+  it("a token for page A is refused for page B's subscription on every route", async () => {
+    process.env[POLICY_ENV] = policy;
+    const a = await createPage("Page SP1", `SP1-${policy}`);
+    const b = await createPage("Page SP2", `SP2-${policy}`);
+    const tokenA = await mint(a);
+    const tokenB = await mint(b);
+    const created = await jsonPost("/subscribe", tokenB, {
+      entity_ids: [b],
+      delivery_method: "sse",
+    });
+    expect(created.status, created.body).toBe(200);
+    const subscriptionId = (JSON.parse(created.body) as { subscription_id: string })
+      .subscription_id;
+
+    const outOfGrant = [
+      { path: "/subscribe", body: { entity_ids: [b], delivery_method: "sse" } },
+      { path: "/unsubscribe", body: { subscription_id: subscriptionId } },
+      { path: "/get_subscription_status", body: { subscription_id: subscriptionId } },
+    ];
+    for (const route of outOfGrant) {
+      const res = await jsonPost(route.path, tokenA, route.body);
+      expect(res.status, `${policy} ${route.path}`).toBe(403);
+      expect(res.body).not.toContain(b);
+      expectScopeBody(res.body);
+    }
+    const listed = await jsonPost("/list_subscriptions", tokenA, {});
+    expect(listed.status, listed.body).toBe(200);
+    expect(listed.body).not.toContain(subscriptionId);
+    const stream = await fetch(`${baseUrl}/events/stream?subscription_id=${subscriptionId}`, {
+      headers: { Authorization: `Bearer ${tokenA}`, "x-forwarded-for": "203.0.113.9" },
+    });
+    expect(stream.status).toBe(403);
+    expectScopeBody(await stream.text());
+
+    // The token for page A still manages its own page's subscription.
+    const own = await jsonPost("/subscribe", tokenA, { entity_ids: [a], delivery_method: "sse" });
+    expect(own.status, own.body).toBe(200);
+    const ownId = (JSON.parse(own.body) as { subscription_id: string }).subscription_id;
+    expect((await jsonPost("/unsubscribe", tokenA, { subscription_id: ownId })).status).toBe(200);
+    await jsonPost("/unsubscribe", tokenB, { subscription_id: subscriptionId });
+  });
+});
+
 describe("guest token validation", () => {
   it("a later record cannot lift a revocation or extend the lifetime", async () => {
     const a = await createPage("Page V", "V");
