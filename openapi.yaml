@@ -7589,7 +7589,12 @@ paths:
                       for the caller (`match_mode: "none"`, `total: 0`). Tells
                       the caller the input looks like an entity_id and that
                       `retrieve_entity_snapshot(entity_id=…)` is the direct
-                      fetch path (#1597). Omitted for every other result.
+                      fetch path (#1597). Also present when `entity_type` is
+                      `skill` and nothing matched: it says no skill with that
+                      name is stored in the graph being read, names the
+                      caller's user id, and suggests comparing
+                      `get_authenticated_user` with the account that owns the graph the
+                      instructions came from. Omitted for every other result.
         "400":
           description: Invalid request
           content:
