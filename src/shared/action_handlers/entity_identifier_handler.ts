@@ -99,7 +99,7 @@ export const ENTITY_ID_NOT_FOUND_HINT =
 export function skillNotFoundHint(userId: string): string {
   return (
     `no skill with that name is stored in the graph you are reading (user_id ${userId}); ` +
-    "call get_authenticated_user and compare its user_id with the owner of the team's records"
+    "call get_authenticated_user and compare its user_id with the account that owns the graph the instructions came from"
   );
 }
 
@@ -216,9 +216,9 @@ export async function retrieveEntityByIdentifierWithFallback(
   }
   // Skill names are what session instructions point agents at, so an empty
   // skill lookup says which graph was read rather than returning a bare empty
-  // result. Keyed on the skill type by design (not a per-type data behavior;
-  // see docs/foundation/schema_agnostic_design_rules.md Step 3). An existing
-  // hint (id-shaped identifier) takes precedence.
+  // result. This per-type branch is for a platform type seeded by the server
+  // and already handled specially in instance_skills.ts and
+  // remote_snapshot_admission.ts. An existing id-shaped hint takes precedence.
   if (params.entityType === SKILL_ENTITY_TYPE && result.total === 0 && !result.hint) {
     return { ...result, hint: skillNotFoundHint(params.userId) };
   }
