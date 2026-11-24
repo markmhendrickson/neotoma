@@ -9,6 +9,7 @@ import {
 } from "../../services/entity_resolution.js";
 import { resolveIdentitySearchFields } from "../../services/schema_registry.js";
 import { logger } from "../../utils/logger.js";
+import { SKILL_ENTITY_TYPE } from "../../services/skills/seed_schema.js";
 
 type RetrievedEntity = {
   id: string;
@@ -64,8 +65,9 @@ export interface RetrieveEntityByIdentifierResult {
   match_mode: IdentifierMatchMode;
   /**
    * Present only when `identifier` is shaped like an entity_id (`ent_<hex>`)
-   * but no entity with that id exists for the caller. Points the caller at the
-   * direct-fetch path instead of leaving a silent empty result (#1597).
+   * but no entity with that id exists for the caller, pointing at the
+   * direct-fetch path (#1597); or when a `skill` lookup finds nothing, naming
+   * the caller's user id so the empty result is explained.
    */
   hint?: string;
 }
@@ -86,6 +88,20 @@ const ENTITY_ID_PATTERN = /^ent_[0-9a-f]+$/i;
  */
 export const ENTITY_ID_NOT_FOUND_HINT =
   "identifier looks like an entity_id; use retrieve_entity_snapshot(entity_id=…) for direct fetch";
+
+/**
+ * Returned (as `hint`) when a lookup with `entity_type: "skill"` finds
+ * nothing. Session instructions can name a skill that the reading user's graph
+ * does not hold (for example, a skill stored under the account that owns a
+ * team's records), and a bare empty result gives no clue why. The hint names
+ * only the caller's own user id, never any stored content.
+ */
+export function skillNotFoundHint(userId: string): string {
+  return (
+    `no skill with that name is stored in the graph you are reading (user_id ${userId}); ` +
+    "call get_authenticated_user and compare its user_id with the account that owns the graph the instructions came from"
+  );
+}
 
 /**
  * Generic identity-bearing snapshot fields scanned for ALL entity types when
@@ -197,6 +213,17 @@ export async function retrieveEntityByIdentifierWithFallback(
   // path matches an `ent_...` identifier regardless of `entityType`.
   if (result.entities.length > 0) {
     enforceRetrieveForEntityTypes(result.entities.map((entity) => entity.entity_type));
+  }
+  // Skill names are what session instructions point agents at, so an empty
+  // skill lookup says which graph was read rather than returning a bare empty
+  // result. An existing id-shaped hint takes precedence.
+  // Per-type branch allowed under docs/foundation/schema_agnostic_design_rules.md
+  // Step 3: `skill` is a platform type the server seeds and already handles
+  // specially (src/services/skills/instance_skills.ts,
+  // src/services/sync/remote_snapshot_admission.ts). If a second type ever needs a
+  // not-found hint, replace this branch with a SchemaDefinition declaration.
+  if (params.entityType === SKILL_ENTITY_TYPE && result.total === 0 && !result.hint) {
+    return { ...result, hint: skillNotFoundHint(params.userId) };
   }
   return result;
 }
