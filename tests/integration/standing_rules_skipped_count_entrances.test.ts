@@ -67,6 +67,11 @@ const SYNTHETIC_BEARER = "synthetic-skipped-count-bearer-token";
 const SKIPPED_LINE = (n: number) =>
   `${n} stored standing rule${n === 1 ? "" : "s"} could not be applied because ` +
   `${n === 1 ? "it has" : "they have"} no rule text.`;
+/**
+ * The rendered skipped-rule line, with its count. Matching the bare phrase
+ * "could not be applied" is not enough: the base instructions mention it too.
+ */
+const SKIPPED_LINE_PATTERN = /\d+ stored standing rules? could not be applied/;
 
 const CASES: Array<{ name: string; result: StandingRulesLookupResult; count: number }> = [
   {
@@ -93,7 +98,7 @@ function expectSkippedLine(instructions: string, count: number, hasRule: boolean
   const block = rulesBlock(instructions);
   expect(block).toContain(SKIPPED_LINE(count));
   // Count only: the line names no rule and no id.
-  const line = block.split("\n").find((l) => l.includes("could not be applied"));
+  const line = block.split("\n").find((l) => SKIPPED_LINE_PATTERN.test(l));
   expect(line).toBeDefined();
   expect(line).not.toContain("ent_");
   expect(line).not.toContain("Synthetic");
@@ -178,9 +183,9 @@ describe("skipped standing rules on initialize and REST", { timeout: 60_000 }, (
   it("no line and no serverInfo field when nothing was skipped", async () => {
     state.result = { rules: [RULE], lookup_failed: false };
     const result = await initializeResult();
-    expect(result.instructions).not.toContain("could not be applied");
+    expect(result.instructions).not.toMatch(SKIPPED_LINE_PATTERN);
     expect("standing_rules_skipped" in (result.serverInfo._neotoma ?? {})).toBe(false);
-    expect(await restText()).not.toContain("could not be applied");
+    expect(await restText()).not.toMatch(SKIPPED_LINE_PATTERN);
   });
 });
 
@@ -223,6 +228,6 @@ describe("skipped standing rules on authenticated server/discover", { timeout: 6
 
   it("discover carries no line when nothing was skipped", async () => {
     state.result = { rules: [RULE], lookup_failed: false };
-    expect(await discoverInstructions()).not.toContain("could not be applied");
+    expect(await discoverInstructions()).not.toMatch(SKIPPED_LINE_PATTERN);
   });
 });
