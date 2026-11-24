@@ -886,17 +886,29 @@ export class NeotomaServer {
     // Rules come only from the identity THIS request's credentials resolved
     // to (see handleStatelessRequest). An authenticated request whose user id
     // cannot be resolved reports the rules as unknown, never as none.
-    const standingRulesSection = this.statelessRequestAuthenticated
-      ? renderStandingRulesSectionForLookup(
-          await this.lookupStandingRulesForInstructions(await this.resolveInstructionLookupUserId())
-        )
-      : STANDING_RULES_AFTER_AUTHENTICATION_NOTICE;
+    // Instance skills follow the same rule: an authenticated request gets the
+    // same `[INSTANCE SKILLS]` section a session `initialize` would, from the
+    // shared helper; an unauthenticated build carries no per-user skills.
+    let standingRulesSection: string | null;
+    let skillsSection: string | null = null;
+    if (this.statelessRequestAuthenticated) {
+      const lookupUserId = await this.resolveInstructionLookupUserId();
+      standingRulesSection = renderStandingRulesSectionForLookup(
+        await this.lookupStandingRulesForInstructions(lookupUserId)
+      );
+      skillsSection = (await this.composeInstanceSkillsForInstructions(lookupUserId)).skillsSection;
+    } else {
+      standingRulesSection = STANDING_RULES_AFTER_AUTHENTICATION_NOTICE;
+    }
     return {
       resultType: "complete",
       supportedVersions: [...MCP_MODERN_SUPPORTED_VERSIONS],
       capabilities: { ...NEOTOMA_MCP_DECLARED_CAPABILITIES },
       instructions: prependClientInstructionsSection(
-        composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+        composeClientInstructions(
+          composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+          skillsSection
+        ),
         standingRulesSection
       ),
       ttlMs: MCP_STATELESS_CACHE_HINT.ttlMs,
@@ -1318,44 +1330,19 @@ export class NeotomaServer {
     return { rules: result.rules, lookup_failed: result.lookup_failed };
   }
 
-  private async composeSessionInstructions(
-    baseInstructions: string,
-    lookupUserId: string | null
-  ): Promise<{
-    instructions: string;
-    standingRules: StandingRule[];
-    standingRulesLookupFailed: boolean;
+  /**
+   * The instance-skills half of the session instructions: the
+   * `[INSTANCE SKILLS]` section text, the merged `available_skills` list and
+   * whether the graph read failed. Shared by session `initialize`
+   * ({@link composeSessionInstructions}) and authenticated stateless
+   * `server/discover` ({@link buildDiscoverResult}) so the two cannot drift.
+   * A null `lookupUserId` is an unknown identity and reports a failed read.
+   */
+  private async composeInstanceSkillsForInstructions(lookupUserId: string | null): Promise<{
+    skillsSection: string | null;
     availableSkills: string[];
     instanceSkillsLookupFailed: boolean;
   }> {
-    // Append this instance's declared data policy (#1974) so a cooperating
-    // agent knows what this instance is for before its first write, rather than
-    // discovering the rules by being rejected. A read failure or an unset
-    // policy yields an empty section, leaving the instructions byte-identical
-    // to what they were before this feature — the handshake must never fail
-    // because a policy lookup did.
-    let policySection = "";
-    try {
-      const { getInstancePolicy, renderInstancePolicyInstructions } =
-        await import("./services/instance_policy.js");
-      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
-    } catch (err) {
-      logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
-    }
-    // Deferred until the instance-skills section is rendered below, so both
-    // appended sections compose through the same helper rather than one going
-    // through it and the other being concatenated on afterwards.
-
-    // Load standing rules for the authenticated user and inject them so agents
-    // apply them from the first turn of the session (issue #184).
-    // An empty rules array is ambiguous — it means either "no rules configured"
-    // or "the lookup failed". Carry the distinction into the payload so an
-    // agent is never handed an empty policy that is actually a broken read
-    // (#2131). A null user id reports as a failed lookup.
-    const standingRulesLookup = await this.lookupStandingRulesForInstructions(lookupUserId);
-    const standingRules: StandingRule[] = standingRulesLookup.rules;
-    const standingRulesLookupFailed = standingRulesLookup.lookup_failed;
-
     // Skills reach agents two ways: mirrored to a local skills directory, or
     // stored in the graph as `skill` rows. A hosted instance has only the
     // latter, so the filesystem scan alone leaves MCP-only clients unable to
@@ -1409,6 +1396,50 @@ export class NeotomaServer {
         "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
         "the `[instance_skills]` warning if this persists."
       : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
+    return { skillsSection, availableSkills, instanceSkillsLookupFailed };
+  }
+
+  private async composeSessionInstructions(
+    baseInstructions: string,
+    lookupUserId: string | null
+  ): Promise<{
+    instructions: string;
+    standingRules: StandingRule[];
+    standingRulesLookupFailed: boolean;
+    availableSkills: string[];
+    instanceSkillsLookupFailed: boolean;
+  }> {
+    // Append this instance's declared data policy (#1974) so a cooperating
+    // agent knows what this instance is for before its first write, rather than
+    // discovering the rules by being rejected. A read failure or an unset
+    // policy yields an empty section, leaving the instructions byte-identical
+    // to what they were before this feature — the handshake must never fail
+    // because a policy lookup did.
+    let policySection = "";
+    try {
+      const { getInstancePolicy, renderInstancePolicyInstructions } =
+        await import("./services/instance_policy.js");
+      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+    } catch (err) {
+      logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
+    }
+    // Deferred until the instance-skills section is rendered below, so both
+    // appended sections compose through the same helper rather than one going
+    // through it and the other being concatenated on afterwards.
+
+    // Load standing rules for the authenticated user and inject them so agents
+    // apply them from the first turn of the session (issue #184).
+    // An empty rules array is ambiguous — it means either "no rules configured"
+    // or "the lookup failed". Carry the distinction into the payload so an
+    // agent is never handed an empty policy that is actually a broken read
+    // (#2131). A null user id reports as a failed lookup.
+    const standingRulesLookup = await this.lookupStandingRulesForInstructions(lookupUserId);
+    const standingRules: StandingRule[] = standingRulesLookup.rules;
+    const standingRulesLookupFailed = standingRulesLookup.lookup_failed;
+
+    const { skillsSection, availableSkills, instanceSkillsLookupFailed } =
+      await this.composeInstanceSkillsForInstructions(lookupUserId);
+
     // Standing rules were delivered ONLY via `serverInfo._neotoma`, which
     // general MCP clients drop — they surface `instructions` to the model and
     // ignore unknown `serverInfo` keys. Rules that an operator had enabled
