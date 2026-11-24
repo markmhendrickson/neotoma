@@ -1252,6 +1252,7 @@ export class NeotomaServer {
       instructions,
       standingRules,
       standingRulesLookupFailed,
+      standingRulesSkipped,
       availableSkills,
       instanceSkillsLookupFailed,
     } = await this.composeSessionInstructions(baseInstructions, lookupUserId);
@@ -1279,6 +1280,8 @@ export class NeotomaServer {
                   "Standing rules could not be read for this session. An empty list here does NOT mean no rules are configured — treat any instance policy as unknown rather than absent, and say so rather than proceeding as if unrestricted.",
               }
             : {}),
+          // Rows dropped for lacking rule_text; present only when above zero.
+          ...(standingRulesSkipped > 0 ? { standing_rules_skipped: standingRulesSkipped } : {}),
           available_skills: availableSkills,
           ...(instanceSkillsLookupFailed
             ? {
@@ -1312,10 +1315,14 @@ export class NeotomaServer {
    */
   private async lookupStandingRulesForInstructions(
     userId: string | null
-  ): Promise<{ rules: StandingRule[]; lookup_failed: boolean }> {
-    if (!userId) return { rules: [], lookup_failed: true };
+  ): Promise<{ rules: StandingRule[]; lookup_failed: boolean; skipped_missing_text: number }> {
+    if (!userId) return { rules: [], lookup_failed: true, skipped_missing_text: 0 };
     const result = await getActiveStandingRulesResult(userId);
-    return { rules: result.rules, lookup_failed: result.lookup_failed };
+    return {
+      rules: result.rules,
+      lookup_failed: result.lookup_failed,
+      skipped_missing_text: result.skipped_missing_text ?? 0,
+    };
   }
 
   private async composeSessionInstructions(
@@ -1325,6 +1332,7 @@ export class NeotomaServer {
     instructions: string;
     standingRules: StandingRule[];
     standingRulesLookupFailed: boolean;
+    standingRulesSkipped: number;
     availableSkills: string[];
     instanceSkillsLookupFailed: boolean;
   }> {
@@ -1439,6 +1447,7 @@ export class NeotomaServer {
       instructions,
       standingRules,
       standingRulesLookupFailed,
+      standingRulesSkipped: standingRulesLookup.skipped_missing_text,
       availableSkills,
       instanceSkillsLookupFailed,
     };
