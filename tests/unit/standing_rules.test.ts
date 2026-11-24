@@ -4,7 +4,7 @@
  * Covers:
  * - Returns empty array when no entities exist
  * - Filters out entities with enabled: false
- * - Filters out entities with no rule_text
+ * - Filters out entities with no rule_text, counting them and warning once
  * - Orders by priority descending, then title ascending
  * - Handles DB errors gracefully (returns empty array)
  * - Handles unexpected exceptions gracefully (returns empty array)
@@ -53,6 +53,7 @@ import {
   getActiveStandingRules,
   getActiveStandingRulesResult,
 } from "../../src/services/standing_rules.js";
+import { logger } from "../../src/utils/logger.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -151,6 +152,45 @@ describe("getActiveStandingRules", () => {
     const result = await getActiveStandingRules("user-1");
     expect(result).toHaveLength(1);
     expect(result[0].entity_id).toBe("e2");
+  });
+
+  it("counts rows skipped for missing rule_text and warns once with the count only", async () => {
+    setRows([
+      makeRow({
+        id: "e1",
+        canonical_name: "Secret Title One",
+        snapshot: { title: "Secret Title One" },
+      }),
+      makeRow({
+        id: "e2",
+        canonical_name: "Secret Title Two",
+        snapshot: { title: "Secret Title Two", rule_text: "" },
+      }),
+      makeRow({ id: "e3", canonical_name: "Has Text", snapshot: { rule_text: "Do something" } }),
+    ]);
+
+    const result = await getActiveStandingRulesResult("user-1");
+    expect(result.rules.map((r) => r.entity_id)).toEqual(["e3"]);
+    expect(result.skipped_missing_text).toBe(2);
+
+    const warn = vi.mocked(logger.warn);
+    const skipWarnings = warn.mock.calls.filter((c) => String(c[0]).includes("no rule_text"));
+    expect(skipWarnings).toHaveLength(1);
+    const message = String(skipWarnings[0]![0]);
+    expect(message).toContain("skipped 2");
+    expect(message).not.toContain("Secret Title");
+    expect(message).not.toContain("e1");
+  });
+
+  it("omits the skipped count and the warning when every rule has text", async () => {
+    setRows([makeRow({ id: "e1", snapshot: { title: "A", rule_text: "Do A" } })]);
+
+    const result = await getActiveStandingRulesResult("user-1");
+    expect(result).toEqual({
+      rules: [{ entity_id: "e1", title: "A", rule_text: "Do A", scope: undefined, priority: 0 }],
+      lookup_failed: false,
+    });
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
   });
 
   it("orders by priority descending then title ascending", async () => {
