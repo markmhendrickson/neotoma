@@ -25,13 +25,25 @@ export interface StandingRule {
 }
 
 /**
+ * Result of one standing-rules read. `skipped_missing_text` counts
+ * `standing_rule` rows that were dropped because they carry no usable
+ * `rule_text`; it is present only when that count is above zero.
+ */
+export interface StandingRulesLookupResult {
+  rules: StandingRule[];
+  lookup_failed: boolean;
+  error?: string;
+  skipped_missing_text?: number;
+}
+
+/**
  * Standing rules plus whether the lookup itself succeeded. Prefer this over
  * {@link getActiveStandingRules} anywhere the result is shown to an agent or
  * an operator, so a lookup failure is never rendered as an empty policy.
  */
 export async function getActiveStandingRulesResult(
   userId: string
-): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
+): Promise<StandingRulesLookupResult> {
   return lookupActiveStandingRules(userId);
 }
 
@@ -64,9 +76,7 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
  * lookup_failed, error? }` directly from this call keeps each invocation's
  * outcome local to that invocation.
  */
-async function lookupActiveStandingRules(
-  userId: string
-): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
+async function lookupActiveStandingRules(userId: string): Promise<StandingRulesLookupResult> {
   try {
     // Read the reduced field values straight off entity_snapshots. This used
     // to join from `entities` with the PostgREST embedded-resource hint
@@ -124,6 +134,7 @@ async function lookupActiveStandingRules(
     }
 
     const rules: StandingRule[] = [];
+    let skippedMissingText = 0;
 
     for (const row of data as Array<{
       entity_id: string;
@@ -151,8 +162,12 @@ async function lookupActiveStandingRules(
       const title = typeof snap["title"] === "string" ? snap["title"] : row.canonical_name;
       const ruleText = typeof snap["rule_text"] === "string" ? snap["rule_text"] : null;
 
-      // Skip rules without usable rule_text.
-      if (!ruleText) continue;
+      // Skip rules without usable rule_text, but count them: a rule an
+      // operator stored without its text must not vanish without a trace.
+      if (!ruleText) {
+        skippedMissingText += 1;
+        continue;
+      }
 
       rules.push({
         entity_id: row.entity_id,
@@ -169,6 +184,13 @@ async function lookupActiveStandingRules(
       return a.title.localeCompare(b.title);
     });
 
+    if (skippedMissingText > 0) {
+      // Count only: rule titles and ids stay out of the log.
+      logger.warn(
+        `[standing_rules] skipped ${skippedMissingText} standing_rule row(s) with no rule_text`
+      );
+      return { rules, lookup_failed: false, skipped_missing_text: skippedMissingText };
+    }
     return { rules, lookup_failed: false };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
