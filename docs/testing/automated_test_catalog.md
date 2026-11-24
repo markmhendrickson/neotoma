@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **899**
-- Backend and repo Vitest files: **845**
+- Total automated test files: **902**
+- Backend and repo Vitest files: **848**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 255 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 72 |
-| Vitest integration tests | 270 |
+| Vitest integration tests | 273 |
 | Vitest CLI tests | 99 |
 | Vitest contract tests | 33 |
 | Vitest security tests | 27 |
@@ -527,7 +527,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (270):**
+**Files (273):**
 - `tests/integration/aauth_admission_lookup_failed.test.ts`
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
@@ -748,10 +748,13 @@ flowchart TD
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_cli_instructions_print.test.ts`
+- `tests/integration/standing_rules_cli_skipped_count.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
 - `tests/integration/standing_rules_initialize_lookup_failure.test.ts`
 - `tests/integration/standing_rules_initialize_parity.test.ts`
+- `tests/integration/standing_rules_initialize_skipped_count.test.ts`
 - `tests/integration/standing_rules_isolated_server_initialize.test.ts`
+- `tests/integration/standing_rules_skipped_count_entrances.test.ts`
 - `tests/integration/standing_rules_stateless_entrances.test.ts`
 - `tests/integration/store_abort_context_2144.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
