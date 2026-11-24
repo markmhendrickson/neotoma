@@ -25,13 +25,25 @@ export interface StandingRule {
 }
 
 /**
+ * Result of one standing-rules read. `skipped_missing_text` counts
+ * `standing_rule` rows that were dropped because they carry no usable
+ * `rule_text`; it is present only when that count is above zero.
+ */
+export interface StandingRulesLookupResult {
+  rules: StandingRule[];
+  lookup_failed: boolean;
+  error?: string;
+  skipped_missing_text?: number;
+}
+
+/**
  * Standing rules plus whether the lookup itself succeeded. Prefer this over
  * {@link getActiveStandingRules} anywhere the result is shown to an agent or
  * an operator, so a lookup failure is never rendered as an empty policy.
  */
 export async function getActiveStandingRulesResult(
   userId: string
-): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
+): Promise<StandingRulesLookupResult> {
   return lookupActiveStandingRules(userId);
 }
 
@@ -64,9 +76,7 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
  * lookup_failed, error? }` directly from this call keeps each invocation's
  * outcome local to that invocation.
  */
-async function lookupActiveStandingRules(
-  userId: string
-): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
+async function lookupActiveStandingRules(userId: string): Promise<StandingRulesLookupResult> {
   try {
     // Read the reduced field values straight off entity_snapshots. This used
     // to join from `entities` with the PostgREST embedded-resource hint
@@ -124,6 +134,7 @@ async function lookupActiveStandingRules(
     }
 
     const rules: StandingRule[] = [];
+    let skippedMissingText = 0;
 
     for (const row of data as Array<{
       entity_id: string;
@@ -151,8 +162,12 @@ async function lookupActiveStandingRules(
       const title = typeof snap["title"] === "string" ? snap["title"] : row.canonical_name;
       const ruleText = typeof snap["rule_text"] === "string" ? snap["rule_text"] : null;
 
-      // Skip rules without usable rule_text.
-      if (!ruleText) continue;
+      // Skip rules without usable rule_text, but count them: a rule an
+      // operator stored without its text must not vanish without a trace.
+      if (!ruleText) {
+        skippedMissingText += 1;
+        continue;
+      }
 
       rules.push({
         entity_id: row.entity_id,
@@ -169,6 +184,13 @@ async function lookupActiveStandingRules(
       return a.title.localeCompare(b.title);
     });
 
+    if (skippedMissingText > 0) {
+      // Count only: rule titles and ids stay out of the log.
+      logger.warn(
+        `[standing_rules] skipped ${skippedMissingText} standing_rule row(s) with no rule_text`
+      );
+      return { rules, lookup_failed: false, skipped_missing_text: skippedMissingText };
+    }
     return { rules, lookup_failed: false };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -313,7 +335,7 @@ function renderOmittedRuleNotice(rule: StandingRule): string {
 
 /**
  * Render the `[STANDING RULES]` section placed ahead of the MCP instructions
- * block, or `null` when there are no rules.
+ * block, or `null` when there are no rules and none were skipped.
  *
  * Why this exists: rules were delivered ONLY via `serverInfo._neotoma`, which
  * general MCP clients ignore. They surface `instructions` to the model and
@@ -328,9 +350,24 @@ function renderOmittedRuleNotice(rule: StandingRule): string {
  *
  * @param rules   Projection from {@link getActiveStandingRulesResult}, already
  *                ordered by priority. Order is preserved.
+ * @param skippedMissingText  Rows dropped for lacking `rule_text`; when above
+ *                zero one fixed count line is appended (count only).
  */
-export function renderStandingRulesSection(rules: StandingRule[]): string | null {
-  if (rules.length === 0) return null;
+export function renderStandingRulesSection(
+  rules: StandingRule[],
+  skippedMissingText = 0
+): string | null {
+  const skipped =
+    Number.isInteger(skippedMissingText) && skippedMissingText > 0 ? skippedMissingText : 0;
+  if (rules.length === 0) {
+    // Every stored rule was skipped: still say so, never fall silent.
+    if (skipped === 0) return null;
+    return (
+      "[STANDING RULES]\n" +
+      "This instance has no standing rules that can be applied.\n" +
+      `${renderSkippedStandingRulesLine(skipped)}\n${STANDING_RULES_END_MARKER}`
+    );
+  }
 
   const notices = rules.map(renderOmittedRuleNotice);
   const noticeCosts = notices.map((n) => utf8Bytes(n) + 2);
@@ -379,7 +416,23 @@ export function renderStandingRulesSection(rules: StandingRule[]): string | null
         ". Fetch the full text with `retrieve_entity_snapshot` before acting in the areas they cover."
       : "";
 
-  return `${header}\n\n${lines.join("\n\n")}${footer}\n${STANDING_RULES_END_MARKER}`;
+  const skippedLine = skipped > 0 ? `\n\n${renderSkippedStandingRulesLine(skipped)}` : "";
+
+  return `${header}\n\n${lines.join("\n\n")}${footer}${skippedLine}\n${STANDING_RULES_END_MARKER}`;
+}
+
+/**
+ * The one fixed line stating how many stored rules were dropped for lacking
+ * `rule_text`. A count only: no titles, no ids. It is carried in the prose
+ * because ordinary MCP clients drop unknown `serverInfo` keys (#2187), so
+ * `serverInfo._neotoma.standing_rules_skipped` alone would go unseen.
+ */
+export function renderSkippedStandingRulesLine(count: number): string {
+  return (
+    `${count} stored standing rule${count === 1 ? "" : "s"} could not be applied because ` +
+    `${count === 1 ? "it has" : "they have"} no rule text. Tell the user so; do not report ` +
+    "that every stored rule is in force."
+  );
 }
 
 /**
@@ -410,13 +463,16 @@ export const STANDING_RULES_AFTER_AUTHENTICATION_NOTICE =
 
 /**
  * The rules section for a lookup result: the unavailable notice on a failed
- * lookup, the rendered block otherwise (null when there are no rules).
+ * lookup, the rendered block otherwise (null when there are no rules and none
+ * were skipped). Every entrance that serves instructions goes through here,
+ * so the skipped-rule line reaches all of them.
  */
 export function renderStandingRulesSectionForLookup(result: {
   rules: StandingRule[];
   lookup_failed: boolean;
+  skipped_missing_text?: number;
 }): string | null {
   return result.lookup_failed
     ? STANDING_RULES_UNAVAILABLE_SECTION
-    : renderStandingRulesSection(result.rules);
+    : renderStandingRulesSection(result.rules, result.skipped_missing_text ?? 0);
 }
