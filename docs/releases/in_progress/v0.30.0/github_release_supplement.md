@@ -2,7 +2,7 @@ Neotoma v0.30.0 is a minor release covering every change merged since v0.29.1. F
 
 ## Highlights
 
-- **Agents now see the instance's skills and standing rules wherever they connect.** Standing rules lead the MCP `instructions` prose, and authenticated `server/discover`, `GET /mcp-interaction-instructions` and `neotoma instructions print` deliver both standing rules and the `[INSTANCE SKILLS]` catalog (#2906, #2916, #2930).
+- **Agents now see the instance's skills and standing rules wherever they connect.** Standing rules lead the MCP `instructions` prose on `initialize`, authenticated `server/discover`, `GET /mcp-interaction-instructions` and `neotoma instructions print`, and the `[INSTANCE SKILLS]` catalog now appears on authenticated `server/discover` as well as `initialize` (#2906, #2916, #2930).
 - **Field provenance returns the full chain, the same way on every transport.** `retrieve_field_provenance` (MCP) and `POST /get_field_provenance` (HTTP) share one implementation and one declared response listing every contributing observation and source, or a typed `PROVENANCE_INTEGRITY_ERROR` instead of a partial chain (#2867).
 - **Lexical search and store writes stay fast on large databases.** A stored `entity_snapshots.search_text` column lets typed search filter candidates in SQL, with a throttled, resumable backfill (`neotoma snapshots search-text-backfill` or `NEOTOMA_SEARCH_TEXT_BACKFILL=1`), plus new indexes on the store, relationship and instance-policy paths (#2900, #2903, #2905, #2887, #2904).
 - **Relationship reads answer "as of" a write time.** `list_relationships` and `retrieve_related_entities` accept `at` and `at_ingested` on MCP, REST and CLI, returning only edges and endpoints visible at that cutoff (#2871).
@@ -64,15 +64,15 @@ What runs at startup after the upgrade:
 
 New and newly documented settings:
 
-| Setting | Default | What it does |
-|---|---|---|
-| `NEOTOMA_DROP_ORPHAN_ENTITY_FTS` | off | `1` drops, at open, the leftover `entity_fts_*` triggers some older databases carry (they make every snapshot write read the whole full-text table) together with the unused `entity_search_fts` and `entity_fts_rows` tables, in one transaction. Search results do not change (#2909, #2911). |
-| `NEOTOMA_SEARCH_TEXT_BACKFILL` | off | Run the `search_text` backfill in the background after start (#2905). |
-| `NEOTOMA_ACCESS_LOG` | `json` beyond loopback, `dev` on loopback | Per-request access log format; `off` disables it and the read log (#2917, #2927). |
-| `NEOTOMA_ACCESS_LOG_FULL_IP` | off | `1` logs full addresses instead of redacted prefixes (#2917). |
-| `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE` | off | `1` restores the wider local-development `user_id` override for test setups (#2901). |
-| `NEOTOMA_MCP_INSTANCE_SKILL_HINTS` | on | `0` or `false` omits the `[INSTANCE SKILLS]` section; now listed in `docs/operations/configuration.md` (#2447). |
-| `NEOTOMA_SHARED_GRAPH_USER_ID` (existing) | unset | When set, the static bearer token now acts as the shared graph owner (#2908). |
+| Setting                                   | Default                                   | What it does                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEOTOMA_DROP_ORPHAN_ENTITY_FTS`          | off                                       | `1` drops, at open, the leftover `entity_fts_*` triggers some older databases carry (they make every snapshot write read the whole full-text table) together with the unused `entity_search_fts` and `entity_fts_rows` tables, in one transaction. Search results do not change (#2909, #2911). |
+| `NEOTOMA_SEARCH_TEXT_BACKFILL`            | off                                       | Run the `search_text` backfill in the background after start (#2905).                                                                                                                                                                                                                           |
+| `NEOTOMA_ACCESS_LOG`                      | `json` beyond loopback, `dev` on loopback | Per-request access log format; `off` disables it and the read log (#2917, #2927).                                                                                                                                                                                                               |
+| `NEOTOMA_ACCESS_LOG_FULL_IP`              | off                                       | `1` logs full addresses instead of redacted prefixes (#2917).                                                                                                                                                                                                                                   |
+| `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE`      | off                                       | `1` restores the wider local-development `user_id` override for test setups (#2901).                                                                                                                                                                                                            |
+| `NEOTOMA_MCP_INSTANCE_SKILL_HINTS`        | on                                        | `0` or `false` omits the `[INSTANCE SKILLS]` section; now listed in `docs/operations/configuration.md` (#2447).                                                                                                                                                                                 |
+| `NEOTOMA_SHARED_GRAPH_USER_ID` (existing) | unset                                     | When set, the static bearer token now acts as the shared graph owner (#2908).                                                                                                                                                                                                                   |
 
 Optional read-capability checks (off by default):
 
