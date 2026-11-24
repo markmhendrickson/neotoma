@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **897**
-- Backend and repo Vitest files: **843**
+- Total automated test files: **898**
+- Backend and repo Vitest files: **844**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 255 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 72 |
-| Vitest integration tests | 268 |
+| Vitest integration tests | 269 |
 | Vitest CLI tests | 99 |
 | Vitest contract tests | 33 |
 | Vitest security tests | 27 |
@@ -527,7 +527,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (268):**
+**Files (269):**
 - `tests/integration/aauth_admission_lookup_failed.test.ts`
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
@@ -742,6 +742,7 @@ flowchart TD
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/shared_graph_identity.test.ts`
 - `tests/integration/shared_graph_write_attribution.test.ts`
+- `tests/integration/skill_lookup_not_found_hint.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`

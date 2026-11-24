@@ -15,6 +15,7 @@ import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
 import { db, getServiceRoleClient } from "../../src/db.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { normalizeEntityValue } from "../../src/services/entity_resolution.js";
 import { skillNotFoundHint } from "../../src/shared/action_handlers/entity_identifier_handler.js";
 
 const USER_ID = LOCAL_DEV_USER_ID;
@@ -36,7 +37,10 @@ async function restLookup(body: Record<string, unknown>): Promise<LookupBody> {
   return (await res.json()) as LookupBody;
 }
 
-async function mcpLookup(server: NeotomaServer, args: Record<string, unknown>): Promise<LookupBody> {
+async function mcpLookup(
+  server: NeotomaServer,
+  args: Record<string, unknown>
+): Promise<LookupBody> {
   const out = await (
     server as unknown as {
       retrieveEntityByIdentifier: (a: unknown) => Promise<{ content: Array<{ text: string }> }>;
@@ -57,11 +61,17 @@ describe("skill lookup by name: not-found hint (REST and MCP)", () => {
       httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
       httpServer.once("error", reject);
     });
-    await getServiceRoleClient()
+    const { error } = await getServiceRoleClient()
       .from("entities")
       .insert([
-        { id: PRESENT_ID, user_id: USER_ID, entity_type: "skill", canonical_name: PRESENT_NAME },
+        {
+          id: PRESENT_ID,
+          user_id: USER_ID,
+          entity_type: "skill",
+          canonical_name: normalizeEntityValue("skill", PRESENT_NAME),
+        },
       ]);
+    expect(error).toBeNull();
   });
 
   afterAll(async () => {
