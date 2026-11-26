@@ -27,6 +27,7 @@
  *
  * CLI surface lives in `src/cli/commands/mirror.ts`.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
@@ -36,6 +37,11 @@ import { db } from "../db.js";
 import { config } from "../config.js";
 import type { NeotomaApiClient } from "../shared/api_client.js";
 import { schemaRegistry } from "./schema_registry.js";
+import {
+  MirrorManifestSession,
+  emptySafetyReport,
+  type MirrorSafetyReport,
+} from "./mirror_manifest.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
 import {
@@ -467,30 +473,48 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
+/**
+ * Manifest session for the current rebuild (or incremental operation). When
+ * absent, each write opens a one-shot session over every configured root.
+ */
+const manifestSessionStore = new AsyncLocalStorage<MirrorManifestSession>();
+
+function configuredRoots(): string[] {
+  const cfg = getMirrorConfig();
+  return [cfg.path, ...(cfg.profiles ?? []).map((p) => p.output_path)];
+}
+
+async function withManifestSession<T>(
+  fn: (session: MirrorManifestSession) => Promise<T>
+): Promise<T> {
+  const active = manifestSessionStore.getStore();
+  if (active) return fn(active);
+  const session = new MirrorManifestSession();
+  for (const root of configuredRoots()) await session.addRoot(root);
+  const result = await fn(session);
+  await session.saveAll();
+  for (const notice of session.report.skipped_foreign_paths) {
+    process.stderr.write(`[mirror] skipped writing over a file the mirror did not create: ${notice}\n`);
+  }
+  return result;
+}
+
 async function writeFileIfChanged(
   filePath: string,
   content: string
-): Promise<"written" | "unchanged"> {
-  await ensureDir(path.dirname(filePath));
-  try {
-    const existing = await fs.readFile(filePath, "utf8");
-    if (existing === content) return "unchanged";
-  } catch {
-    // Not present — fall through to write.
-  }
-  await fs.writeFile(filePath, content, "utf8");
-  return "written";
+): Promise<"written" | "unchanged" | "skipped_foreign"> {
+  return withManifestSession(async (session) => {
+    const root = session.rootFor(filePath) ?? (await session.addRoot(path.dirname(filePath)));
+    return root.write(filePath, content, session.report);
+  });
 }
 
-async function removeIfPresent(filePath: string): Promise<"removed" | "absent"> {
-  try {
-    await fs.unlink(filePath);
-    return "removed";
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === "ENOENT") return "absent";
-    throw err;
-  }
+async function removeIfPresent(filePath: string): Promise<"removed" | "absent" | "kept"> {
+  return withManifestSession(async (session) => {
+    const root = session.rootFor(filePath);
+    if (!root) return "kept";
+    return root.removeOwned(filePath, session.report);
+  });
 }
 
 // Deterministic slug: slug-case canonical_name; short-hash disambiguator on collision.
@@ -1233,6 +1257,12 @@ export interface RebuildReport {
   kinds: MirrorKind[];
   counts: Record<MirrorKind, { written: number; unchanged: number; removed: number }>;
   profiles: Record<string, { written: number; unchanged: number; removed: number }>;
+  /**
+   * Ownership safety outcome (issue #2939): files removed by --clean, generated
+   * files kept because the user edited them, foreign files not overwritten,
+   * and deletions refused (symlinks, rejected manifest).
+   */
+  safety: MirrorSafetyReport;
 }
 
 function emptyReport(): RebuildReport {
@@ -1240,12 +1270,29 @@ function emptyReport(): RebuildReport {
   for (const k of ALL_MIRROR_KINDS) {
     counts[k] = { written: 0, unchanged: 0, removed: 0 };
   }
-  return { kinds: [], counts, profiles: {} };
+  return { kinds: [], counts, profiles: {}, safety: emptySafetyReport() };
 }
 
 export async function rebuildMirror(options: RebuildOptions = {}): Promise<RebuildReport> {
   const cfg = getMirrorConfig();
   const report = emptyReport();
+  const session = new MirrorManifestSession(report.safety);
+  await ensureDir(cfg.path);
+  await session.addRoot(cfg.path);
+  for (const profile of cfg.profiles ?? []) await session.addRoot(profile.output_path);
+  try {
+    return await manifestSessionStore.run(session, () => rebuildMirrorInSession(cfg, options, report));
+  } finally {
+    // Written after the rebuild so the manifest reflects exactly this run.
+    await session.saveAll();
+  }
+}
+
+async function rebuildMirrorInSession(
+  cfg: MirrorConfig,
+  options: RebuildOptions,
+  report: RebuildReport
+): Promise<RebuildReport> {
 
   await ensureDir(cfg.path);
 
@@ -1838,39 +1885,21 @@ async function rebuildSchemas(
   await regenerateSchemasIndex(cfg);
 }
 
-/** Walk `dir` recursively; remove files not in `keep`. Returns count removed. */
+/**
+ * `--clean` for one scope directory: remove only files this mirror wrote (per
+ * the owned-paths manifest), that this run no longer generates, and that the
+ * user has not edited. Never follows symlinks. Returns count removed.
+ */
 async function cleanStale(
   dir: string,
   keep: Set<string>,
   preserveNames: Set<string>
 ): Promise<number> {
-  let removed = 0;
-  let entries: import("node:fs").Dirent[];
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    return 0;
-  }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      removed += await cleanStale(full, keep, preserveNames);
-      // Remove empty dir.
-      try {
-        const remaining = await fs.readdir(full);
-        if (remaining.length === 0) await fs.rmdir(full);
-      } catch {
-        /* ignore */
-      }
-    } else if (entry.isFile()) {
-      if (preserveNames.has(entry.name)) continue;
-      if (!full.endsWith(".md")) continue;
-      if (keep.has(full)) continue;
-      await fs.unlink(full);
-      removed++;
-    }
-  }
-  return removed;
+  const session = manifestSessionStore.getStore();
+  if (!session) return 0;
+  const root = session.rootFor(dir);
+  if (!root) return 0;
+  return root.clean(dir, keep, preserveNames, session.report);
 }
 
 // ============================================================================
