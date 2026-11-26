@@ -68,6 +68,8 @@ neotoma mirror rebuild --entity-id <id>
 neotoma mirror rebuild --clean
 ```
 
+`--clean` only removes files the mirror wrote and you have not edited. Ownership is tracked in `.neotoma-mirror-manifest.json` in each output folder. Files you add to the mirror folder are never removed or overwritten. On a mirror built before v0.31.0 there is no manifest yet, so the first `--clean` removes nothing and writes one; run `--clean` again to remove stale generated files.
+
 ## Checking status
 
 ```bash

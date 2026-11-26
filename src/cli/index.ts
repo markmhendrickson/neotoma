@@ -12548,7 +12548,7 @@ mirrorCommand
   .option("--entity-id <id>", "Restrict entity rebuild to a single entity_id")
   .option(
     "--clean",
-    "Remove stale files in the mirror that no longer correspond to database rows",
+    "Remove stale files this mirror generated (per its owned-paths manifest) that no longer correspond to database rows; edited, foreign, and symlinked files are never removed",
     false
   )
   .option("--profile <id>", "Rebuild a single named profile instead of the main mirror")

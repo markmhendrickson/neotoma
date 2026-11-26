@@ -237,6 +237,17 @@ export function formatRebuildReport(result: MirrorRebuildResult): string {
       );
     }
   }
+  const s = result.report.safety;
+  if (s) {
+    lines.push("");
+    lines.push(
+      `Safety: removed ${s.removed}, kept_edited ${s.kept_edited}, skipped_foreign ${s.skipped_foreign}, refused ${s.refused}`
+    );
+    for (const p of s.kept_edited_paths) lines.push(`  kept (edited):         ${p}`);
+    for (const p of s.skipped_foreign_paths) lines.push(`  skipped (not ours):    ${p}`);
+    for (const p of s.refused_paths) lines.push(`  refused:               ${p}`);
+    for (const n of s.notices) lines.push(`  note: ${n}`);
+  }
   return lines.join("\n");
 }
 
