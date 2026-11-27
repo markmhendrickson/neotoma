@@ -150,16 +150,16 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 
 ### Tunnel and setup
 
-| Script             | Description                                                                |
-| ------------------ | -------------------------------------------------------------------------- |
-| `tunnel:https`     | Start HTTPS tunnel only (Cloudflare or ngrok)                              |
-| `setup:cli`        | Build and link `neotoma` globally                                          |
-| `setup:env-hook`   | Install the opt-in git hook for worktree env copying                       |
+| Script             | Description                                    |
+| ------------------ | ---------------------------------------------- |
+| `tunnel:https`     | Start HTTPS tunnel only (Cloudflare or ngrok)  |
+| `setup:cli`        | Build and link `neotoma` globally              |
+| `setup:env-hook`   | Install the opt-in git hook for worktree env copying |
 | `copy:env`         | Copy env into the current worktree only when `NEOTOMA_WORKTREE_COPY_ENV=1` |
-| `setup:worktree`   | Cursor worktree init                                                       |
-| `setup:data`       | Data directory symlink                                                     |
-| `setup:foundation` | Foundation submodule symlink                                               |
-| `setup:storage`    | Create storage buckets                                                     |
+| `setup:worktree`   | Cursor worktree init                           |
+| `setup:data`       | Data directory symlink                         |
+| `setup:foundation` | Foundation submodule symlink                   |
+| `setup:storage`    | Create storage buckets                         |
 
 ### Test and quality
 
@@ -280,12 +280,12 @@ Inspect and configure this instance's data policy (#1974/#1975): what the instan
 
 CLI behavior can be pinned per invocation via flags or across invocations via environment variables. Every runtime override follows the same precedence: explicit flag > environment variable > default.
 
-| Flag             | Environment variable                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--api-only`     | `NEOTOMA_API_ONLY`                           | Force API-only transport; fail if API is unreachable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `--offline`      | `NEOTOMA_OFFLINE`                            | Force in-process local transport; do not contact a remote API.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `--env <env>`    | `NEOTOMA_ENV` (`development` / `production`) | Environment selector for server lifecycle commands.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `--root <path>`  | `NEOTOMA_REPO_ROOT`                          | Source-checkout root when `neotoma` is run with no args.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Flag             | Environment variable                         | Purpose                                                                                                                                                                                                                                                                                                                           |
+| ---------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--api-only`     | `NEOTOMA_API_ONLY`                           | Force API-only transport; fail if API is unreachable.                                                                                                                                                                                                                                                                             |
+| `--offline`      | `NEOTOMA_OFFLINE`                            | Force in-process local transport; do not contact a remote API.                                                                                                                                                                                                                                                                    |
+| `--env <env>`    | `NEOTOMA_ENV` (`development` / `production`) | Environment selector for server lifecycle commands.                                                                                                                                                                                                                                                                               |
+| `--root <path>`  | `NEOTOMA_REPO_ROOT`                          | Source-checkout root when `neotoma` is run with no args.                                                                                                                                                                                                                                                                          |
 | `--user-id <id>` | `NEOTOMA_USER_ID`                            | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `list-recent-changes` (alias `recent`), `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. A `user_id` that differs from the authenticated user is honoured only for local development requests that carry no token (or when `NEOTOMA_ALLOW_DEV_USER_ID_OVERRIDE=1` is set on the server); otherwise the server answers `403`. |
 
 `--offline` and `--api-only` are mutually exclusive; setting both (via flag or env) raises an error at startup.
