@@ -23,7 +23,11 @@ import {
   MirrorManifestSession,
   sha256,
 } from "../../src/services/mirror_manifest.ts";
-import { rebuildMirror, mirrorSource, removeMirrorSource } from "../../src/services/canonical_mirror.ts";
+import {
+  rebuildMirror,
+  mirrorSource,
+  removeMirrorSource,
+} from "../../src/services/canonical_mirror.ts";
 
 const MANIFEST = MIRROR_MANIFEST_FILENAME;
 
@@ -81,7 +85,8 @@ describe("clean removes only the mirror's own output files", () => {
     expect(m.loadState).toBe("invalid");
     const removed = await m.clean(root, new Set(), new Set(), session.report);
     expect(removed).toBe(0);
-    for (const rel of Object.keys(entries)) expect(existsSync(path.join(root, rel)), rel).toBe(true);
+    for (const rel of Object.keys(entries))
+      expect(existsSync(path.join(root, rel)), rel).toBe(true);
     expect(existsSync(path.join(root, ".config"))).toBe(true);
     expect(session.report.notices.join("\n")).toMatch(/rejected/);
   });
@@ -314,10 +319,11 @@ describe("rebuildMirror writes nothing outside the run", () => {
         return apiClient!.POST("/entities/query" as never, args as never);
       },
     } as unknown as typeof apiClient;
-    configure(path.join(base, "mirror"), [
-      profile("pa", "plan", a),
-      profile("pb", "task", path.join(base, "b")),
-    ], ["entities"]);
+    configure(
+      path.join(base, "mirror"),
+      [profile("pa", "plan", a), profile("pb", "task", path.join(base, "b"))],
+      ["entities"]
+    );
     await expect(rebuildMirror({ apiClient: failing, kind: "entities" })).rejects.toThrow(
       /AUTH_REQUIRED/
     );
