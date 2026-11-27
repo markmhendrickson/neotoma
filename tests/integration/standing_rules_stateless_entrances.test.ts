@@ -279,7 +279,9 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     expect(served.cacheControl).toBeNull();
     expect(served.vary).toContain("Authorization");
     expect(
-      stripInstructionsIndex(served.text).startsWith("[STANDING RULES] Standing rules are served only after authentication")
+      stripInstructionsIndex(served.text).startsWith(
+        "[STANDING RULES] Standing rules are served only after authentication"
+      )
     ).toBe(true);
     expect(served.text).toContain("as unknown, not absent");
     expect(served.text).not.toContain("Body of synthetic rule");
