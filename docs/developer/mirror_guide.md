@@ -64,9 +64,13 @@ neotoma mirror rebuild --entity-type contact
 # Rebuild a single entity
 neotoma mirror rebuild --entity-id <id>
 
-# Remove stale files that the rebuild did not produce
+# Remove stale files the mirror generated that the rebuild did not produce
 neotoma mirror rebuild --clean
 ```
+
+`--clean` deletes only files the mirror generated. Each output root (the mirror folder and each profile output folder) holds an ownership manifest, `.neotoma-mirror-manifest.json`, that records every file the mirror wrote with its content hash, and every folder it created. `--clean` removes a file only if the manifest lists it, it is in the requested scope, this run did not generate it, its content still matches the recorded hash, and no part of its path is a symbolic link. It removes only folders the mirror created and that are empty. An edited generated file is kept and reported. A symlinked output root refuses `--clean`. With no manifest, or an invalid one, `--clean` deletes nothing and says so.
+
+Same-name files are still overwritten by rebuilds and incremental writes, as before. The first `--clean` after upgrading removes nothing and writes the manifest. Files written before the upgrade are not recorded and are never removed automatically. The rebuild report lists the Markdown files it left in place for that reason; delete outdated ones by hand, individually, never the whole folder, before using `mirror push`. If the mirror folder is in git, commit `.neotoma-mirror-manifest.json` with it; if you ignore it, a fresh checkout's first `--clean` removes nothing.
 
 ## Checking status
 
