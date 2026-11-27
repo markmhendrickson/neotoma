@@ -618,7 +618,7 @@ Commands to ensure agent instructions tell agents to use the Neotoma CLI when ru
   - `--yes`: Apply without prompting. Without `--yes`, the command reports what would change.
   - `--user-level` / `--no-user-level`: Include or exclude user-level paths in the scan (default: include).
 - `neotoma cli-instructions config` and `neotoma cli-instructions check` are deprecated aliases for `neotoma cli guide` and `neotoma cli config`.
-- `neotoma instructions print`: Print the first fenced code block from `docs/developer/mcp/instructions.md` bundled with this package (same text MCP sends to clients). Use `--format md` to wrap output in a markdown fence, or `--json` with global JSON output mode for `{ path, body }`.
+- `neotoma instructions print`: Print the first fenced code block from `docs/developer/mcp/instructions.md` bundled with this package (same text MCP sends to clients). When the configured identity authenticates, prints the session text an MCP `initialize` returns: a bounded `[SESSION INDEX]` of standing-rule titles and instance skill names (at most 2,048 bytes), then the full rules, the skills catalog, the base block and the instance policy. Use `--format md` to wrap output in a markdown fence, or `--json` with global JSON output mode for `{ path, body }`.
 
 See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
