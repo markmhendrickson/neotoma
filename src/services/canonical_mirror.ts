@@ -504,8 +504,21 @@ async function withManifestFor<T>(
   const session = new MirrorManifestSession();
   await session.addRoot(root);
   const result = await fn(session);
+  // saveAll never throws; a manifest that could not be read or saved is
+  // reported once and the write or removal itself stands.
   await session.saveAll();
+  reportManifestNoticesOnce(session.report.notices);
   return result;
+}
+
+const reportedManifestNotices = new Set<string>();
+
+function reportManifestNoticesOnce(notices: string[]): void {
+  for (const notice of notices) {
+    if (reportedManifestNotices.has(notice)) continue;
+    reportedManifestNotices.add(notice);
+    process.stderr.write(`[mirror] ${notice}\n`);
+  }
 }
 
 async function writeFileIfChanged(
@@ -1314,6 +1327,8 @@ export async function rebuildMirror(options: RebuildOptions = {}): Promise<Rebui
       rebuildMirrorInSession(cfg, options, report, session)
     );
   } finally {
+    // saveAll reports a failed save in report.safety.notices and never
+    // throws, so it cannot replace an error raised by the rebuild itself.
     await session.saveAll();
   }
 }
@@ -1916,8 +1931,9 @@ async function rebuildSchemas(
 }
 
 /**
- * `--clean` for one scope directory: remove only files the ownership manifest
- * records, that this run did not generate, whose content still matches the
+ * `--clean` for one scope directory: remove only mirror output files the
+ * ownership manifest records, that no scope of this run generated (the
+ * session keeps a run-wide set), whose content still matches the
  * recorded hash, and with no symbolic link in the path; then remove only
  * mirror-created folders left empty. Returns count removed.
  */
