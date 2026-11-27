@@ -27,6 +27,7 @@
  *
  * CLI surface lives in `src/cli/commands/mirror.ts`.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
@@ -36,6 +37,11 @@ import { db } from "../db.js";
 import { config } from "../config.js";
 import type { NeotomaApiClient } from "../shared/api_client.js";
 import { schemaRegistry } from "./schema_registry.js";
+import {
+  MirrorManifestSession,
+  emptySafetyReport,
+  type MirrorSafetyReport,
+} from "./mirror_manifest.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
 import {
@@ -467,30 +473,74 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
+/**
+ * Ownership-manifest session for the current rebuild. Outside a rebuild, each
+ * write or removal opens a one-shot session over the configured root that
+ * contains the path, so incremental writes are recorded too.
+ */
+const manifestSessionStore = new AsyncLocalStorage<MirrorManifestSession>();
+
+function deepestConfiguredRoot(filePath: string): string | null {
+  const cfg = getMirrorConfig();
+  const target = path.resolve(filePath);
+  let best: string | null = null;
+  for (const root of [cfg.path, ...(cfg.profiles ?? []).map((p) => p.output_path)]) {
+    const r = path.resolve(root);
+    const rel = path.relative(r, target);
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    if (!best || r.length > best.length) best = r;
+  }
+  return best;
+}
+
+async function withManifestFor<T>(
+  filePath: string,
+  fn: (session: MirrorManifestSession | null) => Promise<T>
+): Promise<T> {
+  const active = manifestSessionStore.getStore();
+  if (active) return fn(active);
+  const root = deepestConfiguredRoot(filePath);
+  if (!root) return fn(null);
+  const session = new MirrorManifestSession();
+  await session.addRoot(root);
+  const result = await fn(session);
+  await session.saveAll();
+  return result;
+}
+
 async function writeFileIfChanged(
   filePath: string,
   content: string
 ): Promise<"written" | "unchanged"> {
-  await ensureDir(path.dirname(filePath));
-  try {
-    const existing = await fs.readFile(filePath, "utf8");
-    if (existing === content) return "unchanged";
-  } catch {
-    // Not present — fall through to write.
-  }
-  await fs.writeFile(filePath, content, "utf8");
-  return "written";
+  return withManifestFor(filePath, async (session) => {
+    const root = session?.rootFor(filePath);
+    if (root) return root.write(filePath, content);
+    await ensureDir(path.dirname(filePath));
+    try {
+      const existing = await fs.readFile(filePath, "utf8");
+      if (existing === content) return "unchanged";
+    } catch {
+      // Not present — fall through to write.
+    }
+    await fs.writeFile(filePath, content, "utf8");
+    return "written";
+  });
 }
 
 async function removeIfPresent(filePath: string): Promise<"removed" | "absent"> {
-  try {
-    await fs.unlink(filePath);
-    return "removed";
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === "ENOENT") return "absent";
-    throw err;
-  }
+  return withManifestFor(filePath, async (session) => {
+    let result: "removed" | "absent";
+    try {
+      await fs.unlink(filePath);
+      result = "removed";
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code !== "ENOENT") throw err;
+      result = "absent";
+    }
+    session?.rootFor(filePath)?.forget(filePath);
+    return result;
+  });
 }
 
 // Deterministic slug: slug-case canonical_name; short-hash disambiguator on collision.
@@ -1233,6 +1283,13 @@ export interface RebuildReport {
   kinds: MirrorKind[];
   counts: Record<MirrorKind, { written: number; unchanged: number; removed: number }>;
   profiles: Record<string, { written: number; unchanged: number; removed: number }>;
+  /**
+   * `--clean` outcome under the ownership manifest (issue #2939): files
+   * removed, generated files kept because they were edited, removals refused
+   * (symbolic links, invalid manifest), and Markdown files left in place
+   * because the manifest does not record them.
+   */
+  safety: MirrorSafetyReport;
 }
 
 function emptyReport(): RebuildReport {
@@ -1240,7 +1297,7 @@ function emptyReport(): RebuildReport {
   for (const k of ALL_MIRROR_KINDS) {
     counts[k] = { written: 0, unchanged: 0, removed: 0 };
   }
-  return { kinds: [], counts, profiles: {} };
+  return { kinds: [], counts, profiles: {}, safety: emptySafetyReport() };
 }
 
 export async function rebuildMirror(options: RebuildOptions = {}): Promise<RebuildReport> {
@@ -1249,6 +1306,24 @@ export async function rebuildMirror(options: RebuildOptions = {}): Promise<Rebui
 
   await ensureDir(cfg.path);
 
+  const session = new MirrorManifestSession(report.safety);
+  await session.addRoot(cfg.path);
+  for (const profile of cfg.profiles ?? []) await session.addRoot(profile.output_path);
+  try {
+    return await manifestSessionStore.run(session, () =>
+      rebuildMirrorInSession(cfg, options, report, session)
+    );
+  } finally {
+    await session.saveAll();
+  }
+}
+
+async function rebuildMirrorInSession(
+  cfg: MirrorConfig,
+  options: RebuildOptions,
+  report: RebuildReport,
+  session: MirrorManifestSession
+): Promise<RebuildReport> {
   const kinds: MirrorKind[] =
     !options.kind || options.kind === "all"
       ? cfg.kinds
@@ -1292,6 +1367,8 @@ export async function rebuildMirror(options: RebuildOptions = {}): Promise<Rebui
   }
 
   await regenerateTopIndex(cfg);
+  // Save manifests before the git step so a batch commit includes them.
+  await session.saveAll();
 
   // Phase 3: if git is enabled, ensure a repo exists and land either the
   // initial commit (first rebuild) or a deterministic batch commit covering
@@ -1838,39 +1915,22 @@ async function rebuildSchemas(
   await regenerateSchemasIndex(cfg);
 }
 
-/** Walk `dir` recursively; remove files not in `keep`. Returns count removed. */
+/**
+ * `--clean` for one scope directory: remove only files the ownership manifest
+ * records, that this run did not generate, whose content still matches the
+ * recorded hash, and with no symbolic link in the path; then remove only
+ * mirror-created folders left empty. Returns count removed.
+ */
 async function cleanStale(
   dir: string,
   keep: Set<string>,
   preserveNames: Set<string>
 ): Promise<number> {
-  let removed = 0;
-  let entries: import("node:fs").Dirent[];
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    return 0;
-  }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      removed += await cleanStale(full, keep, preserveNames);
-      // Remove empty dir.
-      try {
-        const remaining = await fs.readdir(full);
-        if (remaining.length === 0) await fs.rmdir(full);
-      } catch {
-        /* ignore */
-      }
-    } else if (entry.isFile()) {
-      if (preserveNames.has(entry.name)) continue;
-      if (!full.endsWith(".md")) continue;
-      if (keep.has(full)) continue;
-      await fs.unlink(full);
-      removed++;
-    }
-  }
-  return removed;
+  const session = manifestSessionStore.getStore();
+  if (!session) return 0;
+  const root = session.rootFor(dir);
+  if (!root) return 0;
+  return root.clean(dir, keep, preserveNames, session.report);
 }
 
 // ============================================================================

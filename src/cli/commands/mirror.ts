@@ -237,6 +237,29 @@ export function formatRebuildReport(result: MirrorRebuildResult): string {
       );
     }
   }
+  const s = result.report.safety;
+  if (s) {
+    const anything =
+      s.removed > 0 ||
+      s.kept_edited > 0 ||
+      s.refused > 0 ||
+      s.unrecorded_paths.length > 0 ||
+      s.notices.length > 0;
+    if (anything) {
+      lines.push("");
+      lines.push(
+        `Clean: removed ${s.removed}, kept_edited ${s.kept_edited}, refused ${s.refused}, not_in_manifest ${s.unrecorded_paths.length}`
+      );
+      for (const p of s.kept_edited_paths) lines.push(`  kept (edited):        ${p}`);
+      for (const p of s.refused_paths) lines.push(`  refused:              ${p}`);
+      for (const n of s.notices) lines.push(`  note: ${n}`);
+      if (s.unrecorded_paths.length > 0) {
+        lines.push("  Left in place (not in the ownership manifest):");
+        for (const p of s.unrecorded_paths) lines.push(`    ${p}`);
+        lines.push("  Delete outdated ones by hand before running `mirror push`.");
+      }
+    }
+  }
   return lines.join("\n");
 }
 
