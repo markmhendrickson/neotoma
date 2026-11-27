@@ -22,6 +22,7 @@ import {
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
 import { execAsync } from "../helpers/cli_local_target.js";
+import { stripInstructionsIndex } from "../../src/services/instructions_index.js";
 
 const SKIPPED_LINE = "1 stored standing rule could not be applied because it has no rule text.";
 
@@ -71,7 +72,7 @@ describe(
           maxBuffer: 16 * 1024 * 1024,
         }
       );
-      expect(stdout.startsWith("[STANDING RULES]\n")).toBe(true);
+      expect(stripInstructionsIndex(stdout).startsWith("[STANDING RULES]\n")).toBe(true);
       const block = stdout.slice(0, stdout.indexOf("\n[END STANDING RULES]"));
       expect(block).toContain(SKIPPED_LINE);
       // Count only: the skipped rule's title is not named.

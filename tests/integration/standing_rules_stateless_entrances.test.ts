@@ -28,6 +28,7 @@ import {
   type BootedMcpApp,
   type McpTestEnv,
 } from "../helpers/mcp_http_modern.js";
+import { stripInstructionsIndex } from "../../src/services/instructions_index.js";
 
 const state: { rules: StandingRule[]; failed: boolean } = { rules: [], failed: false };
 
@@ -110,7 +111,7 @@ describe("standing rules on server/discover", { timeout: 60_000 }, () => {
   it("authenticated discover leads with both enabled rules in full", async () => {
     state.rules = TWO_RULES;
     const instructions = await discoverInstructions(app.baseUrl);
-    expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
+    expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]\n")).toBe(true);
     expect(instructions).toContain("> Body of synthetic rule one.");
     expect(instructions).toContain("> Body of synthetic rule two.");
     expect(instructions).toContain("2 standing rules in force");
@@ -125,7 +126,7 @@ describe("standing rules on server/discover", { timeout: 60_000 }, () => {
   it("authenticated discover with no rules carries no rules block", async () => {
     state.rules = [];
     const instructions = await discoverInstructions(app.baseUrl);
-    expect(instructions.startsWith("[STANDING RULES]")).toBe(false);
+    expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]")).toBe(false);
     expect(instructions).not.toContain(AFTER_AUTH_MARK);
   });
 
@@ -133,7 +134,7 @@ describe("standing rules on server/discover", { timeout: 60_000 }, () => {
     state.rules = TWO_RULES;
     state.failed = true;
     const instructions = await discoverInstructions(app.baseUrl);
-    expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
+    expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]\n")).toBe(true);
     expect(instructions).toContain(UNKNOWN_MARK);
     expect(instructions).not.toContain("Body of synthetic rule");
     expect(instructions).not.toMatch(/\d+ standing rules? in force/);
@@ -162,7 +163,7 @@ describe("standing rules on server/discover", { timeout: 60_000 }, () => {
     ).statelessRequestAuthenticated = true;
     const result = await server.buildDiscoverResult();
     const instructions = String(result.instructions);
-    expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
+    expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]\n")).toBe(true);
     expect(instructions).toContain(UNKNOWN_MARK);
     expect(instructions).not.toContain("Body of synthetic rule");
   });
@@ -237,7 +238,7 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     const served = await rest(true);
     expect(served.status).toBe(200);
     expect(served.composition).toBe("user");
-    expect(served.text.startsWith("[STANDING RULES]\n")).toBe(true);
+    expect(stripInstructionsIndex(served.text).startsWith("[STANDING RULES]\n")).toBe(true);
     expect(served.text).toContain("> Body of synthetic rule one.");
     expect(served.text).toContain("> Body of synthetic rule two.");
     expect(served.text).toBe(await initializeInstructions());
@@ -255,7 +256,7 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     state.rules = [];
     const served = await rest(true);
     expect(served.composition).toBe("user");
-    expect(served.text.startsWith("[STANDING RULES]")).toBe(false);
+    expect(stripInstructionsIndex(served.text).startsWith("[STANDING RULES]")).toBe(false);
     expect(served.text).toBe(await initializeInstructions());
   });
 
@@ -264,7 +265,7 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     state.failed = true;
     const served = await rest(true);
     expect(served.composition).toBe("user");
-    expect(served.text.startsWith("[STANDING RULES]\n")).toBe(true);
+    expect(stripInstructionsIndex(served.text).startsWith("[STANDING RULES]\n")).toBe(true);
     expect(served.text).toContain(UNKNOWN_MARK);
     expect(served.text).not.toContain("Body of synthetic rule");
     expect(served.text).toBe(await initializeInstructions());
@@ -278,7 +279,7 @@ describe("standing rules on GET /mcp-interaction-instructions", { timeout: 60_00
     expect(served.cacheControl).toBeNull();
     expect(served.vary).toContain("Authorization");
     expect(
-      served.text.startsWith("[STANDING RULES] Standing rules are served only after authentication")
+      stripInstructionsIndex(served.text).startsWith("[STANDING RULES] Standing rules are served only after authentication")
     ).toBe(true);
     expect(served.text).toContain("as unknown, not absent");
     expect(served.text).not.toContain("Body of synthetic rule");
