@@ -8,7 +8,7 @@
  * exactly the text lexical search would build right now.
  */
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { config } from "../../src/config.js";
 import { storeStructuredForApi } from "../../src/actions.js";
@@ -23,6 +23,8 @@ import {
   nextBackfillPauseMs,
   runEntitySearchTextBackfill,
   searchTextBackfillSettingsFromEnv,
+  validateSearchTextBackfillLimits,
+  type SearchTextBackfillPhaseEvent,
   DEFAULT_SEARCH_TEXT_BACKFILL_SETTINGS,
 } from "../../src/services/entity_search_text_backfill.js";
 import { lexicalSearchEntityIds } from "../../src/shared/action_handlers/entity_handlers.js";
@@ -107,6 +109,35 @@ async function withPrepareIntercept<T>(
 }
 
 const GUARDED_UPDATE = "UPDATE entity_snapshots SET search_text = ?";
+const NULL_COUNT = "SELECT COUNT(*) AS n FROM entity_snapshots WHERE search_text IS NULL";
+
+/** One-row batches with no rate pause: the acceptance shape for verification. */
+const ONE_ROW = { batchSize: 1, rowsPerSecond: 1_000_000 };
+
+/** Fill the rest of the table, then NULL this user's rows: they are all that is NULL. */
+async function isolateNulls(userId: string, count: number, prefix: string): Promise<string[]> {
+  const ids = await storeNotes(userId, count, prefix);
+  await runEntitySearchTextBackfill({ settings: FAST, sleep: noSleep });
+  await nullAll(userId);
+  return ids;
+}
+
+async function nullCountOf(userId: string): Promise<number> {
+  return [...(await textsOf(userId)).values()].filter((t) => t === null).length;
+}
+
+function phasesOf(events: SearchTextBackfillPhaseEvent[]): string[] {
+  return events.map((e) => e.phase);
+}
+
+const ALL_PHASES = [
+  "init_start",
+  "init_done",
+  "active_start",
+  "active_end",
+  "final_count_start",
+  "final_count_done",
+];
 
 export function registerEntitySearchTextBackfillCases(backend: "sqlite" | "libsql"): void {
   describe(`search_text backfill (${backend})`, () => {
@@ -238,6 +269,298 @@ export function registerEntitySearchTextBackfillCases(backend: "sqlite" | "libsq
       expect(pauses).toEqual([110_000]);
       await runEntitySearchTextBackfill({ settings: FAST, sleep: noSleep });
       await expectAllFresh(userId);
+    });
+
+    describe("bounded verification mode", () => {
+      it("commits at most maxBatches batches, with no progress consumer", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 5, "capbatches");
+        const events: SearchTextBackfillPhaseEvent[] = [];
+        const report = await runEntitySearchTextBackfill({
+          settings: ONE_ROW,
+          sleep: noSleep,
+          limits: { maxBatches: 2, maxActiveMs: 20_000, maxInitMs: 60_000 },
+          onPhase: (e) => events.push(e),
+        });
+        expect(report.stopped_reason).toBe("batch_limit");
+        expect(report.batches).toBe(2);
+        expect(report.scanned).toBe(2);
+        expect(report.filled).toBe(2);
+        expect(report.discarded_batches).toBe(0);
+        expect(report.null_at_start).toBe(5);
+        expect(report.null_remaining).toBe(3);
+        expect(await nullCountOf(userId)).toBe(3);
+        expect(phasesOf(events)).toEqual(ALL_PHASES);
+        const end = events.find((e) => e.phase === "active_end");
+        expect(end).toMatchObject({ stopped_reason: "batch_limit", batches: 2, filled: 2 });
+        // Metadata only: no event carries an entity id or text.
+        expect(JSON.stringify(events)).not.toMatch(/ent_|capbatches/);
+        // The filled rows are fresh; a normal run finishes the rest.
+        await runEntitySearchTextBackfill({ settings: FAST, sleep: noSleep });
+        await expectAllFresh(userId);
+      });
+
+      it("ends as done, not batch_limit, when the rows run out first", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 2, "capdone");
+        const report = await runEntitySearchTextBackfill({
+          settings: { ...ONE_ROW, batchSize: 3 },
+          sleep: noSleep,
+          limits: { maxBatches: 20 },
+        });
+        expect(report.stopped_reason).toBe("done");
+        expect(report.batches).toBe(1);
+        expect(report.null_remaining).toBe(0);
+      });
+
+      it("begins no batch once the active deadline has passed", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 5, "capclock");
+        let clock = 0;
+        const report = await runEntitySearchTextBackfill({
+          settings: ONE_ROW,
+          sleep: noSleep,
+          now: () => clock,
+          // Each committed batch appears to take 6 s of active time.
+          onProgress: () => {
+            clock += 6_000;
+          },
+          limits: { maxActiveMs: 10_000 },
+        });
+        expect(report.stopped_reason).toBe("time_limit");
+        expect(report.batches).toBe(2);
+        expect(report.filled).toBe(2);
+        expect(report.discarded_batches).toBe(0);
+        expect(await nullCountOf(userId)).toBe(3);
+      });
+
+      it("rolls back a first batch still running at the deadline", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 3, "capinflight");
+        let clock = 0;
+        const events: SearchTextBackfillPhaseEvent[] = [];
+        const report = await withPrepareIntercept(
+          (sql) => {
+            // The guarded write inside the first batch is where time runs out.
+            if (sql.startsWith(GUARDED_UPDATE)) clock += 25_000;
+          },
+          () =>
+            runEntitySearchTextBackfill({
+              settings: ONE_ROW,
+              sleep: noSleep,
+              now: () => clock,
+              limits: { maxBatches: 20, maxActiveMs: 20_000 },
+              onPhase: (e) => events.push(e),
+            })
+        );
+        expect(report.stopped_reason).toBe("time_limit");
+        expect(report.stop_detail).toContain("rolled back");
+        expect(report.batches).toBe(0);
+        expect(report.filled).toBe(0);
+        expect(report.discarded_batches).toBe(1);
+        expect(await nullCountOf(userId)).toBe(3);
+        expect(report.null_remaining).toBe(3);
+        expect(phasesOf(events)).toEqual(ALL_PHASES);
+      });
+
+      it("stops before any batch when init took longer than maxInitMs", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 2, "capinit");
+        let clock = 0;
+        let counts = 0;
+        const events: SearchTextBackfillPhaseEvent[] = [];
+        const report = await withPrepareIntercept(
+          (sql) => {
+            if (!sql.startsWith(NULL_COUNT)) return;
+            // The initial count is slow; the final one is not.
+            if (counts++ === 0) clock += 61_000;
+          },
+          () =>
+            runEntitySearchTextBackfill({
+              settings: ONE_ROW,
+              sleep: noSleep,
+              now: () => clock,
+              limits: { maxBatches: 20, maxActiveMs: 20_000, maxInitMs: 60_000 },
+              onPhase: (e) => events.push(e),
+            })
+        );
+        expect(report.stopped_reason).toBe("init_limit");
+        expect(report.timing.init_ms).toBe(61_000);
+        expect(report.batches).toBe(0);
+        expect(report.timing.active_ms).toBe(0);
+        expect(await nullCountOf(userId)).toBe(2);
+        // Counts are not skipped: both are taken and reported.
+        expect(report.null_at_start).toBe(2);
+        expect(report.null_remaining).toBe(2);
+        expect(phasesOf(events)).not.toContain("active_start");
+        expect(phasesOf(events).at(-1)).toBe("final_count_done");
+      });
+
+      it("times a slow final count separately from active work", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 2, "capfinal");
+        let clock = 0;
+        let counts = 0;
+        const events: SearchTextBackfillPhaseEvent[] = [];
+        const report = await withPrepareIntercept(
+          (sql) => {
+            if (!sql.startsWith(NULL_COUNT)) return;
+            if (counts++ === 1) clock += 45_000;
+          },
+          () =>
+            runEntitySearchTextBackfill({
+              settings: ONE_ROW,
+              sleep: noSleep,
+              now: () => clock,
+              limits: { maxBatches: 1, maxActiveMs: 20_000 },
+              onPhase: (e) => events.push(e),
+            })
+        );
+        expect(report.stopped_reason).toBe("batch_limit");
+        expect(report.batches).toBe(1);
+        expect(report.timing.active_ms).toBe(0);
+        expect(report.timing.final_count_ms).toBe(45_000);
+        const end = events.find((e) => e.phase === "active_end");
+        expect(end?.active_ms).toBe(0);
+        expect(events.at(-1)).toMatchObject({ phase: "final_count_done", null_remaining: 1 });
+      });
+
+      it("an interrupt stops between batches and still reports every phase", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 4, "capsignal");
+        const controller = new AbortController();
+        const events: SearchTextBackfillPhaseEvent[] = [];
+        const report = await runEntitySearchTextBackfill({
+          settings: ONE_ROW,
+          sleep: noSleep,
+          signal: controller.signal,
+          onProgress: () => controller.abort(),
+          limits: { maxBatches: 20 },
+          onPhase: (e) => events.push(e),
+        });
+        expect(report.stopped_reason).toBe("aborted");
+        expect(report.batches).toBe(1);
+        expect(await nullCountOf(userId)).toBe(3);
+        expect(phasesOf(events)).toEqual(ALL_PHASES);
+      });
+
+      it("fails closed on a bad cap or with counts switched off, before any work", async () => {
+        for (const limits of [
+          { maxBatches: 0 },
+          { maxBatches: 1.5 },
+          { maxActiveMs: -1 },
+          { maxInitMs: Number.NaN },
+          { maxActiveMs: Number.POSITIVE_INFINITY },
+        ]) {
+          expect(() => validateSearchTextBackfillLimits(limits)).toThrow();
+          await expect(runEntitySearchTextBackfill({ limits, sleep: noSleep })).rejects.toThrow();
+        }
+        await expect(
+          runEntitySearchTextBackfill({ limits: { maxBatches: 1 }, countRemaining: false })
+        ).rejects.toThrow(/counts/);
+        expect(validateSearchTextBackfillLimits({})).toBeNull();
+        expect(validateSearchTextBackfillLimits(undefined)).toBeNull();
+      });
+
+      it("a normal run is unchanged: no limits, no phase timings", async () => {
+        const events: SearchTextBackfillPhaseEvent[] = [];
+        const report = await runEntitySearchTextBackfill({
+          settings: FAST,
+          sleep: noSleep,
+          onPhase: (e) => events.push(e),
+        });
+        expect(report.limits).toBeNull();
+        expect(report.timing).toEqual({ init_ms: null, active_ms: null, final_count_ms: null });
+        expect(events).toEqual([]);
+      });
+
+      it("the CLI enforces --max-batches and prints metadata-only phase lines", async () => {
+        const userId = randomUUID();
+        await isolateNulls(userId, 4, "capcli");
+        const { runCli } = await import("../../src/cli/index.js");
+        const out: string[] = [];
+        const err: string[] = [];
+        const outSpy = vi.spyOn(process.stdout, "write").mockImplementation((c: unknown) => {
+          out.push(String(c));
+          return true;
+        });
+        const errSpy = vi.spyOn(process.stderr, "write").mockImplementation((c: unknown) => {
+          err.push(String(c));
+          return true;
+        });
+        const previousExit = process.exitCode;
+        try {
+          await runCli([
+            "node",
+            "neotoma",
+            "snapshots",
+            "search-text-backfill",
+            "--batch-size",
+            "1",
+            "--rows-per-second",
+            "1000000",
+            "--max-batches",
+            "2",
+            "--max-active-seconds",
+            "20",
+            "--max-init-seconds",
+            "60",
+            "--json",
+          ]);
+        } finally {
+          outSpy.mockRestore();
+          errSpy.mockRestore();
+        }
+        expect(process.exitCode ?? 0).toBe(previousExit ?? 0);
+        const report = JSON.parse(out.join("")) as Record<string, unknown>;
+        expect(report).toMatchObject({
+          stopped_reason: "batch_limit",
+          batches: 2,
+          filled: 2,
+          limits: { maxBatches: 2, maxActiveMs: 20_000, maxInitMs: 60_000 },
+        });
+        expect(await nullCountOf(userId)).toBe(2);
+        const phaseLines = err
+          .join("")
+          .split("\n")
+          .filter((l) => l.includes("search_text_backfill_phase"))
+          .map((l) => JSON.parse(l) as { phase: string; pid: number });
+        expect(phaseLines.map((l) => l.phase)).toEqual(ALL_PHASES);
+        expect(phaseLines.every((l) => l.pid === process.pid)).toBe(true);
+      });
+
+      it("the CLI rejects a bad cap before opening the database", async () => {
+        const { runCli } = await import("../../src/cli/index.js");
+        const err: string[] = [];
+        const errSpy = vi.spyOn(process.stderr, "write").mockImplementation((c: unknown) => {
+          err.push(String(c));
+          return true;
+        });
+        const previousExit = process.exitCode;
+        let counts = 0;
+        try {
+          await withPrepareIntercept(
+            (sql) => {
+              if (sql.startsWith(NULL_COUNT)) counts++;
+            },
+            () =>
+              runCli([
+                "node",
+                "neotoma",
+                "snapshots",
+                "search-text-backfill",
+                "--max-batches",
+                "2.5",
+              ])
+          );
+          expect(process.exitCode).toBe(1);
+        } finally {
+          errSpy.mockRestore();
+          process.exitCode = previousExit;
+        }
+        expect(err.join("")).toContain("--max-batches must be a positive integer");
+        expect(counts).toBe(0);
+      });
     });
 
     it("the search trace reports the NULL rows left in scope", async () => {
