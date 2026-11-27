@@ -24,6 +24,7 @@ import {
   type MirrorPushResult,
 } from "../../src/services/mirror_writeback.ts";
 import type { MirrorProfile } from "../../src/services/canonical_mirror.ts";
+import { MIRROR_MANIFEST_FILENAME, sha256 } from "../../src/services/mirror_manifest.ts";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -72,6 +73,20 @@ Body content.
 `;
 }
 
+/**
+ * Write a profile file and record it in the root's ownership manifest, as a
+ * rebuild would, so push treats it as a mirror-written file.
+ */
+async function writeMirrorFile(dir: string, name: string, content: string): Promise<void> {
+  await fs.writeFile(path.join(dir, name), content, "utf8");
+  const manifestPath = path.join(dir, MIRROR_MANIFEST_FILENAME);
+  const manifest = JSON.parse(
+    await fs.readFile(manifestPath, "utf8").catch(() => '{"version":1,"files":{},"dirs":[]}')
+  ) as { files: Record<string, string> };
+  manifest.files[name] = sha256(content);
+  await fs.writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+}
+
 // ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
@@ -99,7 +114,7 @@ describe("runMirrorPush — API failure mid-batch", () => {
     const profile = makeProfile({ output_path: tmpDir });
 
     // Write a file whose title differs from canonical so a correction is queued.
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_api400"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_api400"));
 
     const getMock = vi.fn().mockResolvedValue({
       data: { entity_type: "plan", snapshot: { title: "Original Title", status: "active" } },
@@ -131,7 +146,7 @@ describe("runMirrorPush — API failure mid-batch", () => {
   it("captures error in result.errors when POST /correct throws a network-level exception (503)", async () => {
     const profile = makeProfile({ output_path: tmpDir });
 
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_api503"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_api503"));
 
     const getMock = vi.fn().mockResolvedValue({
       data: { entity_type: "plan", snapshot: { title: "Original Title", status: "active" } },
@@ -156,8 +171,8 @@ describe("runMirrorPush — API failure mid-batch", () => {
     const profile = makeProfile({ output_path: tmpDir });
 
     // Two files that both need corrections.
-    await fs.writeFile(path.join(tmpDir, "plan-a.md"), makeMarkdownFile("ent_batch_a"), "utf8");
-    await fs.writeFile(path.join(tmpDir, "plan-b.md"), makeMarkdownFile("ent_batch_b"), "utf8");
+    await writeMirrorFile(tmpDir, "plan-a.md", makeMarkdownFile("ent_batch_a"));
+    await writeMirrorFile(tmpDir, "plan-b.md", makeMarkdownFile("ent_batch_b"));
 
     const getMock = vi.fn().mockResolvedValue({
       data: { entity_type: "plan", snapshot: { title: "Original Title", status: "active" } },
@@ -195,7 +210,7 @@ describe("runMirrorPush — API failure mid-batch", () => {
   it("records error without crashing when GET /entities/{id} returns a 500 error body", async () => {
     const profile = makeProfile({ output_path: tmpDir });
 
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_get500"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_get500"));
 
     const getMock = vi.fn().mockResolvedValue({
       data: null,
@@ -231,7 +246,7 @@ describe("runMirrorPush — invalid API client at the service boundary", () => {
     const profile = makeProfile({ output_path: tmpDir });
 
     // Write a file so the service gets past the directory scan and attempts an API call.
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_null_client"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_null_client"));
 
     // The CLI guards against a null client, but the service catches the TypeError
     // and records it in errors[] rather than crashing — that is the correct behavior.
@@ -249,7 +264,7 @@ describe("runMirrorPush — invalid API client at the service boundary", () => {
   it("surfaces TypeError in result.errors (no silent success) when apiClient is undefined", async () => {
     const profile = makeProfile({ output_path: tmpDir });
 
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_undef_client"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_undef_client"));
 
     const result = await runMirrorPush(profile, undefined as unknown as WritebackApiClient);
 
@@ -262,7 +277,7 @@ describe("runMirrorPush — invalid API client at the service boundary", () => {
   it("surfaces TypeError in result.errors when GET is replaced with a non-function", async () => {
     const profile = makeProfile({ output_path: tmpDir });
 
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_badget"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_badget"));
 
     // Partially broken client: GET is not a function.
     const brokenClient = {
@@ -289,7 +304,7 @@ describe("runMirrorPush — basemap IO errors", () => {
   it("recovers gracefully from corrupt basemap.json (invalid JSON) — treats as empty base", async () => {
     const profile = makeProfile({ output_path: tmpDir });
 
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_corrupt_base"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_corrupt_base"));
 
     // Write a corrupt basemap.
     const baseDir = path.join(tmpDir, ".neotoma-mirror-base");
@@ -319,11 +334,7 @@ describe("runMirrorPush — basemap IO errors", () => {
   it("recovers gracefully from basemap.json with missing required fields — treats as empty base", async () => {
     const profile = makeProfile({ output_path: tmpDir });
 
-    await fs.writeFile(
-      path.join(tmpDir, "plan.md"),
-      makeMarkdownFile("ent_malformed_base"),
-      "utf8"
-    );
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_malformed_base"));
 
     // Write a basemap with wrong shape: entries lack `snapshot` field.
     const baseDir = path.join(tmpDir, ".neotoma-mirror-base");
@@ -373,7 +384,7 @@ describe("runMirrorPush — basemap IO errors", () => {
     const profile = makeProfile({ output_path: tmpDir });
 
     // Write a file that will produce a correction.
-    await fs.writeFile(path.join(tmpDir, "plan.md"), makeMarkdownFile("ent_save_fail"), "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", makeMarkdownFile("ent_save_fail"));
 
     // Create the base dir as a file (not directory) so mkdir in saveBaseMap fails.
     writeFileSync(path.join(tmpDir, ".neotoma-mirror-base"), "I am a file, not a directory");
@@ -433,7 +444,7 @@ describe("runMirrorPush — idempotency and sequential re-push", () => {
     // Use a disk file whose editable fields (title, status, body) all match
     // what the mock API returns after corrections — so the second push is a no-op.
     const diskContent = makeMarkdownFile("ent_sequential");
-    await fs.writeFile(path.join(tmpDir, "plan.md"), diskContent, "utf8");
+    await writeMirrorFile(tmpDir, "plan.md", diskContent);
 
     // The disk file parses to: { title: "Edited Title", status: "active", body: "Body content." }
     // Original canonical has title: "Original Title" → correction queued for title (and body).

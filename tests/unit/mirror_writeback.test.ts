@@ -29,6 +29,20 @@ import {
   type WritebackApiClient,
 } from "../../src/services/mirror_writeback.ts";
 import type { MirrorProfile } from "../../src/services/canonical_mirror.ts";
+import { MIRROR_MANIFEST_FILENAME, sha256 } from "../../src/services/mirror_manifest.ts";
+
+/** Record `names` in the profile root's ownership manifest, as a rebuild would. */
+async function recordAsMirrorOwned(dir: string, names: string[]): Promise<void> {
+  const files: Record<string, string> = {};
+  for (const name of names) {
+    files[name] = sha256(await fs.readFile(path.join(dir, name), "utf8"));
+  }
+  await fs.writeFile(
+    path.join(dir, MIRROR_MANIFEST_FILENAME),
+    JSON.stringify({ version: 1, files, dirs: [] }),
+    "utf8"
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -361,6 +375,7 @@ My body content.
 `;
     const filePath = path.join(tmpDir, "my-plan.md");
     await fs.writeFile(filePath, diskContent, "utf8");
+    await recordAsMirrorOwned(tmpDir, ["my-plan.md"]);
 
     const postMock = vi.fn().mockResolvedValue({ data: { success: true }, error: null });
     const getMock = vi.fn().mockResolvedValue({
@@ -524,6 +539,7 @@ Body.
 `;
     const filePath = path.join(tmpDir, "dryrun.md");
     await fs.writeFile(filePath, diskContent, "utf8");
+    await recordAsMirrorOwned(tmpDir, ["dryrun.md"]);
 
     const postMock = vi.fn().mockResolvedValue({ data: { success: true }, error: null });
     const getMock = vi.fn().mockResolvedValue({
@@ -584,5 +600,150 @@ Same body.
     expect(result.corrections_applied).toBe(0);
     expect(result.conflicts).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runMirrorPush — files the mirror did not record as its own
+// ---------------------------------------------------------------------------
+
+describe("runMirrorPush — file not in the ownership manifest and no sync base", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "neotoma-mirror-push-unlisted-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // An outdated profile file written before the manifest existed: its title is
+  // older than the database value.
+  const OUTDATED_FILE = `---
+entity_id: ent_outdated01
+entity_type: plan
+schema_version: 1.0
+title: Old Title
+status: draft
+---
+
+Old body.
+`;
+
+  function apiWithNewerValues() {
+    const getMock = vi.fn().mockResolvedValue({
+      data: {
+        entity_type: "plan",
+        snapshot: { title: "Newer Title", status: "active", body: "Old body." },
+      },
+      error: null,
+      response: { status: 200 },
+    });
+    const postMock = vi.fn().mockResolvedValue({ data: { success: true }, error: null });
+    return { getMock, postMock, api: { GET: getMock, POST: postMock } as WritebackApiClient };
+  }
+
+  async function writeOutdatedFile(): Promise<string> {
+    const filePath = path.join(tmpDir, "outdated.md");
+    await fs.writeFile(filePath, OUTDATED_FILE, "utf8");
+    // A manifest exists for the root, but it does not list this file.
+    await fs.writeFile(path.join(tmpDir, "other.md"), "generated\n", "utf8");
+    await recordAsMirrorOwned(tmpDir, ["other.md"]);
+    await fs.rm(path.join(tmpDir, "other.md"));
+    return filePath;
+  }
+
+  it("makes no correction call and reports each differing field as needing a resolution", async () => {
+    const filePath = await writeOutdatedFile();
+    const { api, postMock } = apiWithNewerValues();
+    const profile = makeProfile({ allow_disk_writeback: true, output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+
+    expect(postMock).not.toHaveBeenCalled();
+    expect(result.corrections_applied).toBe(0);
+    const fields = result.conflicts.map((c) => c.field).sort();
+    expect(fields).toEqual(["status", "title"]);
+    for (const c of result.conflicts) {
+      expect(c.source_file).toBe(filePath);
+      expect(c.base_value).toBeUndefined();
+      expect(c.message).toContain("delete the file, then run");
+      expect(c.message).toContain(`neotoma mirror rebuild --profile ${profile.id}`);
+    }
+    const title = result.conflicts.find((c) => c.field === "title")!;
+    expect(title.disk_value).toBe("Old Title");
+    expect(title.canonical_value).toBe("Newer Title");
+
+    // No base is recorded, so a second push still does not apply the file.
+    const baseMapFile = path.join(tmpDir, ".neotoma-mirror-base", "basemap.json");
+    const baseMap = JSON.parse(await fs.readFile(baseMapFile, "utf8").catch(() => "{}"));
+    expect(baseMap["outdated.md"]).toBeUndefined();
+    const second = await runMirrorPush(profile, api);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(second.conflicts.length).toBe(2);
+  });
+
+  it("treats a root with no manifest the same way", async () => {
+    await fs.writeFile(path.join(tmpDir, "outdated.md"), OUTDATED_FILE, "utf8");
+    const { api, postMock } = apiWithNewerValues();
+    const profile = makeProfile({ allow_disk_writeback: true, output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+
+    expect(postMock).not.toHaveBeenCalled();
+    expect(result.conflicts.map((c) => c.field).sort()).toEqual(["status", "title"]);
+  });
+
+  it("reports the file under --check without counting it as a correction", async () => {
+    await writeOutdatedFile();
+    const { api, postMock } = apiWithNewerValues();
+    const profile = makeProfile({ allow_disk_writeback: true, output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api, { dry_run: true });
+
+    expect(postMock).not.toHaveBeenCalled();
+    expect(result.corrections_dry_run).toBe(0);
+    expect(result.conflicts.map((c) => c.field).sort()).toEqual(["status", "title"]);
+  });
+
+  it("still pushes a manifest-listed file with no base, including one edited after it was written", async () => {
+    const filePath = path.join(tmpDir, "listed.md");
+    await fs.writeFile(filePath, OUTDATED_FILE, "utf8");
+    await recordAsMirrorOwned(tmpDir, ["listed.md"]);
+    // The user edits the file after the mirror wrote it.
+    await fs.writeFile(filePath, OUTDATED_FILE.replace("Old Title", "User Title"), "utf8");
+    const { api, postMock } = apiWithNewerValues();
+    const profile = makeProfile({ allow_disk_writeback: true, output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+
+    expect(result.conflicts).toHaveLength(0);
+    const titleCall = postMock.mock.calls.find(
+      (c) => (c[1] as { body: { field: string } }).body.field === "title"
+    );
+    expect((titleCall?.[1] as { body: { value: unknown } }).body.value).toBe("User Title");
+  });
+
+  it("tells the user to delete the file before rebuilding in the conflict message", async () => {
+    await fs.writeFile(path.join(tmpDir, "conflict.md"), OUTDATED_FILE, "utf8");
+    await fs.mkdir(path.join(tmpDir, ".neotoma-mirror-base"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, ".neotoma-mirror-base", "basemap.json"),
+      JSON.stringify({
+        "conflict.md": { content_hash: "x", snapshot: { title: "Base Title", status: "draft" } },
+      }),
+      "utf8"
+    );
+    const { api } = apiWithNewerValues();
+    const profile = makeProfile({ allow_disk_writeback: true, output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+
+    const title = result.conflicts.find((c) => c.field === "title")!;
+    expect(title.base_value).toBe("Base Title");
+    expect(title.message).toContain(
+      `delete the file, then run "neotoma mirror rebuild --profile ${profile.id}"`
+    );
   });
 });

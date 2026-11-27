@@ -19,6 +19,9 @@
  *       - base == canonical, disk different → apply disk edit via /correct
  *       - base == disk, canonical different → no-op (canonical already moved)
  *       - base differs from both canonical and disk → emit conflict
+ *       - no base, and the file is not in the root's ownership manifest
+ *         (`.neotoma-mirror-manifest.json`) → report it as needing a
+ *         resolution; apply nothing and record no base
  *   5. After successful apply, write the new canonical hash as the base.
  *
  * Safety:
@@ -36,6 +39,7 @@ import * as fsSync from "node:fs";
 import * as path from "node:path";
 
 import type { MirrorProfile } from "./canonical_mirror.js";
+import { RootManifest, emptySafetyReport } from "./mirror_manifest.js";
 
 // ============================================================================
 // Types
@@ -424,6 +428,22 @@ export async function runMirrorPush(
   const baseMap = loadBaseMap(outputPath);
   const updatedBaseMap: BaseMap = { ...baseMap };
 
+  // Load the ownership manifest for the profile root (the same root a rebuild
+  // writes). A file with no base that the mirror did not record as its own may
+  // be an outdated copy that rebuild no longer refreshes, so its values are
+  // never taken as the intended state. An absent or rejected manifest lists
+  // nothing.
+  const ownership = new RootManifest(outputPath);
+  try {
+    await ownership.load(emptySafetyReport());
+  } catch (err) {
+    result.errors.push({
+      file: ownership.manifestPath,
+      message: `Cannot read mirror manifest: ${String(err)}`,
+    });
+    return result;
+  }
+
   // Enumerate markdown files in the profile output path.
   let mdFiles: string[] = [];
   try {
@@ -501,6 +521,9 @@ export async function runMirrorPush(
     const baseEntry = baseMap[relPath];
     const baseSnapshot: Record<string, unknown> = baseEntry?.snapshot ?? {};
     const hasBase = baseEntry !== undefined;
+    const ownershipRel = ownership.rel(filePath);
+    const ownedByMirror = ownershipRel !== null && ownership.files.has(ownershipRel);
+    const needsResolution = !hasBase && !ownedByMirror;
 
     // Build the canonical content hash for base comparison.
     const diskHash = contentHash(diskContent);
@@ -529,8 +552,23 @@ export async function runMirrorPush(
         continue;
       }
 
-      if (!hasBase) {
-        // No base — treat as: disk is the intended state, apply if disk != canonical.
+      if (needsResolution) {
+        // No base and not a mirror-written file: report it, apply nothing.
+        conflicts.push({
+          entity_id: entityId,
+          field,
+          source_file: filePath,
+          base_value: undefined,
+          disk_value: diskVal,
+          canonical_value: canonicalVal,
+          message:
+            `Needs a resolution: field "${field}" for entity ${entityId} differs, and ` +
+            `${relPath} has no sync base and was not recorded by the mirror as its own, ` +
+            `so it may be an outdated copy. Nothing was applied. To keep the database ` +
+            `value, delete the file, then run "neotoma mirror rebuild --profile ${profile.id}".`,
+        });
+      } else if (!hasBase) {
+        // No base, mirror-written file — disk is the intended state, apply if disk != canonical.
         corrections.push({
           entity_id: entityId,
           entity_type: canonicalEntityType,
@@ -566,8 +604,8 @@ export async function runMirrorPush(
             `Conflict on field "${field}" for entity ${entityId}: ` +
             `both the disk file and canonical DB have changed since last sync. ` +
             `Resolve manually: edit the file to match the desired value and re-run ` +
-            `"neotoma mirror push ${profile.id}", or revert the file with ` +
-            `"neotoma mirror rebuild --profile ${profile.id}".`,
+            `"neotoma mirror push ${profile.id}", or, to revert to the database value, ` +
+            `delete the file, then run "neotoma mirror rebuild --profile ${profile.id}".`,
         });
       }
       // else: canonicalEqBase=false, diskEqBase=true → canonical moved but disk unchanged → no-op.
@@ -650,6 +688,8 @@ export async function runMirrorPush(
       } catch {
         // Best-effort — don't fail the push if base update fails.
       }
+    } else if (needsResolution) {
+      // Record no base, so a later push does not apply this file silently.
     } else if (!hasBase || diskHash !== baseEntry?.content_hash) {
       // Record the current disk hash so subsequent runs can detect changes.
       updatedBaseMap[relPath] = {
