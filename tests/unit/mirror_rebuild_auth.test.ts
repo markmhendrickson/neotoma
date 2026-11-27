@@ -7,7 +7,10 @@
  * block sets a non-zero exit code. These tests cover the auth-detection logic
  * and the throwing behavior end-to-end via rebuildMirror.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isAuthError, rebuildMirror } from "../../src/services/canonical_mirror.ts";
 
@@ -36,12 +39,52 @@ describe("isAuthError", () => {
 });
 
 describe("rebuildMirror profile auth failure (issue #401)", () => {
+  // The built-in `neotoma-plans` profile writes to the relative path
+  // `docs/plans`, which inside a test run is the repository checkout. Point a
+  // user config under a temporary HOME at a temporary output folder instead, so
+  // the rebuild (and its ownership manifest) never writes into the repository.
+  const envKeys = ["HOME", "USERPROFILE", "NEOTOMA_MIRROR_PATH"] as const;
+  const saved: Record<string, string | undefined> = {};
+  let tmpRoot: string;
+
+  beforeEach(() => {
+    tmpRoot = mkdtempSync(path.join(tmpdir(), "mirror-rebuild-auth-"));
+    for (const k of envKeys) saved[k] = process.env[k];
+    process.env.HOME = tmpRoot;
+    process.env.USERPROFILE = tmpRoot;
+    process.env.NEOTOMA_MIRROR_PATH = path.join(tmpRoot, "mirror");
+    const configDir = path.join(tmpRoot, ".config", "neotoma");
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      path.join(configDir, "config.json"),
+      JSON.stringify({
+        mirror: {
+          profiles: [
+            {
+              id: "neotoma-plans",
+              entity_type: "plan",
+              filter: {},
+              output_path: path.join(tmpRoot, "plans"),
+              render_mode: "frontmatter_content",
+              content_field: "body",
+            },
+          ],
+        },
+      })
+    );
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const k of envKeys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    rmSync(tmpRoot, { recursive: true, force: true });
   });
 
   it("throws (non-zero exit signal) when the API returns AUTH_REQUIRED for a profile rebuild", async () => {
-    // Drive the built-in default `neotoma-plans` profile through the apiClient
+    // Drive a `neotoma-plans` profile through the apiClient
     // path. The apiClient returns an auth error exactly as an unauthenticated
     // server would; rebuildProfile must throw rather than return silently.
     const apiClient = {

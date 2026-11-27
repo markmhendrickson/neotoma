@@ -3,6 +3,7 @@
 ## Scope
 
 This document covers:
+
 - Canonical markdown renderer family
 - The filesystem mirror layout, write-through hooks, and rebuild semantics
 - Optional git-backed history
@@ -10,6 +11,7 @@ This document covers:
 - Determinism guarantees
 
 This document does NOT cover:
+
 - Schema definitions (see `docs/subsystems/schema.md`)
 - Reducer / snapshot computation (see `docs/subsystems/reducer.md`)
 - Relationship semantics (see `docs/subsystems/relationships.md`)
@@ -104,7 +106,23 @@ See `docs/developer/cli_reference.md` for full syntax. Summary:
 
 ### Rebuild filters
 
-`rebuild` always truncates and regenerates within the targeted scope. `--clean` removes stale files inside the scope that this pass did not produce. Without `--clean`, stale files are preserved.
+`rebuild` always truncates and regenerates within the targeted scope. `--clean` removes stale files inside the scope that this pass did not produce, limited to files the ownership manifest records (see [Ownership manifest](#ownership-manifest)). Without `--clean`, stale files are preserved.
+
+### Ownership manifest
+
+Each output root (the mirror path and each profile `output_path`) holds `.neotoma-mirror-manifest.json`:
+
+```json
+{ "version": 1, "files": { "entities/note/example.md": "<sha256>" }, "dirs": ["entities/note"] }
+```
+
+- **Recording.** Every mirror write, in a rebuild or an incremental write, records the file's relative path and the sha256 of the content written, or of identical content already present. An incremental write creates the manifest if the root has none. Folders the mirror creates are recorded in `dirs`. An incremental removal drops the entry. Only the mirror's own output files are recorded: a file entry ends in `.md` and has no path segment starting with a dot, and a folder entry has no dot-prefixed segment. The manifest is written atomically: a temporary file with a name unique per write, then a rename.
+- **Writing is unchanged.** Same-name files are overwritten exactly as before; the manifest only narrows `--clean`.
+- **Only touched roots are saved.** A root's manifest is written only after the run writes to, removes from or cleans that root. A limited rebuild (`--profile`, `--kind`, `--entity-type`, or a profile that is skipped or fails) writes no manifest in output roots it does not touch and creates no profile output folder it does not write to.
+- **Bookkeeping never fails a write.** A manifest that cannot be read leaves that root's manifest as it is: writes and removals proceed, nothing is recorded, and `--clean` removes nothing from that root and says so. A manifest that cannot be saved is reported (in the rebuild report, or once on stderr for incremental writes) and never fails the write, the removal or the rebuild; it never replaces an error the rebuild itself raised.
+- **`--clean`.** Clean removes only the mirror's own output files. It removes a file only if it is listed, is a Markdown output file as above, is in the requested scope, was not generated anywhere in this run (including by another scope whose output root is the same folder or a nested one, even when that folder is spelled differently, such as through a symbolic link in a parent folder or in another letter case on a case-insensitive filesystem), its current content hash equals the recorded hash, and no path component is a symbolic link. It removes only listed folders that are left empty. An edited file is kept and reported. A symlinked root refuses `--clean`. With no manifest, `--clean` deletes nothing and the run writes a manifest for that root. An invalid manifest (unknown version, malformed JSON, an absolute or `..` entry, an entry that is not a mirror output file or folder, a bad hash) is rejected as a whole: `--clean` deletes nothing from that root, and the run replaces it with a manifest listing only what this run writes, removes or cleans there, so files listed only in the rejected manifest are no longer recorded and are never removed automatically. `--clean` with `--profile` works within that profile folder's manifest.
+- **Report.** The rebuild report lists Markdown files under a cleaned scope that the manifest does not record (walked without following links, skipping nested roots), and says to delete outdated ones by hand before running `mirror push`.
+- **Upgrading.** Files written before the manifest existed are not recorded and are never removed automatically. Delete outdated ones individually, never the whole folder. Commit the manifest with the mirror if the folder is versioned; if it is ignored, a fresh checkout's first `--clean` removes nothing.
 
 ### Activation offer
 

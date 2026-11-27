@@ -59,9 +59,15 @@ neotoma mirror rebuild --entity-type contact
 # Rebuild a single entity
 neotoma mirror rebuild --entity-id <id>
 
-# Remove stale files that the rebuild did not produce
+# Remove stale files the mirror generated that the rebuild did not produce
 neotoma mirror rebuild --clean
 ```
+
+`--clean` deletes only files the mirror generated. Each output root (the mirror folder and each profile output folder) holds an ownership manifest, `.neotoma-mirror-manifest.json`, that records every file the mirror wrote with its content hash, and every folder it created. `--clean` removes a file only if the manifest lists it, it is in the requested scope, this run did not generate it, its content still matches the recorded hash, and no part of its path is a symbolic link. It removes only folders the mirror created and that are empty. An edited generated file is kept and reported. A symlinked output root refuses `--clean`. Clean removes only the mirror's own output files: Markdown files with no dot-prefixed path segment, and never a file this run generated in any scope. With no manifest, or an invalid or unreadable one, `--clean` deletes nothing from that output root and says so.
+
+Incremental writes also record their files, and create the manifest if the output root has none. The manifest is written only in output roots the run writes to, removes from or cleans, so `--profile` or `--kind` leaves other output folders untouched. A manifest that cannot be read or saved is reported and never makes a write, removal or rebuild fail.
+
+Same-name files are still overwritten by rebuilds and incremental writes, as before. The first `--clean` after upgrading removes nothing and writes the manifest. Files written before the upgrade are not recorded and are never removed automatically. The rebuild report lists the Markdown files it left in place for that reason; delete outdated ones by hand, individually, never the whole folder, before using `mirror push`. If the mirror folder is in git, commit `.neotoma-mirror-manifest.json` with it; if you ignore it, a fresh checkout's first `--clean` removes nothing.
 
 ## Checking status
 
