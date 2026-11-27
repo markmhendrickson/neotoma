@@ -88,6 +88,11 @@ export class RootManifest {
     return r.split(path.sep).join("/");
   }
 
+  /** True when `absPath` is this root itself or a path inside it. */
+  contains(absPath: string): boolean {
+    return path.resolve(absPath) === this.root || this.rel(absPath) !== null;
+  }
+
   async load(report: MirrorSafetyReport): Promise<void> {
     let raw: string;
     try {
@@ -405,7 +410,7 @@ export class MirrorManifestSession {
   rootFor(filePath: string): RootManifest | null {
     let best: RootManifest | null = null;
     for (const m of this.roots.values()) {
-      if (m.rel(filePath) !== null && (!best || m.root.length > best.root.length)) best = m;
+      if (m.contains(filePath) && (!best || m.root.length > best.root.length)) best = m;
     }
     return best;
   }
