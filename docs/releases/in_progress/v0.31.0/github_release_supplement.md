@@ -1,4 +1,4 @@
-Neotoma v0.31.0 includes a correctness fix: `neotoma mirror rebuild --clean` now deletes only files the mirror generated (#2939).
+Neotoma v0.31.0 makes `neotoma mirror rebuild --clean` delete only files the mirror generated (#2939), and adds regression tests that pin guest-link confinement on the subscription and event-stream routes under every access policy (#2937).
 
 ## What changed for npm package users
 
@@ -8,6 +8,17 @@ Neotoma v0.31.0 includes a correctness fix: `neotoma mirror rebuild --clean` now
 - With no manifest, or an invalid or unreadable one, `--clean` deletes nothing from that output root and the report says so. Manifests are written only in output roots the run writes to, removes from or cleans, and a manifest that cannot be read or saved is reported without failing the write, removal or rebuild.
 - The rebuild report lists the Markdown files under a cleaned folder that were left in place because the manifest does not record them, with one line: delete outdated ones by hand before running `mirror push`.
 - Writing is unchanged. Rebuilds and incremental writes still overwrite a same-name file as before, and incremental removals behave as before. The mirror now also records each file it writes, with its content hash, and each folder it creates, in the manifest of that output root. `--clean` on a profile output folder works within that folder's manifest.
+
+## Security hardening
+
+- Guest-link confinement on the subscription and event-stream routes is now pinned by a per-policy test matrix (closed, read_only, submit_only, submitter_scoped, open): a token for page A gets 403 for page B's subscription on every route and still manages page A's own subscription (#2937, refs #2456). This is test-only, with no runtime change.
+- Security review: [`security_review.md`](security_review.md). The diff classifier reports `sensitive=false`, `security:lint` has 0 errors, the protected-routes manifest is in sync, and the auth topology matrix passes (18 passed, 1 skipped).
+
+## Tests and validation
+
+- Six test files, 174 tests, pass: the mirror manifest unit, scope and spelling tests, the rebuild auth test, the `--clean` end-to-end test, and the guest-token entity binding test.
+- Type check passes and the automated test catalog is up to date.
+- `npm run openapi:bc-diff` reports no breaking changes. The only breaking change is the CLI behavior below.
 
 ## Breaking changes
 
