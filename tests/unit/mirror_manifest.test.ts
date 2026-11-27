@@ -38,7 +38,13 @@ async function rebuild(root: string, files: Record<string, string>, clean: boole
   const m = await session.addRoot(root);
   for (const [p, c] of Object.entries(files)) await m.write(p, c, session.report);
   let removed = 0;
-  if (clean) removed = await m.clean(root, new Set(Object.keys(files)), new Set(["index.md"]), session.report);
+  if (clean)
+    removed = await m.clean(
+      root,
+      new Set(Object.keys(files)),
+      new Set(["index.md"]),
+      session.report
+    );
   await session.saveAll();
   return { report: session.report, removed };
 }
@@ -127,24 +133,26 @@ describe("mirror owned-paths manifest (#2939)", () => {
     expect(existsSync(path.join(root, "legacy.md"))).toBe(true);
   });
 
-  it.each([
-    ["../escape.md"],
-    ["/etc/passwd"],
-    ["sub/../../escape.md"],
-  ])("rejects a tampered manifest entry %s and removes nothing", async (entry) => {
-    const parent = tmp();
-    const root = path.join(parent, "root");
-    mkdirSync(root);
-    writeFileSync(path.join(parent, "escape.md"), "victim");
-    writeFileSync(path.join(root, "owned.md"), "gen");
-    writeFileSync(
-      path.join(root, MIRROR_MANIFEST_FILENAME),
-      JSON.stringify({ version: 1, files: { [entry]: sha256("victim"), "owned.md": sha256("gen") } })
-    );
-    const { report, removed } = await rebuild(root, {}, true);
-    expect(removed).toBe(0);
-    expect(report.refused).toBe(1);
-    expect(existsSync(path.join(parent, "escape.md"))).toBe(true);
-    expect(existsSync(path.join(root, "owned.md"))).toBe(true);
-  });
+  it.each([["../escape.md"], ["/etc/passwd"], ["sub/../../escape.md"]])(
+    "rejects a tampered manifest entry %s and removes nothing",
+    async (entry) => {
+      const parent = tmp();
+      const root = path.join(parent, "root");
+      mkdirSync(root);
+      writeFileSync(path.join(parent, "escape.md"), "victim");
+      writeFileSync(path.join(root, "owned.md"), "gen");
+      writeFileSync(
+        path.join(root, MIRROR_MANIFEST_FILENAME),
+        JSON.stringify({
+          version: 1,
+          files: { [entry]: sha256("victim"), "owned.md": sha256("gen") },
+        })
+      );
+      const { report, removed } = await rebuild(root, {}, true);
+      expect(removed).toBe(0);
+      expect(report.refused).toBe(1);
+      expect(existsSync(path.join(parent, "escape.md"))).toBe(true);
+      expect(existsSync(path.join(root, "owned.md"))).toBe(true);
+    }
+  );
 });

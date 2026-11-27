@@ -494,7 +494,9 @@ async function withManifestSession<T>(
   const result = await fn(session);
   await session.saveAll();
   for (const notice of session.report.skipped_foreign_paths) {
-    process.stderr.write(`[mirror] skipped writing over a file the mirror did not create: ${notice}\n`);
+    process.stderr.write(
+      `[mirror] skipped writing over a file the mirror did not create: ${notice}\n`
+    );
   }
   return result;
 }
@@ -1281,7 +1283,9 @@ export async function rebuildMirror(options: RebuildOptions = {}): Promise<Rebui
   await session.addRoot(cfg.path);
   for (const profile of cfg.profiles ?? []) await session.addRoot(profile.output_path);
   try {
-    return await manifestSessionStore.run(session, () => rebuildMirrorInSession(cfg, options, report));
+    return await manifestSessionStore.run(session, () =>
+      rebuildMirrorInSession(cfg, options, report)
+    );
   } finally {
     // Written after the rebuild so the manifest reflects exactly this run.
     await session.saveAll();
@@ -1293,7 +1297,6 @@ async function rebuildMirrorInSession(
   options: RebuildOptions,
   report: RebuildReport
 ): Promise<RebuildReport> {
-
   await ensureDir(cfg.path);
 
   const kinds: MirrorKind[] =

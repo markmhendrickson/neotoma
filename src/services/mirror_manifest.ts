@@ -94,7 +94,9 @@ export class RootManifest {
       const st = await fs.lstat(this.manifestPath);
       if (!st.isFile()) {
         this.loadState = "invalid";
-        report.notices.push(`Mirror manifest at ${this.manifestPath} is not a regular file; ignored.`);
+        report.notices.push(
+          `Mirror manifest at ${this.manifestPath} is not a regular file; ignored.`
+        );
         return;
       }
       raw = await fs.readFile(this.manifestPath, "utf8");
