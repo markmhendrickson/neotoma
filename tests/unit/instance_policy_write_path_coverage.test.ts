@@ -352,18 +352,30 @@ describe("instance policy is served on every client-instructions surface (#1974)
   // from each other on fence extraction and compact-mode handling before this
   // feature. Composition is centralized in one function precisely so parity is
   // structural; this asserts each surface actually routes through it.
-  const COMPOSE = "composeClientInstructions";
+  // `composeInstructions` is that shared composer; the policy reaches the text
+  // only through its `policySection` part, so each surface must both call it
+  // and pass that part. Dropping either makes the surface serve no policy.
+  const COMPOSE_CALL = /composeInstructions\(\{[^}]*\bpolicySection\b/;
+
+  function composesPolicy(path: string): boolean {
+    return COMPOSE_CALL.test(stripComments(read(path)));
+  }
 
   it("the MCP handshake composes the policy into its instructions", () => {
-    expect(read("src/server.ts").includes(COMPOSE)).toBe(true);
+    expect(composesPolicy("src/server.ts")).toBe(true);
   });
 
   it("the REST instructions endpoint composes the policy into its instructions", () => {
-    expect(read("src/actions.ts").includes(COMPOSE)).toBe(true);
+    expect(composesPolicy("src/actions.ts")).toBe(true);
   });
 
   it("the CLI instructions command composes the policy into its output", () => {
-    expect(read("src/cli/index.ts").includes(COMPOSE)).toBe(true);
+    expect(composesPolicy("src/cli/index.ts")).toBe(true);
+  });
+
+  it("the guard fails when a surface composes instructions without the policy", () => {
+    expect(COMPOSE_CALL.test("composeInstructions({ base, skillsSection })")).toBe(false);
+    expect(COMPOSE_CALL.test("composeClientInstructions(base, policySection)")).toBe(false);
   });
 });
 
