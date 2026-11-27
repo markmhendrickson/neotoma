@@ -8106,7 +8106,10 @@ const instructionsCommand = program
 instructionsCommand
   .command("print")
   .description(
-    "Print the first fenced code block from docs/developer/mcp/instructions.md bundled with this package"
+    "Print the agent instructions: the fenced block from docs/developer/mcp/instructions.md bundled " +
+      "with this package. When authenticated, prints the session text an MCP initialize returns: a " +
+      "bounded [SESSION INDEX] of standing-rule titles and instance skill names (at most 2048 bytes), " +
+      "then the full rules, skills, base block and policy"
   )
   .option("--format <fmt>", "plain (default) or md (wrap in a markdown fence)", "plain")
   .action(async (opts: { format?: string }) => {
@@ -8173,8 +8176,8 @@ instructionsCommand
       // Unreachable instance: print the global text.
     }
     if (composition === "global") {
+      let policySection = "";
       try {
-        const { composeClientInstructions } = await import("../mcp_instruction_doc.js");
         const cliConfig = await readConfig();
         const api = createApiClient({
           baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
@@ -8185,26 +8188,22 @@ instructionsCommand
         if (policy) {
           const { renderInstancePolicyInstructions } =
             await import("../services/instance_policy.js");
-          composed = composeClientInstructions(
-            body,
-            renderInstancePolicyInstructions(policy as never)
-          );
+          policySection = renderInstancePolicyInstructions(policy as never);
         }
       } catch {
-        // Leave `composed` as the global instructions.
+        // Leave the policy out: print the global instructions.
       }
-    }
-
-    if (composition === "global") {
-      // Lead the global text with the fixed notice, as the REST endpoint and
-      // server/discover do, so missing rules read as unknown, not absent.
-      const { prependClientInstructionsSection } = await import("../mcp_instruction_doc.js");
+      // Lead the global text with the fixed notice, through the same shared
+      // composer the REST endpoint, server/discover and initialize use, so
+      // missing rules read as unknown, not absent.
+      const { composeInstructions } = await import("../mcp_instruction_doc.js");
       const { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } =
         await import("../services/standing_rules.js");
-      composed = prependClientInstructionsSection(
-        composed,
-        STANDING_RULES_AFTER_AUTHENTICATION_NOTICE
-      );
+      composed = composeInstructions({
+        base: body,
+        policySection,
+        standingRulesSection: STANDING_RULES_AFTER_AUTHENTICATION_NOTICE,
+      });
     }
 
     const compositionNote =

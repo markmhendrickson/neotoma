@@ -199,10 +199,10 @@ import {
   type AuthenticatedPrincipal,
 } from "./crypto/agent_identity.js";
 import { getOrCreateMemberAttributionId } from "./services/member_attribution.js";
+import { renderInstructionsIndex } from "./services/instructions_index.js";
 import {
-  composeClientInstructions,
+  composeInstructions,
   extractFirstFencedCodeBlock,
-  prependClientInstructionsSection,
   readMcpInstructionsMarkdown,
   resolveNeotomaPackageRoot,
 } from "./mcp_instruction_doc.js";
@@ -873,44 +873,30 @@ export class NeotomaServer {
   private statelessRequestAuthenticated = false;
 
   async buildDiscoverResult(): Promise<Record<string, unknown>> {
-    let policySection = "";
-    try {
-      const { getInstancePolicy, renderInstancePolicyInstructions } =
-        await import("./services/instance_policy.js");
-      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
-    } catch (err) {
-      logger.warn(
-        `[instance_policy] discover instructions render skipped: ${(err as Error).message}`
-      );
-    }
     // Rules come only from the identity THIS request's credentials resolved
     // to (see handleStatelessRequest). An authenticated request whose user id
     // cannot be resolved reports the rules as unknown, never as none.
-    // Instance skills follow the same rule: an authenticated request gets the
-    // same `[INSTANCE SKILLS]` section a session `initialize` would, from the
-    // shared helper; an unauthenticated build carries no per-user skills.
-    let standingRulesSection: string | null;
-    let skillsSection: string | null = null;
+    // An authenticated request gets exactly the text a session `initialize`
+    // would (same composition, so the two cannot drift); an unauthenticated
+    // build carries no per-user rules or skills, only the fixed notice.
+    let instructions: string;
     if (this.statelessRequestAuthenticated) {
       const lookupUserId = await this.resolveInstructionLookupUserId();
-      standingRulesSection = renderStandingRulesSectionForLookup(
-        await this.lookupStandingRulesForInstructions(lookupUserId)
-      );
-      skillsSection = (await this.composeInstanceSkillsForInstructions(lookupUserId)).skillsSection;
+      instructions = (
+        await this.composeSessionInstructions(this.getMcpInteractionInstructions(), lookupUserId)
+      ).instructions;
     } else {
-      standingRulesSection = STANDING_RULES_AFTER_AUTHENTICATION_NOTICE;
+      instructions = composeInstructions({
+        base: this.getMcpInteractionInstructions(),
+        policySection: await this.renderPolicySectionForInstructions("discover "),
+        standingRulesSection: STANDING_RULES_AFTER_AUTHENTICATION_NOTICE,
+      });
     }
     return {
       resultType: "complete",
       supportedVersions: [...MCP_MODERN_SUPPORTED_VERSIONS],
       capabilities: { ...NEOTOMA_MCP_DECLARED_CAPABILITIES },
-      instructions: prependClientInstructionsSection(
-        composeClientInstructions(
-          composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
-          skillsSection
-        ),
-        standingRulesSection
-      ),
+      instructions,
       ttlMs: MCP_STATELESS_CACHE_HINT.ttlMs,
       cacheScope: MCP_STATELESS_CACHE_HINT.cacheScope,
       _meta: { [MCP_META_SERVER_INFO]: this.getServerInfo() },
@@ -1347,6 +1333,7 @@ export class NeotomaServer {
    */
   private async composeInstanceSkillsForInstructions(lookupUserId: string | null): Promise<{
     skillsSection: string | null;
+    instanceSkillNames: string[];
     availableSkills: string[];
     instanceSkillsLookupFailed: boolean;
   }> {
@@ -1403,7 +1390,29 @@ export class NeotomaServer {
         "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
         "the `[instance_skills]` warning if this persists."
       : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
-    return { skillsSection, availableSkills, instanceSkillsLookupFailed };
+    return {
+      skillsSection,
+      instanceSkillNames: instanceSkills.map((s) => s.name),
+      availableSkills,
+      instanceSkillsLookupFailed,
+    };
+  }
+
+  /**
+   * This instance's declared data policy section (#1974), or "" when unset or
+   * unreadable: the handshake must never fail because a policy lookup did.
+   */
+  private async renderPolicySectionForInstructions(logContext: string): Promise<string> {
+    try {
+      const { getInstancePolicy, renderInstancePolicyInstructions } =
+        await import("./services/instance_policy.js");
+      return renderInstancePolicyInstructions(await getInstancePolicy());
+    } catch (err) {
+      logger.warn(
+        `[instance_policy] ${logContext}instructions render skipped: ${(err as Error).message}`
+      );
+      return "";
+    }
   }
 
   private async composeSessionInstructions(
@@ -1423,18 +1432,7 @@ export class NeotomaServer {
     // policy yields an empty section, leaving the instructions byte-identical
     // to what they were before this feature — the handshake must never fail
     // because a policy lookup did.
-    let policySection = "";
-    try {
-      const { getInstancePolicy, renderInstancePolicyInstructions } =
-        await import("./services/instance_policy.js");
-      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
-    } catch (err) {
-      logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
-    }
-    // Deferred until the instance-skills section is rendered below, so both
-    // appended sections compose through the same helper rather than one going
-    // through it and the other being concatenated on afterwards.
-
+    const policySection = await this.renderPolicySectionForInstructions("");
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
     // An empty rules array is ambiguous — it means either "no rules configured"
@@ -1445,7 +1443,7 @@ export class NeotomaServer {
     const standingRules: StandingRule[] = standingRulesLookup.rules;
     const standingRulesLookupFailed = standingRulesLookup.lookup_failed;
 
-    const { skillsSection, availableSkills, instanceSkillsLookupFailed } =
+    const { skillsSection, instanceSkillNames, availableSkills, instanceSkillsLookupFailed } =
       await this.composeInstanceSkillsForInstructions(lookupUserId);
 
     // Standing rules were delivered ONLY via `serverInfo._neotoma`, which
@@ -1458,21 +1456,28 @@ export class NeotomaServer {
     // reason it is for skills: an agent told nothing concludes "no rules",
     // which is the one inference that must never follow from a broken read.
     const standingRulesSection = renderStandingRulesSectionForLookup(standingRulesLookup);
-    // Nested rather than variadic: each helper takes one section and no-ops on
-    // an empty one, so an instance with no policy, no rules and no skill rows
-    // gets byte-identical instructions to before.
-    //
-    // Standing rules go FIRST, not appended with the other sections: the base
-    // block is well over 100KB and clients truncate long `instructions`, so an
-    // appended rule is the first thing cut. Operator-set rules are the
-    // must-follow content in this payload; they lead it.
-    const instructions = prependClientInstructionsSection(
-      composeClientInstructions(
-        composeClientInstructions(baseInstructions, policySection),
-        skillsSection
-      ),
-      standingRulesSection
-    );
+    // Composed by the one shared composer every entrance uses. Order, most
+    // important first, because clients truncate long `instructions` from the
+    // end and the base block is well over 100KB:
+    //   [SESSION INDEX] (bounded, at most INSTRUCTIONS_INDEX_MAX_BYTES), then
+    //   the full standing rules, then the instance skills catalog, then the
+    //   base block, then the policy (appended, where it always was).
+    // The index lists every rule title and skill name a tight client would
+    // otherwise cut; an instance with no rules and no skills gets no index and
+    // byte-identical instructions to before.
+    const indexSection = renderInstructionsIndex({
+      rules: standingRules,
+      rulesLookupFailed: standingRulesLookupFailed,
+      skillNames: instanceSkillNames,
+      skillsLookupFailed: instanceSkillsLookupFailed,
+    });
+    const instructions = composeInstructions({
+      base: baseInstructions,
+      indexSection,
+      standingRulesSection,
+      skillsSection,
+      policySection,
+    });
 
     return {
       instructions,
