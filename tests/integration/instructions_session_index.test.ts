@@ -203,6 +203,9 @@ describe("session index at the start of the composed instructions", { timeout: 6
     state.rules = [];
     state.skills = [];
     const text = await initializeInstructions();
-    expect(text).not.toContain(INSTRUCTIONS_INDEX_START_MARKER);
+    // The base block mentions the marker in prose, so check for the rendered
+    // header line rather than the bare substring.
+    expect(text.startsWith(INSTRUCTIONS_INDEX_START_MARKER)).toBe(false);
+    expect(text.split("\n")).not.toContain(INSTRUCTIONS_INDEX_START_MARKER);
   });
 });
