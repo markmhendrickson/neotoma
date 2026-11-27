@@ -291,12 +291,13 @@ export function sanitizeStandingRuleBody(value: string): string {
 /** Longest rule title quoted in an omission notice, in UTF-8 bytes. */
 const OMITTED_TITLE_MAX_BYTES = 200;
 
-function utf8Bytes(s: string): number {
+/** Length of `s` in UTF-8 bytes. */
+export function utf8Bytes(s: string): number {
   return Buffer.byteLength(s, "utf8");
 }
 
 /** Clip `s` to at most `max` UTF-8 bytes on a code-point boundary. */
-function clipUtf8(s: string, max: number): string {
+export function clipUtf8(s: string, max: number): string {
   if (utf8Bytes(s) <= max) return s;
   let out = "";
   let used = 0;

@@ -16,7 +16,7 @@
  */
 
 import type { StandingRule } from "./standing_rules.js";
-import { sanitizeStandingRuleInline } from "./standing_rules.js";
+import { clipUtf8, sanitizeStandingRuleInline, utf8Bytes } from "./standing_rules.js";
 import { INSTANCE_SKILL_FETCH_HINT } from "./skills/instance_skills.js";
 
 /**
@@ -38,24 +38,6 @@ const INDEX_TITLE_MAX_BYTES = 80;
 
 /** Longest skill name shown in the index, in UTF-8 bytes. */
 const INDEX_SKILL_NAME_MAX_BYTES = 64;
-
-function utf8Bytes(s: string): number {
-  return Buffer.byteLength(s, "utf8");
-}
-
-/** Clip `s` to at most `max` UTF-8 bytes on a code-point boundary. */
-function clipUtf8(s: string, max: number): string {
-  if (utf8Bytes(s) <= max) return s;
-  let out = "";
-  let used = 0;
-  for (const ch of s) {
-    const n = utf8Bytes(ch);
-    if (used + n > max - 3) break;
-    out += ch;
-    used += n;
-  }
-  return `${out}...`;
-}
 
 export interface InstructionsIndexInput {
   /** Rules in priority order, as rendered in `[STANDING RULES]`. */
@@ -113,8 +95,8 @@ export function renderInstructionsIndex(input: InstructionsIndexInput): string |
         `Instance skills (${skills.length}; fetch one with ${INSTANCE_SKILL_FETCH_HINT}): ` +
           (listed.length > 0 ? listed : "(none listed here)") +
           (omitted > 0
-            ? `; ${omitted} more not listed here, see [INSTANCE SKILLS] below or ` +
-              'retrieve_entities with entity_type "skill".'
+            ? `; ${omitted} more not listed here; [INSTANCE SKILLS] below may list more, ` +
+              'and retrieve_entities with entity_type "skill" lists all of them.'
             : "")
       );
     } else if (input.skillsLookupFailed) {
