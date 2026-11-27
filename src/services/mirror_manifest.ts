@@ -22,12 +22,17 @@
  *   only after this run wrote to, removed from or cleaned it, and a manifest
  *   that cannot be read or saved is reported, never thrown.
  * - A symlinked root refuses `--clean`.
+ * - One physical folder is one root, however it is spelled (a symbolic link in
+ *   a parent folder, letter case on a case-insensitive filesystem): spellings
+ *   are matched by real path and by device and inode, and a file generated in
+ *   this run is never removed under any spelling. When sameness cannot be
+ *   established, the string path is used for writing and nothing is removed.
  * - Markdown files under a cleaned scope that the manifest does not record
  *   are listed in the report (walked without following links).
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, realpathSync, statSync } from "node:fs";
 import * as path from "node:path";
 
 export const MIRROR_MANIFEST_FILENAME = ".neotoma-mirror-manifest.json";
@@ -90,6 +95,77 @@ function isMissing(err: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
+/** Device and inode of an existing path (links followed); null when absent. */
+function fileId(p: string): string | null {
+  try {
+    const st = statSync(p);
+    return `${st.dev}:${st.ino}`;
+  } catch (err) {
+    if (isMissing(err)) return null;
+    throw err;
+  }
+}
+
+/** Real path of the nearest existing ancestor, joined with the rest. */
+function physicalPath(p: string): string {
+  let cur = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(realpathSync(cur), ...tail);
+    } catch (err) {
+      if (!isMissing(err)) throw err;
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p);
+      tail.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/** "" when `abs` is `root`, the relative path when inside, else null. */
+function lexicalRel(root: string, abs: string): string | null {
+  const r = path.relative(root, abs);
+  if (r === "") return "";
+  if (r.startsWith("..") || path.isAbsolute(r)) return null;
+  return r.split(path.sep).join("/");
+}
+
+/**
+ * Where `absPath` sits under `root`, comparing the paths as written, then by
+ * real path, then by device and inode of existing folders: "" for the root
+ * itself, a relative path when inside, null when outside or when sameness
+ * cannot be established.
+ */
+export function relWithin(root: string, absPath: string): string | null {
+  const r = path.resolve(root);
+  const abs = path.resolve(absPath);
+  const lexical = lexicalRel(r, abs);
+  if (lexical !== null) return lexical;
+  try {
+    const physical = lexicalRel(physicalPath(r), physicalPath(abs));
+    if (physical !== null) return physical;
+    const rootId = fileId(r);
+    if (!rootId) return null;
+    let cur = abs;
+    const tail: string[] = [];
+    for (;;) {
+      if (fileId(cur) === rootId) return tail.join("/");
+      const parent = path.dirname(cur);
+      if (parent === cur) return null;
+      tail.unshift(path.basename(cur));
+      cur = parent;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/** True when two spellings name one existing folder (or one real path). */
+function sameFolder(a: string, b: string): boolean {
+  return relWithin(a, b) === "";
+}
+
 export class RootManifest {
   readonly root: string;
   loadState: LoadState = "absent";
@@ -102,10 +178,29 @@ export class RootManifest {
   touched = false;
   /** Absolute paths generated anywhere in this run (shared across roots). */
   readonly runWritten: Set<string>;
+  /** Device and inode of files generated anywhere in this run (shared). */
+  readonly runWrittenIds: Set<string>;
+  /** Every configured spelling of this root's folder; `root` is the first. */
+  readonly spellings: string[];
 
-  constructor(root: string, runWritten: Set<string> = new Set()) {
+  constructor(
+    root: string,
+    runWritten: Set<string> = new Set(),
+    runWrittenIds: Set<string> = new Set()
+  ) {
     this.root = path.resolve(root);
     this.runWritten = runWritten;
+    this.runWrittenIds = runWrittenIds;
+    this.spellings = [this.root];
+  }
+
+  /** "" for the root itself, a relative path inside it, else null. */
+  relOrSelf(absPath: string): string | null {
+    for (const s of this.spellings) {
+      const r = relWithin(s, absPath);
+      if (r !== null) return r;
+    }
+    return null;
   }
 
   private markChanged(): void {
@@ -118,14 +213,27 @@ export class RootManifest {
   }
 
   rel(absPath: string): string | null {
-    const r = path.relative(this.root, path.resolve(absPath));
-    if (!r || r.startsWith("..") || path.isAbsolute(r)) return null;
-    return r.split(path.sep).join("/");
+    const r = this.relOrSelf(absPath);
+    return r ? r : null;
   }
 
   /** True when `absPath` is this root itself or a path inside it. */
   contains(absPath: string): boolean {
-    return path.resolve(absPath) === this.root || this.rel(absPath) !== null;
+    return this.relOrSelf(absPath) !== null;
+  }
+
+  /** Was this file generated in this run, under any spelling? */
+  private writtenThisRun(rel: string): boolean {
+    for (const s of this.spellings) {
+      if (this.runWritten.has(path.join(s, rel))) return true;
+    }
+    try {
+      const id = fileId(path.join(this.root, rel));
+      return id !== null && this.runWrittenIds.has(id);
+    } catch {
+      // Sameness cannot be established: treat it as generated and keep it.
+      return true;
+    }
   }
 
   async load(report: MirrorSafetyReport): Promise<void> {
@@ -263,6 +371,12 @@ export class RootManifest {
     }
     if (result === "written") await fs.writeFile(filePath, content, "utf8");
     this.runWritten.add(path.resolve(filePath));
+    try {
+      const id = fileId(filePath);
+      if (id) this.runWrittenIds.add(id);
+    } catch {
+      // Bookkeeping never fails a write.
+    }
     this.touched = true;
     if (this.loadState === "unreadable") return result;
     if (rel && isMirrorOutputFile(rel) && this.files.get(rel) !== hash) {
@@ -348,13 +462,16 @@ export class RootManifest {
     report: MirrorSafetyReport
   ): Promise<number> {
     const rootStat = await fs.lstat(this.root).catch(() => null);
-    if (rootStat?.isSymbolicLink()) {
-      report.refused++;
-      report.refused_paths.push(this.root);
-      report.notices.push(
-        `--clean refused: mirror output root ${this.root} is a symlink; nothing was removed.`
-      );
-      return 0;
+    for (const spelling of this.spellings) {
+      const st = spelling === this.root ? rootStat : await fs.lstat(spelling).catch(() => null);
+      if (st?.isSymbolicLink()) {
+        report.refused++;
+        report.refused_paths.push(spelling);
+        report.notices.push(
+          `--clean refused: mirror output root ${spelling} is a symlink; nothing was removed.`
+        );
+        return 0;
+      }
     }
     if (this.loadState !== "valid") {
       if (this.loadState === "absent") {
@@ -382,7 +499,7 @@ export class RootManifest {
     for (const rel of [...this.files.keys()].sort()) {
       if (!inScope(rel) || keepRel.has(rel)) continue;
       // Never remove anything this run generated, under any root.
-      if (this.runWritten.has(path.join(this.root, rel))) continue;
+      if (this.writtenThisRun(rel)) continue;
       if (!isMirrorOutputFile(rel)) continue;
       if (preserveNames.has(path.posix.basename(rel))) continue;
       if ((await this.removeEntry(rel, report)) === "removed") removed++;
@@ -442,7 +559,7 @@ export class RootManifest {
     };
     const st = await fs.lstat(scopeDir).catch(() => null);
     if (!st || !st.isDirectory()) return;
-    await walk(scopeDir, path.resolve(scopeDir) === this.root);
+    await walk(scopeDir, this.relOrSelf(scopeDir) === "");
   }
 }
 
@@ -455,6 +572,7 @@ export class MirrorManifestSession {
   private roots = new Map<string, RootManifest>();
   /** Absolute paths generated anywhere in this run; never removed by a clean. */
   readonly runWritten = new Set<string>();
+  readonly runWrittenIds = new Set<string>();
 
   constructor(report: MirrorSafetyReport = emptySafetyReport()) {
     this.report = report;
@@ -464,7 +582,15 @@ export class MirrorManifestSession {
     const key = path.resolve(root);
     const existing = this.roots.get(key);
     if (existing) return existing;
-    const m = new RootManifest(key, this.runWritten);
+    // Another spelling of a registered folder routes to the same manifest.
+    for (const m of this.roots.values()) {
+      if (sameFolder(m.root, key)) {
+        m.spellings.push(key);
+        this.roots.set(key, m);
+        return m;
+      }
+    }
+    const m = new RootManifest(key, this.runWritten, this.runWrittenIds);
     // Registering a root writes nothing: it is saved only once this run
     // writes to, removes from or cleans it.
     await m.load(this.report);
@@ -472,17 +598,60 @@ export class MirrorManifestSession {
     return m;
   }
 
+  /** Distinct manifests (one per physical folder). */
+  private manifests(): RootManifest[] {
+    return [...new Set(this.roots.values())];
+  }
+
+  /**
+   * Merge `other` into `into` when two roots registered before their folder
+   * existed turn out to be one folder: both loaded the same manifest file.
+   */
+  private merge(into: RootManifest, other: RootManifest): void {
+    for (const s of other.spellings) {
+      into.spellings.push(s);
+      this.roots.set(s, into);
+    }
+    for (const [k, v] of other.files) into.files.set(k, v);
+    for (const d of other.dirs) into.dirs.add(d);
+    into.dirty ||= other.dirty;
+    into.touched ||= other.touched;
+    const rank: LoadState[] = ["absent", "valid", "invalid", "unreadable"];
+    if (rank.indexOf(other.loadState) > rank.indexOf(into.loadState)) {
+      into.loadState = other.loadState;
+    }
+  }
+
+  /** The deepest registered root that contains `filePath`, under any spelling. */
   rootFor(filePath: string): RootManifest | null {
     let best: RootManifest | null = null;
-    for (const m of this.roots.values()) {
-      if (m.contains(filePath) && (!best || m.root.length > best.root.length)) best = m;
+    let bestDepth = Infinity;
+    for (const m of this.manifests()) {
+      const r = m.relOrSelf(filePath);
+      if (r === null) continue;
+      const depth = r === "" ? 0 : r.split("/").length;
+      if (best && depth === bestDepth && best !== m) {
+        this.merge(best, m);
+      } else if (depth < bestDepth) {
+        best = m;
+        bestDepth = depth;
+      }
     }
     return best;
   }
 
   /** Save every changed root. A failed save is reported, never thrown. */
   async saveAll(): Promise<void> {
-    for (const m of this.roots.values()) {
+    const list = this.manifests();
+    const live = (x: RootManifest) => this.roots.get(x.root) === x;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (live(list[i]) && live(list[j]) && sameFolder(list[i].root, list[j].root)) {
+          this.merge(list[i], list[j]);
+        }
+      }
+    }
+    for (const m of this.manifests()) {
       try {
         await m.save();
       } catch (err) {

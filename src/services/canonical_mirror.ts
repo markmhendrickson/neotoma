@@ -40,6 +40,7 @@ import { schemaRegistry } from "./schema_registry.js";
 import {
   MirrorManifestSession,
   emptySafetyReport,
+  relWithin,
   type MirrorSafetyReport,
 } from "./mirror_manifest.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
@@ -482,13 +483,17 @@ const manifestSessionStore = new AsyncLocalStorage<MirrorManifestSession>();
 
 function deepestConfiguredRoot(filePath: string): string | null {
   const cfg = getMirrorConfig();
-  const target = path.resolve(filePath);
   let best: string | null = null;
+  let bestDepth = Infinity;
   for (const root of [cfg.path, ...(cfg.profiles ?? []).map((p) => p.output_path)]) {
-    const r = path.resolve(root);
-    const rel = path.relative(r, target);
-    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) continue;
-    if (!best || r.length > best.length) best = r;
+    // Compared under any spelling of the folder (real path, device and inode).
+    const rel = relWithin(root, filePath);
+    if (!rel) continue;
+    const depth = rel.split("/").length;
+    if (depth < bestDepth) {
+      best = path.resolve(root);
+      bestDepth = depth;
+    }
   }
   return best;
 }
