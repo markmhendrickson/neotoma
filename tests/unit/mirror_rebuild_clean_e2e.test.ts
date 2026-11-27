@@ -142,7 +142,7 @@ describe("rebuildMirror --clean end to end (#2939)", () => {
     await rebuild(false);
     const report = await rebuild(true);
 
-    expect(report.safety.refused_paths).toContain(link);
     expect(readFileSync(userFile, "utf8")).toBe("not a mirror file\n");
+    expect(report.safety.refused_paths).toContain(link);
   });
 });

@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **903**
-- Backend and repo Vitest files: **849**
+- Total automated test files: **904**
+- Backend and repo Vitest files: **850**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 256 |
+| Vitest unit tests | 257 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 72 |
 | Vitest integration tests | 273 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (256):**
+**Files (257):**
 - `tests/unit/aauth_admission_middleware_lookup_failed.test.ts`
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
@@ -262,6 +262,7 @@ flowchart TD
 - `tests/unit/mirror_manifest.test.ts`
 - `tests/unit/mirror_profiles.test.ts`
 - `tests/unit/mirror_rebuild_auth.test.ts`
+- `tests/unit/mirror_rebuild_clean_e2e.test.ts`
 - `tests/unit/mirror_writeback_integration.test.ts`
 - `tests/unit/mirror_writeback.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
