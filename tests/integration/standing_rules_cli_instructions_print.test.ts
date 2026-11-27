@@ -97,7 +97,9 @@ describe("neotoma instructions print with standing rules", { timeout: 180_000 },
   it("prints the global text without a token and says so on stderr", async () => {
     const { stdout, stderr } = await printInstructions(null);
     expect(
-      stripInstructionsIndex(stdout).startsWith("[STANDING RULES] Standing rules are served only after authentication")
+      stripInstructionsIndex(stdout).startsWith(
+        "[STANDING RULES] Standing rules are served only after authentication"
+      )
     ).toBe(true);
     expect(stdout).not.toContain(RULE_ONE);
     expect(stdout).toContain("[TURN LIFECYCLE]");
