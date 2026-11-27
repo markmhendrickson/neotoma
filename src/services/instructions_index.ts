@@ -142,3 +142,15 @@ export function renderInstructionsIndex(input: InstructionsIndexInput): string |
   }
   return render(rulesShown, skillsShown);
 }
+
+/**
+ * `instructions` with a leading `[SESSION INDEX]` block removed, or unchanged
+ * when it does not start with one. For readers that want the sections after
+ * the index, such as a check that the full rules block leads what follows.
+ */
+export function stripInstructionsIndex(instructions: string): string {
+  if (!instructions.startsWith(`${INSTRUCTIONS_INDEX_START_MARKER}\n`)) return instructions;
+  const end = instructions.indexOf(`\n${INSTRUCTIONS_INDEX_END_MARKER}`);
+  if (end < 0) return instructions;
+  return instructions.slice(end + INSTRUCTIONS_INDEX_END_MARKER.length + 1).replace(/^\n\n/, "");
+}

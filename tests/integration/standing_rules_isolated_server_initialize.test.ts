@@ -18,6 +18,7 @@ import {
   startIsolatedNeotomaServer,
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
+import { stripInstructionsIndex } from "../../src/services/instructions_index.js";
 
 const RULE_TITLE = "Synthetic isolated-server rule";
 const RULE_TEXT = "Synthetic rule body: label every example record as synthetic before storing it.";
@@ -104,6 +105,6 @@ describe("isolated server: standing rule body in the natural MCP initialize resp
       Buffer.byteLength(instructions.slice(0, at), "utf8"),
       "rule body sits too far from the start, where clients truncate"
     ).toBeLessThan(NEAR_START_BYTES);
-    expect(instructions.startsWith("[STANDING RULES]")).toBe(true);
+    expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]")).toBe(true);
   });
 });

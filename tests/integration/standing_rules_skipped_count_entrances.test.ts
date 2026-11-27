@@ -26,6 +26,7 @@ import {
   type BootedMcpApp,
   type McpTestEnv,
 } from "../helpers/mcp_http_modern.js";
+import { stripInstructionsIndex } from "../../src/services/instructions_index.js";
 
 const state: { result: StandingRulesLookupResult } = {
   result: { rules: [], lookup_failed: false },
@@ -88,7 +89,7 @@ const CASES: Array<{ name: string; result: StandingRulesLookupResult; count: num
 
 /** The rules block alone, from its opening tag to its closing marker. */
 function rulesBlock(instructions: string): string {
-  expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
+  expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]\n")).toBe(true);
   const end = instructions.indexOf("\n[END STANDING RULES]");
   expect(end).toBeGreaterThan(0);
   return instructions.slice(0, end);

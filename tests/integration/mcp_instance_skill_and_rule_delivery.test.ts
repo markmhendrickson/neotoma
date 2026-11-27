@@ -24,6 +24,7 @@ import {
   type BootedMcpApp,
   type McpTestEnv,
 } from "../helpers/mcp_http_modern.js";
+import { stripInstructionsIndex } from "../../src/services/instructions_index.js";
 
 const TOKEN = "synthetic-skill-rule-delivery-token";
 const SHARED_OWNER = randomUUID().toLowerCase();
@@ -143,7 +144,7 @@ describe(
 
     it("(a) legacy initialize leads with the rule and lists the skill", async () => {
       const instructions = (await legacyInitialize(app.baseUrl)).result?.instructions ?? "";
-      expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
+      expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]\n")).toBe(true);
       expect(instructions).toContain(RULE_TEXT);
       expect(skillsSection(instructions)).toContain(`- ${SKILL_NAME}`);
     });
@@ -164,7 +165,7 @@ describe(
       );
       expect(reply.status, reply.text).toBe(200);
       const instructions = String(reply.body?.result?.instructions ?? "");
-      expect(instructions.startsWith("[STANDING RULES]\n")).toBe(true);
+      expect(stripInstructionsIndex(instructions).startsWith("[STANDING RULES]\n")).toBe(true);
       expect(instructions).toContain(RULE_TEXT);
       expect(skillsSection(instructions)).toContain(`- ${SKILL_NAME}`);
     });
