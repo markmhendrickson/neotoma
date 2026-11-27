@@ -15,6 +15,8 @@
  *   3. Compare with the last-synced base (stored as a SHA-256 hash of the
  *      rendered canonical content in `<output_path>/.neotoma-mirror-base/`).
  *   4. For each editable field:
+ *       - the file is listed in the ownership manifest and its content hash
+ *         equals the recorded hash → no-op (the file holds no user edit)
  *       - base == canonical == on-disk  → no-op (nothing changed)
  *       - base == canonical, disk different → apply disk edit via /correct
  *       - base == disk, canonical different → no-op (canonical already moved)
@@ -22,7 +24,10 @@
  *       - no base, and the file is not in the root's ownership manifest
  *         (`.neotoma-mirror-manifest.json`) → report it as needing a
  *         resolution; apply nothing and record no base
- *   5. After successful apply, write the new canonical hash as the base.
+ *       - no base for the field, and the file is listed and edited → apply
+ *   5. Update the base per field: a field takes the file's value only when
+ *      the database holds it (already equal, or its correction succeeded);
+ *      every other field keeps its previous base. --check writes no base.
  *
  * Safety:
  *   - Gated by `allow_disk_writeback: true` on the profile. Default: false.
@@ -39,7 +44,7 @@ import * as fsSync from "node:fs";
 import * as path from "node:path";
 
 import type { MirrorProfile } from "./canonical_mirror.js";
-import { RootManifest, emptySafetyReport } from "./mirror_manifest.js";
+import { RootManifest, emptySafetyReport, sha256 } from "./mirror_manifest.js";
 
 // ============================================================================
 // Types
@@ -141,6 +146,18 @@ async function saveBaseMap(outputPath: string, map: BaseMap): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
   const p = baseMapPath(outputPath);
   await fs.writeFile(p, JSON.stringify(map, null, 2) + "\n", "utf8");
+}
+
+/** How to keep the user's own edit when the file must be regenerated. */
+function keepEditSteps(profileId: string): string {
+  return (
+    `Setting the file to the value you want and pushing again does not resolve this. ` +
+    `To keep your own edit: copy the changed values aside, delete the file, run ` +
+    `"neotoma mirror rebuild --profile ${profileId}", re-apply the values to the ` +
+    `regenerated file, then run "neotoma mirror push ${profileId}". To keep the ` +
+    `database value instead, delete the file, then run ` +
+    `"neotoma mirror rebuild --profile ${profileId}".`
+  );
 }
 
 function contentHash(content: string): string {
@@ -524,6 +541,11 @@ export async function runMirrorPush(
     const ownershipRel = ownership.rel(filePath);
     const ownedByMirror = ownershipRel !== null && ownership.files.has(ownershipRel);
     const needsResolution = !hasBase && !ownedByMirror;
+    // A listed file whose content still matches the hash the mirror recorded
+    // holds no user edit, so none of its values are applied (they may be
+    // outdated: rebuild no longer refreshes every file).
+    const uneditedListedFile =
+      ownedByMirror && sha256(diskContent) === ownership.files.get(ownershipRel!);
 
     // Build the canonical content hash for base comparison.
     const diskHash = contentHash(diskContent);
@@ -542,13 +564,14 @@ export async function runMirrorPush(
       const diskVal = diskFields[field];
       const canonicalVal = canonicalSnapshot[field];
       const baseVal = baseSnapshot[field];
+      const fieldHasBase = hasBase && Object.prototype.hasOwnProperty.call(baseSnapshot, field);
 
       const diskEqBase = hasBase ? valuesEqual(diskVal, baseVal) : false;
       const canonicalEqBase = hasBase ? valuesEqual(canonicalVal, baseVal) : false;
       const diskEqCanonical = valuesEqual(diskVal, canonicalVal);
 
-      if (diskEqCanonical) {
-        // Nothing to do — already in sync.
+      if (diskEqCanonical || uneditedListedFile) {
+        // Already in sync, or the file holds no user edit.
         continue;
       }
 
@@ -564,11 +587,12 @@ export async function runMirrorPush(
           message:
             `Needs a resolution: field "${field}" for entity ${entityId} differs, and ` +
             `${relPath} has no sync base and was not recorded by the mirror as its own, ` +
-            `so it may be an outdated copy. Nothing was applied. To keep the database ` +
-            `value, delete the file, then run "neotoma mirror rebuild --profile ${profile.id}".`,
+            `so it may be an outdated copy. Nothing was applied. ` +
+            keepEditSteps(profile.id),
         });
-      } else if (!hasBase) {
-        // No base, mirror-written file — disk is the intended state, apply if disk != canonical.
+      } else if (!fieldHasBase && ownedByMirror) {
+        // No base for this field in a mirror-written file the user edited —
+        // disk is the intended state, apply if disk != canonical.
         corrections.push({
           entity_id: entityId,
           entity_type: canonicalEntityType,
@@ -603,9 +627,7 @@ export async function runMirrorPush(
           message:
             `Conflict on field "${field}" for entity ${entityId}: ` +
             `both the disk file and canonical DB have changed since last sync. ` +
-            `Resolve manually: edit the file to match the desired value and re-run ` +
-            `"neotoma mirror push ${profile.id}", or, to revert to the database value, ` +
-            `delete the file, then run "neotoma mirror rebuild --profile ${profile.id}".`,
+            keepEditSteps(profile.id),
         });
       }
       // else: canonicalEqBase=false, diskEqBase=true → canonical moved but disk unchanged → no-op.
@@ -622,6 +644,12 @@ export async function runMirrorPush(
           `${conflicts.length} conflict(s) were detected. Resolve conflicts first.`,
       });
       continue;
+    }
+
+    // Fields the database holds the file's value for after this push.
+    const settled = new Set<string>();
+    for (const field of allFields) {
+      if (valuesEqual(diskFields[field], canonicalSnapshot[field])) settled.add(field);
     }
 
     // Apply or dry-run corrections.
@@ -651,6 +679,7 @@ export async function runMirrorPush(
               message: `Correction failed for field "${correction.field}" on ${correction.entity_id}: ${JSON.stringify(error)}`,
             });
           } else {
+            settled.add(correction.field);
             result.corrections_applied++;
             if (options.verbose) {
               process.stdout.write(
@@ -667,35 +696,19 @@ export async function runMirrorPush(
       }
     }
 
-    // Update base map entry with the new canonical snapshot (after corrections).
-    // In dry_run mode, still record the disk hash to track what was seen.
-    if (
-      !options.dry_run &&
-      corrections.length > 0 &&
-      result.errors.filter((e) => e.file === filePath).length === 0
-    ) {
-      // Re-fetch canonical snapshot after corrections to get the updated state.
-      try {
-        const { data } = await apiClient.GET("/entities/{id}", {
-          params: { path: { id: entityId } },
-        });
-        if (data?.snapshot) {
-          updatedBaseMap[relPath] = {
-            content_hash: diskHash,
-            snapshot: data.snapshot as Record<string, unknown>,
-          };
-        }
-      } catch {
-        // Best-effort — don't fail the push if base update fails.
+    // Update the base. A field's base takes the file's value only when the
+    // database holds that value; every other field keeps its previous base,
+    // or stays without one. A base is never advanced to a database value the
+    // file does not hold, which a later push would take as a user edit.
+    if (!options.dry_run && !needsResolution) {
+      const nextSnapshot: Record<string, unknown> = { ...baseSnapshot };
+      for (const field of settled) {
+        if (diskFields[field] === undefined) delete nextSnapshot[field];
+        else nextSnapshot[field] = diskFields[field];
       }
-    } else if (needsResolution) {
-      // Record no base, so a later push does not apply this file silently.
-    } else if (!hasBase || diskHash !== baseEntry?.content_hash) {
-      // Record the current disk hash so subsequent runs can detect changes.
-      updatedBaseMap[relPath] = {
-        content_hash: diskHash,
-        snapshot: canonicalSnapshot,
-      };
+      if (hasBase || Object.keys(nextSnapshot).length > 0) {
+        updatedBaseMap[relPath] = { content_hash: diskHash, snapshot: nextSnapshot };
+      }
     }
   }
 

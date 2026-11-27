@@ -44,6 +44,24 @@ async function recordAsMirrorOwned(dir: string, names: string[]): Promise<void> 
   );
 }
 
+/**
+ * List `name` in the ownership manifest with the hash of the content the
+ * mirror generated, for a file the user has since edited (the disk content
+ * differs from the recorded hash).
+ */
+async function recordAsMirrorOwnedThenEdited(dir: string, name: string): Promise<void> {
+  const current = await fs.readFile(path.join(dir, name), "utf8");
+  await fs.writeFile(
+    path.join(dir, MIRROR_MANIFEST_FILENAME),
+    JSON.stringify({
+      version: 1,
+      files: { [name]: sha256(`${current}<!-- generated before the user's edit -->\n`) },
+      dirs: [],
+    }),
+    "utf8"
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -375,7 +393,7 @@ My body content.
 `;
     const filePath = path.join(tmpDir, "my-plan.md");
     await fs.writeFile(filePath, diskContent, "utf8");
-    await recordAsMirrorOwned(tmpDir, ["my-plan.md"]);
+    await recordAsMirrorOwnedThenEdited(tmpDir, "my-plan.md");
 
     const postMock = vi.fn().mockResolvedValue({ data: { success: true }, error: null });
     const getMock = vi.fn().mockResolvedValue({
@@ -539,7 +557,7 @@ Body.
 `;
     const filePath = path.join(tmpDir, "dryrun.md");
     await fs.writeFile(filePath, diskContent, "utf8");
-    await recordAsMirrorOwned(tmpDir, ["dryrun.md"]);
+    await recordAsMirrorOwnedThenEdited(tmpDir, "dryrun.md");
 
     const postMock = vi.fn().mockResolvedValue({ data: { success: true }, error: null });
     const getMock = vi.fn().mockResolvedValue({
@@ -670,6 +688,8 @@ Old body.
       expect(c.base_value).toBeUndefined();
       expect(c.message).toContain("delete the file, then run");
       expect(c.message).toContain(`neotoma mirror rebuild --profile ${profile.id}`);
+      expect(c.message).toContain("copy the changed values aside");
+      expect(c.message).toContain("pushing again does not resolve this");
     }
     const title = result.conflicts.find((c) => c.field === "title")!;
     expect(title.disk_value).toBe("Old Title");
@@ -745,5 +765,190 @@ Old body.
     expect(title.message).toContain(
       `delete the file, then run "neotoma mirror rebuild --profile ${profile.id}"`
     );
+  });
+});
+
+describe("runMirrorPush — the sync base only records values the database holds", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "neotoma-mirror-push-base-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const fileWith = (title: string, status: string) => `---
+entity_id: ent_base01
+entity_type: plan
+schema_version: 1.0
+title: ${title}
+status: ${status}
+---
+
+Body.
+`;
+
+  /** A database that applies successful corrections to its own snapshot. */
+  function statefulApi(snapshot: Record<string, unknown>, failFields: Set<string> = new Set()) {
+    const db = { ...snapshot };
+    const getMock = vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        data: { entity_type: "plan", snapshot: { ...db } },
+        error: null,
+        response: { status: 200 },
+      })
+    );
+    const postMock = vi
+      .fn()
+      .mockImplementation((_p: string, args: { body: { field: string; value: unknown } }) => {
+        if (failFields.has(args.body.field)) {
+          return Promise.resolve({ data: null, error: { message: "rejected" } });
+        }
+        db[args.body.field] = args.body.value;
+        return Promise.resolve({ data: { success: true }, error: null });
+      });
+    return { db, getMock, postMock, api: { GET: getMock, POST: postMock } as WritebackApiClient };
+  }
+
+  async function writeBase(snapshot: Record<string, unknown>): Promise<void> {
+    await fs.mkdir(path.join(tmpDir, ".neotoma-mirror-base"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, ".neotoma-mirror-base", "basemap.json"),
+      JSON.stringify({ "plan.md": { content_hash: "x", snapshot } }),
+      "utf8"
+    );
+  }
+
+  const fieldsWritten = (postMock: ReturnType<typeof vi.fn>) =>
+    postMock.mock.calls.map((c) => (c[1] as { body: { field: string } }).body.field);
+
+  it("does not write an unedited field the database changed, across two pushes", async () => {
+    // Base: title A0, status s0. The user edits title; the database moves status.
+    await writeBase({ title: "A0", status: "s0", body: "Body." });
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A1", "s0"), "utf8");
+    const { db, postMock, api } = statefulApi({ title: "A0", status: "s1", body: "Body." });
+    const profile = makeProfile({ output_path: tmpDir });
+
+    const first = await runMirrorPush(profile, api);
+    expect(first.conflicts).toHaveLength(0);
+    expect(fieldsWritten(postMock)).toEqual(["title"]);
+
+    const second = await runMirrorPush(profile, api);
+    expect(second.conflicts).toHaveLength(0);
+    expect(fieldsWritten(postMock)).toEqual(["title"]);
+    expect(db.status).toBe("s1");
+  });
+
+  it("keeps reporting a conflict and writes nothing on a second push", async () => {
+    // Base: title A0, status s0. Both sides changed title; the database moved status.
+    await writeBase({ title: "A0", status: "s0", body: "Body." });
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A1", "s0"), "utf8");
+    const { db, postMock, api } = statefulApi({ title: "A2", status: "s1", body: "Body." });
+    const profile = makeProfile({ output_path: tmpDir });
+
+    const first = await runMirrorPush(profile, api);
+    expect(first.conflicts.map((c) => c.field)).toEqual(["title"]);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(first.conflicts[0].message).toContain(
+      `copy the changed values aside, delete the file, run "neotoma mirror rebuild --profile ${profile.id}"`
+    );
+
+    const second = await runMirrorPush(profile, api);
+    expect(second.conflicts.map((c) => c.field)).toEqual(["title"]);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(db).toMatchObject({ title: "A2", status: "s1" });
+  });
+
+  it("retries a failed correction on the next push and applies nothing else", async () => {
+    await writeBase({ title: "A0", status: "s0", body: "Body." });
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A1", "s0"), "utf8");
+    const failFields = new Set(["title"]);
+    const { db, postMock, api } = statefulApi(
+      { title: "A0", status: "s1", body: "Body." },
+      failFields
+    );
+    const profile = makeProfile({ output_path: tmpDir });
+
+    const first = await runMirrorPush(profile, api);
+    expect(first.corrections_applied).toBe(0);
+    expect(fieldsWritten(postMock)).toEqual(["title"]);
+
+    failFields.clear();
+    const second = await runMirrorPush(profile, api);
+    expect(second.corrections_applied).toBe(1);
+    expect(fieldsWritten(postMock)).toEqual(["title", "title"]);
+    expect(db).toMatchObject({ title: "A1", status: "s1" });
+  });
+
+  it("retries a failed correction for a listed, edited file with no base", async () => {
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A0", "s0"), "utf8");
+    await recordAsMirrorOwned(tmpDir, ["plan.md"]);
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A1", "s0"), "utf8");
+    const failFields = new Set(["title"]);
+    const { db, postMock, api } = statefulApi(
+      { title: "A0", status: "s0", body: "Body." },
+      failFields
+    );
+    const profile = makeProfile({ output_path: tmpDir });
+
+    await runMirrorPush(profile, api);
+    failFields.clear();
+    const second = await runMirrorPush(profile, api);
+    expect(second.conflicts).toHaveLength(0);
+    expect(fieldsWritten(postMock)).toEqual(["title", "title"]);
+    expect(db.title).toBe("A1");
+  });
+
+  it("applies nothing for a listed, unedited, outdated file with no base", async () => {
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A0", "s0"), "utf8");
+    await recordAsMirrorOwned(tmpDir, ["plan.md"]);
+    const { postMock, api } = statefulApi({ title: "A2", status: "s1", body: "Body." });
+    const profile = makeProfile({ output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(result.conflicts).toHaveLength(0);
+    const second = await runMirrorPush(profile, api);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(second.conflicts).toHaveLength(0);
+  });
+
+  it("applies nothing for a listed, unedited, outdated file that has a base", async () => {
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A0", "s0"), "utf8");
+    await recordAsMirrorOwned(tmpDir, ["plan.md"]);
+    // A base that differs from the file, as left by an earlier push.
+    await writeBase({ title: "A9", status: "s0", body: "Body." });
+    const { postMock, api } = statefulApi({ title: "A9", status: "s1", body: "Body." });
+    const profile = makeProfile({ output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(result.conflicts).toHaveLength(0);
+  });
+
+  it("still pushes a listed file the user edited", async () => {
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A0", "s0"), "utf8");
+    await recordAsMirrorOwned(tmpDir, ["plan.md"]);
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A1", "s0"), "utf8");
+    const { db, postMock, api } = statefulApi({ title: "A0", status: "s0", body: "Body." });
+    const profile = makeProfile({ output_path: tmpDir });
+
+    const result = await runMirrorPush(profile, api);
+    expect(result.conflicts).toHaveLength(0);
+    expect(fieldsWritten(postMock)).toEqual(["title"]);
+    expect(db.title).toBe("A1");
+  });
+
+  it("writes no base under --check", async () => {
+    await writeBase({ title: "A0", status: "s0", body: "Body." });
+    await fs.writeFile(path.join(tmpDir, "plan.md"), fileWith("A1", "s0"), "utf8");
+    const { api } = statefulApi({ title: "A0", status: "s1", body: "Body." });
+    const baseFile = path.join(tmpDir, ".neotoma-mirror-base", "basemap.json");
+    const before = await fs.readFile(baseFile, "utf8");
+
+    await runMirrorPush(makeProfile({ output_path: tmpDir }), api, { dry_run: true });
+    expect(await fs.readFile(baseFile, "utf8")).toBe(before);
   });
 });

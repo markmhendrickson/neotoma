@@ -74,8 +74,9 @@ Body content.
 }
 
 /**
- * Write a profile file and record it in the root's ownership manifest, as a
- * rebuild would, so push treats it as a mirror-written file.
+ * Write a profile file the user edited after the mirror wrote it: the
+ * ownership manifest lists it with the hash of the generated content, which
+ * differs from the edited content on disk.
  */
 async function writeMirrorFile(dir: string, name: string, content: string): Promise<void> {
   await fs.writeFile(path.join(dir, name), content, "utf8");
@@ -83,7 +84,7 @@ async function writeMirrorFile(dir: string, name: string, content: string): Prom
   const manifest = JSON.parse(
     await fs.readFile(manifestPath, "utf8").catch(() => '{"version":1,"files":{},"dirs":[]}')
   ) as { files: Record<string, string> };
-  manifest.files[name] = sha256(content);
+  manifest.files[name] = sha256(`${content}<!-- generated before the user's edit -->\n`);
   await fs.writeFile(manifestPath, JSON.stringify(manifest), "utf8");
 }
 
