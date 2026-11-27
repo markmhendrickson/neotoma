@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { formatRebuildReport } from "../../src/cli/commands/mirror.ts";
 import { rebuildMirror } from "../../src/services/canonical_mirror.ts";
 
 type Row = { entity_id: string; entity_type: string; snapshot: Record<string, unknown> };
@@ -128,6 +129,17 @@ describe("rebuildMirror --clean end to end (#2939)", () => {
       expect(readFileSync(p).equals(b), p).toBe(true);
     }
     expect(readFileSync(path.join(outside, "external.md"), "utf8")).toBe("outside the mirror\n");
+
+    // The report says skipped files are left as they are.
+    expect(report.safety.skipped_foreign).toBeGreaterThan(0);
+    const skippedLine = "Skipped files stay as they are, possibly out of date";
+    const config = { enabled: true, path: root, kinds: ["entities" as const], git_enabled: false };
+    expect(formatRebuildReport({ config, report })).toContain(skippedLine);
+    const none = {
+      ...report,
+      safety: { ...report.safety, skipped_foreign: 0, skipped_foreign_paths: [] },
+    };
+    expect(formatRebuildReport({ config, report: none })).not.toContain(skippedLine);
   });
 
   it("does not follow a symlinked output root on --clean", async () => {

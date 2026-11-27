@@ -243,6 +243,11 @@ export function formatRebuildReport(result: MirrorRebuildResult): string {
     lines.push(
       `Safety: removed ${s.removed}, kept_edited ${s.kept_edited}, skipped_foreign ${s.skipped_foreign}, refused ${s.refused}`
     );
+    if (s.skipped_foreign > 0) {
+      lines.push(
+        "  Skipped files stay as they are, possibly out of date, until you delete them and rebuild."
+      );
+    }
     for (const p of s.kept_edited_paths) lines.push(`  kept (edited):         ${p}`);
     for (const p of s.skipped_foreign_paths) lines.push(`  skipped (not ours):    ${p}`);
     for (const p of s.refused_paths) lines.push(`  refused:               ${p}`);
