@@ -703,8 +703,8 @@ export async function runMirrorPush(
     if (!options.dry_run && !needsResolution) {
       const nextSnapshot: Record<string, unknown> = { ...baseSnapshot };
       for (const field of settled) {
-        if (diskFields[field] === undefined) delete nextSnapshot[field];
-        else nextSnapshot[field] = diskFields[field];
+        // A field the file does not carry keeps its previous base.
+        if (diskFields[field] !== undefined) nextSnapshot[field] = diskFields[field];
       }
       if (hasBase || Object.keys(nextSnapshot).length > 0) {
         updatedBaseMap[relPath] = { content_hash: diskHash, snapshot: nextSnapshot };
