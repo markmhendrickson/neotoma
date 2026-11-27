@@ -33,6 +33,11 @@ import { db } from "../../src/db.js";
 import { config } from "../../src/config.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { cleanupTestEntity, cleanupEntitySnapshot } from "../helpers/cleanup_helpers.js";
+import {
+  INSTRUCTIONS_INDEX_END_MARKER,
+  INSTRUCTIONS_INDEX_START_MARKER,
+  stripInstructionsIndex,
+} from "../../src/services/instructions_index.js";
 
 const USER_ID = LOCAL_DEV_USER_ID;
 
@@ -432,11 +437,34 @@ describe("instance skill hints respect the config gate (#2046)", () => {
     // the unavailable marker either.
     expect(result.serverInfo._neotoma?.skills_unavailable).toBeUndefined();
 
+    // The session index served with the flag off lists no skill names: either
+    // there is no index at all, or it carries no instance-skills line.
+    if (instructions.startsWith(`${INSTRUCTIONS_INDEX_START_MARKER}\n`)) {
+      const offIndex = instructions.slice(
+        0,
+        instructions.indexOf(`\n${INSTRUCTIONS_INDEX_END_MARKER}`)
+      );
+      expect(offIndex).not.toContain("Instance skills (");
+      expect(offIndex).not.toContain(FLAG_SKILL);
+    }
+
     // The accepted criterion is that flag-off leaves the instructions as they
-    // were before this feature existed: the ONLY difference is the section.
-    const onLines = onInstructions.split("\n");
-    const onWithoutSection = onLines.slice(0, sectionStart).join("\n");
-    expect(instructions.trim()).toBe(onWithoutSection.trim());
+    // were before this feature existed: apart from the session index (which
+    // lists skill names when the flag is on), the ONLY difference is the
+    // section. Compare with the index removed from both sides.
+    const onBody = stripInstructionsIndex(onInstructions);
+    const offBody = stripInstructionsIndex(instructions);
+    const onBodyLines = onBody.split("\n");
+    const bodySectionStart = onBodyLines.findIndex((l) => l === "[INSTANCE SKILLS]");
+    expect(bodySectionStart).toBeGreaterThan(-1);
+    const before = onBodyLines.slice(0, bodySectionStart).join("\n");
+    expect(offBody.startsWith(before)).toBe(true);
+    const remainder = offBody.slice(before.length);
+    expect(onBody.endsWith(remainder)).toBe(true);
+    const removed = onBody.slice(before.length, onBody.length - remainder.length);
+    expect(removed.trimStart().startsWith("[INSTANCE SKILLS]\n")).toBe(true);
+    expect(removed).toContain(FLAG_SKILL);
+    expect(removed).not.toContain("[TURN LIFECYCLE]");
   });
 
   it("surfaces the skill when the flag is on, which is the default", async () => {
