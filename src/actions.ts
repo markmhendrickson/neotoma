@@ -8242,7 +8242,7 @@ app.get("/sources/:id/content", async (req, res) => {
     res.setHeader("Content-Length", buffer.length);
     res.setHeader(
       "Content-Disposition",
-      `${inline ? "inline" : "attachment"}; filename="${filename.replace(/"/g, '\\"')}"`
+      buildContentDisposition(inline ? "inline" : "attachment", filename, `source-${sourceId}`)
     );
     return res.send(buffer);
   } catch (error) {
@@ -10798,6 +10798,7 @@ app.post("/store", writeRateLimit, handleStorePost);
 // POST /github/webhook - Receive verified GitHub webhook events
 import { verifyGithubSignature, mapEventToStore } from "./services/github_webhook.js";
 import { runtimeEnv } from "./config_embedded.js";
+import { buildContentDisposition } from "./utils/content_disposition.js";
 
 app.post(
   "/github/webhook",
