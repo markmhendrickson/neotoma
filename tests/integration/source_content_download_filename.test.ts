@@ -14,12 +14,35 @@ const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
 const API_PORT = 18127;
 const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
-const CASES: Array<{ label: string; name: string; expectedName: string }> = [
+const LONG_NAME = `${"n".repeat(10_000)}.bin`;
+
+const CASES: Array<{
+  label: string;
+  name: string;
+  expectedName: string;
+  /** Name as the database keeps it, when it differs from the name sent. */
+  storedName?: string;
+  mimeType?: string;
+}> = [
   { label: "en dash", name: "report – final.bin", expectedName: "report – final.bin" },
   { label: "combining accent", name: "café notes.bin", expectedName: "café notes.bin" },
   { label: "emoji", name: "plan \u{1F680}.bin", expectedName: "plan \u{1F680}.bin" },
   { label: "double quote", name: 'say "hi".bin', expectedName: 'say "hi".bin' },
   { label: "newline", name: "line1\nline2.bin", expectedName: "line1line2.bin" },
+  {
+    label: "lone surrogate",
+    name: "half\ud800pair.bin",
+    expectedName: "half\ufffdpair.bin",
+    // SQLite keeps text as UTF-8, so the stored name already holds U+FFFD and the
+    // route never sees the lone surrogate. The unit tests pin the helper on it.
+    storedName: "half\ufffdpair.bin",
+    mimeType: "text/plain",
+  },
+  {
+    label: "very long name",
+    name: LONG_NAME,
+    expectedName: `${"n".repeat(251)}.bin`,
+  },
 ];
 
 /** Decode the RFC 5987 filename* parameter. */
@@ -61,7 +84,7 @@ describe("GET /sources/:id/content — stored names in Content-Disposition", () 
         body: JSON.stringify({
           user_id: TEST_USER_ID,
           file_content: bytes.toString("base64"),
-          mime_type: "application/octet-stream",
+          mime_type: testCase.mimeType ?? "application/octet-stream",
           original_filename: testCase.name,
           file_idempotency_key: `download-filename-${testCase.label}-${Date.now()}`,
         }),
@@ -79,7 +102,7 @@ describe("GET /sources/:id/content — stored names in Content-Disposition", () 
         .select("storage_url, original_filename")
         .eq("id", sourceId)
         .single();
-      expect(row?.original_filename).toBe(testCase.name);
+      expect(row?.original_filename).toBe(testCase.storedName ?? testCase.name);
       await db.storage.from("sources").upload(row!.storage_url as string, bytes, { upsert: true });
 
       const resp = await fetch(`${API_BASE}/sources/${sourceId}/content?user_id=${TEST_USER_ID}`);
@@ -88,8 +111,12 @@ describe("GET /sources/:id/content — stored names in Content-Disposition", () 
       expect(body.equals(bytes)).toBe(true);
 
       const disposition = resp.headers.get("content-disposition");
-      expect(disposition).toMatch(/^attachment; filename="[\x20-\x7e]*";/);
+      expect(disposition).toMatch(/^(attachment|inline); filename="[\x20-\x7e]*";/);
       expect(extendedFilename(disposition)).toBe(testCase.expectedName);
+      if (testCase.mimeType) {
+        // The header change leaves the stored content type as it was.
+        expect(resp.headers.get("content-type")).toMatch(/^text\/plain/);
+      }
     });
   }
 });
