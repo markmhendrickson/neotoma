@@ -52,6 +52,7 @@ export const OPERATION_RETRIEVE_CLASS: Record<string, RetrieveScopeEntry> = {
   // Infrastructure and authentication
   healthCheck: EX("liveness probe"),
   readinessCheck: EX("readiness probe"),
+  storageReadinessCheck: EX("storage readiness probe; returns no entity data"),
   getOpenApiSpec: EX("serves the API description"),
   getServerInfo: EX("server metadata"),
   getMcpInteractionInstructions: EX("instruction text"),

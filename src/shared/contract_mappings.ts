@@ -58,6 +58,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     notes: "Readiness probe (bounded real DB read) for Fly checks. Infrastructure only.",
   },
   {
+    operationId: "storageReadinessCheck",
+    method: "get",
+    path: "/ready/storage",
+    adapter: "infra",
+    notes: "Storage write check (free-space floor + synced probe file). Infrastructure only.",
+  },
+  {
     operationId: "getOpenApiSpec",
     method: "get",
     path: "/openapi.yaml",

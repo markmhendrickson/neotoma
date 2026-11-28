@@ -28,7 +28,7 @@ export const ACCESS_LOG_SERVICE = "neotoma-api";
 export const REQUEST_ID_HEADER = "x-request-id";
 export const USER_AGENT_MAX_LENGTH = 120;
 /** Readiness and liveness paths; logged with `health: true`. */
-export const HEALTH_PATHS: ReadonlySet<string> = new Set(["/health", "/ready"]);
+export const HEALTH_PATHS: ReadonlySet<string> = new Set(["/health", "/ready", "/ready/storage"]);
 
 /** Incoming request ids are logged (as `incoming_request_id`) only when they match this shape. */
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{8,128}$/;

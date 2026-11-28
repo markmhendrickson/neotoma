@@ -1201,6 +1201,22 @@
       "override_applied": true
     },
     {
+      "path": "/ready/storage",
+      "method": "GET",
+      "operation_id": "storageReadinessCheck",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        503
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        503
+      ],
+      "override_applied": true
+    },
+    {
       "path": "/recent_conversations",
       "method": "GET",
       "operation_id": "getRecentConversations",
@@ -1868,6 +1884,21 @@
         ],
         "expected_invalid_auth_status": [
           200
+        ]
+      }
+    },
+    {
+      "path": "/ready/storage",
+      "method": "GET",
+      "reason": "503 is /ready/storage's designed response when free space is below the floor or the probe write fails or times out, not an auth outcome. Auth posture matches /ready: public by design, never returns 401.",
+      "fields": {
+        "expected_no_auth_status": [
+          200,
+          503
+        ],
+        "expected_invalid_auth_status": [
+          200,
+          503
         ]
       }
     }

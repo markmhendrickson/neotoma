@@ -64,6 +64,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/ready/storage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Storage write check
+     * @description Checks free space on the volume holding the database file against NEOTOMA_READY_MIN_FREE_MB (default 64), then writes and fsyncs a small probe file in the same directory. Returns 503 when either fails or exceeds NEOTOMA_READY_WRITE_TIMEOUT_MS. The result is cached for NEOTOMA_READY_WRITE_CACHE_MS (default 30s) and concurrent requests share one probe. A 200 does not prove the database itself accepts writes. Returns 200 with storage_write "skipped" when the probe is disabled with NEOTOMA_READY_WRITE_PROBE=0.
+     */
+    get: operations["storageReadinessCheck"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/openapi.yaml": {
     parameters: {
       query?: never;
@@ -2850,11 +2870,37 @@ export interface components {
       checks?: {
         /** @enum {string} */
         database?: "ok" | "failed";
+        /**
+         * @description Cached result of the storage write probe (free-space floor plus a synced probe file next to the database file). Does not change the status code unless NEOTOMA_READY_REQUIRE_WRITE=1.
+         * @enum {string}
+         */
+        storage_write?: "ok" | "failed" | "skipped";
       };
+      storage_write_reason?: components["schemas"]["StorageWriteReason"];
       /** @description Probe duration, reported on success and failure alike. Degradation is progressive, so the trend matters as much as the verdict. */
       latency_ms?: number;
       /** @description Failure reason. Present only when ok is false. */
       error?: string;
+    };
+    /**
+     * @description Short fixed reason for a storage write result other than ok. Paths, sizes and raw error text are logged, never returned.
+     * @enum {string}
+     */
+    StorageWriteReason:
+      | "below_free_space_floor"
+      | "free_space_check_failed"
+      | "write_failed"
+      | "write_timeout"
+      | "disabled";
+    /** @description Result of the /ready/storage check. */
+    StorageReadinessResult: {
+      /** @description False only when the storage write probe failed. */
+      ok?: boolean;
+      checks?: {
+        /** @enum {string} */
+        storage_write?: "ok" | "failed" | "skipped";
+      };
+      reason?: components["schemas"]["StorageWriteReason"];
     };
     FileUrlResponse: {
       /** @description Signed URL for accessing the file */
@@ -5436,6 +5482,35 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ReadinessResult"];
+        };
+      };
+    };
+  };
+  storageReadinessCheck: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Storage accepted the probe write above the free-space floor */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorageReadinessResult"];
+        };
+      };
+      /** @description Free space below the floor, or the probe write failed or timed out */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorageReadinessResult"];
         };
       };
     };
