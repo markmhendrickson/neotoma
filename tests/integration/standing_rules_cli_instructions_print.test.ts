@@ -23,6 +23,7 @@ import {
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
 import { execAsync } from "../helpers/cli_local_target.js";
+import { stripInstructionsIndex } from "../../src/services/instructions_index.js";
 
 const RULE_ONE = "Body of synthetic CLI rule one.";
 const RULE_TWO = "Body of synthetic CLI rule two.";
@@ -81,7 +82,7 @@ describe("neotoma instructions print with standing rules", { timeout: 180_000 },
 
   it("prints the composed text for the configured identity and says so on stderr", async () => {
     const { stdout, stderr } = await printInstructions(server.token);
-    expect(stdout.startsWith("[STANDING RULES]\n")).toBe(true);
+    expect(stripInstructionsIndex(stdout).startsWith("[STANDING RULES]\n")).toBe(true);
     expect(stdout).toContain(`> ${RULE_ONE}`);
     expect(stdout).toContain(`> ${RULE_TWO}`);
     expect(stdout).toContain("[TURN LIFECYCLE]");
@@ -96,7 +97,9 @@ describe("neotoma instructions print with standing rules", { timeout: 180_000 },
   it("prints the global text without a token and says so on stderr", async () => {
     const { stdout, stderr } = await printInstructions(null);
     expect(
-      stdout.startsWith("[STANDING RULES] Standing rules are served only after authentication")
+      stripInstructionsIndex(stdout).startsWith(
+        "[STANDING RULES] Standing rules are served only after authentication"
+      )
     ).toBe(true);
     expect(stdout).not.toContain(RULE_ONE);
     expect(stdout).toContain("[TURN LIFECYCLE]");

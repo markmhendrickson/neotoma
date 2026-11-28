@@ -1205,7 +1205,7 @@ app.get("/mcp-interaction-instructions", async (req, res) => {
     readMcpInstructionsMarkdown,
     extractFirstFencedCodeBlock,
     resolveNeotomaPackageRoot,
-    composeClientInstructions,
+    composeInstructions,
   } = await import("./mcp_instruction_doc.js");
 
   let text: string | null = null;
@@ -1251,15 +1251,13 @@ app.get("/mcp-interaction-instructions", async (req, res) => {
   // absence of rules is never read as "none" (same line server/discover carries).
   const { STANDING_RULES_AFTER_AUTHENTICATION_NOTICE } =
     await import("./services/standing_rules.js");
-  const { prependClientInstructionsSection } = await import("./mcp_instruction_doc.js");
-  res
-    .type("text/plain")
-    .send(
-      prependClientInstructionsSection(
-        composeClientInstructions(text, policySection),
-        STANDING_RULES_AFTER_AUTHENTICATION_NOTICE
-      )
-    );
+  res.type("text/plain").send(
+    composeInstructions({
+      base: text,
+      policySection,
+      standingRulesSection: STANDING_RULES_AFTER_AUTHENTICATION_NOTICE,
+    })
+  );
 });
 
 // ============================================================================

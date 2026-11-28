@@ -93,3 +93,36 @@ export function prependClientInstructionsSection(
   if (!section || section.trim().length === 0) return instructions;
   return `${section.trim()}\n\n${instructions}`;
 }
+
+/** The sections one instructions text is built from. Absent or empty parts are skipped. */
+export interface InstructionsParts {
+  /** The global instructions (the fenced block of the instruction doc). */
+  base: string;
+  /** Bounded `[SESSION INDEX]` of rule titles and skill names. */
+  indexSection?: string | null;
+  /** `[STANDING RULES]` block, its unavailable notice, or the after-authentication line. */
+  standingRulesSection?: string | null;
+  /** `[INSTANCE SKILLS]` catalog or its unavailable notice. */
+  skillsSection?: string | null;
+  /** This instance's declared data policy (#1974). */
+  policySection?: string | null;
+}
+
+/**
+ * The ONE composer every instructions entrance uses: session `initialize`,
+ * stateless `server/discover`, GET /mcp-interaction-instructions and
+ * `neotoma instructions print`. Order, most important first, because clients
+ * truncate long instructions from the end:
+ *
+ *   index, standing rules, instance skills, base block, policy.
+ *
+ * The policy stays appended after the base block, where it was before the
+ * index existed, so an instance with no rules and no skills serves byte-for-byte
+ * the text it served before. Each empty part is a no-op.
+ */
+export function composeInstructions(parts: InstructionsParts): string {
+  let out = composeClientInstructions(parts.base, parts.policySection);
+  out = prependClientInstructionsSection(out, parts.skillsSection);
+  out = prependClientInstructionsSection(out, parts.standingRulesSection);
+  return prependClientInstructionsSection(out, parts.indexSection);
+}
