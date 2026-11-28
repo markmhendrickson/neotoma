@@ -5,13 +5,16 @@
  * characters above U+00FF and most control characters (ERR_INVALID_CHAR), so a
  * raw name in the header fails the response. Per RFC 6266 / RFC 5987 this sends
  * an ASCII `filename` fallback plus a `filename*=UTF-8''` percent-encoded name.
- * Control characters are dropped from both forms. Lone UTF-16 surrogates are
+ * Control characters and Unicode format characters (category Cf, such as
+ * bidirectional controls and zero-width characters) are dropped from both forms. Lone UTF-16 surrogates are
  * replaced with U+FFFD first, because encodeURIComponent throws URIError on them.
  */
 
 // C0 controls, DEL and C1 controls.
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+// Unicode format characters (Cf) include U+202A-U+202E, U+2066-U+2069 and
+// zero-width characters such as U+200B-U+200F and U+FEFF.
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]|\p{Cf}/gu;
 
 // A high surrogate not followed by a low one, or a low surrogate not preceded by a high one.
 const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
