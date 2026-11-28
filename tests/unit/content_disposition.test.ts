@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildContentDisposition, MAX_NAME_CODE_POINTS } from "../../src/utils/content_disposition.js";
+import {
+  buildContentDisposition,
+  MAX_NAME_CODE_POINTS,
+} from "../../src/utils/content_disposition.js";
 
 describe("buildContentDisposition", () => {
   it("keeps plain ASCII names readable in both forms", () => {
@@ -51,11 +54,7 @@ describe("buildContentDisposition", () => {
   });
 
   it("drops bidirectional controls and zero-width format characters", () => {
-    const value = buildContentDisposition(
-      "attachment",
-      "a‮b⁦c⁩​d﻿.txt",
-      "d"
-    );
+    const value = buildContentDisposition("attachment", "a‮b⁦c⁩​d﻿.txt", "d");
     expect(value).toBe(`attachment; filename="abcd.txt"; filename*=UTF-8''abcd.txt`);
   });
 

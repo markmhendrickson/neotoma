@@ -12,9 +12,9 @@
  */
 
 // C0 controls, DEL and C1 controls.
-// eslint-disable-next-line no-control-regex
 // Unicode format characters (Cf) include U+202A-U+202E, U+2066-U+2069 and
 // zero-width characters such as U+200B-U+200F and U+FEFF.
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]|\p{Cf}/gu;
 
 // A high surrogate not followed by a low one, or a low surrogate not preceded by a high one.
@@ -73,7 +73,9 @@ export function buildContentDisposition(
   storedName: string | null | undefined,
   defaultName: string
 ): string {
-  const cleaned = toWellFormed(storedName ?? "").replace(CONTROL_CHARS, "").trim();
+  const cleaned = toWellFormed(storedName ?? "")
+    .replace(CONTROL_CHARS, "")
+    .trim();
   const name = capLength(cleaned || toWellFormed(defaultName).replace(CONTROL_CHARS, ""));
   const fallback = asciiFallback(name) || "download";
   return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeRfc5987(name)}`;
