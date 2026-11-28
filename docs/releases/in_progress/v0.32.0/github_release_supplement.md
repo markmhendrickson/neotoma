@@ -21,6 +21,10 @@ Neotoma v0.32.0 opens the MCP instructions with a short session index of standin
 
 - New unit tests for the index renderer (`tests/unit/instructions_index.test.ts`) and an integration test of the index on every instructions entrance (`tests/integration/instructions_session_index.test.ts`).
 
+## Security hardening
+
+Review: [`security_review.md`](https://github.com/markmhendrickson/neotoma/blob/release/v0.32.0/docs/releases/in_progress/v0.32.0/security_review.md). The diff classifier flagged `src/actions.ts` (auth-middleware concern) because the `GET /mcp-interaction-instructions` handler now uses the shared composer. No route, middleware, or trust-helper change; unauthenticated output still carries only the fixed notice. No advisory opened.
+
 ## Breaking changes
 
 No breaking changes.
