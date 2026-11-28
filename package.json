@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "description": "The system of record for AI agents: versioned facts with their sources, over MCP, API and CLI",
   "main": "dist/index.js",
   "type": "module",
