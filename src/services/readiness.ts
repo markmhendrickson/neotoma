@@ -216,7 +216,10 @@ export function resolveStorageWriteProbeConfig(
     enabled: !isFalsyFlag(env.NEOTOMA_READY_WRITE_PROBE),
     // Floors keep a misconfigured value from turning the probe into a write
     // loop (cache) or a flapping check against a healthy disk (timeout).
-    cacheMs: Math.max(1_000, parsePositiveInt(env.NEOTOMA_READY_WRITE_CACHE_MS) ?? DEFAULT_READY_WRITE_CACHE_MS),
+    cacheMs: Math.max(
+      1_000,
+      parsePositiveInt(env.NEOTOMA_READY_WRITE_CACHE_MS) ?? DEFAULT_READY_WRITE_CACHE_MS
+    ),
     timeoutMs: Math.max(
       500,
       parsePositiveInt(env.NEOTOMA_READY_WRITE_TIMEOUT_MS) ?? DEFAULT_READY_WRITE_TIMEOUT_MS

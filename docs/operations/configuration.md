@@ -133,7 +133,7 @@ Each `json` line carries these fields:
 | `peer_ip`             | string or null | Connecting socket address, redacted like `client_ip`. Always present, so a supplied header never replaces the real source                                                                                                                                                                      |
 | `user_agent`          | string or null | `User-Agent`, truncated to 120 characters                                                                                                                                                                                                                                                      |
 | `service`             | string         | `neotoma-api`                                                                                                                                                                                                                                                                                  |
-| `health`              | boolean        | True for `/health` and `/ready`. These requests are logged, not skipped                                                                                                                                                                                                                        |
+| `health`              | boolean        | True for `/health`, `/ready` and `/ready/storage`. These requests are logged, not skipped                                                                                                                                                                                                      |
 | `aborted`             | boolean        | True when the client closed the connection before the response finished; `status` is then not a sent status                                                                                                                                                                                    |
 
 Example (synthetic values, shown indented; the written line is a single line):
@@ -184,6 +184,7 @@ The read log covers the general entity read operations and the helper reads name
 | `GET /get_file_url`                               | rest    | Returns a signed file URL, not entity records                                              |
 | `GET /health`                                     | rest    | Liveness probe                                                                             |
 | `GET /ready`                                      | rest    | Readiness probe                                                                            |
+| `GET /ready/storage`                              | rest    | Storage write check                                                                        |
 | `GET /openapi.yaml`                               | rest    | API description                                                                            |
 | `GET /openapi_actions.yaml`                       | rest    | API description                                                                            |
 | `GET /server-info`                                | rest    | Server metadata                                                                            |
