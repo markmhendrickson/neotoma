@@ -22,6 +22,7 @@ import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
 import { writeLocalHttpPortFile } from "./utils/local_http_port_file.js";
+import { buildContentDisposition } from "./utils/content_disposition.js";
 import { WorkerDbAbortError } from "./repositories/worker/worker_file_database.js";
 import { peekCachedDb } from "./repositories/db/connection.js";
 import yaml from "js-yaml";
@@ -10798,7 +10799,6 @@ app.post("/store", writeRateLimit, handleStorePost);
 // POST /github/webhook - Receive verified GitHub webhook events
 import { verifyGithubSignature, mapEventToStore } from "./services/github_webhook.js";
 import { runtimeEnv } from "./config_embedded.js";
-import { buildContentDisposition } from "./utils/content_disposition.js";
 
 app.post(
   "/github/webhook",
