@@ -22,6 +22,7 @@ import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
 import { writeLocalHttpPortFile } from "./utils/local_http_port_file.js";
+import { buildContentDisposition } from "./utils/content_disposition.js";
 import { WorkerDbAbortError } from "./repositories/worker/worker_file_database.js";
 import { peekCachedDb } from "./repositories/db/connection.js";
 import yaml from "js-yaml";
@@ -8242,7 +8243,7 @@ app.get("/sources/:id/content", async (req, res) => {
     res.setHeader("Content-Length", buffer.length);
     res.setHeader(
       "Content-Disposition",
-      `${inline ? "inline" : "attachment"}; filename="${filename.replace(/"/g, '\\"')}"`
+      buildContentDisposition(inline ? "inline" : "attachment", filename, `source-${sourceId}`)
     );
     return res.send(buffer);
   } catch (error) {

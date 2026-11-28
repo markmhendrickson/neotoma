@@ -13,6 +13,12 @@ Neotoma v0.32.0 opens the MCP instructions with a short session index of standin
   - The instance policy section stays where it was, after the base block, so a client that cuts the instructions very early can still lose it.
   - Migration: none. A client that checked that instructions start with `[STANDING RULES]` should skip the leading `[SESSION INDEX]` block first.
 
+- **Downloads work for any stored file name.**
+  - Who: anyone who downloads a stored file with `GET /sources/:id/content` when the file name holds characters such as an en dash, a combining accent, an emoji, a double quote or a newline.
+  - Before: the raw name went into the `Content-Disposition` header. Node refuses header characters above U+00FF and most control characters, so the download failed with `500 DOWNLOAD_FAILED` although the bytes were stored.
+  - After: the header carries an ASCII `filename` fallback plus a `filename*=UTF-8''` percent-encoded name (RFC 6266). Each lone UTF-16 surrogate becomes U+FFFD. Control characters and Unicode format characters (such as bidirectional controls and zero-width characters) are dropped from both. The header name is capped at 255 code points, keeping the file extension. The ASCII fallback also turns `%` into `_`. The file downloads byte for byte, and its `Content-Type` is unchanged.
+  - Upgrade: none. Clients that read `filename*` get the stored name, minus the characters above and capped as described; older clients read the ASCII fallback.
+
 ## Agent-facing instruction changes (ship to every client)
 
 - `[STANDING RULES]` in `docs/developer/mcp/instructions.md` now says that a short `[SESSION INDEX]` of rule titles and skill names opens the instructions and the full standing rules follow it.
