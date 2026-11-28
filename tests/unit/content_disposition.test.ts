@@ -27,7 +27,9 @@ describe("buildContentDisposition", () => {
     expect(buildContentDisposition("attachment", "\n\t", "source-1")).toBe(
       `attachment; filename="source-1"; filename*=UTF-8''source-1`
     );
-    expect(buildContentDisposition("attachment", null, "source-2")).toContain(`filename="source-2"`);
+    expect(buildContentDisposition("attachment", null, "source-2")).toContain(
+      `filename="source-2"`
+    );
   });
 
   it("encodes RFC 5987 reserved characters", () => {

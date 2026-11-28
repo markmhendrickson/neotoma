@@ -80,13 +80,9 @@ describe("GET /sources/:id/content — stored names in Content-Disposition", () 
         .eq("id", sourceId)
         .single();
       expect(row?.original_filename).toBe(testCase.name);
-      await db.storage
-        .from("sources")
-        .upload(row!.storage_url as string, bytes, { upsert: true });
+      await db.storage.from("sources").upload(row!.storage_url as string, bytes, { upsert: true });
 
-      const resp = await fetch(
-        `${API_BASE}/sources/${sourceId}/content?user_id=${TEST_USER_ID}`
-      );
+      const resp = await fetch(`${API_BASE}/sources/${sourceId}/content?user_id=${TEST_USER_ID}`);
       expect(resp.status).toBe(200);
       const body = Buffer.from(await resp.arrayBuffer());
       expect(body.equals(bytes)).toBe(true);

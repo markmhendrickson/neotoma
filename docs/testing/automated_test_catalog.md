@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **908**
-- Backend and repo Vitest files: **854**
+- Total automated test files: **910**
+- Backend and repo Vitest files: **856**
 - Frontend Vitest files: **27**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 260 |
+| Vitest unit tests | 261 |
 | Vitest service tests | 69 |
 | Source-adjacent tests | 72 |
-| Vitest integration tests | 274 |
+| Vitest integration tests | 275 |
 | Vitest CLI tests | 99 |
 | Vitest contract tests | 33 |
 | Vitest security tests | 27 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (260):**
+**Files (261):**
 - `tests/unit/aauth_admission_middleware_lookup_failed.test.ts`
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
@@ -169,6 +169,7 @@ flowchart TD
 - `tests/unit/config_refuses_user_env_under_test.test.ts`
 - `tests/unit/config_sqlite_path.test.ts`
 - `tests/unit/config_trusted_callbacks.test.ts`
+- `tests/unit/content_disposition.test.ts`
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
@@ -532,7 +533,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (274):**
+**Files (275):**
 - `tests/integration/aauth_admission_lookup_failed.test.ts`
 - `tests/integration/aauth_admitted_entity_detail_read.test.ts`
 - `tests/integration/aauth_attribution_stamping.test.ts`
@@ -752,6 +753,7 @@ flowchart TD
 - `tests/integration/skill_lookup_not_found_hint.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
+- `tests/integration/source_content_download_filename.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_cli_instructions_print.test.ts`
 - `tests/integration/standing_rules_cli_skipped_count.test.ts`
