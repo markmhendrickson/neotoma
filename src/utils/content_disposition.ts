@@ -5,12 +5,20 @@
  * characters above U+00FF and most control characters (ERR_INVALID_CHAR), so a
  * raw name in the header fails the response. Per RFC 6266 / RFC 5987 this sends
  * an ASCII `filename` fallback plus a `filename*=UTF-8''` percent-encoded name.
- * Control characters are dropped from both forms.
+ * Control characters are dropped from both forms. Lone UTF-16 surrogates are
+ * replaced with U+FFFD first, because encodeURIComponent throws URIError on them.
  */
 
 // C0 controls, DEL and C1 controls.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+// A high surrogate not followed by a low one, or a low surrogate not preceded by a high one.
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
+function toWellFormed(value: string): string {
+  return value.replace(LONE_SURROGATE, "\ufffd");
+}
 
 function encodeRfc5987(value: string): string {
   return encodeURIComponent(value).replace(
@@ -35,8 +43,8 @@ export function buildContentDisposition(
   storedName: string | null | undefined,
   defaultName: string
 ): string {
-  const cleaned = (storedName ?? "").replace(CONTROL_CHARS, "").trim();
-  const name = cleaned || defaultName.replace(CONTROL_CHARS, "");
+  const cleaned = toWellFormed(storedName ?? "").replace(CONTROL_CHARS, "").trim();
+  const name = cleaned || toWellFormed(defaultName).replace(CONTROL_CHARS, "");
   const fallback = asciiFallback(name) || "download";
   return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeRfc5987(name)}`;
 }
