@@ -538,6 +538,15 @@ components:
             database:
               type: string
               enum: [ok, failed]
+            storage_write:
+              type: string
+              enum: [ok, failed, skipped]
+              description: >-
+                Cached result of the storage write probe (free-space floor
+                plus a synced probe file next to the database file). Does not
+                change the status code unless NEOTOMA_READY_REQUIRE_WRITE=1.
+        storage_write_reason:
+          $ref: "#/components/schemas/StorageWriteReason"
         latency_ms:
           type: integer
           description: >-
@@ -546,6 +555,28 @@ components:
         error:
           type: string
           description: Failure reason. Present only when ok is false.
+    StorageWriteReason:
+      type: string
+      description: >-
+        Short fixed reason for a storage write result other than ok. Paths,
+        sizes and raw error text are logged, never returned.
+      enum:
+        [below_free_space_floor, free_space_check_failed, write_failed, write_timeout, disabled]
+    StorageReadinessResult:
+      type: object
+      description: Result of the /ready/storage check.
+      properties:
+        ok:
+          type: boolean
+          description: False only when the storage write probe failed.
+        checks:
+          type: object
+          properties:
+            storage_write:
+              type: string
+              enum: [ok, failed, skipped]
+        reason:
+          $ref: "#/components/schemas/StorageWriteReason"
     FileUrlResponse:
       type: object
       properties:
@@ -4001,6 +4032,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessResult"
+
+  /ready/storage:
+    get:
+      summary: Storage write check
+      description: >-
+        Checks free space on the volume holding the database file against
+        NEOTOMA_READY_MIN_FREE_MB (default 64), then writes and fsyncs a small
+        probe file in the same directory. Returns 503 when either fails or
+        exceeds NEOTOMA_READY_WRITE_TIMEOUT_MS. The result is cached for
+        NEOTOMA_READY_WRITE_CACHE_MS (default 30s) and concurrent requests
+        share one probe. A 200 does not prove the database itself accepts
+        writes. Returns 200 with storage_write "skipped" when the probe is
+        disabled with NEOTOMA_READY_WRITE_PROBE=0.
+      operationId: storageReadinessCheck
+      security: []
+      responses:
+        "200":
+          description: Storage accepted the probe write above the free-space floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageReadinessResult"
+        "503":
+          description: Free space below the floor, or the probe write failed or timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageReadinessResult"
 
   /openapi.yaml:
     get:

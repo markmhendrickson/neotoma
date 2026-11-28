@@ -45,7 +45,12 @@ import { dbAbortContext } from "./middleware/db_abort_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
 import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
-import { probeReadiness } from "./services/readiness.js";
+import {
+  buildReadyResponse,
+  buildStorageReadyResponse,
+  createStorageWriteProbe,
+  probeReadiness,
+} from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { EntityOwnerConflictError } from "./services/entity_resolution.js";
@@ -3154,13 +3159,31 @@ app.get("/health", (_req, res) => {
 // the database is unreachable, erroring, or too slow. See
 // src/services/readiness.ts for exactly what a passing result does and does
 // not prove.
+//
+// The body also reports checks.storage_write (free-space floor plus a synced
+// probe file next to the database). By default that result does not change the
+// status code; NEOTOMA_READY_REQUIRE_WRITE=1 makes it. /ready/storage below is
+// the check that fails on it. See docs/operations/health_checks.md.
+const storageWriteProbe = createStorageWriteProbe({
+  dir: path.dirname(config.sqlitePath),
+  log: (message) => logger.warn(message),
+});
+
 app.get("/ready", async (_req, res) => {
-  const result = await probeReadiness(db);
+  const [result, write] = await Promise.all([probeReadiness(db), storageWriteProbe.check()]);
   if (!result.ok) {
     logger.warn(`[Ready] database probe failed after ${result.latency_ms}ms: ${result.error}`);
-    return res.status(503).json(result);
   }
-  return res.json(result);
+  const response = buildReadyResponse(result, write, storageWriteProbe.config.requireForReady);
+  return res.status(response.status).json(response.body);
+});
+
+// Public storage check (no auth): 503 when the probe write or the free-space
+// floor fails, 200 otherwise (including when the probe is disabled). Results
+// are cached, so request volume cannot become write volume.
+app.get("/ready/storage", async (_req, res) => {
+  const response = buildStorageReadyResponse(await storageWriteProbe.check());
+  return res.status(response.status).json(response.body);
 });
 
 // ============================================================================
@@ -5183,7 +5206,8 @@ async function restAuthMiddleware(
       (req.path === "/openapi.yaml" ||
         req.path === "/openapi_actions.yaml" ||
         req.path === "/health" ||
-        req.path === "/ready")) ||
+        req.path === "/ready" ||
+        req.path === "/ready/storage")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();
