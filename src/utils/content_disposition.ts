@@ -6,7 +6,8 @@
  * raw name in the header fails the response. Per RFC 6266 / RFC 5987 this sends
  * an ASCII `filename` fallback plus a `filename*=UTF-8''` percent-encoded name.
  * Control characters and Unicode format characters (category Cf, such as
- * bidirectional controls and zero-width characters) are dropped from both forms. Lone UTF-16 surrogates are
+ * bidirectional controls and zero-width characters) are dropped from both forms,
+ * and the name is capped at 255 code points, keeping the extension. Lone UTF-16 surrogates are
  * replaced with U+FFFD first, because encodeURIComponent throws URIError on them.
  */
 
@@ -21,6 +22,31 @@ const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[
 
 function toWellFormed(value: string): string {
   return value.replace(LONE_SURROGATE, "\ufffd");
+}
+
+// Longest name, in code points, that goes into the header.
+export const MAX_NAME_CODE_POINTS = 255;
+// Longest suffix after the last "." that is kept as the extension when capping.
+const MAX_EXTENSION_CODE_POINTS = 32;
+
+/**
+ * Cap a well-formed name at MAX_NAME_CODE_POINTS code points. Counting code
+ * points (not UTF-16 units) keeps surrogate pairs whole. The extension after the
+ * last "." is kept when there is one.
+ */
+function capLength(value: string): string {
+  const codePoints = Array.from(value);
+  if (codePoints.length <= MAX_NAME_CODE_POINTS) return value;
+  const dot = value.lastIndexOf(".");
+  if (dot > 0) {
+    const extension = Array.from(value.slice(dot));
+    if (extension.length <= MAX_EXTENSION_CODE_POINTS) {
+      return (
+        codePoints.slice(0, MAX_NAME_CODE_POINTS - extension.length).join("") + extension.join("")
+      );
+    }
+  }
+  return codePoints.slice(0, MAX_NAME_CODE_POINTS).join("");
 }
 
 function encodeRfc5987(value: string): string {
@@ -47,7 +73,7 @@ export function buildContentDisposition(
   defaultName: string
 ): string {
   const cleaned = toWellFormed(storedName ?? "").replace(CONTROL_CHARS, "").trim();
-  const name = cleaned || toWellFormed(defaultName).replace(CONTROL_CHARS, "");
+  const name = capLength(cleaned || toWellFormed(defaultName).replace(CONTROL_CHARS, ""));
   const fallback = asciiFallback(name) || "download";
   return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeRfc5987(name)}`;
 }
