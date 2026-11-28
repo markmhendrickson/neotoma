@@ -1,8 +1,9 @@
-Neotoma v0.32.0 opens the MCP instructions with a short session index of standing rules and instance skills, so a client that truncates long instructions still sees them.
+Neotoma v0.32.0 opens the MCP instructions with a short session index of standing rules and instance skills, so a client that truncates long instructions still sees them. It also fixes stored-file downloads whose names hold characters that HTTP headers reject.
 
 ## Highlights
 
 - **Rules and skills survive truncated instructions.** The served instructions now open with a `[SESSION INDEX]` block of at most 2,048 bytes that names the instance's standing rules and skills before the long base block.
+- **Stored-file downloads no longer fail on unusual names.** `GET /sources/:id/content` encodes the file name in `Content-Disposition` (RFC 6266) instead of failing with `500 DOWNLOAD_FAILED`.
 
 ## Behavior changes
 
@@ -25,7 +26,15 @@ Neotoma v0.32.0 opens the MCP instructions with a short session index of standin
 
 ## Tests and validation
 
-- New unit tests for the index renderer (`tests/unit/instructions_index.test.ts`) and an integration test of the index on every instructions entrance (`tests/integration/instructions_session_index.test.ts`).
+- New unit tests for the index renderer (`tests/unit/instructions_index.test.ts`) and an integration test of the index on every instructions entrance (`tests/integration/instructions_session_index.test.ts`). New unit tests for the header encoder (`tests/unit/content_disposition.test.ts`) and an integration test that downloads files named with an en dash, combining accent, emoji, double quote, newline, lone surrogate and a very long name (`tests/integration/source_content_download_filename.test.ts`).
+
+## Fixes
+
+- `GET /sources/:id/content` no longer returns `500 DOWNLOAD_FAILED` for stored file names containing characters above U+00FF, control characters, or double quotes (#2946).
+
+## Security hardening
+
+Review: [`security_review.md`](https://github.com/markmhendrickson/neotoma/blob/release/v0.32.0/docs/releases/in_progress/v0.32.0/security_review.md). The diff classifier flagged `src/actions.ts` (auth-middleware concern) because the `GET /mcp-interaction-instructions` handler now uses the shared composer and the `GET /sources/:id/content` handler builds its `Content-Disposition` header through a new encoder (`src/utils/content_disposition.ts`). No route, middleware, or trust-helper change; unauthenticated output still carries only the fixed notice. No advisory opened.
 
 ## Breaking changes
 
