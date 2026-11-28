@@ -27,6 +27,10 @@ Neotoma v0.32.0 opens the MCP instructions with a short session index of standin
 
 - New unit tests for the index renderer (`tests/unit/instructions_index.test.ts`) and an integration test of the index on every instructions entrance (`tests/integration/instructions_session_index.test.ts`).
 
+## Security hardening
+
+The diff classifier marked this release sensitive because `src/actions.ts` changed. The changes there only compose instruction text and build the download header; no auth, proxy-trust or guest-gate code moved. The download header change drops control and format characters from stored names, which closes header injection through a file name. See `docs/releases/in_progress/v0.32.0/security_review.md`. No advisory is opened or referenced.
+
 ## Breaking changes
 
 No breaking changes.
