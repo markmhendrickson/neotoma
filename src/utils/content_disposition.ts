@@ -62,8 +62,9 @@ function asciiFallback(value: string): string {
       .normalize("NFKD")
       // Drop combining marks left by decomposition (e.g. "e\u0301" -> "e").
       .replace(/[\u0300-\u036f]/g, "")
-      // Anything outside printable ASCII, plus quote and backslash, becomes "_".
-      .replace(/[^\x20-\x7e]|["\\]/g, "_")
+      // Anything outside printable ASCII, plus quote, backslash and "%", becomes "_".
+      // "%" is replaced so no client reads the plain fallback as percent-encoded.
+      .replace(/[^\x20-\x7e]|["\\%]/g, "_")
   );
 }
 
